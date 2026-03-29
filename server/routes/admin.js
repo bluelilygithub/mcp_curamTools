@@ -648,6 +648,42 @@ router.get('/logs', async (req, res) => {
   }
 });
 
+// ── SQL Console ───────────────────────────────────────────────────────────
+
+router.post('/sql', async (req, res) => {
+  const { sql, allowWrite = false } = req.body;
+  if (!sql?.trim()) return res.status(400).json({ error: 'No SQL provided.' });
+
+  // Strip leading comments/whitespace to find the first keyword
+  const firstKeyword = sql.trim().replace(/\/\*[\s\S]*?\*\//g, '').replace(/--[^\n]*/g, '').trim().split(/\s+/)[0].toUpperCase();
+
+  const writeKeywords = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE'];
+  const isWrite = writeKeywords.includes(firstKeyword);
+
+  if (isWrite && !allowWrite) {
+    return res.status(400).json({ error: `Write statements are blocked. Enable "Allow writes" to run ${firstKeyword}.` });
+  }
+
+  const start = Date.now();
+  try {
+    const result = await pool.query(sql);
+    const duration = Date.now() - start;
+    const rows   = result.rows ?? [];
+    const columns = rows.length > 0 ? Object.keys(rows[0]) : (result.fields?.map(f => f.name) ?? []);
+    console.log(`[SQL Console] ${req.user.email} ran: ${sql.slice(0, 120).replace(/\n/g, ' ')} — ${rows.length} rows in ${duration}ms`);
+    res.json({
+      command:  result.command ?? firstKeyword,
+      rowCount: result.rowCount ?? rows.length,
+      columns,
+      rows,
+      duration,
+    });
+  } catch (err) {
+    console.error(`[SQL Console] Error for ${req.user.email}:`, err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ── Diagnostics ───────────────────────────────────────────────────────────
 
 router.post('/diagnostics', async (req, res) => {
@@ -798,7 +834,7 @@ router.post('/diagnostics', async (req, res) => {
   });
 
   console.log(`[Diagnostics] Run by ${req.user.email} — ${results.filter(r => r.ok).length}/${results.length} passed`);
-  res.json({ results });
+  res.json(results);
 });
 
 module.exports = router;

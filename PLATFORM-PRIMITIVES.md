@@ -957,6 +957,68 @@ class BudgetExceededError extends Error {
 
 ---
 
+## Admin — Diagnostics
+
+**Type:** Route handler + admin page
+**Backend:** `POST /api/admin/diagnostics` in `server/routes/admin.js`
+**Frontend:** `client/src/pages/admin/AdminDiagnosticsPage.jsx` → `/admin/diagnostics`
+**Auth:** `requireAuth` + `requireRole(['org_admin'])`
+
+**What it does:** Runs a sequential set of live health checks against all external integrations and returns an array of `{ name, ok, detail }` objects. Checks run in order; later checks may depend on earlier ones (e.g. Google Ads check reuses the OAuth access token obtained in the Google OAuth check).
+
+**Current checks (in order):**
+
+| # | Name | What is tested |
+|---|---|---|
+| 1 | Database | `SELECT NOW()` — confirms pool connectivity |
+| 2 | Anthropic API | Sends a minimal 16-token message to `claude-haiku-4-5-20251001` |
+| 3 | MailChannels | POSTs deliberately invalid payload; 422 = key accepted, 401/403 = key rejected |
+| 4 | MCP Registry | Lists registered servers; reports count and connection status |
+| 5 | Google OAuth | Refreshes access token from `GOOGLE_REFRESH_TOKEN`; token stored for checks 6–7 |
+| 6 | Google Ads API | Queries `SELECT customer.id FROM customer LIMIT 1` against `GOOGLE_ADS_CUSTOMER_ID` |
+| 7 | Google Analytics (GA4) | Runs a 7-day sessions report against `GOOGLE_GA4_PROPERTY_ID` |
+
+**Response shape:** plain array (not wrapped in an object) — `res.json(results)` not `res.json({ results })`.
+
+**Adding a new check:** append an `await check('Name', async () => { ... })` call inside the route handler. Throw to signal failure; return a string detail message to signal success. The `check()` helper catches all exceptions automatically.
+
+**MailChannels note:** uses `https.request` (not `fetch`) — native `fetch` silently fails on Railway with MailChannels. Pattern from `feedback_https_vs_fetch` memory.
+
+---
+
+## Admin — SQL Console
+
+**Type:** Route handler + admin page
+**Backend:** `POST /api/admin/sql` in `server/routes/admin.js`
+**Frontend:** `client/src/pages/admin/AdminSqlPage.jsx` → `/admin/sql`
+**Auth:** `requireAuth` + `requireRole(['org_admin'])`
+
+**What it does:** Executes arbitrary SQL against the platform PostgreSQL database and returns structured results. Intended for admin debugging, schema inspection, and data queries.
+
+**Request body:**
+```json
+{ "sql": "SELECT ...", "allowWrite": false }
+```
+
+**Response shape:**
+```json
+{ "command": "SELECT", "rowCount": 12, "columns": ["id", "email"], "rows": [...], "duration": 43 }
+```
+
+**Write guard:** By default, statements beginning with `INSERT`, `UPDATE`, `DELETE`, `DROP`, `TRUNCATE`, `ALTER`, `CREATE`, `GRANT`, or `REVOKE` are rejected with a 400 error. Pass `"allowWrite": true` to bypass. The frontend toggle shows a red warning banner when write mode is active.
+
+**Audit log:** Every query is logged to server console: `[SQL Console] user@example.com ran: SELECT ... — N rows in Xms`.
+
+**UI features:**
+- Ctrl+Enter to run, Tab to indent (2 spaces)
+- Sticky-header results table, max 480px height with scroll
+- `null` values displayed in italics, object/JSON values serialised inline
+- Row count + duration + PG command tag shown above results
+
+**Does not handle:** Multi-statement batches (pg driver executes the full string; behaviour for `;`-separated statements depends on pg). Query cancellation. Result export/download. Row limit is not enforced server-side — large queries will return all rows.
+
+---
+
 ## Open Questions
 
 1. **`AgentScheduler.register` orgId resolution from DB:** The README vault notes "resolves orgId from DB if omitted (single active org fallback)" but does not specify which table or query is used for this resolution. `Learnings-ToolsForge.md` notes that `scope.orgId = null` throws `AgentSchedulerError` "until the `org_tools` table is built" — implying this fallback is not yet fully implemented for multi-org scenarios. The exact behaviour when `orgId` is omitted and multiple orgs exist is ambiguous.
