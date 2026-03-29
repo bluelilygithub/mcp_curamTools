@@ -1,16 +1,16 @@
 'use strict';
 
 /**
- * Google Ads Monitor — tool definitions.
+ * Google Ads Freeform — tool definitions.
  *
- * context.startDate / context.endDate take priority when set (UI date-range picker).
- * Falls back to context.days (number) then input.days then 30.
+ * Same four data tools as the monitor. TOOL_SLUG is different so usage
+ * is tracked separately and config is stored independently.
  */
 
 const { googleAdsService }       = require('../../services/GoogleAdsService');
 const { googleAnalyticsService } = require('../../services/GoogleAnalyticsService');
 
-const TOOL_SLUG = 'google-ads-monitor';
+const TOOL_SLUG = 'google-ads-freeform';
 
 const daysSchema = {
   type: 'object',
@@ -34,11 +34,10 @@ function rangeOrDays(context, input) {
 const getCampaignPerformanceTool = {
   name: 'get_campaign_performance',
   description:
-    'Retrieve performance totals for every enabled Google Ads campaign over the ' +
-    'specified date range. Returns one object per campaign with: id, name, status, ' +
-    'monthly budget (AUD), impressions, clicks, cost (AUD), conversions, CTR, and ' +
-    'average CPC. Use this first to understand which campaigns are running and their ' +
-    'overall efficiency.',
+    'Retrieve performance totals for every enabled Google Ads campaign. ' +
+    'Returns id, name, status, budget (AUD), impressions, clicks, cost (AUD), ' +
+    'conversions, CTR, and average CPC. Call this when the question involves ' +
+    'campaign-level performance, budgets, or efficiency.',
   input_schema:        daysSchema,
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
@@ -50,10 +49,9 @@ const getCampaignPerformanceTool = {
 const getDailyPerformanceTool = {
   name: 'get_daily_performance',
   description:
-    'Retrieve account-level daily aggregated metrics: date, impressions, clicks, ' +
-    'cost (AUD), and conversions — one row per day ordered by date ASC. ' +
-    'Use this to identify trends, spend acceleration, and day-of-week patterns ' +
-    'that are invisible in campaign-level totals.',
+    'Retrieve account-level daily metrics: date, impressions, clicks, cost (AUD), ' +
+    'conversions — one row per day ordered ASC. Call this when the question involves ' +
+    'trends, day-of-week patterns, or spend over time.',
   input_schema:        daysSchema,
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
@@ -66,10 +64,9 @@ const getSearchTermsTool = {
   name: 'get_search_terms',
   description:
     'Retrieve the top 50 actual user search queries that triggered ads, ordered by ' +
-    'clicks DESC. Returns: term, status, impressions, clicks, cost (AUD), conversions, ' +
-    'and CTR per term. This is the highest-signal dataset for intent analysis — ' +
-    'use it to find converting vs wasted-spend terms, negative keyword candidates, ' +
-    'and ad copy opportunities.',
+    'clicks DESC. Returns term, status, impressions, clicks, cost (AUD), conversions, ' +
+    'and CTR. Call this for questions about what users are searching for, wasted spend, ' +
+    'negative keywords, or ad copy relevance.',
   input_schema:        daysSchema,
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
@@ -82,9 +79,8 @@ const getAnalyticsOverviewTool = {
   name: 'get_analytics_overview',
   description:
     'Retrieve daily GA4 session metrics: date, sessions, activeUsers, newUsers, ' +
-    'and bounceRate (decimal fraction, e.g. 0.42 = 42%) — ordered by date ASC. ' +
-    'Use this to correlate ad spend trends from get_daily_performance with on-site ' +
-    'behaviour, and to identify whether paid traffic quality is improving or declining.',
+    'bounceRate (decimal fraction). Call this when the question involves on-site ' +
+    'behaviour, landing page quality, or correlating ad traffic with website outcomes.',
   input_schema:        daysSchema,
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
@@ -93,11 +89,11 @@ const getAnalyticsOverviewTool = {
   },
 };
 
-const googleAdsMonitorTools = [
+const googleAdsFreeformTools = [
   getCampaignPerformanceTool,
   getDailyPerformanceTool,
   getSearchTermsTool,
   getAnalyticsOverviewTool,
 ];
 
-module.exports = { googleAdsMonitorTools, TOOL_SLUG };
+module.exports = { googleAdsFreeformTools, TOOL_SLUG };

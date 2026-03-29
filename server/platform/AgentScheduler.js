@@ -81,22 +81,59 @@ class AgentSchedulerClass {
 
   /**
    * Execute the agent run for one cron tick. Persists result via persistRun.
+   *
+   * Multi-customer support: if runFn returns an array of
+   * `{ customerId, result, status, error }` objects, each element is persisted
+   * as a separate agent_runs row. Single-object returns (existing agents) are
+   * unchanged — backward compatible.
+   *
    * Errors never rethrow — a failing agent cannot crash the process.
    */
   async _tick(slug, runFn, orgId) {
     const startTime = new Date();
     let runId;
     try {
+      // Single opening 'running' row — used for single-run agents; array-run agents
+      // create their own rows per customer below and close this one immediately.
       runId = await persistRun({ slug, orgId, status: 'running', runAt: startTime });
       const outcome = await runFn({ orgId, userId: null, config: {}, adminConfig: {}, emit: () => {} });
-      await persistRun({
-        slug,
-        orgId,
-        status: 'complete',
-        result: outcome?.result ?? outcome,
-        runId,
-      });
-      console.log(`[AgentScheduler] ${slug} completed at ${new Date().toISOString()}`);
+
+      if (Array.isArray(outcome)) {
+        // Multi-customer: close the placeholder row then persist one row per customer
+        await persistRun({ slug, orgId, status: 'complete', result: { multi: true, count: outcome.length }, runId });
+
+        for (const item of outcome) {
+          const customerRunId = await persistRun({
+            slug,
+            orgId,
+            status: 'running',
+            runAt: startTime,
+            customerId: item.customerId ?? null,
+            campaignId: item.campaignId ?? null,
+          });
+          await persistRun({
+            slug,
+            orgId,
+            status: item.status ?? (item.error ? 'error' : 'complete'),
+            result: item.result ?? null,
+            error: item.error ?? null,
+            customerId: item.customerId ?? null,
+            campaignId: item.campaignId ?? null,
+            runId: customerRunId,
+          });
+        }
+        console.log(`[AgentScheduler] ${slug} completed ${outcome.length} customer runs at ${new Date().toISOString()}`);
+      } else {
+        // Single-run (backward compatible)
+        await persistRun({
+          slug,
+          orgId,
+          status: 'complete',
+          result: outcome?.result ?? outcome,
+          runId,
+        });
+        console.log(`[AgentScheduler] ${slug} completed at ${new Date().toISOString()}`);
+      }
     } catch (err) {
       console.error(`[AgentScheduler] ${slug} tick error:`, err.message);
       if (runId) {

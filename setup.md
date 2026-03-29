@@ -153,10 +153,63 @@ If startup logs `extension "vector" is not available`, the PostgreSQL instance d
 `ORG_NAME` in `.env` is used to seed the organisation on first startup via `INSERT ... ON CONFLICT DO NOTHING`. Changing `ORG_NAME` after first run creates a second org — it does not rename the existing one. Don't change this value after the first startup.
 
 ### Google credentials in .env
-The `.env` contains Google OAuth credentials (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, etc.) carried over from ToolsForge. These are not wired to any routes yet in this project. They are safe to leave in place but have no effect until Google integrations are built.
+The `.env` contains Google OAuth credentials (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_MANAGER_ID`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_GA4_PROPERTY_ID`). These are used by `GoogleAdsService`, `GoogleAnalyticsService`, and the Gmail/Calendar integrations. All Google services share the same OAuth2 refresh token.
 
 ### Schema errors on startup
 `initSchema()` is fully idempotent (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). Safe to restart at any time.
+
+---
+
+## Google Ads & Analytics Setup
+
+Both `GoogleAdsService` and `GoogleAnalyticsService` use a shared OAuth2 refresh token. One token set covers all Google APIs.
+
+**Required env vars:**
+```
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+GOOGLE_REFRESH_TOKEN         # must include adwords + analytics.readonly scopes
+GOOGLE_ADS_CUSTOMER_ID       # e.g. 123-456-7890 (displayed format with dashes)
+GOOGLE_ADS_MANAGER_ID        # MCC / manager account ID
+GOOGLE_ADS_DEVELOPER_TOKEN   # from Google Ads API Center
+GOOGLE_GA4_PROPERTY_ID       # numeric property ID only, no 'properties/' prefix
+```
+
+**To obtain a refresh token with all required scopes:**
+1. Enable in [Google Cloud Console](https://console.cloud.google.com/): Google Ads API, Google Analytics Data API, Gmail API, Google Calendar API.
+2. Create an OAuth 2.0 Client ID (Web application type).
+3. Add authorised redirect URIs:
+   - `http://localhost:3002/api/gmail/callback` (local)
+   - `https://yourapp.up.railway.app/api/gmail/callback` (production)
+4. Use the Google OAuth Playground or a one-time local auth flow with all required scopes in a single grant.
+
+**Required scopes:**
+- `https://www.googleapis.com/auth/adwords`
+- `https://www.googleapis.com/auth/analytics.readonly`
+- `https://www.googleapis.com/auth/gmail.readonly`
+- `https://www.googleapis.com/auth/calendar.readonly`
+
+**Diagnosing Google API issues:** Use the Admin Diagnostics page (`/admin/diagnostics`) — it runs live probes against Google OAuth token refresh, Google Ads API (minimal GAQL query), and GA4 (minimal report) and reports specific errors. This is the fastest way to confirm credentials are correct after deploy.
+
+---
+
+## Adding a New Agent
+
+1. Create `server/agents/<slug>/index.js` — exports `run<Name>(context)`
+2. Create `server/agents/<slug>/tools.js` — exports `{ <name>Tools, TOOL_SLUG }`
+3. Create `server/agents/<slug>/prompt.js` — exports `buildSystemPrompt(config)`
+4. In `server/routes/agents.js`:
+   - Import `run<Name>`
+   - `agentsRouter.use('/<slug>', createAgentRoute({ slug, runFn, requiredPermission }))`
+   - `AgentScheduler.register({ slug, schedule, runFn })` if it needs a cron schedule
+5. Add operator defaults to `AGENT_DEFAULTS` in `server/platform/AgentConfigService.js`
+6. Add admin defaults to `ADMIN_DEFAULTS` in `server/platform/AgentConfigService.js`
+7. Create `client/src/pages/tools/<NamePage>.jsx`
+8. Add the route in `client/src/App.jsx` (under `RequireAuth > AppShell`)
+9. Add an entry in `client/src/config/tools.js`
+
+See `PLATFORM-PRIMITIVES.md` for the full interface contract of each primitive.
+See `MCP_CURAMTOOLS_PROMPTS.md` for prompt structure conventions.
 
 ---
 

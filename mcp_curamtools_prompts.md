@@ -585,14 +585,204 @@ server/agents/email-campaign-analyzer/
 
 ---
 
+### Google Ads Monitor
+
+**Agent**: Google Ads Monitor
+**Slug**: `google-ads-monitor`
+**Date Built**: 2026-03-29
+**Status**: Production
+
+**Purpose**: AI-powered analysis of Google Ads campaign performance and GA4 site behaviour. Produces a written report with campaign analysis, search term insights, and prioritised recommendations.
+
+**Tools registered** (in `server/agents/googleAdsMonitor/tools.js`):
+- `get_campaign_performance` — all enabled campaigns, totals for the date range
+- `get_daily_performance` — account-level daily aggregates for trend analysis
+- `get_search_terms` — top 50 search queries by clicks, bucketed by intent
+- `get_analytics_overview` — GA4 session metrics for correlation with spend
+
+**Domain services used**:
+- `GoogleAdsService` — Google Ads REST API v23; `getCampaignPerformance`, `getDailyPerformance`, `getSearchTerms`, `getBudgetPacing`
+- `GoogleAnalyticsService` — GA4 Data API v1beta; `getSessionsOverview`
+
+**Configuration schema** (AGENT_DEFAULTS in AgentConfigService):
+```json
+{
+  "schedule": "0 6,18 * * *",
+  "lookback_days": 30,
+  "ctr_low_threshold": 0.03,
+  "wasted_clicks_threshold": 5,
+  "impressions_ctr_threshold": 100,
+  "max_suggestions": 8
+}
+```
+
+**Admin defaults**:
+```json
+{
+  "enabled": true,
+  "model": "claude-sonnet-4-6",
+  "max_tokens": 8192,
+  "max_iterations": 10,
+  "max_task_budget_aud": 0.50
+}
+```
+
+**Files created**:
+```
+server/agents/googleAdsMonitor/
+  index.js      — runGoogleAdsMonitor(context) — the runFn
+  tools.js      — 4 tool definitions exported as array + TOOL_SLUG
+  prompt.js     — buildSystemPrompt(config)
+
+server/services/
+  GoogleAdsService.js
+  GoogleAnalyticsService.js
+
+client/src/pages/tools/
+  GoogleAdsMonitorPage.jsx                    — main page (tabs: Results / History / Settings)
+  GoogleAdsMonitor/
+    CampaignPerformanceTable.jsx
+    SearchTermsTable.jsx
+    AISuggestionsPanel.jsx
+```
+
+**Deviations from generic agent template**:
+- No MCP server required — direct REST API calls to Google Ads and GA4 via `googleapis` OAuth2 token rotation
+- Email report endpoint: `POST /api/agents/google-ads-monitor/email` added to `server/routes/agents.js`
+- UX additions: animated progress bar, beforeunload guard, from/to date pickers, CSV export, print/PDF, email modal
+
+**Known issues**: None in current build.
+
+**Future enhancements**:
+- Keyword research agent (separate slug, shares GoogleAdsService)
+- Bid optimisation agent
+- Campaign-level date range drill-down
+- Multi-account (MCC) support
+
+---
+
 ### [Next Agent Entry Goes Here]
 
-**Agent**: [Name]  
-**Slug**: `[slug]`  
-**Date Built**: YYYY-MM-DD  
+**Agent**: [Name]
+**Slug**: `[slug]`
+**Date Built**: YYYY-MM-DD
 **Status**: [Development/Staging/Production]
 
 [Follow same format as above]
+
+---
+
+## Agent System Prompt Conventions
+
+All agent system prompts follow a consistent structure and set of rules. Deviating from these conventions breaks `extractSuggestions` and makes the agent UI components unable to parse the output.
+
+---
+
+### System Prompt Block Order
+
+Every agent's `buildSystemPrompt(config)` must produce blocks in this order:
+
+```
+1. Account Intelligence Profile block (if profile is populated)
+   — injected by buildAccountContext(config.intelligence_profile, slug)
+   — followed by a horizontal rule (---)
+   — omitted (returns '') when profile is null or {}
+
+2. Role and analytical framework
+   — "You are a [role] for [team]. Your role is to..."
+   — Establishes the persona and objective
+
+3. Data sources and tool usage order
+   — Numbered list of tool call order
+   — "Before writing any analysis, use your tools to gather the complete picture:"
+   — Never estimate data that can be retrieved
+
+4. What to look for / analytical criteria
+   — Config-injected thresholds (CTR %, wasted clicks, impressions floor)
+   — Grouped by analytical domain (efficiency, intent signals, budget, analytics)
+
+5. Output format (required section headers in order)
+
+6. Baseline verification instruction (last line always)
+   — "Before finalising any recommendation, verify it against the declared account baselines..."
+```
+
+---
+
+### Required Output Sections
+
+Every agent prompt must produce output with these exact section headers (in this order):
+
+```markdown
+### Summary
+2–4 sentences. [What to include — agent-specific]
+
+### [Primary Analysis Section]
+[Agent-specific analysis structure]
+
+### [Secondary Analysis Section]
+[Agent-specific analysis structure]
+
+### Recommendations
+Numbered list. Each recommendation must:
+- Reference a specific [entity name].
+- State the current number and the target or action.
+- Be actionable without additional data.
+Prioritise by estimated impact — highest first. Limit to ${maxSugg} recommendations maximum.
+```
+
+**Why this matters:** `extractSuggestions` (in `createAgentRoute.js`) parses the `### Recommendations` numbered list to produce `[{ text, priority }]` objects stored in `agent_runs.result.suggestions`. If the section heading is different, `AISuggestionsPanel` receives an empty array. Do not rename this section.
+
+---
+
+### Config-Injected Thresholds
+
+Operator-configurable thresholds are interpolated at run time in `buildSystemPrompt(config)`. Never hardcode a threshold that an operator might want to change. Pattern:
+
+```js
+function buildSystemPrompt(config = {}) {
+  const ctrPct  = ((config.ctr_low_threshold  ?? 0.03) * 100).toFixed(0);
+  const wasted  = config.wasted_clicks_threshold   ?? 5;
+  const impMin  = config.impressions_ctr_threshold ?? 100;
+  const maxSugg = config.max_suggestions           ?? 8;
+
+  return `...CTR below ${ctrPct}%...wasted spend ≥ ${wasted} clicks...`;
+}
+```
+
+The defaults in the function signature serve as the fallback when the operator has not set a value. The canonical source of defaults is `AGENT_DEFAULTS` in `AgentConfigService.js` — keep these in sync.
+
+---
+
+### Account Context Block Injection
+
+```js
+const { buildAccountContext } = require('../../platform/buildAccountContext');
+
+function buildSystemPrompt(config = {}) {
+  const accountContext = buildAccountContext(
+    config.intelligence_profile ?? null,
+    'your-agent-slug'
+  );
+  const accountContextBlock = accountContext ? `${accountContext}\n---\n\n` : '';
+  return `${accountContextBlock}You are a...`;
+}
+```
+
+The account context block is injected **first** so Claude sees the declared business targets before any role instructions or analytical heuristics. The final instruction in the prompt must reference the profile: "Before finalising any recommendation, verify it against the declared account baselines in the Account Intelligence Profile above."
+
+---
+
+### Tool Description Guidelines
+
+Tool descriptions are part of the prompt — Claude reads them to decide which tool to call. Good descriptions:
+
+- Lead with the data shape returned: "Returns one object per campaign with: id, name, status, budget (AUD), impressions, clicks..."
+- State when to use it: "Use this first to understand which campaigns are running..."
+- State what not to use it for (if relevant): distinguishes from similar tools
+- Avoid vague verbs: not "gets data" — say "retrieves performance totals for every enabled campaign"
+
+The `input_schema` should have no required fields for tools with sensible defaults (date range tools). If a tool has no configurable parameters at all, use `{ type: 'object', properties: {}, required: [] }` as the schema — the orchestrator still requires a schema object.
 
 ---
 

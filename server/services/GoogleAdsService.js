@@ -65,11 +65,16 @@ class GoogleAdsService {
     return token;
   }
 
-  async _search(gaql) {
+  /**
+   * @param {string} gaql
+   * @param {string|null} [customerId] — override the env default customer ID for multi-account runs
+   */
+  async _search(gaql, customerId = null) {
     const accessToken = await this._getAccessToken();
+    const cid = customerId ? customerId.replace(/-/g, '') : this._customerId;
 
     const response = await fetch(
-      `${ADS_BASE}/customers/${this._customerId}/googleAds:search`,
+      `${ADS_BASE}/customers/${cid}/googleAds:search`,
       {
         method: 'POST',
         headers: {
@@ -95,8 +100,9 @@ class GoogleAdsService {
 
   /**
    * @param {number|{startDate,endDate}} [options=30]
+   * @param {string|null} [customerId]
    */
-  async getCampaignPerformance(options = 30) {
+  async getCampaignPerformance(options = 30, customerId = null) {
     const { from, to } = resolveRange(options);
 
     const results = await this._search(`
@@ -114,7 +120,7 @@ class GoogleAdsService {
       FROM campaign
       WHERE campaign.status = 'ENABLED'
         AND segments.date BETWEEN '${from}' AND '${to}'
-    `);
+    `, customerId);
 
     return results.map((r) => ({
       id:          r.campaign?.id          ?? null,
@@ -132,8 +138,9 @@ class GoogleAdsService {
 
   /**
    * @param {number|{startDate,endDate}} [options=30]
+   * @param {string|null} [customerId]
    */
-  async getDailyPerformance(options = 30) {
+  async getDailyPerformance(options = 30, customerId = null) {
     const { from, to } = resolveRange(options);
 
     const results = await this._search(`
@@ -146,7 +153,7 @@ class GoogleAdsService {
       FROM customer
       WHERE segments.date BETWEEN '${from}' AND '${to}'
       ORDER BY segments.date ASC
-    `);
+    `, customerId);
 
     return results.map((r) => ({
       date:        r.segments?.date                  ?? '',
@@ -159,8 +166,9 @@ class GoogleAdsService {
 
   /**
    * @param {number|{startDate,endDate}} [options=30]
+   * @param {string|null} [customerId]
    */
-  async getSearchTerms(options = 30) {
+  async getSearchTerms(options = 30, customerId = null) {
     const { from, to } = resolveRange(options);
 
     const results = await this._search(`
@@ -176,7 +184,7 @@ class GoogleAdsService {
       WHERE segments.date BETWEEN '${from}' AND '${to}'
       ORDER BY metrics.clicks DESC
       LIMIT 50
-    `);
+    `, customerId);
 
     return results.map((r) => ({
       term:        r.searchTermView?.searchTerm  ?? '',
@@ -189,7 +197,10 @@ class GoogleAdsService {
     }));
   }
 
-  async getBudgetPacing() {
+  /**
+   * @param {string|null} [customerId]
+   */
+  async getBudgetPacing(customerId = null) {
     const results = await this._search(`
       SELECT
         campaign.name,
@@ -198,12 +209,44 @@ class GoogleAdsService {
       FROM campaign
       WHERE campaign.status = 'ENABLED'
         AND segments.date DURING THIS_MONTH
-    `);
+    `, customerId);
 
     return results.map((r) => ({
       name:          r.campaign?.name                                     ?? '',
       monthlyBudget: parseInt(r.campaignBudget?.amountMicros ?? '0') / 1_000_000,
       spentToDate:   parseInt(r.metrics?.costMicros          ?? '0') / 1_000_000,
+    }));
+  }
+  /**
+   * Returns recent change history events (bid/budget/status changes, ad edits).
+   * @param {number|{startDate,endDate}} [options=7]
+   * @param {string|null} [customerId]
+   */
+  async getChangeHistory(options = 7, customerId = null) {
+    const { from, to } = resolveRange(options);
+
+    const results = await this._search(`
+      SELECT
+        change_event.change_date_time,
+        change_event.change_resource_type,
+        change_event.changed_fields,
+        change_event.client_type,
+        change_event.resource_change_operation,
+        campaign.name
+      FROM change_event
+      WHERE change_event.change_date_time >= '${from} 00:00:00'
+        AND change_event.change_date_time <= '${to} 23:59:59'
+      ORDER BY change_event.change_date_time DESC
+      LIMIT 50
+    `, customerId);
+
+    return results.map((r) => ({
+      changedAt:      r.changeEvent?.changeDateTimeAsString ?? r.changeEvent?.changeDateTime ?? '',
+      resourceType:   r.changeEvent?.changeResourceType    ?? '',
+      changedFields:  r.changeEvent?.changedFields         ?? [],
+      clientType:     r.changeEvent?.clientType            ?? '',
+      operation:      r.changeEvent?.resourceChangeOperation ?? '',
+      campaignName:   r.campaign?.name                     ?? '',
     }));
   }
 }

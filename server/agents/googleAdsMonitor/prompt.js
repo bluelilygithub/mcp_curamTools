@@ -16,8 +16,13 @@
  */
 
 const { buildAccountContext } = require('../../platform/buildAccountContext');
+const { substitutePromptVars } = require('../../platform/substitutePromptVars');
 
-function buildSystemPrompt(config = {}) {
+/**
+ * @param {object} config
+ * @param {object} [customerVars]  — { customer_name, customer_id } for {{variable}} substitution
+ */
+function buildSystemPrompt(config = {}, customerVars = {}) {
   const ctrPct  = ((config.ctr_low_threshold  ?? 0.03) * 100).toFixed(0);
   const wasted  = config.wasted_clicks_threshold   ?? 5;
   const impMin  = config.impressions_ctr_threshold ?? 100;
@@ -29,6 +34,10 @@ function buildSystemPrompt(config = {}) {
   );
 
   const accountContextBlock = accountContext ? `${accountContext}\n---\n\n` : '';
+
+  const customPromptBlock = config.custom_prompt
+    ? `\n\n## Operator Instructions\n${substitutePromptVars(config.custom_prompt, customerVars)}\n`
+    : '';
 
   return `${accountContextBlock}\
 You are a Google Ads performance analyst for a digital marketing team. \
@@ -92,7 +101,7 @@ Numbered list. Each recommendation must:
 
 Prioritise by estimated impact — highest first. Limit to ${maxSugg} recommendations maximum.
 
-Before finalising any recommendation, verify it against the declared account baselines in the Account Intelligence Profile above. If a recommendation contradicts a positive account-level metric, either withdraw it or reframe it as a refinement opportunity rather than a problem.`;
+Before finalising any recommendation, verify it against the declared account baselines in the Account Intelligence Profile above. If a recommendation contradicts a positive account-level metric, either withdraw it or reframe it as a refinement opportunity rather than a problem.${customPromptBlock}`;
 }
 
 module.exports = { buildSystemPrompt };

@@ -20,6 +20,13 @@ const AGENT_DEFAULTS = {
     impressions_ctr_threshold: 100,            // impressions floor for ad-copy opportunity check
     max_suggestions:           8,
   },
+  'google-ads-freeform': {
+    max_suggestions: 5,
+  },
+  'google-ads-change-impact': {
+    lookback_days: 7,
+    max_suggestions: 5,
+  },
 };
 
 const ADMIN_DEFAULTS = {
@@ -29,6 +36,20 @@ const ADMIN_DEFAULTS = {
     max_tokens:           8192,
     max_iterations:       10,
     max_task_budget_aud:  0.50,
+  },
+  'google-ads-freeform': {
+    enabled:             true,
+    model:               'claude-sonnet-4-6',
+    max_tokens:          8192,
+    max_iterations:      12,
+    max_task_budget_aud: 0.50,
+  },
+  'google-ads-change-impact': {
+    enabled:             true,
+    model:               'claude-sonnet-4-6',
+    max_tokens:          8192,
+    max_iterations:      10,
+    max_task_budget_aud: 0.50,
   },
   _platform: {
     enabled: true,
@@ -56,18 +77,23 @@ function getDefaultAgentConfig(slug) {
 async function getAgentConfig(orgId, slug) {
   try {
     const res = await pool.query(
-      `SELECT config, intelligence_profile
+      `SELECT config, intelligence_profile, custom_prompt
          FROM agent_configs
-        WHERE org_id = $1 AND slug = $2`,
+        WHERE org_id = $1 AND slug = $2 AND customer_id IS NULL`,
       [orgId, slug]
     );
     const defaults = getDefaultAgentConfig(slug);
-    if (res.rows.length === 0) return { ...defaults, intelligence_profile: null };
-    const { config, intelligence_profile } = res.rows[0];
-    return { ...defaults, ...(config || {}), intelligence_profile: intelligence_profile ?? null };
+    if (res.rows.length === 0) return { ...defaults, intelligence_profile: null, custom_prompt: null };
+    const { config, intelligence_profile, custom_prompt } = res.rows[0];
+    return {
+      ...defaults,
+      ...(config || {}),
+      intelligence_profile: intelligence_profile ?? null,
+      custom_prompt: custom_prompt ?? null,
+    };
   } catch (err) {
     console.error(`[AgentConfigService] getAgentConfig error (${slug}):`, err.message);
-    return { ...getDefaultAgentConfig(slug), intelligence_profile: null };
+    return { ...getDefaultAgentConfig(slug), intelligence_profile: null, custom_prompt: null };
   }
 }
 
@@ -75,29 +101,25 @@ async function getAgentConfig(orgId, slug) {
  * Upserts a partial patch into agent_configs. Returns the merged result.
  */
 async function updateAgentConfig(orgId, slug, patch, updatedBy) {
-  const current = await getAgentConfig(orgId, slug);
-  const { intelligence_profile, ...configFields } = patch;
+  const { intelligence_profile, custom_prompt, ...configFields } = patch;
 
-  const merged = { ...configFields };
-  // Remove intelligence_profile from config JSONB; it has its own column
-  delete merged.intelligence_profile;
-
-  const newConfig = { ...configFields };
   const res = await pool.query(
-    `INSERT INTO agent_configs (org_id, slug, config, intelligence_profile, updated_by, updated_at)
-     VALUES ($1, $2, $3, $4, $5, NOW())
-     ON CONFLICT (org_id, slug)
+    `INSERT INTO agent_configs (org_id, slug, config, intelligence_profile, custom_prompt, updated_by, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW())
+     ON CONFLICT (org_id, slug) WHERE customer_id IS NULL
      DO UPDATE SET
-       config              = agent_configs.config || $3::jsonb,
+       config               = agent_configs.config || $3::jsonb,
        intelligence_profile = COALESCE($4, agent_configs.intelligence_profile),
-       updated_by          = $5,
-       updated_at          = NOW()
-     RETURNING config, intelligence_profile`,
+       custom_prompt        = COALESCE($5, agent_configs.custom_prompt),
+       updated_by           = $6,
+       updated_at           = NOW()
+     RETURNING config, intelligence_profile, custom_prompt`,
     [
       orgId,
       slug,
-      JSON.stringify(newConfig),
+      JSON.stringify(configFields),
       intelligence_profile !== undefined ? JSON.stringify(intelligence_profile) : null,
+      custom_prompt !== undefined ? custom_prompt : null,
       updatedBy,
     ]
   );
@@ -106,7 +128,94 @@ async function updateAgentConfig(orgId, slug, patch, updatedBy) {
     ...getDefaultAgentConfig(slug),
     ...(row.config || {}),
     intelligence_profile: row.intelligence_profile ?? null,
+    custom_prompt: row.custom_prompt ?? null,
   };
+}
+
+// ── Customer-level operator config ────────────────────────────────────────
+
+/**
+ * Returns config for a specific customerId, falling back to org-default if no
+ * customer-specific row exists. Merges: system defaults → org default → customer override.
+ */
+async function getAgentConfigForCustomer(orgId, slug, customerId) {
+  const orgDefault = await getAgentConfig(orgId, slug);
+  try {
+    const res = await pool.query(
+      `SELECT config, intelligence_profile, custom_prompt
+         FROM agent_configs
+        WHERE org_id = $1 AND slug = $2 AND customer_id = $3`,
+      [orgId, slug, customerId]
+    );
+    if (res.rows.length === 0) return orgDefault;
+    const { config, intelligence_profile, custom_prompt } = res.rows[0];
+    return {
+      ...orgDefault,
+      ...(config || {}),
+      intelligence_profile: intelligence_profile ?? orgDefault.intelligence_profile,
+      custom_prompt: custom_prompt ?? orgDefault.custom_prompt,
+    };
+  } catch (err) {
+    console.error(`[AgentConfigService] getAgentConfigForCustomer error (${slug}/${customerId}):`, err.message);
+    return orgDefault;
+  }
+}
+
+/**
+ * Upserts a customer-specific config row. Only stores the delta — falls back to
+ * org-default at read time via getAgentConfigForCustomer.
+ */
+async function updateAgentConfigForCustomer(orgId, slug, customerId, patch, updatedBy) {
+  const { intelligence_profile, custom_prompt, ...configFields } = patch;
+
+  const res = await pool.query(
+    `INSERT INTO agent_configs (org_id, slug, customer_id, config, intelligence_profile, custom_prompt, updated_by, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+     ON CONFLICT (org_id, slug, customer_id) WHERE customer_id IS NOT NULL
+     DO UPDATE SET
+       config               = agent_configs.config || $4::jsonb,
+       intelligence_profile = COALESCE($5, agent_configs.intelligence_profile),
+       custom_prompt        = COALESCE($6, agent_configs.custom_prompt),
+       updated_by           = $7,
+       updated_at           = NOW()
+     RETURNING config, intelligence_profile, custom_prompt`,
+    [
+      orgId,
+      slug,
+      customerId,
+      JSON.stringify(configFields),
+      intelligence_profile !== undefined ? JSON.stringify(intelligence_profile) : null,
+      custom_prompt !== undefined ? custom_prompt : null,
+      updatedBy,
+    ]
+  );
+  const row = res.rows[0];
+  return {
+    ...getDefaultAgentConfig(slug),
+    ...(row.config || {}),
+    intelligence_profile: row.intelligence_profile ?? null,
+    custom_prompt: row.custom_prompt ?? null,
+  };
+}
+
+/**
+ * Returns all customer-specific config rows for a given agent slug.
+ * Used by AgentScheduler to enumerate customers that need scheduled runs.
+ */
+async function listCustomerConfigs(orgId, slug) {
+  try {
+    const res = await pool.query(
+      `SELECT customer_id, config, intelligence_profile, custom_prompt
+         FROM agent_configs
+        WHERE org_id = $1 AND slug = $2 AND customer_id IS NOT NULL
+        ORDER BY customer_id`,
+      [orgId, slug]
+    );
+    return res.rows;
+  } catch (err) {
+    console.error(`[AgentConfigService] listCustomerConfigs error (${slug}):`, err.message);
+    return [];
+  }
 }
 
 // ── Admin config (system_settings) ────────────────────────────────────────
@@ -199,6 +308,9 @@ async function updateOrgBudgetSettings(orgId, patch, updatedBy) {
 module.exports = {
   getAgentConfig,
   updateAgentConfig,
+  getAgentConfigForCustomer,
+  updateAgentConfigForCustomer,
+  listCustomerConfigs,
   getAdminConfig,
   updateAdminConfig,
   getOrgBudgetSettings,

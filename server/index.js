@@ -51,6 +51,8 @@ const { agentsRouter, agentConfigsRouter } = require('./routes/agents');
 app.use('/api/agents', agentsRouter);
 app.use('/api/agent-configs', agentConfigsRouter);
 
+app.use('/api/google-ads', require('./routes/googleAds'));
+
 // ── Static files (production) ──────────────────────────────────────────────
 const publicDir = path.join(__dirname, 'public');
 app.use(express.static(publicDir));

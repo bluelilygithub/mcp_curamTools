@@ -84,21 +84,38 @@ async function initSchema() {
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS agent_configs (
-        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        org_id              INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-        slug                TEXT NOT NULL,
-        config              JSONB NOT NULL DEFAULT '{}',
+        id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id               INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        slug                 TEXT NOT NULL,
+        customer_id          TEXT DEFAULT NULL,
+        config               JSONB NOT NULL DEFAULT '{}',
         intelligence_profile JSONB,
-        updated_by          INTEGER REFERENCES users(id) ON DELETE SET NULL,
-        updated_at          TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(org_id, slug)
+        custom_prompt        TEXT,
+        updated_by           INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        updated_at           TIMESTAMPTZ DEFAULT NOW()
+        -- UNIQUE constraint replaced by partial indexes below
       )
     `);
 
-    // Idempotent add of intelligence_profile in case this table existed without it
+    // Idempotent column additions (existing installs)
+    await client.query(`ALTER TABLE agent_configs ADD COLUMN IF NOT EXISTS intelligence_profile JSONB`);
+    await client.query(`ALTER TABLE agent_configs ADD COLUMN IF NOT EXISTS customer_id TEXT DEFAULT NULL`);
+    await client.query(`ALTER TABLE agent_configs ADD COLUMN IF NOT EXISTS custom_prompt TEXT`);
+
+    // Drop old UNIQUE(org_id, slug) constraint and replace with partial indexes
+    // (existing installs have the constraint; new installs don't — DROP IF EXISTS handles both)
+    await client.query(`ALTER TABLE agent_configs DROP CONSTRAINT IF EXISTS agent_configs_org_id_slug_key`);
+
+    // Partial unique indexes: one default config per (org, slug), one per customer
     await client.query(`
-      ALTER TABLE agent_configs
-        ADD COLUMN IF NOT EXISTS intelligence_profile JSONB
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_configs_org_slug_default
+        ON agent_configs(org_id, slug)
+        WHERE customer_id IS NULL
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_configs_org_slug_customer
+        ON agent_configs(org_id, slug, customer_id)
+        WHERE customer_id IS NOT NULL
     `);
 
     // Idempotent add of timezone to users
@@ -259,6 +276,39 @@ async function initSchema() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_user_departments_user_id
         ON user_departments(user_id)
+    `);
+
+    // ── Google Ads multi-customer tables ───────────────────────────────────
+
+    // Extend agent_runs with customer/campaign metadata (idempotent)
+    await client.query(`ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS customer_id TEXT`);
+    await client.query(`ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS campaign_id TEXT`);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS google_ads_customers (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id        INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        customer_id   TEXT NOT NULL,
+        customer_name TEXT NOT NULL,
+        is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at    TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (org_id, customer_id)
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS campaign_agent_assignments (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id        INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        customer_id   TEXT NOT NULL,
+        campaign_id   TEXT NOT NULL,
+        campaign_name TEXT,
+        agent_slug    TEXT NOT NULL,
+        config        JSONB NOT NULL DEFAULT '{}',
+        is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at    TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (org_id, customer_id, campaign_id, agent_slug)
+      )
     `);
 
     await client.query('COMMIT');

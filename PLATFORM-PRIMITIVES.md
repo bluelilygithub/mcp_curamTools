@@ -314,6 +314,165 @@ Called at run time with freshly-loaded agent config from `AgentConfigService`. O
 
 ---
 
+### AgentOrchestrator
+**Type:** Platform Primitive — Singleton
+**Location:** `server/platform/AgentOrchestrator.js`
+**What it does:** The ReAct (Reason + Act) loop engine for all agents. Calls Claude, parses `tool_use` blocks, executes tools, feeds results back, and repeats until Claude produces a final text response or `maxIterations` is reached. Zero agent-specific code — it knows nothing about which agent is running.
+**Interface:**
+```js
+const { result, trace, tokensUsed } = await agentOrchestrator.run({
+  systemPrompt:  string,        // agent's full system prompt
+  userMessage:   string,        // initial user message
+  tools:         array,         // tool definitions from agent's tools.js
+  model:         string,        // e.g. 'claude-sonnet-4-6'
+  maxTokens:     number,        // token limit per Claude call
+  maxIterations: number,        // max tool-use loops (default 10)
+  onStep:        function,      // emit callback from createAgentRoute — called with progress text on each iteration
+  context:       object,        // passed to each tool's execute(input, context) call
+  thinking:      object|null,   // optional { type: 'enabled', budget_tokens: N } for extended thinking
+});
+
+// Returns:
+// result:     { summary: string }  — the final text response from Claude
+// trace:      array                — each step: { type, content, toolResults }
+// tokensUsed: { input, output, cacheRead, cacheWrite } — accumulated across all iterations
+```
+
+**Tool stripping:** Before sending tool definitions to Anthropic, the orchestrator strips `execute`, `requiredPermissions`, and `toolSlug` fields — these are agent-platform metadata, not part of the Anthropic tool schema.
+
+**Full content preservation:** When feeding tool results back to Claude, the orchestrator passes the full assistant response content array (including any `thinking` blocks if extended thinking was active). This is required by the Anthropic API — stripping thinking blocks from multi-turn conversations causes an API error.
+
+**Stopping condition:** The loop ends when Claude produces a `text` block without any `tool_use` in the same response, or when `maxIterations` is reached.
+
+**Error behaviour:** Tool execution errors are caught per-tool and fed back to Claude as error text (not thrown) so the agent can recover or report the issue. An orchestrator-level error (e.g. Anthropic API failure) propagates to `createAgentRoute`'s catch block.
+
+**Used by:** All agents via their `index.js` `runFn`. Currently: `runGoogleAdsMonitor`.
+**Reuse contract:** Agents never construct their own Anthropic API client. All Claude calls go through `agentOrchestrator.run()`. The `context` object is passed through verbatim to each tool's `execute()` — include `startDate`, `endDate`, `orgId`, `toolSlug` etc. at the `context` level, not inside tool input schemas.
+**Does not handle:** Tool registration or lookup (tools are passed as an array per run). Cost computation (callers use `CostGuardService.computeCostAud(tokensUsed)`). Prompt caching structure (system prompt is passed as a string; callers may structure it as a block array if using Anthropic's cache API — not currently used by agents).
+
+---
+
+### buildAccountContext
+**Type:** Utility
+**Location:** `server/platform/buildAccountContext.js`
+**What it does:** Formats the operator's `intelligence_profile` (stored in `agent_configs.config.intelligence_profile`) into a prompt-ready account context block. Injected as the first block of every agent's system prompt — before role instructions and analytical heuristics — so Claude sees declared business targets before interpreting any data.
+**Interface:**
+```js
+const { buildAccountContext } = require('../../platform/buildAccountContext');
+
+buildAccountContext(profile, agentSlug)
+// profile:   object | null — intelligence_profile from agent config; null/empty → returns ''
+// agentSlug: string — used to select agent-specific keys from profile.agentSpecific
+// Returns:   string — formatted markdown block, or '' if profile is null/empty
+```
+
+**Profile shape (shared base + agent-specific extension):**
+```js
+{
+  // Shared base — all agents
+  targetROAS:          number | null,   // declared account-level ROAS target
+  targetCPA:           number | null,   // declared CPA target (AUD)
+  businessContext:     string,          // free text: business type, seasonality, budget constraints
+  analyticalGuardrails: string,         // free text: what to ignore or treat carefully
+
+  // Agent-specific extension — open JSONB, keyed by agent concern
+  agentSpecific: {
+    conversionRateBaseline:    number,  // Google Ads Monitor: account-level baseline CVR
+    averageOrderValue:         number,  // Google Ads Monitor: declared AOV (AUD)
+    typicalConversionLagDays:  number,  // Google Ads Monitor: days between click and conversion
+  }
+}
+```
+
+**Injection pattern:**
+```js
+const accountContext = buildAccountContext(config.intelligence_profile ?? null, 'google-ads-monitor');
+const accountContextBlock = accountContext ? `${accountContext}\n---\n\n` : '';
+return `${accountContextBlock}You are a Google Ads analyst...`;
+```
+
+**Rationale:** Placing the account context block first (before role instructions) gives it maximum influence on Claude's reasoning. An empty or null profile produces `''` so the prompt degrades gracefully — agents function correctly with no profile set.
+
+**Used by:** `server/agents/googleAdsMonitor/prompt.js`. Must be used by all future agents that accept a configurable `intelligence_profile`.
+**Reuse contract:** `buildAccountContext` must contain no agent-specific logic. The `agentSpecific` field is the extension point — agents add their own keys to it without modifying `buildAccountContext`. The function must return `''` (not throw) for null or `{}` profiles.
+**Does not handle:** Validation of profile field types. Formatting of the `agentSpecific` block beyond what the agent's profile keys contain — each agent's prompt should document which `agentSpecific` keys it reads.
+
+---
+
+### GoogleAdsService
+**Type:** Domain Service — Singleton
+**Location:** `server/services/GoogleAdsService.js`
+**What it does:** Google Ads REST API v23 client. Executes GAQL queries against a single configured Ads account and returns normalised data ready for agent tool execution. All monetary values returned in AUD (÷ 1,000,000 from micros). Shared by all current and future Google Ads agents.
+**Interface:**
+```js
+const { googleAdsService } = require('../services/GoogleAdsService');
+
+// All methods accept either:
+//   - number:             days lookback from today
+//   - { startDate, endDate }: ISO date strings 'YYYY-MM-DD'
+
+googleAdsService.getCampaignPerformance(options)
+// Returns: [{ id, name, status, budget(AUD), impressions, clicks, cost(AUD), conversions, ctr, avgCpc }]
+// One object per enabled campaign.
+
+googleAdsService.getDailyPerformance(options)
+// Returns: [{ date, impressions, clicks, cost(AUD), conversions }]
+// Account-level daily aggregates, ordered by date ASC.
+
+googleAdsService.getSearchTerms(options)
+// Returns: [{ term, status, impressions, clicks, cost(AUD), conversions, ctr }]
+// Top 50 search queries by clicks DESC.
+
+googleAdsService.getBudgetPacing()
+// Returns: [{ campaignId, campaignName, budgetAud, spentAud, remainingAud, pacingPct }]
+// Current-month budget pacing across all campaigns (no date param — always current month).
+```
+
+**Authentication:** Uses `googleapis` for OAuth2 token rotation only. All API calls use native `fetch` to the Google Ads REST endpoint (v23). Token refresh is automatic on each call.
+
+**Required env vars:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_MANAGER_ID`, `GOOGLE_ADS_DEVELOPER_TOKEN`.
+
+**Used by:** `server/agents/googleAdsMonitor/tools.js`. Importable by any future Google Ads agent.
+**Reuse contract:** New Google Ads agents import `googleAdsService` directly from `server/services/`. Do not create agent-specific API clients. Add new query methods to `GoogleAdsService` if needed — do not add them inside agent `tools.js` files.
+**Does not handle:** Multi-account (MCC) account switching per request. Campaign mutation (read-only). Authentication token storage (tokens are refreshed on-demand, not persisted).
+
+---
+
+### GoogleAnalyticsService
+**Type:** Domain Service — Singleton
+**Location:** `server/services/GoogleAnalyticsService.js`
+**What it does:** Google Analytics Data API (GA4) v1beta client. Executes report queries against a configured GA4 property and returns normalised rows. Shared by all current and future Google Ads / analytics agents.
+**Interface:**
+```js
+const { googleAnalyticsService } = require('../services/GoogleAnalyticsService');
+
+// All methods accept either number (days) or { startDate, endDate }
+
+googleAnalyticsService.getSessionsOverview(options)
+// Returns: [{ date, sessions, activeUsers, newUsers, bounceRate }]
+// Daily metrics ordered by date ASC. bounceRate is a decimal (0.42 = 42%).
+
+googleAnalyticsService.getTrafficSources(options)
+// Returns: [{ channel, sessions, conversions, totalRevenue }]
+// Per-channel session and revenue breakdown.
+
+googleAnalyticsService.getLandingPagePerformance(options)
+// Returns: [{ page, sessions, conversions, bounceRate, avgSessionDuration }]
+// Top 20 landing pages by session count.
+
+googleAnalyticsService.getConversionEvents(options)
+// Returns: [{ event, date, eventCount, conversions }]
+// Conversion events only (conversions > 0), ordered by date ASC then conversions DESC.
+```
+
+**Authentication:** Same `googleapis` OAuth2 pattern as `GoogleAdsService`. Shares the same `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` env vars. Requires `GOOGLE_GA4_PROPERTY_ID`.
+
+**Used by:** `server/agents/googleAdsMonitor/tools.js` (`get_analytics_overview` tool). Importable by any future analytics agent.
+**Reuse contract:** Same as `GoogleAdsService` — import the singleton, add new methods if needed, don't create agent-specific clients.
+**Does not handle:** GA4 event-level data. Realtime reporting. Multi-property queries.
+
+---
+
 ## Curam Vault Patterns Explicitly Flagged as Reusable
 
 The following patterns are from `LEARNINGS--very important.md` and `README  -- very important.md` (Curam Vault) and are explicitly flagged as reusable in the platform context.

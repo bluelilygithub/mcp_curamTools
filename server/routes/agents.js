@@ -24,7 +24,9 @@ const { AgentScheduler }   = require('../platform/AgentScheduler');
 const { send: sendEmail }  = require('../services/EmailService');
 
 // ── Google Ads Monitor ────────────────────────────────────────────────────
-const { runGoogleAdsMonitor } = require('../agents/googleAdsMonitor');
+const { runGoogleAdsMonitor }      = require('../agents/googleAdsMonitor');
+const { runGoogleAdsFreeform }     = require('../agents/googleAdsFreeform');
+const { runGoogleAdsChangeImpact } = require('../agents/googleAdsChangeImpact');
 
 agentsRouter.use(
   '/google-ads-monitor',
@@ -40,6 +42,26 @@ AgentScheduler.register({
   schedule: '0 6,18 * * *',
   runFn:    runGoogleAdsMonitor,
 });
+
+// ── Google Ads Freeform ───────────────────────────────────────────────────
+agentsRouter.use(
+  '/google-ads-freeform',
+  createAgentRoute({
+    slug:               'google-ads-freeform',
+    runFn:              runGoogleAdsFreeform,
+    requiredPermission: 'ads_operator',
+  })
+);
+
+// ── Google Ads Change Impact ──────────────────────────────────────────────
+agentsRouter.use(
+  '/google-ads-change-impact',
+  createAgentRoute({
+    slug:               'google-ads-change-impact',
+    runFn:              runGoogleAdsChangeImpact,
+    requiredPermission: 'ads_operator',
+  })
+);
 
 // Email report — POST /api/agents/google-ads-monitor/email
 agentsRouter.post('/google-ads-monitor/email', requireAuth, async (req, res) => {
@@ -147,6 +169,63 @@ agentConfigsRouter.put('/:slug', requireAuth, requireRole(['org_admin']), async 
   } catch (err) {
     console.error('[agent-configs PUT]', err.message);
     res.status(500).json({ error: 'Failed to update agent config.' });
+  }
+});
+
+// GET /api/agent-configs/:slug/preview-prompt — preview rendered system prompt
+agentConfigsRouter.get('/:slug/preview-prompt', requireAuth, async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const customerId = req.query.customerId ?? null;
+    const config = customerId
+      ? await AgentConfigService.getAgentConfigForCustomer(req.user.orgId, slug, customerId)
+      : await AgentConfigService.getAgentConfig(req.user.orgId, slug);
+
+    // Dynamically load the agent's buildSystemPrompt if it exists
+    let preview = null;
+    try {
+      const agentDir = slug.replace(/-([a-z])/g, (_, c) => c.toUpperCase()); // kebab → camel
+      const { buildSystemPrompt } = require(`../agents/${agentDir}/prompt`);
+      const customerVars = customerId
+        ? { customer_id: customerId, customer_name: config.customer_name ?? customerId }
+        : {};
+      preview = buildSystemPrompt(config, customerVars);
+    } catch {
+      preview = '(No prompt builder found for this agent.)';
+    }
+
+    res.json({ preview });
+  } catch (err) {
+    console.error('[agent-configs preview-prompt]', err.message);
+    res.status(500).json({ error: 'Failed to preview prompt.' });
+  }
+});
+
+// GET /api/agent-configs/:slug/customers — list customer-specific configs
+agentConfigsRouter.get('/:slug/customers', requireAuth, async (req, res) => {
+  try {
+    const rows = await AgentConfigService.listCustomerConfigs(req.user.orgId, req.params.slug);
+    res.json(rows);
+  } catch (err) {
+    console.error('[agent-configs customers GET]', err.message);
+    res.status(500).json({ error: 'Failed to load customer configs.' });
+  }
+});
+
+// PUT /api/agent-configs/:slug/customers/:customerId — upsert customer-specific config
+agentConfigsRouter.put('/:slug/customers/:customerId', requireAuth, requireRole(['org_admin']), async (req, res) => {
+  try {
+    const updated = await AgentConfigService.updateAgentConfigForCustomer(
+      req.user.orgId,
+      req.params.slug,
+      req.params.customerId,
+      req.body,
+      req.user.id
+    );
+    res.json(updated);
+  } catch (err) {
+    console.error('[agent-configs customers PUT]', err.message);
+    res.status(500).json({ error: 'Failed to update customer config.' });
   }
 });
 

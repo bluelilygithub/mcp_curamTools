@@ -430,6 +430,96 @@ Both pages added to `App.jsx` under the existing `RequireRole(['org_admin'])` gu
 
 ---
 
+### Google Ads Monitor — Date Range Resolution
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** The initial agent accepted only a `days` (integer) parameter from the UI. The user required date pickers (from/to) so specific date ranges could be selected, not just rolling lookback windows.
+**Decision:** Both `GoogleAdsService` and `GoogleAnalyticsService` accept either form via a `resolveRange(options)` helper. If `options` is an object with `startDate`/`endDate`, those are used directly. If it is a number (or `{ days }` object), the date range is computed from today. The agent's `tools.js` exposes a `rangeOrDays(context, input)` helper that picks `context.startDate`/`context.endDate` (set from `req.body` by `index.js`) over any fallback — this is the canonical priority order:
+1. `req.body.startDate` / `req.body.endDate` (UI date pickers)
+2. `req.body.days` (UI legacy or days preset buttons)
+3. `config.lookback_days` (operator default)
+4. `30` (hardcoded fallback)
+
+**Rationale:** Backward compatibility: existing callers passing a number continue to work. The services are reusable by future agents that need either convention.
+**Constraints it must not violate:** `resolveRange` must live inside each service file, not in the agent — agents call service methods, not `resolveRange` directly. `rangeOrDays` in `tools.js` must always prefer context-level dates over tool input dates (context has already resolved the correct range before tools execute).
+
+---
+
+### Scheduled Runs — Empty Config Detection
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `AgentScheduler` passes `config: {}` and `adminConfig: {}` to `runFn` on cron ticks because no HTTP request context exists. If an agent reads config from `context.config` without checking, it silently falls back to all hardcoded defaults and ignores the operator's saved settings.
+**Decision:** Each agent's `index.js` detects empty config objects and loads from DB:
+```js
+const config = Object.keys(context.config ?? {}).length > 0
+  ? context.config
+  : await AgentConfigService.getAgentConfig(orgId, TOOL_SLUG);
+
+const adminConfig = Object.keys(context.adminConfig ?? {}).length > 0
+  ? context.adminConfig
+  : await AgentConfigService.getAdminConfig(TOOL_SLUG);
+```
+**Rationale:** The scheduler passes empty objects (not null/undefined) because the route factory contract defines those fields. Length-checking is the idiomatic way to detect "not populated" from "populated but empty". This pattern must be copied verbatim into every new agent's `index.js`.
+**Constraints it must not violate:** The check must use `Object.keys(...).length > 0`, not `context.config ?? {}` — the latter always trusts the passed value even if empty.
+
+---
+
+### MarkdownRenderer — Prop Is `text`, Not `content`
+**Date:** 2026-03-29
+**Status:** Settled — enforced
+**Context:** `MarkdownRenderer` was built with a `text` prop. The initial `GoogleAdsMonitorPage` passed `content=` by analogy with other components, producing a silently empty analysis block. No runtime error was thrown.
+**Decision:** The `MarkdownRenderer` prop name is `text`. All callers must use `<MarkdownRenderer text={value} />`. No aliasing or alternate prop names.
+**Rationale:** Prop name mismatch is silent in React — the component renders empty without warning. Enforcing a single canonical name prevents recurrence. Any future refactor of the component must maintain `text` for backward compatibility.
+**Constraints it must not violate:** Do not add a `content` alias to `MarkdownRenderer`. If the prop name ever needs to change, update all call sites simultaneously.
+
+---
+
+### Number and Date Formatting Standards
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** Initial agent UI rendered raw floats (`$1234.5678`), missing thousands separators, and ISO date strings (`2026-03-01`). The user specified: comma-formatted integers, 2dp AUD currency, dd/mm/yyyy dates, and no monospace fonts except for code/search terms.
+**Decision:** All agent UI pages and sub-components use these helpers (defined inline or imported from a shared module when multiple components need them):
+```js
+const fmtNum = (n) => Math.round(n ?? 0).toLocaleString('en-AU');
+const fmtAud = (n) => `$${Number(n ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtDate = (s) => {
+  if (!s) return '—';
+  if (s.includes('T') || s.includes(' ')) return new Date(s).toLocaleString('en-AU');
+  const [y, m, d] = s.split('-');
+  return `${d}/${m}/${y}`;
+};
+```
+All inline styles include `fontFamily: 'inherit'` to respect the user's platform font setting. Monospace font for search query terms uses `fontFamily: 'var(--font-mono, monospace)'` — not the string `'monospace'`.
+**Constraints it must not violate:** `toFixed(2)` alone is not acceptable for currency — it lacks thousands separators. `toLocaleString()` without a locale argument is not acceptable — it produces locale-specific output that differs between environments. Always pass `'en-AU'` explicitly.
+
+---
+
+### Google Ads Monitor — UX Features
+**Date:** 2026-03-29
+**Status:** Settled — Complete
+**Context:** The initial UI showed no feedback during the 60–90 second agent run, used non-system fonts, had no data export, and accepted only preset day buttons.
+**Decision:** The following UX features were implemented in `GoogleAdsMonitorPage.jsx`:
+- **Animated progress bar** — CSS keyframe indeterminate animation (`@keyframes _ads_slide`), injected via `<style>` tag. No new npm packages.
+- **Run duration message** — "This may take 60–90 seconds. Please don't navigate away." displayed while running.
+- **Navigation guard** — `beforeunload` event listener added when run starts, removed on completion.
+- **Date pickers** — From/To `<input type="date">` fields replace the days-only UI. Preset buttons (7d / 14d / 30d / 90d) fill the date pickers rather than submitting directly.
+- **Export to CSV** — Client-side `Blob` download of campaign and search term data. No server round-trip.
+- **Print/PDF** — `window.print()`. Browser handles PDF generation; no jsPDF dependency.
+- **Email report** — Modal with pre-filled recipient (logged-in user's email). Calls `POST /api/agents/google-ads-monitor/email` which builds an HTML + plain-text email with campaign table and sends via `EmailService`.
+**Constraints it must not violate:** No new npm packages for any of these features. All inline styles must include `fontFamily: 'inherit'`. PDF export relies on browser print — no custom print CSS is required for correctness, though `@media print` rules may be added later to hide nav/controls.
+
+---
+
+### Email Report Endpoint Pattern
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** Agent reports need to be emailable from the UI without requiring a separate email microservice or new package.
+**Decision:** Each agent that supports email reporting adds a `POST /api/agents/:slug/email` route directly in `server/routes/agents.js`. The route accepts `{ to, result, startDate, endDate }` and builds an inline HTML email (no template engine). Campaign/data table rows are built with inline styles (email clients strip `<style>` tags). Summary markdown is converted to simple HTML via regex replacements in the route handler — no `marked` or `rehype` dependency. The route calls `EmailService.send({ to, subject, html, text })`.
+**Rationale:** Keeps the email route co-located with the agent's other route registrations. Inline styles are mandatory for email HTML — CSS classes are stripped by most clients. The regex conversion is sufficient for the headings/bold/list subset used in agent summaries.
+**Constraints it must not violate:** Email routes must use `requireAuth` but do not require `requiredPermission` — any user who can see the report can email it. Email route handlers must not call `persistRun` or `emit` — they are not agent runs. `https.request` (not `fetch`) must be used for MailChannels on Railway — `fetch` via `undici` silently fails on Railway's network layer.
+
+---
+
 ## Open Questions
 
 _(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_
