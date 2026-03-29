@@ -40,35 +40,35 @@ const ADMIN_DEFAULTS = {
     model:                'claude-sonnet-4-6',
     max_tokens:           8192,
     max_iterations:       10,
-    max_task_budget_aud:  0.50,
+    max_task_budget_aud:  2.00,
   },
   'google-ads-freeform': {
     enabled:             true,
     model:               'claude-sonnet-4-6',
     max_tokens:          8192,
     max_iterations:      12,
-    max_task_budget_aud: 0.50,
+    max_task_budget_aud: 2.00,
   },
   'google-ads-change-impact': {
     enabled:             true,
     model:               'claude-sonnet-4-6',
     max_tokens:          8192,
     max_iterations:      10,
-    max_task_budget_aud: 0.50,
+    max_task_budget_aud: 2.00,
   },
   'google-ads-change-audit': {
     enabled:             true,
     model:               'claude-sonnet-4-6',
     max_tokens:          8192,
     max_iterations:      15,   // higher — runs multiple before/after tool call pairs
-    max_task_budget_aud: 0.75, // slightly higher budget — more tool calls
+    max_task_budget_aud: 3.00, // higher budget — multiple before/after query pairs per change
   },
   _platform: {
     enabled: true,
     model: 'claude-sonnet-4-6',
     max_tokens: 4096,
     max_iterations: 10,
-    max_task_budget_aud: 0.50,  // per-run AUD ceiling; null = unlimited
+    max_task_budget_aud: 2.00,  // per-run AUD ceiling; null = unlimited
   },
 };
 

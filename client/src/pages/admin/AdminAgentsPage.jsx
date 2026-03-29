@@ -129,8 +129,8 @@ function AgentCard({ agent, onSave }) {
       {error && <InlineBanner type="error" message={error} onDismiss={() => setError('')} />}
       {success && <InlineBanner type="neutral" message={success} />}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2">
           <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>Model</label>
           <input
             value={config.model ?? ''}
@@ -156,6 +156,23 @@ function AgentCard({ agent, onSave }) {
             className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
             style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
           />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
+            Max Task Budget (AUD)
+          </label>
+          <input
+            type="number" step="0.25" min="0" value={config.max_task_budget_aud ?? ''}
+            onChange={(e) => setConfig((c) => ({ ...c, max_task_budget_aud: e.target.value === '' ? null : parseFloat(e.target.value) }))}
+            placeholder="Leave blank for unlimited"
+            className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+            style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+          />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+          <p className="text-xs" style={{ color: 'var(--color-muted)', paddingBottom: '0.6rem' }}>
+            Per-run AUD ceiling. Leave blank for unlimited. Applies before the daily org budget.
+          </p>
         </div>
       </div>
 
