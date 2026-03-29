@@ -75,7 +75,7 @@ async function createInvitation(email, orgId, roleName = 'org_member', invitedBy
   console.log(`[InvitationService] Activation URL for ${email}: ${activationUrl}`);
   await EmailService.sendInvitation(email, activationUrl);
 
-  return { userId, token, activationUrl };
+  return { userId, token, activationUrl, expiresAt: expiresAt.toISOString(), email };
 }
 
 /**

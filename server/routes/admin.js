@@ -50,7 +50,7 @@ router.post('/users/invite', async (req, res) => {
     const { email, role = 'org_member' } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required.' });
     const result = await createInvitation(email, req.user.orgId, role, req.user.id);
-    res.json({ ok: true, userId: result.userId });
+    res.json({ email: result.email, activationUrl: result.activationUrl, expiresAt: result.expiresAt });
   } catch (err) {
     console.error('[admin/invite]', err.message);
     res.status(400).json({ error: err.message });
@@ -59,8 +59,8 @@ router.post('/users/invite', async (req, res) => {
 
 router.post('/users/:id/resend-invite', async (req, res) => {
   try {
-    await resendInvitation(parseInt(req.params.id), req.user.id);
-    res.json({ ok: true });
+    const result = await resendInvitation(parseInt(req.params.id), req.user.id);
+    res.json({ email: result.email, activationUrl: result.activationUrl, expiresAt: result.expiresAt });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
