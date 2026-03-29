@@ -70,6 +70,31 @@ async function initSchema() {
         ON user_roles(user_id)
     `);
 
+    // Unique constraint so ON CONFLICT DO NOTHING works correctly.
+    // scope_id is nullable; two partial indexes cover both cases since
+    // standard UNIQUE treats NULL != NULL.
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_user_roles_no_scope
+        ON user_roles(user_id, role_name, scope_type)
+        WHERE scope_id IS NULL
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_user_roles_with_scope
+        ON user_roles(user_id, role_name, scope_type, scope_id)
+        WHERE scope_id IS NOT NULL
+    `);
+
+    // Remove duplicate rows that accumulated before the unique index was added.
+    // Keeps the earliest row (lowest id) for each logical combination.
+    await client.query(`
+      DELETE FROM user_roles
+      WHERE id NOT IN (
+        SELECT MIN(id)
+        FROM user_roles
+        GROUP BY user_id, role_name, scope_type, COALESCE(scope_id, '')
+      )
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS system_settings (
         id         SERIAL PRIMARY KEY,

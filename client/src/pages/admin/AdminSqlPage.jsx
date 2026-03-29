@@ -20,17 +20,7 @@ e.g. "Show me the last 10 agent runs with their status and cost"
 e.g. "How many users are in each organisation?"
 e.g. "Which agents have been run today?"`;
 
-function buildSpeakSummary(results) {
-  if (!results?.rows?.length) return `Query complete. ${results.rowCount ?? 0} rows returned.`;
-  const cols = results.columns ?? [];
-  const preview = results.rows.slice(0, 3).map((row, i) => {
-    const parts = cols.slice(0, 4).map((c) => `${c}: ${row[c] ?? 'null'}`).join(', ');
-    return `Row ${i + 1}: ${parts}`;
-  }).join('. ');
-  return `Query returned ${results.rowCount} row${results.rowCount !== 1 ? 's' : ''}. ${preview}${results.rows.length > 3 ? '. And more.' : '.'}`;
-}
-
-function ResultsTable({ results, showReadAloud = false }) {
+function ResultsTable({ results, readAloudText = '' }) {
   const hasRows = results?.rows?.length > 0;
   return (
     <div className="space-y-2">
@@ -51,8 +41,8 @@ function ResultsTable({ results, showReadAloud = false }) {
             {results.command}
           </span>
         )}
-        {showReadAloud && (
-          <ReadAloudButton text={buildSpeakSummary(results)} size={14} />
+        {readAloudText && (
+          <ReadAloudButton text={readAloudText} size={14} />
         )}
       </div>
 
@@ -161,6 +151,7 @@ export default function AdminSqlPage() {
     try {
       const data = await api.post('/admin/sql/nlp', { question: q, allowWrite });
       setGeneratedSql(data.generatedSql ?? '');
+      setNlpAnswer(data.answer ?? '');
       if (data.modelId) setNlpMeta({ modelId: data.modelId, tokensUsed: data.tokensUsed, costAud: data.costAud });
       setResults(data);
     } catch (e) {
@@ -333,7 +324,7 @@ export default function AdminSqlPage() {
       {error && <InlineBanner type="error" message={error} onDismiss={() => setError('')} />}
 
       {/* Results */}
-      {results && <ResultsTable results={results} showReadAloud={mode === 'nlp'} />}
+      {results && <ResultsTable results={results} readAloudText={mode === 'nlp' ? nlpAnswer : ''} />}
 
       {/* Generated SQL (NLP mode only) */}
       {generatedSql && (
