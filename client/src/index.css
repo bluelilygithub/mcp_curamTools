@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS custom property defaults (warm-sand theme) ────────────────────────
+   ThemeProvider overwrites these on mount from Zustand-persisted settings.
+   Seeding here prevents flash-of-wrong-theme on first paint.
+   ──────────────────────────────────────────────────────────────────────── */
+:root {
+  --color-bg:          #F5F5F0;
+  --color-surface:     #EEEEE8;
+  --color-border:      #D8D8D0;
+  --color-primary:     #CC785C;
+  --color-primary-rgb: 204, 120, 92;
+  --color-text:        #1A1A1A;
+  --color-muted:       #888888;
+
+  --font-body:    'Inter', sans-serif;
+  --font-heading: 'Playfair Display', serif;
+  --font-mono:    'DM Mono', monospace;
+}
+
+/* ── Global resets ─────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  min-height: 100vh;
+  min-height: 100dvh; /* mobile browser chrome collapse fix */
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Heading font — global rule ────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
+
+/* ── Focus ring — global accessibility ─────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ── Scrollbar styling ──────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}
+
+/* ── Mobile font size fix — prevent iOS zoom-on-focus ───────────────────── */
+@media (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ── Safe area inset for iOS home indicator ─────────────────────────────── */
+.pb-safe {
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
+
+/* ── Textarea overflow control ──────────────────────────────────────────── */
+textarea {
+  overflow: hidden;
+}
+textarea:focus {
+  overflow: auto;
+}

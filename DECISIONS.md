@@ -158,6 +158,170 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+---
+
+### MCP_curamTools Scaffold — Resolved Annotation Decisions
+**Date:** 2026-03-28
+**Status:** Settled — all SECTION-ANNOTATION.md items resolved in the first scaffold session
+
+| Decision | Resolution |
+|---|---|
+| Toast z-index | `z-[9999]` — adopted Vault's value |
+| Corner radius | `rounded-xl` buttons/inputs, `rounded-2xl` containers/modals |
+| Modal dismiss | Backdrop + Escape + explicit × close button |
+| TopNav height | 56px (h-14) |
+| `Button` component | **Created** — `Button.jsx` with variants: primary, secondary, danger, icon, toggle |
+| Markdown renderer | Custom zero-dependency renderer with fenced code block support added (platform will return code from agents) |
+| Assistant message avatar | None — multi-tenant workspace signal |
+| Transition duration | `transitionDuration: { DEFAULT: '200ms' }` set in tailwind.config.js |
+| `:focus-visible` ring | Global `*:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }` in index.css |
+| Tailwind CSS variable mapping | Configured — bg-bg, text-primary, border-border etc. in tailwind.config.js |
+
+---
+
+### persistRun Separation — Own File in platform/
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** PLATFORM-PRIMITIVES.md documented persistRun as exported from createAgentRoute.js. The MCP_curamTools scaffold spec lists it as a separate file `server/platform/persistRun.js`.
+**Decision:** `persistRun` lives in `server/platform/persistRun.js` and is imported by both `createAgentRoute.js` and `AgentScheduler.js`. This is cleaner and makes the single-write-path contract more explicit.
+
+---
+
+### agent_runs Schema — Simplified for MCP
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** ToolsForge agent_runs had separate columns (summary, data, suggestions, duration_ms, token_count). The MCP scaffold uses a consolidated `result JSONB` column that holds all of these as a structured object `{ summary, data, suggestions, tokensUsed }`.
+**Decision:** `result JSONB` replaces the separate columns. This reduces schema surface area. The `persistRun` function writes the full result object. UI reads `run.result.summary`, `run.result.data`, `run.result.suggestions`.
+
+---
+
+### Zustand Store Keys
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** SECTION-5-UX.md specified `curam-mcp-auth`. The session scaffold prompt specified `mcp-curamtools-auth`. The scaffold prompt is the authority.
+**Decision:** Storage keys are `mcp-curamtools-auth`, `mcp-curamtools-settings`, `mcp-curamtools-tool`.
+
+---
+
+---
+
+### Three-Pillar Architectural Roadmap — Staged Implementation
+**Date:** 2026-03-29
+**Status:** Settled — All three stages complete
+**Context:** Analysis of the platform's architectural gaps identified three foundational pillars required before any domain agents are built. These pillars were absent from the initial scaffold and must be implemented in sequence because each stage provides the foundation the next one builds on.
+**Decision:** Implement in three discrete stages:
+- **Stage 1 — Multi-Server Discovery (MCPRegistry):** DB-backed registry + connection lifecycle. ✅ Complete.
+- **Stage 2 — Resource-Level Permissions:** `mcp_resources` + `resource_permissions` tables, `PermissionService` extension, admin API surface. ✅ Complete.
+- **Stage 3 — Budget-Aware Circuit Breaker:** `CostGuardService` + budget integration in `createAgentRoute` + org-level daily budget in `system_settings`. ✅ Complete.
+**Rationale:** Each stage is independently deliverable and testable. Agents should not be built until all three stages are complete — building agents on an incomplete platform foundation creates migration friction later.
+**Constraints it must not violate:** Stage 2 must not require changes to `mcp_servers` table schema. Stage 3 must not require changes to `createAgentRoute`'s public interface (`{ slug, runFn, requiredPermission }`).
+
+---
+
+### Stage 1 — Multi-Server Discovery via MCPRegistry
+**Date:** 2026-03-29
+**Status:** Settled — Complete
+**Context:** The initial platform scaffold had an inbound MCP server (`mcpServer.js`) but no mechanism to connect *to* remote MCP servers. Tool slugs were hardcoded. As agents grow, each would need to manage its own transport connections, duplicating code and bypassing security boundaries.
+**Decision:** `MCPRegistry` singleton at `server/platform/mcpRegistry.js` is the only code path that connects to remote MCP servers. All connections are DB-backed (via `mcp_servers` table) and org-scoped. The registry exposes `register`, `deregister`, `list`, `get`, `connect`, `disconnect`, `send` — agents never construct their own HTTP or stdio transports.
+**Rationale:** Centralising connection management in a platform primitive means security (org scoping, ownership validation) is enforced once and applies to all future agents automatically. Stage 2 resource permissions can query `MCPRegistry.get(orgId, serverId)` as its scope check without touching transport code.
+**Constraints it must not violate:** `org_id` must be sourced from `req.user.org_id` (verified session context) — never from request body or query params. Every DB operation and every `send()` call validates the `(org_id, serverId)` pair. Connection cleanup (`disconnectAll()`) must run on SIGTERM/SIGINT before process exit.
+**References:** `server/platform/mcpRegistry.js`; `server/db.js` (`mcp_servers` table); `server/index.js` (graceful shutdown wiring).
+
+---
+
+### Stage 2 — Resource-Level Permissions
+**Date:** 2026-03-29
+**Status:** Settled — Complete
+**Context:** MCPRegistry provided org-scoped server connections but no control over which users or roles could access specific resource URIs within those servers. Without this layer, any authenticated user with access to an agent could implicitly reach any resource the agent's server exposes.
+**Decision:** Two new tables (`mcp_resources`, `resource_permissions`) and four new `PermissionService` methods establish resource URI-level access control. `canAccessResource(userId, resourceUri, orgId)` is the single check point. Deny-wins resolution: any deny rule overrides all allow rules. No matching rule is an implicit deny — the platform is default-deny for resources.
+**Rationale:** Default-deny is the correct posture for a multi-tenant platform handling business-sensitive data. Admins explicitly grant access rather than revoke it.
+**Constraints it must not violate:** `org_admin` bypasses all resource permission checks unconditionally. `resource_uri` is stored as denormalised TEXT in `resource_permissions` (not FK) — this allows permissions to exist before a resource record is explicitly registered and prevents cascade deletes from silently removing permissions. `org_id` is always from session context at every call site.
+**References:** `server/db.js` (`mcp_resources`, `resource_permissions`); `server/services/PermissionService.js`; `server/routes/adminMcp.js`.
+
+---
+
+### resource_uri Denormalisation — TEXT Not FK
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `resource_permissions.resource_uri` could reference `mcp_resources.id` as a FK. This would enforce referential integrity but would prevent setting permissions before a resource record exists and would cascade-delete permissions if a resource record is cleaned up.
+**Decision:** `resource_uri` is stored as TEXT in `resource_permissions`. Permissions can be pre-set before a resource is registered. Deleting a resource record does not delete its permissions.
+**Rationale:** Permissions are security data. Losing them silently because a resource record was deleted is worse than having orphan permission rows. Orphan rows are harmless — they simply never match a real resource.
+
+---
+
+### user_id XOR role_name — Partial Indexes Over UNIQUE NULLS NOT DISTINCT
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `resource_permissions` requires that exactly one of `user_id` or `role_name` is set. A standard `UNIQUE(org_id, resource_uri, user_id, role_name)` cannot handle NULL distinctness correctly in PostgreSQL — two rows with the same user_id and NULL role_name would both be allowed. PostgreSQL 15 introduced `UNIQUE NULLS NOT DISTINCT` but partial indexes are more explicit.
+**Decision:** Two partial unique indexes: `idx_resource_perm_user` on `(org_id, resource_uri, user_id) WHERE user_id IS NOT NULL` and `idx_resource_perm_role` on `(org_id, resource_uri, role_name) WHERE role_name IS NOT NULL`. A CHECK constraint enforces the XOR at insert time. The `ON CONFLICT` upsert syntax uses the column-predicate form matching the partial index.
+**Rationale:** Explicit over clever. The partial index approach is readable, portable to older PG versions if needed, and makes the intent self-documenting.
+
+---
+
+### org_id Is Never Sourced from User-Supplied Data
+**Date:** 2026-03-29
+**Status:** Settled — applies to all platform primitives
+**Context:** Stage 1 formalises a security rule that was implicit in the auth and agent layers but not yet documented as a platform-wide constraint.
+**Decision:** `org_id` is always sourced from `req.user.org_id` (attached by `requireAuth` middleware from the verified session token). It is never read from `req.body`, `req.params`, or `req.query`. This applies to `MCPRegistry`, `AgentConfigService`, `persistRun`, and every future platform primitive.
+**Rationale:** Allowing org_id in user-supplied data would let a user scope their request to another organisation's data by manipulating the payload. The session token is the only trusted source of org identity.
+**Constraints it must not violate:** No route handler may pass `req.body.orgId` or `req.params.orgId` to any platform primitive. The linting rule: if a function accepts `orgId` as its first parameter, the call site must read it from `req.user.org_id`.
+
+---
+
+### Stage 3 — Budget-Aware Circuit Breaker
+**Date:** 2026-03-29
+**Status:** Settled — Complete
+**Context:** Stages 1 and 2 established server discovery and resource permissions. Stage 3 adds cost safety: without a budget guardrail, an agent making recursive or expensive MCP tool calls can exceed budget before `max_tokens` kicks in. Two enforcement layers are required: per-task (configurable per agent by admin) and daily org-wide (a ceiling across all agents).
+**Decision:** `CostGuardService` (`server/services/CostGuardService.js`) is the single enforcement point. It exports `computeCostAud`, `getDailyOrgSpendAud`, `check`, and `BudgetExceededError`. `createAgentRoute` loads budget context once at run start and calls `check()` after each accumulation event and again post-run with the definitive token count. `max_task_budget_aud` is added to `ADMIN_DEFAULTS._platform` in `AgentConfigService.js`. Daily org budget lives in `system_settings` under key `platform_budget`. `costAud` is written to `agent_runs.result` JSONB on every successful run.
+**Rationale:** Separating per-task and daily org limits allows fine-grained control without coupling them. The pure-function design of `check()` (no DB queries mid-stream) keeps latency low. Persisting `costAud` in the result payload means the UI can display actual run cost without recomputing from tokens.
+**Constraints it must not violate:** `createAgentRoute` public interface (`{ slug, runFn, requiredPermission }`) must not change. Existing agents with no token reporting must still receive post-run checks — the mid-run enforcement is opt-in via the `emit` second param. `check()` must remain a pure function with no async behaviour.
+**References:** `server/services/CostGuardService.js`; `server/platform/createAgentRoute.js`; `server/platform/AgentConfigService.js`.
+
+---
+
+### Pure-function check() — daily spend loaded once at run start
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** A naive circuit breaker design would query `usage_logs` on every `emit()` call to get the current daily spend. At high emit frequency this produces O(n) DB queries per run — unnecessary load that grows with run length.
+**Decision:** `getDailyOrgSpendAud(orgId)` is called exactly once at run start and the result is stored in a local variable. `CostGuardService.check()` receives the pre-loaded `dailyOrgSpendAud` as a parameter and performs no DB queries — it is a pure synchronous function. The pre-loaded spend is a snapshot; if another concurrent run for the same org finishes mid-stream, the snapshot is slightly stale. This is accepted: the daily limit is a soft ceiling, not a hard transaction guarantee.
+**Rationale:** A single DB query at run start vs O(n) queries during a run is the correct tradeoff for an operational safety guardrail. Perfect atomicity would require pessimistic locking across all concurrent agent runs — unacceptable complexity for a soft budget limit.
+**Constraints it must not violate:** `check()` must never perform IO. It accepts `{ taskCostAud, maxTaskBudgetAud, dailyOrgSpendAud, maxDailyBudgetAud }` and throws or returns synchronously. Callers own the accumulation and snapshotting.
+
+---
+
+### Opt-in mid-run enforcement via emit second param
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `createAgentRoute`'s `emit` callback already streams progress text to the SSE client. Existing agents call `emit(text)`. Adding mandatory budget accumulation to `emit` would require every existing agent to supply token counts — a breaking change. Budget enforcement must be additive.
+**Decision:** `emit` is extended to accept an optional second parameter: `emit(text, partialTokensUsed)`. If `partialTokensUsed` is provided, `createAgentRoute` accumulates the cost and calls `CostGuardService.check()`. If omitted (existing agents), no mid-run check occurs. A definitive post-run check always runs using the final `tokensUsed` returned by `runFn` — this catches over-budget runs even for agents that never pass `partialTokensUsed` to `emit`.
+**Rationale:** Backwards compatible — zero changes required to existing agents. New agents opt in to granular mid-run enforcement by supplying `partialTokensUsed`. The post-run check provides a safety net regardless.
+**Constraints it must not violate:** The `emit(text)` single-argument form must continue to work exactly as before. `BudgetExceededError` thrown inside `emit` must propagate through `runFn` to the existing catch block — no new error paths in `createAgentRoute`.
+
+---
+
+### costAud persisted in agent_runs.result
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `agent_runs.result` is a JSONB column holding `{ summary, data, suggestions, tokensUsed }`. Without storing computed cost, the UI would need to recompute AUD cost from `tokensUsed` using the current rate constant — coupling the UI to the cost model and producing stale values if rates change.
+**Decision:** `costAud` (a number, AUD, rounded to 6 decimal places) is added to the `result` JSONB on every run. The value is the definitive post-run cost computed by `CostGuardService.computeCostAud(tokensUsed)`.
+**Rationale:** Storing the computed value at run time is the correct pattern: it locks in the rate that was in effect, avoids recomputation in every UI consumer, and allows historical cost display without coupling the UI to the cost model. `result` JSONB is the right location — no schema change required.
+**Constraints it must not violate:** `costAud` is stored as AUD, consistent with the platform-wide monetary convention. It must be computed from the definitive post-run `tokensUsed`, not from mid-run accumulated estimates.
+
+---
+
+### Stage 4 — Admin MCP UI Integration
+**Date:** 2026-03-29
+**Status:** Settled — Complete
+**Context:** Stages 1–3 built the backend APIs for MCP server discovery, resource-level permissions, and budget enforcement. None of that work was operable without a UI — an admin had to use raw curl to register servers, resources, or permissions. Stage 4 closes the gap.
+**Decision:** Two new admin pages built as React components following the existing admin page pattern. No new backend routes, no schema changes, no new packages. UI only.
+- `AdminMcpServersPage` (`/admin/mcp-servers`) — register, connect/disconnect, delete MCP servers
+- `AdminMcpResourcesPage` (`/admin/mcp-resources`) — register resources, manage permissions (two sections, one page)
+Both pages added to `App.jsx` under the existing `RequireRole(['org_admin'])` guard and to `Sidebar.jsx` under the Admin section.
+**Rationale:** Building the UI last (after the API is stable) means the UI is built against a known, tested interface. The two-section layout of AdminMcpResourcesPage (resources + permissions together) reflects the operational workflow: an admin registers a resource and then immediately sets permissions — they are adjacent operations.
+**Constraints it must not violate:** Admin pages never call platform primitives directly — all data access goes through the `/api/admin/*` routes. `org_id` continues to be sourced from `req.user.orgId` on the server; the UI never sends an `orgId` in the request body.
+
+---
+
 ## Open Questions
 
-_(Previously open questions #7 and #8 have been resolved above. No remaining open questions.)_
+_(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_

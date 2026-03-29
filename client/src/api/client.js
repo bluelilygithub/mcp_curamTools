@@ -1,0 +1,83 @@
+/**
+ * API client — centralised fetch wrapper.
+ * - Auto-adds Authorization: Bearer token from authStore.
+ * - Handles 401 globally: clears auth state and redirects to /login.
+ * - Never use raw fetch('/api/...') for authenticated endpoints.
+ */
+import useAuthStore from '../stores/authStore';
+
+const BASE = '/api';
+
+async function request(path, options = {}) {
+  const token = useAuthStore.getState().token;
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers ?? {}),
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${BASE}${path}`, {
+    ...options,
+    headers,
+  });
+
+  if (res.status === 401) {
+    useAuthStore.getState().clearAuth();
+    window.location.href = '/login';
+    throw new Error('Session expired. Please log in again.');
+  }
+
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      message = body.error || body.message || message;
+    } catch {
+      // use default message
+    }
+    throw new Error(message);
+  }
+
+  const contentType = res.headers.get('content-type');
+  if (contentType?.includes('application/json')) {
+    return res.json();
+  }
+  return res;
+}
+
+const api = {
+  get: (path, options = {}) => request(path, { ...options, method: 'GET' }),
+  post: (path, body, options = {}) =>
+    request(path, { ...options, method: 'POST', body: JSON.stringify(body) }),
+  put: (path, body, options = {}) =>
+    request(path, { ...options, method: 'PUT', body: JSON.stringify(body) }),
+  delete: (path, options = {}) => request(path, { ...options, method: 'DELETE' }),
+
+  /**
+   * Open a streaming SSE connection via POST.
+   * Returns the raw fetch Response — caller reads the ReadableStream.
+   */
+  stream: async (path, body) => {
+    const token = useAuthStore.getState().token;
+    const res = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 401) {
+      useAuthStore.getState().clearAuth();
+      window.location.href = '/login';
+      throw new Error('Session expired.');
+    }
+    return res;
+  },
+};
+
+export default api;

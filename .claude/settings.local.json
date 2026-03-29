@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm audit:*)",
+      "Bash(npm show:*)",
+      "Bash(curl:*)",
+      "Bash(\"C:\\\\Users\\\\micha\\\\Local Sites\\\\mcp_curamTools\\\\setup.md\")"
+    ]
+  }
+}

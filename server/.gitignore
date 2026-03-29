@@ -1,0 +1,15 @@
+# Environment — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Uploaded files volume (Railway persistent volume)
+uploads/
+public/
+
+# Logs
+*.log
+npm-debug.log*

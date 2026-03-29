@@ -1,0 +1,20 @@
+{
+  "name": "mcp-curamtools-server",
+  "version": "1.0.0",
+  "description": "MCP_curamTools — multi-tenant AI agent platform server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^8.0.4",
+    "pg": "^8.11.5"
+  }
+}

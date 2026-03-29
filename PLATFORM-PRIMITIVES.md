@@ -33,6 +33,12 @@ Internal helpers exported from this file:
 - `extractSuggestions(text)` — parses `### Recommendations` numbered list into `[{text, priority}]`
 - `persistRun({ slug, orgId, status, summary, trace, tokensUsed, startTime })` — single write path to `agent_runs`
 
+**Stage 3 budget integration (additive — public interface unchanged):**
+- After the kill switch check, `createAgentRoute` loads org budget settings (`AgentConfigService.getOrgBudgetSettings`) and the daily org spend (`CostGuardService.getDailyOrgSpendAud`) in a single DB query. If the daily budget is already exceeded before the run starts, the route aborts immediately with a `BudgetExceededError`.
+- `emit` accepts an optional second parameter: `emit(text, partialTokensUsed)`. If provided, the route accumulates `taskCostAud` and calls `CostGuardService.check()` mid-run. Existing agents calling `emit(text)` are unaffected.
+- A definitive post-run `CostGuardService.check()` always runs using the final `tokensUsed` returned by `runFn`.
+- `costAud` is added to `resultPayload` and persisted in `agent_runs.result` JSONB on every completed run.
+
 **Used by:** Google Ads Monitor (`server/routes/agents/`); all future agents.
 **Reuse contract:** Provide `slug` (stable, lowercase, hyphen-separated), a `runFn(context)` that returns `{ result, trace, tokensUsed }`, and a `requiredPermission` role name. Register the returned router in `server/index.js` under `/api/agents/:slug`.
 **Does not handle:** Agent tool registration (done in the agent's `tools.js`), system prompt construction (done in the agent's `prompt.js`), data fetching (done in domain services). Does not write directly to `agent_executions` (that is `services/AgentScheduler.js` territory).
@@ -180,8 +186,21 @@ Google Ads Monitor defaults:
 - Agent: `schedule='0 6,18 * * *'`, `lookback_days=30`, `ctr_threshold_pct=2.0`, `wasted_clicks_threshold=5`, `impressions_min=100`, `max_suggestions=5`
 - Admin: `enabled=true`, `model='claude-sonnet-4-6'`, `max_tokens=4096`, `max_iterations=10`
 
-**Used by:** `createAgentRoute.js` (loads admin config before every run); `PUT /api/agent-configs/:slug` route; `AdminAgentsPage.jsx`; `GoogleAdsMonitorPage.jsx` agent settings panel.
-**Reuse contract:** New agents add entries to `AGENT_DEFAULTS` and `ADMIN_DEFAULTS`. Agent code reads config via `getAgentConfig`; admin enforcement is automatic via `createAgentRoute`.
+**Stage 3 budget additions:**
+- `ADMIN_DEFAULTS._platform` includes `max_task_budget_aud: 0.50` — falls through the existing admin config merge for all agents. `null` means unlimited; agents may override.
+- Two new methods for org-level daily budget (stored in `system_settings` under key `platform_budget`, not per-agent):
+```js
+AgentConfigService.getOrgBudgetSettings(orgId)
+// Returns: { max_daily_org_budget_aud: null } by default (null = unlimited)
+// Reads system_settings key 'platform_budget' for the org.
+
+AgentConfigService.updateOrgBudgetSettings(orgId, patch, updatedBy)
+// patch: { max_daily_org_budget_aud: number | null }
+// Upserts to system_settings key 'platform_budget'.
+```
+
+**Used by:** `createAgentRoute.js` (loads admin config and org budget settings before every run); `PUT /api/agent-configs/:slug` route; `AdminAgentsPage.jsx`; `GoogleAdsMonitorPage.jsx` agent settings panel.
+**Reuse contract:** New agents add entries to `AGENT_DEFAULTS` and `ADMIN_DEFAULTS`. Agent code reads config via `getAgentConfig`; admin enforcement is automatic via `createAgentRoute`. Org-level daily budget is set once per org via `updateOrgBudgetSettings` — not per agent.
 **Does not handle:** Permission checks (those are on the route layer). Cron rescheduling (the route calls `AgentScheduler.updateSchedule` separately after `updateAgentConfig`).
 
 ---
@@ -403,6 +422,294 @@ const blocks = [
 ```
 **Reuse contract:** Never send system prompts as a flat string when using Anthropic. Order blocks by change frequency (most stable first). Put date/dynamic content last without a cache marker. Maximum 4 cache breakpoints per request.
 **Does not handle:** Google Gemini (receives the same content flattened to a plain string). Runtime validation that budget_tokens is less than maxTokens when extended thinking is enabled.
+
+---
+
+---
+
+### MCPRegistry
+**Type:** Platform Primitive — Singleton
+**Location:** `server/platform/mcpRegistry.js`
+**What it does:** Manages the full lifecycle of remote MCP server connections for the platform. Provides a DB-backed registry of server configurations and in-memory connection management for live transports. All operations are org-scoped — `orgId` is the first parameter on every method and is sourced from `req.user.org_id`, never from user-supplied request data.
+**Interface:**
+```js
+// DB layer — persists server configuration
+MCPRegistry.register(orgId, { name, transportType, endpointUrl, config })
+// transportType: 'sse' | 'stdio'
+// endpointUrl: required for sse; null for stdio
+// config: JSONB — for sse: { headers }; for stdio: { command, args, env }
+// Upserts on (org_id, name). Returns the saved row.
+
+MCPRegistry.deregister(orgId, serverId)
+// Soft-deactivates (is_active = FALSE). Also disconnects any live connection. Throws if not found for org.
+
+MCPRegistry.list(orgId)
+// Returns all active servers for org. Each row includes connection_status: 'connected' | 'connecting' | 'disconnected'.
+
+MCPRegistry.get(orgId, serverId)
+// Returns single server row scoped to org_id. Returns null if not found or belongs to different org.
+
+// Connection lifecycle
+MCPRegistry.connect(orgId, serverId)
+// Idempotent — no-op if already connected. Dispatches to _connectSSE or _connectStdio based on transport_type.
+
+MCPRegistry.disconnect(orgId, serverId)
+// Tears down live connection. Safe to call on unconnected server.
+
+MCPRegistry.disconnectAll()
+// Shuts down all connections. Called on SIGTERM/SIGINT in index.js.
+
+// JSON-RPC dispatch
+MCPRegistry.send(orgId, serverId, method, params)
+// Sends a JSON-RPC request. Enforces org ownership at send time (not just at connect time).
+// Returns Promise resolving with server's result. 30s timeout.
+
+// Events (EventEmitter)
+MCPRegistry.on('connected',     ({ serverId, name }) => {})
+MCPRegistry.on('disconnected',  ({ serverId, reason }) => {})
+MCPRegistry.on('notification',  ({ serverId, method, params }) => {})
+```
+
+**Transport: SSE** — Implements the MCP SSE transport spec:
+1. GET to `endpoint_url` opens the SSE stream
+2. Server emits an `endpoint` event with a POST URL for JSON-RPC messages
+3. Client POSTs JSON-RPC to that URL; responses arrive via the SSE stream, correlated by `id`
+
+**Transport: Stdio** — Spawns subprocess, sends MCP `initialize` handshake on connect, exchanges newline-delimited JSON-RPC via stdin/stdout. `config.command` is required.
+
+**Security assertion:** `org_id` is mandatory and enforced on every DB operation and on every `send()` call. A server registered to org A can never be reached by org B. The registry never trusts `serverId` alone — it always validates the `(org_id, serverId)` pair against the DB.
+
+**DB table:** `mcp_servers` — see table schema below.
+
+**Used by:** Stage 2 (resource permissions) queries the registry to validate server ownership. Future agent routes call `connect()` and `send()` to communicate with external MCP servers.
+
+**Reuse contract:** Never query `mcp_servers` directly from agent or route code. All access goes through `MCPRegistry`. When connecting to an external MCP server from within an agent, call `MCPRegistry.connect(req.user.org_id, serverId)` — never construct your own HTTP/stdio transport.
+
+**Does not handle:** Authentication to remote MCP servers beyond passing `config.headers` (OAuth flows are the caller's responsibility). Connection pooling per org (one connection per registered server). Retry on disconnect (reconnect logic is the consumer's responsibility).
+
+---
+
+### mcp_servers Table Schema
+**Type:** Table
+**Location:** `server/db.js` (defined in `initSchema()`)
+**What it does:** Persists the registry of remote MCP server configurations, one row per registered server per org.
+**Interface:**
+```sql
+mcp_servers (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id         INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL,
+  transport_type TEXT NOT NULL CHECK (transport_type IN ('sse', 'stdio')),
+  endpoint_url   TEXT,           -- required for sse; null for stdio
+  config         JSONB DEFAULT '{}',  -- headers (sse) | command/args/env (stdio)
+  is_active      BOOLEAN DEFAULT TRUE,
+  created_at     TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (org_id, name)
+)
+```
+`is_active = FALSE` is the deregistration state — rows are never hard-deleted. The `UNIQUE(org_id, name)` constraint ensures re-registering the same server name updates rather than duplicates.
+
+**Used by:** `MCPRegistry` exclusively — no other code queries this table.
+
+**Reuse contract:** Never query this table directly. All access through `MCPRegistry`. The `resource_permissions` table references `mcp_servers.id` via `mcp_resources.server_id` — this FK chain was designed to absorb Stage 2 without requiring changes to this table.
+
+---
+
+### mcp_resources Table Schema
+**Type:** Table
+**Location:** `server/db.js`
+**What it does:** Stores the set of known MCP resource URIs registered against a server, scoped to an org. Resources are registered by an admin and act as the anchors for permission rules.
+**Interface:**
+```sql
+mcp_resources (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  server_id   UUID NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+  org_id      INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  uri         TEXT NOT NULL,          -- e.g. 'mcp://finance/invoices'
+  name        TEXT NOT NULL,
+  description TEXT,
+  metadata    JSONB DEFAULT '{}',
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (org_id, uri)                -- a URI is unique per org, not per server
+)
+```
+**Used by:** `adminMcp.js` CRUD routes. `resource_permissions` references `resource_uri` as denormalised TEXT — intentional, see decision in DECISIONS.md.
+**Reuse contract:** Always validate `server_id` ownership via `MCPRegistry.get(orgId, serverId)` before inserting. Never insert resources for a server belonging to a different org.
+
+---
+
+### resource_permissions Table Schema
+**Type:** Table
+**Location:** `server/db.js`
+**What it does:** Grants or denies a user or role access to a specific MCP resource URI. Deny-wins: any matching deny rule overrides all allow rules. No matching rule means deny by default.
+**Interface:**
+```sql
+resource_permissions (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id       INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  resource_uri TEXT NOT NULL,         -- denormalised TEXT, not FK (intentional)
+  user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,   -- null if role-based
+  role_name    TEXT,                                              -- null if user-specific
+  permission   TEXT NOT NULL CHECK (permission IN ('allow', 'deny')),
+  granted_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  CHECK (
+    (user_id IS NOT NULL AND role_name IS NULL) OR
+    (user_id IS NULL AND role_name IS NOT NULL)
+  )
+)
+-- Partial unique indexes handle NULL distinctness correctly:
+CREATE UNIQUE INDEX idx_resource_perm_user ON resource_permissions(org_id, resource_uri, user_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_resource_perm_role ON resource_permissions(org_id, resource_uri, role_name) WHERE role_name IS NOT NULL;
+```
+**Used by:** `PermissionService` exclusively — all four resource permission methods.
+**Reuse contract:** Never query directly. ON CONFLICT upsert uses column-predicate form: `ON CONFLICT (org_id, resource_uri, user_id) WHERE user_id IS NOT NULL`. `UNIQUE NULLS NOT DISTINCT` is not used despite PG15 support — partial indexes are more explicit and portable.
+
+---
+
+### PermissionService — Resource Methods
+**Type:** Service extension
+**Location:** `server/services/PermissionService.js`
+**What it does:** Four methods extending role-based permissions to cover MCP resource URI access.
+**Interface:**
+```js
+PermissionService.canAccessResource(userId, resourceUri, orgId)
+// org_admin → always true (checked first, no DB query needed for admins).
+// Otherwise: fetches user's roles, checks resource_permissions for user_id OR role_name match.
+// Deny-wins: any 'deny' row overrides all 'allow' rows.
+// No matching row → false (deny by default).
+
+PermissionService.grantResourcePermission(orgId, resourceUri, { userId, roleName }, permission, grantedBy)
+// Exactly one of userId/roleName required — throws otherwise.
+// Upserts — re-granting changes permission type in place.
+
+PermissionService.revokeResourcePermission(orgId, permissionId)
+// Hard delete. Throws if permissionId does not belong to orgId.
+
+PermissionService.listResourcePermissions(orgId, resourceUri = null)
+// All permissions for org; optional resourceUri filter. Joins users for email display.
+```
+**Security invariant:** `org_id` always from `req.user.orgId` at call sites. `org_admin` bypass is unconditional.
+**Does not handle:** Wildcard URI matching. Time-limited permissions. Permission inheritance from parent URI paths.
+
+---
+
+### adminMcp.js — Admin MCP API Surface
+**Type:** Route file
+**Location:** `server/routes/adminMcp.js`
+**Mounted at:** `/api/admin` alongside `routes/admin.js`. All routes require `org_admin`.
+
+| Method | Path | Behaviour |
+|---|---|---|
+| GET | `/api/admin/mcp-servers` | List registered servers + live connection status |
+| POST | `/api/admin/mcp-servers` | Register server (`MCPRegistry.register`) |
+| DELETE | `/api/admin/mcp-servers/:id` | Soft-deregister + disconnect |
+| POST | `/api/admin/mcp-servers/:id/connect` | Establish live connection |
+| POST | `/api/admin/mcp-servers/:id/disconnect` | Tear down live connection |
+| GET | `/api/admin/mcp-resources` | List resources (`?serverId=` optional filter) |
+| POST | `/api/admin/mcp-resources` | Register resource URI (validates server ownership first) |
+| DELETE | `/api/admin/mcp-resources/:id` | Remove resource record |
+| GET | `/api/admin/mcp-resources/permissions` | List permissions (`?resourceUri=` optional filter) |
+| POST | `/api/admin/mcp-resources/permissions` | Grant permission |
+| DELETE | `/api/admin/mcp-resources/permissions/:id` | Revoke permission |
+
+**Route ordering invariant:** `GET /mcp-resources/permissions` must be declared before `DELETE /mcp-resources/permissions/:id`. Express matches in declaration order — if `:id` comes first, the literal string `permissions` matches it as a param.
+
+---
+
+---
+
+### CostGuardService
+**Type:** Service
+**Location:** `server/services/CostGuardService.js`
+**What it does:** All budget enforcement logic for the platform. Four exports: a cost conversion function, a DB query for daily org spend, a pure synchronous check function, and a typed error class. No export performs IO except `getDailyOrgSpendAud`.
+
+**Token cost constants:**
+```js
+const AUD_PER_USD = 1.55;  // approximate; documented as such in the source file
+
+// Approximate Claude Sonnet 4.6 rates (USD per million tokens):
+// Input:       $3.00   → 0.000003 USD/token
+// Output:      $15.00  → 0.000015 USD/token
+// Cache read:  $0.30   → 0.0000003 USD/token
+// Cache write: $3.75   → 0.00000375 USD/token
+```
+
+**Interface:**
+```js
+// Pure function — no IO
+computeCostAud({ input, output, cacheRead, cacheWrite })
+// tokensUsed object → AUD cost as a number
+// Uses the rate constants above × AUD_PER_USD
+
+// Single DB query — call once at run start
+getDailyOrgSpendAud(orgId)
+// Queries usage_logs: SUM(cost_usd * 1.55) WHERE org_id = $1 AND created_at >= today UTC
+// Returns: number (AUD). Returns 0 if no rows.
+
+// Pure function — no IO, no async
+check({ taskCostAud, maxTaskBudgetAud, dailyOrgSpendAud, maxDailyBudgetAud })
+// taskCostAud: number — accumulated cost for this run so far
+// maxTaskBudgetAud: number | null — per-task limit from admin config (null = unlimited)
+// dailyOrgSpendAud: number — snapshot loaded at run start
+// maxDailyBudgetAud: number | null — org-wide daily limit from system_settings (null = unlimited)
+// Throws BudgetExceededError if either limit is breached.
+// Task limit is checked before daily limit.
+// Returns undefined if both limits pass.
+```
+
+**BudgetExceededError shape:**
+```js
+class BudgetExceededError extends Error {
+  // err.type:   'task' | 'daily_org'
+  // err.limit:  number — the limit that was exceeded (AUD)
+  // err.actual: number — the actual cost (AUD)
+  // err.message: human-readable description
+}
+```
+
+**Pure-function design rationale:** `check()` performs no DB queries. The daily org spend is a snapshot loaded once before the run starts via `getDailyOrgSpendAud(orgId)`. This trades perfect spend accuracy (which would require pessimistic locking across concurrent runs) for a single DB query per run. The daily limit is a soft ceiling — marginal overshoot from concurrent runs is accepted.
+
+**Used by:** `createAgentRoute.js` — `getDailyOrgSpendAud` called once at run start; `check()` called after each `emit(text, partialTokensUsed)` event and once post-run with definitive token counts. `BudgetExceededError` propagates through `runFn` to the existing catch block in `createAgentRoute` — no new error paths.
+
+**Reuse contract:**
+1. Call `getDailyOrgSpendAud(orgId)` exactly once at run start. Store the result.
+2. After each accumulation event, call `check({ taskCostAud, maxTaskBudgetAud, dailyOrgSpendAud, maxDailyBudgetAud })`.
+3. Always perform a final post-run `check()` with the definitive `tokensUsed` from `runFn`.
+4. Never call `getDailyOrgSpendAud` mid-stream or inside a loop.
+
+**Does not handle:** Writing to `usage_logs` (that is the agent's responsibility). Currency conversion beyond AUD_PER_USD. Model-specific rate selection (rates are hardcoded to Claude Sonnet 4.6 approximations).
+
+---
+
+### Admin MCP UI Pages
+**Type:** Admin Pages
+**Location:**
+- `client/src/pages/admin/AdminMcpServersPage.jsx` — route `/admin/mcp-servers`
+- `client/src/pages/admin/AdminMcpResourcesPage.jsx` — route `/admin/mcp-resources`
+
+**What they do:** Admin-only pages that expose the Stage 1/2 backend APIs (MCPRegistry, mcp_resources, resource_permissions) to the platform operator. Both routes sit under the existing `RequireRole(['org_admin'])` guard in `App.jsx`. Both pages appear in the Sidebar Admin section (`server` icon for MCP Servers, `layers` icon for MCP Resources).
+
+**AdminMcpServersPage** (`/admin/mcp-servers`):
+- Table: name, transport type, endpoint URL, status pill (connected / connecting / error / registered / disconnected)
+- Register modal: name, transport type select (SSE/stdio), endpoint URL field (SSE) or config JSON textarea (stdio; `{ command, args }`)
+- Per-server actions: Connect / Disconnect toggle button; delete with inline confirm
+
+**AdminMcpResourcesPage** (`/admin/mcp-resources`):
+- Two sections on a single page: Resources (top) + Permissions (bottom)
+- **Resources table:** URI (monospace), display name, server name, description; register modal (server dropdown, URI, name, description); delete with inline confirm; shield icon shortcut pre-populates the permission form for that URI
+- **Permissions table:** resource URI, subject (role label + name or user label + UUID), allow/deny pill; filterable by resource URI via dropdown above table; grant modal (resource URI dropdown from registered resources, role/user radio, allow/deny select); revoke with inline confirm
+
+**API surface consumed:**
+
+| Page | Endpoints |
+|---|---|
+| AdminMcpServersPage | `GET /admin/mcp-servers`, `POST /admin/mcp-servers`, `POST /admin/mcp-servers/:id/connect`, `POST /admin/mcp-servers/:id/disconnect`, `DELETE /admin/mcp-servers/:id` |
+| AdminMcpResourcesPage | `GET /admin/mcp-servers` (server dropdown), `GET /admin/mcp-resources`, `POST /admin/mcp-resources`, `DELETE /admin/mcp-resources/:id`, `GET /admin/mcp-resources/permissions`, `POST /admin/mcp-resources/permissions`, `DELETE /admin/mcp-resources/permissions/:id` |
+
+**Reuse contract:** Follow existing admin page patterns — `api.get/post/delete` from `../../api/client`, `InlineBanner` for errors, `EmptyState` for empty tables, `Modal` for create forms, inline confirm for destructive actions (no `ConfirmModal` — inline Yes/No is sufficient for these operations).
+
+**Does not handle:** Editing a registered server after creation (delete and re-register). Bulk permission import. Displaying which users currently have access to a resource (PermissionService runtime check — not a UI concern).
 
 ---
 

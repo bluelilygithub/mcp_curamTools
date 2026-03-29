@@ -1,69 +1,45 @@
-notepad .gitignore
-```
+# Environment files — never commit secrets
+.env
+.env.*
+!.env.example
 
-**Replace entire contents with:**
-```
 # Dependencies
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-package-lock.json
-yarn.lock
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Build output
+dist/
+build/
+.cache/
 
-# Uploads and user data
-uploads/
-*.pdf
-*.docx
-*.xlsx
-
-# Logs
-logs/
-*.log
-
-# OS files
+# OS artefacts
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# IDE / Editor
+# Editor
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.project
-.classpath
-.settings/
 
-# Build outputs
-dist/
-build/
-.cache/
-*.tsbuildinfo
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Testing
-coverage/
-.nyc_output/
+# Uploads (Railway persistent volume)
+uploads/
 
-# Temporary files
+# Temporary
 tmp/
 temp/
 *.tmp
 
-# Database
-*.sqlite
-*.sqlite3
-*.db
+# Railway / Docker
+.railway/
 
-# Misc
-.vercel
-.next/
-out/
+# Vite
+.vite/
