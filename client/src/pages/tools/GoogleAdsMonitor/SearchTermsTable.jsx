@@ -5,8 +5,9 @@
 export default function SearchTermsTable({ terms = [] }) {
   if (!terms.length) return null;
 
-  const fmt = (n) => `$${Number(n ?? 0).toFixed(2)}`;
-  const pct = (n) => `${(Number(n ?? 0) * 100).toFixed(1)}%`;
+  const fmtAud = (n) => `$${Number(n ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtNum = (n) => Math.round(n ?? 0).toLocaleString('en-AU');
+  const pct    = (n) => `${(Number(n ?? 0) * 100).toFixed(1)}%`;
 
   const converting  = terms.filter((t) => t.conversions > 0);
   const wasted      = terms.filter((t) => t.conversions === 0 && t.clicks >= 5);
@@ -14,12 +15,12 @@ export default function SearchTermsTable({ terms = [] }) {
   const standard    = terms.filter((t) => !converting.includes(t) && !wasted.includes(t) && !adCopy.includes(t));
 
   const headerStyle = {
-    fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
-    padding: '6px 10px', borderBottom: '1px solid var(--color-border)',
+    fontSize: 11, fontWeight: 700, fontFamily: 'inherit', textTransform: 'uppercase',
+    letterSpacing: '0.05em', padding: '6px 10px', borderBottom: '1px solid var(--color-border)',
   };
   const rowStyle = {
-    fontSize: 12, padding: '5px 10px', borderBottom: '1px solid var(--color-border)',
-    color: 'var(--color-text)',
+    fontSize: 12, padding: '5px 10px', fontFamily: 'inherit',
+    borderBottom: '1px solid var(--color-border)', color: 'var(--color-text)',
   };
 
   function BucketTable({ title, color, rows, columns }) {
@@ -40,7 +41,7 @@ export default function SearchTermsTable({ terms = [] }) {
             <tbody>
               {rows.map((t, i) => (
                 <tr key={i} style={{ background: i % 2 === 0 ? 'var(--color-bg)' : 'var(--color-surface)' }}>
-                  <td style={{ ...rowStyle, fontFamily: 'monospace', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <td style={{ ...rowStyle, fontFamily: 'var(--font-mono, monospace)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {t.term}
                   </td>
                   {columns.map((c) => (
@@ -64,9 +65,9 @@ export default function SearchTermsTable({ terms = [] }) {
         color="#16a34a"
         rows={converting}
         columns={[
-          { key: 'clicks', label: 'Clicks' },
+          { key: 'clicks', label: 'Clicks', format: fmtNum },
           { key: 'conversions', label: 'Conv.', format: (v) => v?.toFixed(1) },
-          { key: 'cost', label: 'Cost', format: fmt },
+          { key: 'cost', label: 'Cost', format: fmtAud },
           { key: 'ctr', label: 'CTR', format: pct },
         ]}
       />
@@ -75,9 +76,9 @@ export default function SearchTermsTable({ terms = [] }) {
         color="#dc2626"
         rows={wasted}
         columns={[
-          { key: 'clicks', label: 'Clicks' },
-          { key: 'impressions', label: 'Impressions' },
-          { key: 'cost', label: 'Cost', format: fmt },
+          { key: 'clicks', label: 'Clicks', format: fmtNum },
+          { key: 'impressions', label: 'Impressions', format: fmtNum },
+          { key: 'cost', label: 'Cost', format: fmtAud },
           { key: 'ctr', label: 'CTR', format: pct },
         ]}
       />
@@ -86,10 +87,10 @@ export default function SearchTermsTable({ terms = [] }) {
         color="#d97706"
         rows={adCopy}
         columns={[
-          { key: 'impressions', label: 'Impressions' },
-          { key: 'clicks', label: 'Clicks' },
+          { key: 'impressions', label: 'Impressions', format: fmtNum },
+          { key: 'clicks', label: 'Clicks', format: fmtNum },
           { key: 'ctr', label: 'CTR', format: pct },
-          { key: 'cost', label: 'Cost', format: fmt },
+          { key: 'cost', label: 'Cost', format: fmtAud },
         ]}
       />
       <BucketTable
@@ -97,10 +98,10 @@ export default function SearchTermsTable({ terms = [] }) {
         color="var(--color-muted)"
         rows={standard}
         columns={[
-          { key: 'impressions', label: 'Impressions' },
-          { key: 'clicks', label: 'Clicks' },
+          { key: 'impressions', label: 'Impressions', format: fmtNum },
+          { key: 'clicks', label: 'Clicks', format: fmtNum },
           { key: 'ctr', label: 'CTR', format: pct },
-          { key: 'cost', label: 'Cost', format: fmt },
+          { key: 'cost', label: 'Cost', format: fmtAud },
         ]}
       />
     </div>

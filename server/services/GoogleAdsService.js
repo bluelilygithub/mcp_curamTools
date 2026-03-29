@@ -4,17 +4,15 @@
  * GoogleAdsService — Google Ads API v23 data layer.
  *
  * Shared domain service — used by all Google Ads agents in MCP_curamTools.
- * Makes authenticated REST calls to the Google Ads API.
- * Auth: OAuth2 via googleapis (access token rotation handled automatically).
+ * All monetary values returned in AUD (cost_micros ÷ 1,000,000).
  *
- * All monetary values from the API are in micros (1/1,000,000 of the currency).
- * Every cost field is divided by 1,000,000 before being returned. Unit: AUD.
+ * Methods accept either:
+ *   - a number (days lookback from today): getCampaignPerformance(30)
+ *   - a range object: getCampaignPerformance({ startDate: '2026-03-01', endDate: '2026-03-29' })
  *
  * Required environment variables:
  *   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
- *   GOOGLE_ADS_CUSTOMER_ID      — advertiser account ID (dashes stripped automatically)
- *   GOOGLE_ADS_MANAGER_ID       — MCC account ID (required for manager-account auth)
- *   GOOGLE_ADS_DEVELOPER_TOKEN  — developer token from Google Ads API centre
+ *   GOOGLE_ADS_CUSTOMER_ID, GOOGLE_ADS_MANAGER_ID, GOOGLE_ADS_DEVELOPER_TOKEN
  */
 
 const { google } = require('googleapis');
@@ -28,11 +26,22 @@ function fmtDate(d) {
   return d.toISOString().split('T')[0];
 }
 
-function dateRange(days) {
+function dateRangeFromDays(days) {
   const to   = new Date();
   const from = new Date();
   from.setDate(from.getDate() - days);
   return { from: fmtDate(from), to: fmtDate(to) };
+}
+
+/**
+ * Resolve a { from, to } GAQL range from either a number (days) or { startDate, endDate }.
+ */
+function resolveRange(options) {
+  if (options && typeof options === 'object' && options.startDate && options.endDate) {
+    return { from: options.startDate, to: options.endDate };
+  }
+  const days = typeof options === 'number' ? options : (options?.days ?? 30);
+  return dateRangeFromDays(days);
 }
 
 // ─── GoogleAdsService ─────────────────────────────────────────────────────────
@@ -85,12 +94,10 @@ class GoogleAdsService {
   // ── Public methods ────────────────────────────────────────────────────────
 
   /**
-   * Campaign-level performance totals for all enabled campaigns.
-   * All cost fields in AUD.
-   * @param {number} [days=30]
+   * @param {number|{startDate,endDate}} [options=30]
    */
-  async getCampaignPerformance(days = 30) {
-    const { from, to } = dateRange(days);
+  async getCampaignPerformance(options = 30) {
+    const { from, to } = resolveRange(options);
 
     const results = await this._search(`
       SELECT
@@ -124,12 +131,10 @@ class GoogleAdsService {
   }
 
   /**
-   * Daily aggregated account-level metrics. One row per day, ordered ASC.
-   * Suitable for time-series charting. All cost fields in AUD.
-   * @param {number} [days=30]
+   * @param {number|{startDate,endDate}} [options=30]
    */
-  async getDailyPerformance(days = 30) {
-    const { from, to } = dateRange(days);
+  async getDailyPerformance(options = 30) {
+    const { from, to } = resolveRange(options);
 
     const results = await this._search(`
       SELECT
@@ -144,21 +149,19 @@ class GoogleAdsService {
     `);
 
     return results.map((r) => ({
-      date:        r.segments?.date                            ?? '',
-      impressions: parseInt(r.metrics?.impressions            ?? '0'),
-      clicks:      parseInt(r.metrics?.clicks                 ?? '0'),
-      cost:        parseInt(r.metrics?.costMicros             ?? '0') / 1_000_000,
-      conversions: parseFloat(r.metrics?.conversions          ?? '0'),
+      date:        r.segments?.date                  ?? '',
+      impressions: parseInt(r.metrics?.impressions   ?? '0'),
+      clicks:      parseInt(r.metrics?.clicks        ?? '0'),
+      cost:        parseInt(r.metrics?.costMicros    ?? '0') / 1_000_000,
+      conversions: parseFloat(r.metrics?.conversions ?? '0'),
     }));
   }
 
   /**
-   * Top 50 actual user search queries by click volume.
-   * Highest-signal dataset for intent analysis. All cost fields in AUD.
-   * @param {number} [days=30]
+   * @param {number|{startDate,endDate}} [options=30]
    */
-  async getSearchTerms(days = 30) {
-    const { from, to } = dateRange(days);
+  async getSearchTerms(options = 30) {
+    const { from, to } = resolveRange(options);
 
     const results = await this._search(`
       SELECT
@@ -186,10 +189,6 @@ class GoogleAdsService {
     }));
   }
 
-  /**
-   * Current month spend vs budget per campaign.
-   * All cost fields in AUD.
-   */
   async getBudgetPacing() {
     const results = await this._search(`
       SELECT
@@ -208,8 +207,6 @@ class GoogleAdsService {
     }));
   }
 }
-
-// ─── Singleton ────────────────────────────────────────────────────────────────
 
 const googleAdsService = new GoogleAdsService();
 

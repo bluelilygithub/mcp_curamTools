@@ -3,16 +3,8 @@
 /**
  * Google Ads Monitor — tool definitions.
  *
- * Four tools exported as an array. Each tool has the Anthropic schema fields
- * (name, description, input_schema) plus an execute(input, context) function.
- * AgentOrchestrator strips execute before sending schemas to Claude.
- *
- * toolSlug = 'google-ads-monitor' is a security annotation used by any future
- * ToolRegistry if cross-agent tool isolation is introduced. It is not enforced
- * by AgentOrchestrator today but must be present for forward compatibility.
- *
- * context.days is the authoritative date range (from the UI or config).
- * input.days is Claude's optional argument — used only as a last fallback.
+ * context.startDate / context.endDate take priority when set (UI date-range picker).
+ * Falls back to context.days (number) then input.days then 30.
  */
 
 const { googleAdsService }       = require('../../services/GoogleAdsService');
@@ -32,7 +24,12 @@ const daysSchema = {
   required: [],
 };
 
-// ── Tool definitions ──────────────────────────────────────────────────────────
+function rangeOrDays(context, input) {
+  if (context.startDate && context.endDate) {
+    return { startDate: context.startDate, endDate: context.endDate };
+  }
+  return context.days ?? input.days ?? 30;
+}
 
 const getCampaignPerformanceTool = {
   name: 'get_campaign_performance',
@@ -45,9 +42,8 @@ const getCampaignPerformanceTool = {
   input_schema:        daysSchema,
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
-
   async execute(input, context) {
-    return googleAdsService.getCampaignPerformance(context.days ?? input.days ?? 30);
+    return googleAdsService.getCampaignPerformance(rangeOrDays(context, input));
   },
 };
 
@@ -61,9 +57,8 @@ const getDailyPerformanceTool = {
   input_schema:        daysSchema,
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
-
   async execute(input, context) {
-    return googleAdsService.getDailyPerformance(context.days ?? input.days ?? 30);
+    return googleAdsService.getDailyPerformance(rangeOrDays(context, input));
   },
 };
 
@@ -78,9 +73,8 @@ const getSearchTermsTool = {
   input_schema:        daysSchema,
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
-
   async execute(input, context) {
-    return googleAdsService.getSearchTerms(context.days ?? input.days ?? 30);
+    return googleAdsService.getSearchTerms(rangeOrDays(context, input));
   },
 };
 
@@ -94,13 +88,10 @@ const getAnalyticsOverviewTool = {
   input_schema:        daysSchema,
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
-
   async execute(input, context) {
-    return googleAnalyticsService.getSessionsOverview(context.days ?? input.days ?? 30);
+    return googleAnalyticsService.getSessionsOverview(rangeOrDays(context, input));
   },
 };
-
-// ── Export ────────────────────────────────────────────────────────────────────
 
 const googleAdsMonitorTools = [
   getCampaignPerformanceTool,
