@@ -299,11 +299,13 @@ export default function AdminSqlPage() {
           <div className="flex items-center justify-between px-4 py-2" style={{ background: 'var(--color-surface)' }}>
             <div className="flex items-center gap-1">
               <MicButton
-                onResult={(t) => setQuestion((q) => q ? q + ' ' + t : t)}
+                onResult={(t) => setQuestion((q) => {
+                  const base = q.replace(/\s*\[.*?\]$/, '').trim();
+                  return base ? base + ' ' + t : t;
+                })}
                 onPartial={(t) => setQuestion((q) => {
-                  // Replace any trailing interim text with new interim
-                  const base = q.replace(/\s*\[.*\]$/, '');
-                  return base + (base ? ' ' : '') + '[' + t + ']';
+                  const base = q.replace(/\s*\[.*?\]$/, '').trim();
+                  return base ? base + ' [' + t + ']' : '[' + t + ']';
                 })}
               />
               <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
@@ -327,6 +329,9 @@ export default function AdminSqlPage() {
       )}
 
       {error && <InlineBanner type="error" message={error} onDismiss={() => setError('')} />}
+
+      {/* Results */}
+      {results && <ResultsTable results={results} showReadAloud={mode === 'nlp'} />}
 
       {/* Generated SQL (NLP mode only) */}
       {generatedSql && (
@@ -374,9 +379,6 @@ export default function AdminSqlPage() {
           </pre>
         </div>
       )}
-
-      {/* Results */}
-      {results && <ResultsTable results={results} showReadAloud={mode === 'nlp'} />}
 
       {/* Empty state */}
       {!results && !loading && !error && (
