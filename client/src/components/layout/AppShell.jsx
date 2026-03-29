@@ -24,7 +24,7 @@ export default function AppShell() {
   return (
     <div
       className="flex flex-col"
-      style={{ minHeight: '100vh', minHeight: '100dvh' }}
+      style={{ minHeight: '100dvh' }}
     >
       <TopNav onMenuClick={() => setMobileOpen(true)} />
 

@@ -1,7 +1,7 @@
 /**
  * stripForSpeech — clean markdown/code text before passing to speechSynthesis.
  *
- * Removes: headings (#), bold/italic (*/_), code fences, inline code,
+ * Removes: headings (#), bold/italic, code fences, inline code,
  * URLs, HTML tags, bullet/numbered list markers, horizontal rules,
  * and collapses excess whitespace.
  */
