@@ -87,7 +87,6 @@ The `PORT` variable is injected automatically by Railway — do not set it in Ra
 | `DATABASE_URL` | Railway Postgres connection string (auto-injected if using Railway Postgres) |
 | `ANTHROPIC_API_KEY` | Your Anthropic key |
 | `MAIL_CHANNEL_API_KEY` | MailChannels key |
-| `MAIL_FROM_EMAIL` | `noreply@bluelily.com.au` |
 | `SEED_ADMIN_EMAIL` | Initial admin email |
 | `SEED_ADMIN_PASSWORD` | Initial admin password |
 | `ORG_NAME` | `Blue Lily` |
@@ -126,6 +125,11 @@ If missing, check `server/.env` → `PORT=3002`.
 
 ### 502 Bad Gateway
 Vite can't reach the API server. Confirm the server is running and on port 3002.
+
+### Invite email sent (logged) but never arrives in inbox or spam
+Do **not** set `MAIL_FROM_EMAIL` as a Railway environment variable. The sending address is hardcoded in `EmailService.js` as `noreply@curam-ai.com.au` — the domain authorised for the MailChannels API key. If `MAIL_FROM_EMAIL` is set in Railway to a different domain (e.g. `bluelily.com.au`), MailChannels will accept the API call and log "Sent" but silently drop delivery because the domain is not authorised.
+
+Also: `EmailService` uses `https.request` (not native `fetch`) to call the MailChannels API. On Railway, native `fetch` causes the same silent delivery failure. Do not refactor this to use `fetch`.
 
 ### Invite email not received locally (expected)
 Invitation emails contain `http://localhost:5174/invite/...` as the activation link. Mail servers reject emails with `localhost` URLs as a spam signal — this is why delivery works on Railway (real domain) but not in local development.

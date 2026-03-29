@@ -14,16 +14,23 @@ function findDefault(slug) {
 
 /**
  * Fetch template by slug. Falls back to emailDefaults if not in DB.
+ * Always merges description + variables from the default definition.
  */
 async function get(slug) {
   const res = await pool.query(
     `SELECT slug, subject, body_html, body_text FROM email_templates WHERE slug = $1`,
     [slug]
   );
-  if (res.rows.length > 0) return res.rows[0];
-  const fallback = findDefault(slug);
-  if (!fallback) throw new Error(`Email template not found: ${slug}`);
-  return fallback;
+  const def = findDefault(slug);
+  if (res.rows.length > 0) {
+    return {
+      ...res.rows[0],
+      description: def?.description ?? null,
+      variables:   def?.variables   ?? [],
+    };
+  }
+  if (!def) throw new Error(`Email template not found: ${slug}`);
+  return def;
 }
 
 /**
@@ -43,12 +50,20 @@ async function render(slug, vars = {}) {
 
 /**
  * List all templates ordered by slug.
+ * Merges description + variables from emailDefaults so callers always get the full shape.
  */
 async function list() {
   const res = await pool.query(
     `SELECT id, slug, subject, updated_at FROM email_templates ORDER BY slug`
   );
-  return res.rows;
+  return res.rows.map((row) => {
+    const def = findDefault(row.slug);
+    return {
+      ...row,
+      description: def?.description ?? null,
+      variables:   def?.variables   ?? [],
+    };
+  });
 }
 
 /**

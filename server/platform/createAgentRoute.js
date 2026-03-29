@@ -18,6 +18,7 @@ const { requireAuth } = require('../middleware/requireAuth');
 const { requireRole } = require('../middleware/requireRole');
 const AgentConfigService = require('./AgentConfigService');
 const CostGuardService = require('../services/CostGuardService');
+const { logUsage } = require('../services/UsageLogger');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -189,6 +190,9 @@ function createAgentRoute({ slug, runFn, requiredPermission }) {
         };
 
         await persistRun({ slug, orgId, status: 'complete', result: resultPayload, runId });
+
+        logUsage({ orgId, userId, slug, modelId: adminConfig.model, tokensUsed: tokensUsed ?? {}, costAud: taskCostAud })
+          .catch(err => console.error(`[${slug}] usage log error:`, err.message));
 
         emit('result', { data: resultPayload });
       } catch (runErr) {

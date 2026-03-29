@@ -5,6 +5,8 @@
 const EMAIL_DEFAULTS = [
   {
     slug: 'invitation',
+    description: 'Sent when an admin invites a new user to the platform.',
+    variables: ['appName', 'activationUrl'],
     subject: 'You have been invited to {{appName}}',
     body_html: `
 <p>Hello,</p>
@@ -18,6 +20,8 @@ const EMAIL_DEFAULTS = [
   },
   {
     slug: 'password_reset',
+    description: 'Sent when a user requests a password reset.',
+    variables: ['appName', 'email', 'resetUrl'],
     subject: 'Reset your {{appName}} password',
     body_html: `
 <p>Hello,</p>

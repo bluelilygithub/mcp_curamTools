@@ -389,6 +389,28 @@ embedBatch(texts)     // → array of vectors
 
 ---
 
+### UsageLogger
+**Type:** Service
+**Location:** `server/services/UsageLogger.js`
+**What it does:** Writes one row to `usage_logs` after each completed agent run — the only code path that may write to this table.
+**Interface:**
+```js
+logUsage({ orgId, userId, slug, modelId, tokensUsed, costAud })
+// orgId:      number  — organisation FK
+// userId:     number  — user who triggered the run
+// slug:       string  — agent identifier
+// modelId:    string  — model used (from adminConfig.model)
+// tokensUsed: object  — { input, output, cacheRead, cacheWrite }
+// costAud:    number  — AUD cost computed by CostGuardService; converted to USD for storage
+```
+Returns a Promise. Always called fire-and-forget (`.catch` only) — a logging failure must never affect the agent response.
+
+**Used by:** `createAgentRoute.js` success path only. Never called from agent code or other routes.
+**Reuse contract:** `createAgentRoute` calls `logUsage` automatically after every successful run — no per-agent wiring required. Do not call `logUsage` from agent code. Do not write to `usage_logs` from any other location.
+**Does not handle:** Failed or error runs (those are not logged — only complete runs generate a usage row). Mid-run token accumulation (that is `CostGuardService`).
+
+---
+
 ### Idempotent Schema Initialisation
 **Type:** Utility
 **Location (Vault reference):** `server/db.js` in both Curam Vault and ToolsForge

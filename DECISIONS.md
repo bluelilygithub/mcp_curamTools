@@ -322,6 +322,50 @@ Both pages added to `App.jsx` under the existing `RequireRole(['org_admin'])` gu
 
 ---
 
+### UsageLogger as the Single Write Path to usage_logs
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** The `usage_logs` table was defined in the platform scaffold and read by `CostGuardService.getDailyOrgSpendAud()` for budget enforcement. No code was writing to it — the Admin Logs page was always empty and the daily budget check always saw zero spend regardless of actual usage.
+**Decision:** `UsageLogger` (`server/services/UsageLogger.js`) is the only code path that writes to `usage_logs`. It is called from `createAgentRoute` on the success path, fire-and-forget (logging failures must never affect agent responses). No agent code or route code may write to `usage_logs` directly.
+**Rationale:** Mirroring the `persistRun`/`agent_runs` pattern: one table, one write path, enforced at the platform layer. Calling from `createAgentRoute` means every agent gets usage logging automatically with zero per-agent code.
+**Constraints it must not violate:** `logUsage` must remain fire-and-forget at the call site. A failure to log must never surface as an agent error. `org_id` must be sourced from `req.user.orgId`, never from user-supplied input.
+**References:** `server/services/UsageLogger.js`; `server/platform/createAgentRoute.js`; `server/services/CostGuardService.js` (`getDailyOrgSpendAud` reads this table).
+
+---
+
+### Admin UI Parity with ToolsForge
+**Date:** 2026-03-29
+**Status:** Ongoing
+**Context:** MCP_curamTools was scaffolded with functional but minimal admin pages. ToolsForge, the predecessor single-tenant platform, has richer admin UI developed over many iterations. Rather than reinventing, the decision is to port ToolsForge admin features selectively — adopting what works and replacing ToolsForge-specific patterns with MCP_curamTools equivalents.
+**Decision:** Each admin page is brought to ToolsForge feature parity in turn, then adapted: ToolsForge component patterns (raw `<button>` with inline styles) are replaced with MCP_curamTools primitives (`Button`, `Modal`, `InlineBanner`). ToolsForge-specific backend calls (different route paths, different response shapes) are mapped to MCP_curamTools routes. Feature additions that don't apply (ToolsForge tool-access per-user roles) are replaced with MCP_curamTools equivalents (org-role grant/revoke).
+**Pages ported (in order):** Email Templates (tabs, preview iframe, click-to-insert variables, auto-generate plain text) → Models (add/edit/delete/reset, API key status, per-model test) → Users (Manage Access modal replacing separate Edit + Delete modals, role toggle, profile editing).
+**Constraints it must not violate:** No ToolsForge-specific route paths or response shapes in MCP_curamTools. `org_id` always from `req.user.orgId`. PermissionService is the only code path for role grants/revocations.
+
+---
+
+### Role Management HTTP Endpoints
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** The Users page needs to grant and revoke the `org_admin` role without a full user update (`PUT /users/:id` replaces the entire role). A finer-grained API is needed so the UI can toggle admin independently of other profile edits.
+**Decision:** Three endpoints are added to `server/routes/admin.js`: `GET /users/:id/roles` (returns current role assignments), `POST /users/:id/grant-role` (grants a named role at a given scope), `POST /users/:id/revoke-role` (revokes it). These are thin wrappers over `PermissionService.getUserRoles`, `grantRole`, and `revokeRole` — no permission logic lives in the route handler.
+**Rationale:** Matches the pattern from ToolsForge (`grant-role`/`revoke-role` sub-resource endpoints). Keeps PermissionService as the single write path for all role changes. Guarded by the existing `router.use(requireAuth, requireRole(['org_admin']))` — no per-route middleware needed. Self-demotion is blocked server-side.
+**Constraints it must not violate:** An admin may not grant/revoke their own `org_admin` role (server enforces). `org_id` scoping — the target user must belong to `req.user.orgId`. PermissionService functions are the only callers of role SQL.
+**References:** `server/services/PermissionService.js` (`grantRole`, `revokeRole`, `getUserRoles`); `server/routes/admin.js`.
+
+---
+
+### Admin Diagnostics Page
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** Operators need a way to verify that all external integrations (database, AI API, email, MCP servers, Google APIs) are correctly configured without diving into Railway logs or running manual curl commands.
+**Decision:** A `POST /admin/diagnostics` route in `server/routes/admin.js` runs all checks server-side and returns a JSON array of `{ name, ok, detail }` objects. The frontend page (`client/src/pages/admin/AdminDiagnosticsPage.jsx`) shows the results in a pass/fail table triggered by a "Run Checks" button.
+**Rationale:** Server-side execution means secrets never leave the server. A single endpoint covers all checks. The MailChannels check uses `https.request` (not `fetch`) — consistent with the fix in `EmailService.js` and the railway+undici+MailChannels incompatibility. The MCP Registry check (`MCPRegistry.list(orgId)`) is the MCP-specific addition over the ToolsForge equivalent.
+**Checks (in order):** Database (`SELECT NOW()`), Anthropic API (minimal haiku call), MailChannels (`https.request` probe — 401/403 = bad key, 4xx = key valid), MCP Registry (connected server count), Google OAuth (token refresh), Google Ads API (GAQL minimal query), Google Analytics GA4 (minimal report).
+**Constraints it must not violate:** The route is protected by `router.use(requireAuth, requireRole(['org_admin']))` — no additional middleware needed. The diagnostics route must never perform side effects (no emails sent, no data written). Run checks are always initiated manually — no scheduling.
+**References:** `server/routes/admin.js` (POST /diagnostics); `client/src/pages/admin/AdminDiagnosticsPage.jsx`.
+
+---
+
 ## Open Questions
 
 _(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_
