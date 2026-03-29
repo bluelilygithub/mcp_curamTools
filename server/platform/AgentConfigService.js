@@ -27,6 +27,11 @@ const AGENT_DEFAULTS = {
     lookback_days: 7,
     max_suggestions: 5,
   },
+  'google-ads-change-audit': {
+    lookback_days:           30,
+    comparison_window_days:  7,   // days before/after each change for metric comparison
+    max_suggestions:         5,
+  },
 };
 
 const ADMIN_DEFAULTS = {
@@ -50,6 +55,13 @@ const ADMIN_DEFAULTS = {
     max_tokens:          8192,
     max_iterations:      10,
     max_task_budget_aud: 0.50,
+  },
+  'google-ads-change-audit': {
+    enabled:             true,
+    model:               'claude-sonnet-4-6',
+    max_tokens:          8192,
+    max_iterations:      15,   // higher — runs multiple before/after tool call pairs
+    max_task_budget_aud: 0.75, // slightly higher budget — more tool calls
   },
   _platform: {
     enabled: true,

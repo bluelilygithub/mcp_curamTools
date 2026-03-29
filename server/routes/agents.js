@@ -27,6 +27,7 @@ const { send: sendEmail }  = require('../services/EmailService');
 const { runGoogleAdsMonitor }      = require('../agents/googleAdsMonitor');
 const { runGoogleAdsFreeform }     = require('../agents/googleAdsFreeform');
 const { runGoogleAdsChangeImpact } = require('../agents/googleAdsChangeImpact');
+const { runGoogleAdsChangeAudit }  = require('../agents/googleAdsChangeAudit');
 
 agentsRouter.use(
   '/google-ads-monitor',
@@ -59,6 +60,16 @@ agentsRouter.use(
   createAgentRoute({
     slug:               'google-ads-change-impact',
     runFn:              runGoogleAdsChangeImpact,
+    requiredPermission: 'ads_operator',
+  })
+);
+
+// ── Google Ads Change Audit ───────────────────────────────────────────────
+agentsRouter.use(
+  '/google-ads-change-audit',
+  createAgentRoute({
+    slug:               'google-ads-change-audit',
+    runFn:              runGoogleAdsChangeAudit,
     requiredPermission: 'ads_operator',
   })
 );

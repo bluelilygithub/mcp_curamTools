@@ -520,6 +520,50 @@ All inline styles include `fontFamily: 'inherit'` to respect the user's platform
 
 ---
 
+### Multi-Customer Scheduled Runs — Option A (Agent Returns Array)
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `AgentScheduler._tick` calls `runFn` once and persists one `agent_runs` row. With multi-customer support, each customer needs its own row so the history UI and cost tracking can be scoped per customer. Three options were considered: (A) agent loops internally and returns an array; (B) scheduler enumerates customers and calls `runFn` once per customer; (C) a new scheduler variant for multi-account agents.
+**Decision:** Option A — the agent's `runFn` loops over active customers and returns an array of `{ customerId, result, status, error }` objects. `AgentScheduler._tick` detects an array return and persists one `agent_runs` row per element (with `customer_id` populated), closing the initial placeholder row with `{ multi: true, count: N }`. Existing agents returning a single object are unchanged.
+**Rationale:** Option A keeps the scheduler generic with zero agent-specific knowledge. Option B would require the scheduler to know about customer enumeration. Option C adds API surface. Array detection (`Array.isArray(outcome)`) is a backward-compatible, minimal signal.
+**Constraints it must not violate:** Single-object-returning agents must continue to produce exactly one `agent_runs` row with no `customer_id`. Multi-customer array return must never be used for non-customer reasons — the array shape is a contract meaning "one entry per customer run". Each array element must include `{ customerId, status }` at minimum.
+
+---
+
+### agent_configs Multi-Customer — Partial Index ON CONFLICT Syntax
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** Adding per-customer agent configs required multiple rows per `(org_id, slug)` — one for the org default (`customer_id IS NULL`) and one per customer. The existing `UNIQUE(org_id, slug)` constraint prevents this. The same partial-index pattern from `resource_permissions` (`user_id XOR role_name`) applies here.
+**Decision:** The `UNIQUE(org_id, slug)` constraint on `agent_configs` is dropped and replaced with two partial unique indexes:
+- `idx_agent_configs_org_slug_default` on `(org_id, slug) WHERE customer_id IS NULL`
+- `idx_agent_configs_org_slug_customer` on `(org_id, slug, customer_id) WHERE customer_id IS NOT NULL`
+
+`updateAgentConfig` ON CONFLICT clause changes from `ON CONFLICT (org_id, slug)` to `ON CONFLICT (org_id, slug) WHERE customer_id IS NULL`. `updateAgentConfigForCustomer` uses `ON CONFLICT (org_id, slug, customer_id) WHERE customer_id IS NOT NULL`. Both forms follow the column-predicate syntax required for partial indexes — `ON CONFLICT ON CONSTRAINT` does not work for partial indexes.
+**Rationale:** Consistent with the `resource_permissions` pattern already in the codebase. Explicit WHERE predicate in ON CONFLICT is more readable than relying on constraint name lookup.
+**Constraints it must not violate:** The DROP CONSTRAINT step must use `DROP CONSTRAINT IF EXISTS` — both new and existing installs must be handled idempotently. The `customer_id` column defaults to NULL so existing rows (org defaults) satisfy the `WHERE customer_id IS NULL` index automatically.
+
+---
+
+### substitutePromptVars — `{{variable}}` Syntax
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** Operator-authored `custom_prompt` text needs variable substitution (e.g. inject customer name). The syntax must be consistent with the existing email template convention.
+**Decision:** `server/platform/substitutePromptVars.js` exports `substitutePromptVars(template, vars)`. Placeholders use double braces: `{{variable_name}}`. Unknown placeholders are left as-is (no silent data loss). The function is a pure string transform — no async, no DB access.
+**Rationale:** Double braces match the `EmailTemplateService` convention already in use. Single braces would conflict with JavaScript template literals in source code. Leaving unknown placeholders intact means a misconfigured custom_prompt produces visible `{{variable}}` text rather than silent empty substitution — easier to debug.
+**Constraints it must not violate:** `substitutePromptVars` must remain a pure function with no side effects. It must not throw for null/undefined templates — return the input as-is. The `{{}}` syntax is the only supported form — do not add `{variable}` or `$variable` variants.
+
+---
+
+### custom_prompt — Injected After Analysis Sections, Before Closing Instruction
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** Operators need to inject account-specific instructions (e.g. "prioritise brand campaigns", "ignore test campaign") into the agent's reasoning without replacing the full prompt. The injection point determines how much influence the custom text has relative to the analytical framework.
+**Decision:** `custom_prompt` is injected as a `## Operator Instructions` block appended after all output format sections, immediately before the final baseline-verification instruction. In `buildSystemPrompt(config, customerVars)`, it appears at the end of the returned string so it does not disrupt the structured prompt sections but is still present when Claude forms its final recommendations. `substitutePromptVars` is applied before injection to resolve `{{customer_name}}` and `{{customer_id}}` variables.
+**Rationale:** Appending at the end ensures the analytical framework and output format are fully established before Claude reads the operator's additions. Placing it before the baseline-verification instruction means operator instructions are contextualised by the account targets, not placed above them.
+**Constraints it must not violate:** `custom_prompt` must never replace the role block, data source block, or output format block — it is additive only. If `custom_prompt` is null or empty, the prompt must be identical to a run with no custom_prompt set.
+
+---
+
 ## Open Questions
 
 _(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_

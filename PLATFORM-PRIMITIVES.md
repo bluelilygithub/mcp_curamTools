@@ -58,9 +58,12 @@ AgentScheduler.register({ slug, schedule, runFn, orgId })
 // orgId: number | null — if null, resolved from DB (single active org fallback)
 ```
 On each cron tick: resolves `orgId` if omitted, calls `runFn`, persists result to `agent_runs` via shared `persistRun`. Logs success/failure. Handler errors never rethrow — a failing agent cannot crash the process.
+
+**Multi-customer array return:** If `runFn` returns an array of `{ customerId, result, status, error }` objects, `_tick` persists one `agent_runs` row per element (with `customer_id` populated) and closes the initial placeholder row with `{ multi: true, count: N }`. Single-object returns (existing agents) are unchanged — backward compatible.
+
 **Used by:** Google Ads Monitor registration (schedule: `'0 6,18 * * *'`).
-**Reuse contract:** Provide `slug`, a valid cron expression, and a `runFn`. Document the UTC↔local offset in a comment at the registration site.
-**Does not handle:** HTTP-triggered runs (those go through `createAgentRoute`). Does not manage `agent_executions` (that is `services/AgentScheduler.js`). Does not parse or validate cron expressions — invalid expressions are passed directly to node-cron.
+**Reuse contract:** Provide `slug`, a valid cron expression, and a `runFn`. Document the UTC↔local offset in a comment at the registration site. For multi-customer agents: return an array from `runFn`; each element must include `{ customerId, status }` at minimum.
+**Does not handle:** HTTP-triggered runs (those go through `createAgentRoute`). Does not parse or validate cron expressions — invalid expressions are passed directly to node-cron.
 
 ---
 
@@ -136,72 +139,94 @@ agent_runs (
 ### agent_configs Table Schema
 **Type:** Table
 **Location:** `server/db.js` (defined in `initializeSchema()`)
-**What it does:** Stores operator-level agent configuration — analytical thresholds, schedule, and lookback settings — one row per org per agent slug.
+**What it does:** Stores operator-level agent configuration — analytical thresholds, schedule, lookback settings, custom prompt, and account intelligence profile. Supports one org-default row (customer_id IS NULL) and any number of customer-specific override rows per (org_id, slug).
 **Interface:**
 ```sql
 agent_configs (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id      INTEGER NOT NULL,       -- FK → organizations
-  slug        TEXT NOT NULL,          -- agent identifier
-  config      JSONB DEFAULT '{}',     -- merged with AGENT_DEFAULTS at read time
-  updated_by  INTEGER,                -- FK → users
-  updated_at  TIMESTAMPTZ,
-  UNIQUE (org_id, slug)
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id               INTEGER NOT NULL,       -- FK → organizations
+  slug                 TEXT NOT NULL,           -- agent identifier
+  customer_id          TEXT DEFAULT NULL,       -- NULL = org default; set = customer-specific override
+  config               JSONB DEFAULT '{}',      -- merged with AGENT_DEFAULTS at read time
+  intelligence_profile JSONB,                   -- typed account context; injected first in system prompt
+  custom_prompt        TEXT,                    -- operator-authored prompt extension; {{variable}} substitution
+  updated_by           INTEGER,                 -- FK → users
+  updated_at           TIMESTAMPTZ
+  -- No inline UNIQUE constraint. Two partial indexes enforce uniqueness:
+  --   idx_agent_configs_org_slug_default:  UNIQUE (org_id, slug) WHERE customer_id IS NULL
+  --   idx_agent_configs_org_slug_customer: UNIQUE (org_id, slug, customer_id) WHERE customer_id IS NOT NULL
 )
 ```
 Admin config (model, max_tokens, max_iterations, kill switch) is stored separately in `system_settings` under key `agent_<slug_underscored>`, not in this table.
-**Used by:** `AgentConfigService` (only access path); `PUT /api/agent-configs/:slug` route; Google Ads Monitor agent.
-**Reuse contract:** Never query this table directly from agent or route code. Always use `AgentConfigService.getAgentConfig(orgId, slug)` and `AgentConfigService.updateAgentConfig(orgId, slug, patch, updatedBy)`. Add new agent defaults to `AGENT_DEFAULTS` in `AgentConfigService.js`.
+**Used by:** `AgentConfigService` (only access path); `PUT /api/agent-configs/:slug` route; `PUT /api/agent-configs/:slug/customers/:customerId` route.
+**Reuse contract:** Never query this table directly from agent or route code. Use `AgentConfigService` methods. Add new agent defaults to `AGENT_DEFAULTS` in `AgentConfigService.js`. ON CONFLICT upserts must use column-predicate form matching the partial indexes — `ON CONFLICT (org_id, slug) WHERE customer_id IS NULL` for org defaults and `ON CONFLICT (org_id, slug, customer_id) WHERE customer_id IS NOT NULL` for customer-specific rows.
 **Does not handle:** Admin guardrails (model, tokens, kill switch) — those are in `system_settings`.
 
 ---
 
-### AgentConfigService (all four methods)
+### AgentConfigService
 **Type:** Service
-**Location:** `server/services/AgentConfigService.js`
-**What it does:** Canonical access layer for both operator config (`agent_configs` table) and admin config (`system_settings` table). All methods return the full merged config; callers never see a partial config.
+**Location:** `server/platform/AgentConfigService.js`
+**What it does:** Canonical access layer for operator config (`agent_configs`) and admin config (`system_settings`). All methods return full merged configs; callers never see partial configs.
 **Interface:**
 ```js
-// Operator config — analytical settings, schedule, thresholds
+// ── Org-level operator config (customer_id IS NULL rows) ──────────────────
+
 AgentConfigService.getAgentConfig(orgId, slug)
-// orgId: number, slug: string
-// Returns: defaults merged with stored JSONB. Falls back to defaults on DB error.
+// Returns: AGENT_DEFAULTS merged with stored config + intelligence_profile + custom_prompt.
+// Scoped to WHERE customer_id IS NULL. Falls back to defaults on DB error.
 
 AgentConfigService.updateAgentConfig(orgId, slug, patch, updatedBy)
-// orgId: number, slug: string, patch: object (partial config), updatedBy: number (userId)
-// Upserts patch into agent_configs. Returns merged result.
+// Upserts patch. intelligence_profile and custom_prompt are separate columns (not inside config JSONB).
+// ON CONFLICT (org_id, slug) WHERE customer_id IS NULL — must match partial index exactly.
+// Returns merged result including intelligence_profile and custom_prompt.
 
-// Admin config — model, cost guardrails, kill switch
+// ── Customer-level operator config (customer_id IS NOT NULL rows) ─────────
+
+AgentConfigService.getAgentConfigForCustomer(orgId, slug, customerId)
+// Returns org-default merged with customer-specific overrides.
+// Falls back to org default if no customer-specific row exists.
+
+AgentConfigService.updateAgentConfigForCustomer(orgId, slug, customerId, patch, updatedBy)
+// Upserts customer-specific config row.
+// ON CONFLICT (org_id, slug, customer_id) WHERE customer_id IS NOT NULL.
+
+AgentConfigService.listCustomerConfigs(orgId, slug)
+// Returns all customer_id IS NOT NULL rows for (org, slug).
+// Used by AgentScheduler to enumerate customers for multi-account scheduled runs.
+// Returns: [{ customer_id, config, intelligence_profile, custom_prompt }]
+
+// ── Admin config (system_settings) ───────────────────────────────────────
+
 AgentConfigService.getAdminConfig(slug)
-// slug: string
-// Reads from system_settings key = 'agent_<slug_underscored>'. Returns defaults merged with stored JSON.
+// Reads system_settings key 'agent_<slug_underscored>'. Returns ADMIN_DEFAULTS merged with stored JSON.
 
 AgentConfigService.updateAdminConfig(slug, patch, updatedBy)
-// slug: string, patch: object, updatedBy: number (userId)
 // Saves merged config to system_settings. Returns merged result.
-```
-Default values are defined in `AGENT_DEFAULTS` and `ADMIN_DEFAULTS` constants at the top of the service file. New agents add their defaults to those constants.
 
-Google Ads Monitor defaults:
-- Agent: `schedule='0 6,18 * * *'`, `lookback_days=30`, `ctr_threshold_pct=2.0`, `wasted_clicks_threshold=5`, `impressions_min=100`, `max_suggestions=5`
-- Admin: `enabled=true`, `model='claude-sonnet-4-6'`, `max_tokens=4096`, `max_iterations=10`
+// ── Org-level budget (system_settings key: 'platform_budget') ────────────
 
-**Stage 3 budget additions:**
-- `ADMIN_DEFAULTS._platform` includes `max_task_budget_aud: 0.50` — falls through the existing admin config merge for all agents. `null` means unlimited; agents may override.
-- Two new methods for org-level daily budget (stored in `system_settings` under key `platform_budget`, not per-agent):
-```js
 AgentConfigService.getOrgBudgetSettings(orgId)
-// Returns: { max_daily_org_budget_aud: null } by default (null = unlimited)
-// Reads system_settings key 'platform_budget' for the org.
+// Returns: { max_daily_org_budget_aud: null } by default (null = unlimited).
 
 AgentConfigService.updateOrgBudgetSettings(orgId, patch, updatedBy)
 // patch: { max_daily_org_budget_aud: number | null }
-// Upserts to system_settings key 'platform_budget'.
 ```
 
-**Used by:** `createAgentRoute.js` (loads admin config and org budget settings before every run); `PUT /api/agent-configs/:slug` route; `AdminAgentsPage.jsx`; `GoogleAdsMonitorPage.jsx` agent settings panel.
-**Reuse contract:** New agents add entries to `AGENT_DEFAULTS` and `ADMIN_DEFAULTS`. Agent code reads config via `getAgentConfig`; admin enforcement is automatic via `createAgentRoute`. Org-level daily budget is set once per org via `updateOrgBudgetSettings` — not per agent.
-**Does not handle:** Permission checks (those are on the route layer). Cron rescheduling (the route calls `AgentScheduler.updateSchedule` separately after `updateAgentConfig`).
+**AGENT_DEFAULTS entries:**
+- `google-ads-monitor`: `schedule`, `lookback_days=30`, `ctr_low_threshold=0.03`, `wasted_clicks_threshold=5`, `impressions_ctr_threshold=100`, `max_suggestions=8`
+- `google-ads-freeform`: `max_suggestions=5`
+- `google-ads-change-impact`: `lookback_days=7`, `max_suggestions=5`
+
+**ADMIN_DEFAULTS entries** (all with `enabled`, `model='claude-sonnet-4-6'`, `max_task_budget_aud=0.50`):
+- `google-ads-monitor`: `max_tokens=8192`, `max_iterations=10`
+- `google-ads-freeform`: `max_tokens=8192`, `max_iterations=12`
+- `google-ads-change-impact`: `max_tokens=8192`, `max_iterations=10`
+- `_platform` (fallback for unregistered agents): `max_tokens=4096`, `max_iterations=10`
+
+**Used by:** `createAgentRoute.js`; all agent `index.js` files; `PUT /api/agent-configs/:slug`; `PUT /api/agent-configs/:slug/customers/:customerId`; `AgentScheduler._tick` (array-return multi-customer path).
+**Reuse contract:** New agents add entries to `AGENT_DEFAULTS` and `ADMIN_DEFAULTS`. Agent code reads config via `getAgentConfig` or `getAgentConfigForCustomer` — never queries tables directly. `custom_prompt` and `intelligence_profile` are returned as top-level fields on the merged config object alongside the JSONB config fields.
+**Does not handle:** Permission checks (route layer). Cron rescheduling (route calls `AgentScheduler.updateSchedule` separately).
 
 ---
 
@@ -294,23 +319,57 @@ This function is prompt-format dependent: it expects the agent prompt to produce
 
 ---
 
-### buildSystemPrompt (google ads monitor)
+### substitutePromptVars
 **Type:** Utility
-**Location:** `server/agents/googleAdsMonitor/prompt.js`
-**What it does:** Builds the Google Ads Monitor system prompt by injecting live agent config values (thresholds, limits) into the prompt string at run time.
+**Location:** `server/platform/substitutePromptVars.js`
+**What it does:** Replaces `{{variable}}` placeholders in a prompt template string with values from a vars map. Unknown placeholders are left intact — no silent data loss.
 **Interface:**
 ```js
-buildSystemPrompt({ ctr_threshold_pct, wasted_clicks_threshold, impressions_min, max_suggestions })
-// ctr_threshold_pct: number — CTR % below which campaigns are flagged
-// wasted_clicks_threshold: number — clicks with zero conversions = wasted spend
-// impressions_min: number — minimum impressions to flag Ad Copy Opportunity
-// max_suggestions: number — maximum recommendations to produce
-// Returns: string — complete system prompt for the agent
+const { substitutePromptVars } = require('../../platform/substitutePromptVars');
+
+substitutePromptVars(template, vars)
+// template: string | null — prompt string with {{var}} placeholders; null/undefined returned as-is
+// vars: object — key/value substitution map
+// Returns: string — template with known placeholders replaced; unknown placeholders unchanged
+
+// Example:
+substitutePromptVars('Focus on {{customer_name}} ({{customer_id}}).', {
+  customer_name: 'Acme Corp',
+  customer_id:   '123-456-7890',
+});
+// → 'Focus on Acme Corp (123-456-7890).'
 ```
-Called at run time with freshly-loaded agent config from `AgentConfigService`. Operator changes to thresholds take effect on the next run without any code change or server restart.
-**Used by:** `server/agents/googleAdsMonitor/index.js` (`runAdsMonitor` entry point).
-**Reuse contract:** Every future agent with configurable analytical thresholds should export a `buildSystemPrompt(config)` function following this pattern rather than a static string. Static prompt strings are acceptable only for agents with no operator-configurable parameters.
-**Does not handle:** Prompt caching structure (that is the caller's responsibility). Injection of date/time context (handled by the platform date context pattern). Admin config values (model, token limits) — those are passed separately into `AgentOrchestrator.run()`.
+Placeholder syntax `{{variable}}` matches the `EmailTemplateService` convention. Pure function — no async, no DB access, no side effects.
+**Used by:** All agent `prompt.js` files that support `custom_prompt` injection.
+**Reuse contract:** Any agent that injects `config.custom_prompt` into its system prompt must call `substitutePromptVars(config.custom_prompt, customerVars)` before appending. The `customerVars` object should include `{ customer_id, customer_name }` for multi-customer agents. Single-account agents pass `{}`.
+**Does not handle:** Nested variable substitution. Conditional blocks. Escaping of `{{` literals.
+
+---
+
+### buildSystemPrompt convention
+**Type:** Convention
+**Location:** `server/agents/<slug>/prompt.js` (one per agent)
+**What it does:** Builds the complete system prompt for an agent, injecting live config values, account context, and optional operator custom prompt.
+**Interface (standard signature):**
+```js
+buildSystemPrompt(config = {}, customerVars = {})
+// config:        merged config object from AgentConfigService (includes thresholds, custom_prompt, intelligence_profile)
+// customerVars:  { customer_id, customer_name } — substituted into custom_prompt via substitutePromptVars
+// Returns: string — complete system prompt
+
+// Injection order (canonical):
+// 1. accountContextBlock (buildAccountContext result + '---\n\n' separator, or '' if null)
+// 2. Role and analytical framework
+// 3. Data sources and usage order
+// 4. What to look for (analysis heuristics, thresholds from config)
+// 5. Output format (required sections)
+// 6. customPromptBlock ('## Operator Instructions\n' + substitutePromptVars result, or '' if null)
+// 7. Baseline-verification instruction (last line — must see declared targets before finalising)
+```
+**All three Google Ads agents follow this signature.** Static prompt strings are acceptable only for agents with zero operator-configurable parameters.
+**Used by:** `runGoogleAdsMonitor`, `runGoogleAdsFreeform`, `runGoogleAdsChangeImpact` — called at run time with freshly-loaded config from `AgentConfigService`.
+**Reuse contract:** Every new agent exports `buildSystemPrompt(config = {}, customerVars = {})`. If the agent has no custom_prompt support, the second argument can be omitted or ignored.
+**Does not handle:** Prompt caching structure. Date/time context injection. Admin config values (model, token limits) — those go into `AgentOrchestrator.run()` separately.
 
 ---
 
@@ -402,39 +461,43 @@ return `${accountContextBlock}You are a Google Ads analyst...`;
 ### GoogleAdsService
 **Type:** Domain Service — Singleton
 **Location:** `server/services/GoogleAdsService.js`
-**What it does:** Google Ads REST API v23 client. Executes GAQL queries against a single configured Ads account and returns normalised data ready for agent tool execution. All monetary values returned in AUD (÷ 1,000,000 from micros). Shared by all current and future Google Ads agents.
+**What it does:** Google Ads REST API v23 client. Executes GAQL queries and returns normalised data ready for agent tool execution. All monetary values returned in AUD (÷ 1,000,000 from micros). Supports multi-account runs via optional `customerId` parameter on every method — if omitted, falls back to `GOOGLE_ADS_CUSTOMER_ID` env var.
 **Interface:**
 ```js
 const { googleAdsService } = require('../services/GoogleAdsService');
 
-// All methods accept either:
-//   - number:             days lookback from today
-//   - { startDate, endDate }: ISO date strings 'YYYY-MM-DD'
+// All methods accept:
+//   options:     number (days lookback) | { startDate, endDate } (ISO strings)
+//   customerId:  string | null — overrides env default for multi-account runs
 
-googleAdsService.getCampaignPerformance(options)
+googleAdsService.getCampaignPerformance(options, customerId?)
 // Returns: [{ id, name, status, budget(AUD), impressions, clicks, cost(AUD), conversions, ctr, avgCpc }]
-// One object per enabled campaign.
 
-googleAdsService.getDailyPerformance(options)
+googleAdsService.getDailyPerformance(options, customerId?)
 // Returns: [{ date, impressions, clicks, cost(AUD), conversions }]
-// Account-level daily aggregates, ordered by date ASC.
+// Account-level daily aggregates ordered by date ASC.
 
-googleAdsService.getSearchTerms(options)
+googleAdsService.getSearchTerms(options, customerId?)
 // Returns: [{ term, status, impressions, clicks, cost(AUD), conversions, ctr }]
 // Top 50 search queries by clicks DESC.
 
-googleAdsService.getBudgetPacing()
-// Returns: [{ campaignId, campaignName, budgetAud, spentAud, remainingAud, pacingPct }]
-// Current-month budget pacing across all campaigns (no date param — always current month).
+googleAdsService.getBudgetPacing(customerId?)
+// Returns: [{ name, monthlyBudget(AUD), spentToDate(AUD) }]
+// Current-month budget pacing — no date param, always THIS_MONTH.
+
+googleAdsService.getChangeHistory(options, customerId?)
+// Returns: [{ changedAt, resourceType, changedFields, clientType, operation, campaignName }]
+// Recent account change events: bids, budgets, statuses, ad edits. Ordered by changedAt DESC. Limit 50.
+// Default lookback: 7 days.
 ```
 
-**Authentication:** Uses `googleapis` for OAuth2 token rotation only. All API calls use native `fetch` to the Google Ads REST endpoint (v23). Token refresh is automatic on each call.
+**Authentication:** Uses `googleapis` for OAuth2 token rotation only. All API calls use native `fetch` to the Google Ads REST endpoint (v23). Token refresh is automatic on each call via `getAccessToken()`.
 
 **Required env vars:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_MANAGER_ID`, `GOOGLE_ADS_DEVELOPER_TOKEN`.
 
-**Used by:** `server/agents/googleAdsMonitor/tools.js`. Importable by any future Google Ads agent.
-**Reuse contract:** New Google Ads agents import `googleAdsService` directly from `server/services/`. Do not create agent-specific API clients. Add new query methods to `GoogleAdsService` if needed — do not add them inside agent `tools.js` files.
-**Does not handle:** Multi-account (MCC) account switching per request. Campaign mutation (read-only). Authentication token storage (tokens are refreshed on-demand, not persisted).
+**Used by:** All Google Ads agent tools.js files.
+**Reuse contract:** New Google Ads agents import `googleAdsService` directly. Do not create agent-specific API clients. Add new GAQL query methods to `GoogleAdsService` when needed — do not implement queries inside agent `tools.js` files. Pass `customerId` from `context.customerId` in tool `execute()` calls.
+**Does not handle:** Campaign mutation (read-only). Authentication token storage (refreshed on-demand).
 
 ---
 

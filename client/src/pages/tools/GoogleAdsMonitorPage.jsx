@@ -11,6 +11,7 @@ import LineChart from '../../components/charts/LineChart';
 import CampaignPerformanceTable from './GoogleAdsMonitor/CampaignPerformanceTable';
 import SearchTermsTable from './GoogleAdsMonitor/SearchTermsTable';
 import AISuggestionsPanel from './GoogleAdsMonitor/AISuggestionsPanel';
+import AgentDashboardCard from './GoogleAdsMonitor/AgentDashboardCard';
 
 const AGENT_SLUG = 'google-ads-monitor';
 
@@ -389,9 +390,10 @@ export default function GoogleAdsMonitorPage() {
 
       {/* ── Tabs ───────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1 mb-4 flex-wrap">
-        {tabBtn('results',  'Results')}
-        {tabBtn('history',  'History')}
-        {tabBtn('settings', 'Settings')}
+        {tabBtn('results',   'Results')}
+        {tabBtn('dashboard', 'Dashboard')}
+        {tabBtn('history',   'History')}
+        {tabBtn('settings',  'Settings')}
         {actionButtons}
       </div>
 
@@ -459,6 +461,31 @@ export default function GoogleAdsMonitorPage() {
             </>
           )}
         </>
+      )}
+
+      {/* ── Dashboard ──────────────────────────────────────────────────── */}
+      {activeTab === 'dashboard' && (
+        <div>
+          <p className="text-xs mb-4" style={{ color: 'var(--color-muted)', fontFamily: 'inherit' }}>
+            Related agents — run against the same date range selected above.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16 }}>
+            <AgentDashboardCard
+              slug="google-ads-change-impact"
+              title="Change Impact"
+              description="Identifies what changed and narrates the performance effect of each change."
+              startDate={startDate}
+              endDate={endDate}
+            />
+            <AgentDashboardCard
+              slug="google-ads-change-audit"
+              title="Change Audit"
+              description="Before/after metric comparison per change. Scores each change as Positive, Neutral, or Negative."
+              startDate={startDate}
+              endDate={endDate}
+            />
+          </div>
+        </div>
       )}
 
       {/* ── History ────────────────────────────────────────────────────── */}

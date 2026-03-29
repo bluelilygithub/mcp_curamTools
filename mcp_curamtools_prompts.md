@@ -650,25 +650,115 @@ client/src/pages/tools/
 - No MCP server required — direct REST API calls to Google Ads and GA4 via `googleapis` OAuth2 token rotation
 - Email report endpoint: `POST /api/agents/google-ads-monitor/email` added to `server/routes/agents.js`
 - UX additions: animated progress bar, beforeunload guard, from/to date pickers, CSV export, print/PDF, email modal
+- Multi-customer support added (2026-03-29): scheduled runs fan out across `google_ads_customers` rows; HTTP runs accept `req.body.customerId`; `buildSystemPrompt` now accepts `customerVars` for `{{customer_name}}`/`{{customer_id}}` substitution in `custom_prompt`
 
 **Known issues**: None in current build.
 
 **Future enhancements**:
-- Keyword research agent (separate slug, shares GoogleAdsService)
-- Bid optimisation agent
-- Campaign-level date range drill-down
-- Multi-account (MCC) support
+- Campaign dashboard UI (campaign-level agent assignments)
+- Admin UI for `google_ads_customers` management and per-customer config overrides
 
 ---
 
-### [Next Agent Entry Goes Here]
+### Google Ads Freeform
 
-**Agent**: [Name]
-**Slug**: `[slug]`
-**Date Built**: YYYY-MM-DD
-**Status**: [Development/Staging/Production]
+**Agent**: Google Ads Freeform
+**Slug**: `google-ads-freeform`
+**Date Built**: 2026-03-29
+**Status**: Production
 
-[Follow same format as above]
+**Purpose**: Answers ad-hoc natural-language questions about Google Ads account data. Uses only the tools needed to answer the specific question asked — no fixed report structure.
+
+**Tools registered** (in `server/agents/googleAdsFreeform/tools.js`):
+- `get_campaign_performance` — campaign totals
+- `get_daily_performance` — daily trend data
+- `get_search_terms` — search query data
+- `get_analytics_overview` — GA4 session metrics
+
+**Domain services used**: `GoogleAdsService`, `GoogleAnalyticsService` (same singletons as monitor)
+
+**Configuration schema** (AGENT_DEFAULTS):
+```json
+{ "max_suggestions": 5 }
+```
+
+**Admin defaults**:
+```json
+{ "enabled": true, "model": "claude-sonnet-4-6", "max_tokens": 8192, "max_iterations": 12, "max_task_budget_aud": 0.50 }
+```
+
+**Files created**:
+```
+server/agents/googleAdsFreeform/
+  index.js    — runGoogleAdsFreeform(context); accepts req.body.question + req.body.customerId
+  tools.js    — same 4 tools as monitor; TOOL_SLUG = 'google-ads-freeform'
+  prompt.js   — buildSystemPrompt(config, customerVars); conversational output, selective tool use
+```
+
+**Request shape**: `POST /api/agents/google-ads-freeform/run` with `{ question, customerId?, startDate?, endDate?, days? }`
+
+**Deviations from generic agent template**:
+- No fixed output structure — agent answers the question conversationally
+- `question` from `req.body.question` replaces a constructed `userMessage`
+- Defaults to `'Give me an overview of account performance.'` if no question supplied
+- `max_iterations: 12` (higher than monitor) — open-ended questions may require more tool calls
+
+**Known issues**: None in current build.
+
+**Future enhancements**:
+- Frontend page with chat-style input and markdown response
+- Session history (multi-turn conversation within a page visit)
+
+---
+
+### Google Ads Change Impact
+
+**Agent**: Google Ads Change Impact
+**Slug**: `google-ads-change-impact`
+**Date Built**: 2026-03-29
+**Status**: Production
+
+**Purpose**: Identifies what changed in a Google Ads account (bids, budgets, status changes, ad edits) and quantifies the performance impact before vs. after each change. Produces a change timeline and before/after metric comparison.
+
+**Tools registered** (in `server/agents/googleAdsChangeImpact/tools.js`):
+- `get_change_history` — account change events from `change_event` GAQL resource (unique to this agent)
+- `get_campaign_performance` — campaign totals for current period
+- `get_daily_performance` — daily trend for pinpointing impact date
+- `get_analytics_overview` — GA4 correlation for landing page/behaviour changes
+
+**Domain services used**: `GoogleAdsService.getChangeHistory` (new method), `GoogleAdsService` performance methods, `GoogleAnalyticsService`
+
+**Configuration schema** (AGENT_DEFAULTS):
+```json
+{ "lookback_days": 7, "max_suggestions": 5 }
+```
+
+**Admin defaults**:
+```json
+{ "enabled": true, "model": "claude-sonnet-4-6", "max_tokens": 8192, "max_iterations": 10, "max_task_budget_aud": 0.50 }
+```
+
+**Files created**:
+```
+server/agents/googleAdsChangeImpact/
+  index.js    — runGoogleAdsChangeImpact(context); accepts req.body.customerId + date range
+  tools.js    — 4 tools; TOOL_SLUG = 'google-ads-change-impact'; get_change_history default lookback 7 days
+  prompt.js   — buildSystemPrompt(config, customerVars); sequential strategy: changes first, then performance
+```
+
+**Output sections**: `### Summary`, `### Change Timeline`, `### Performance Impact`, `### Recommendations`
+
+**Deviations from generic agent template**:
+- `get_change_history` tool is unique to this agent — not shared with monitor or freeform
+- Default lookback is 7 days (not 30) — change analysis focuses on recency
+- Agent instructs itself to call `get_change_history` first, then performance tools — sequential strategy baked into system prompt
+
+**Known issues**: `change_event` resource returns `changeDateTimeAsString` or `changeDateTime` depending on API version — both are handled in `getChangeHistory`.
+
+**Future enhancements**:
+- Frontend page with timeline visualisation
+- Before/after metric cards (two date-range comparison)
+- Scheduled weekly change digest
 
 ---
 
