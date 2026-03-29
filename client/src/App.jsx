@@ -20,6 +20,7 @@ import AdminMcpResourcesPage from './pages/admin/AdminMcpResourcesPage';
 import AdminDiagnosticsPage from './pages/admin/AdminDiagnosticsPage';
 import AdminDepartmentsPage from './pages/admin/AdminDepartmentsPage';
 import AdminOrgRolesPage from './pages/admin/AdminOrgRolesPage';
+import GoogleAdsMonitorPage from './pages/tools/GoogleAdsMonitorPage';
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/tools/google-ads-monitor" element={<GoogleAdsMonitorPage />} />
 
                 {/* Admin-only */}
                 <Route element={<RequireRole allowedRoles={['org_admin']} />}>

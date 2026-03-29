@@ -14,15 +14,14 @@
  */
 
 const TOOLS = [
-  // Example — uncomment and adapt when building the first agent:
-  // {
-  //   id: 'google-ads-monitor',
-  //   name: 'Google Ads Monitor',
-  //   description: 'AI-powered analysis of your Google Ads account performance.',
-  //   icon: 'bar-chart',
-  //   path: '/tools/google-ads-monitor',
-  //   roles: ['ads_operator', 'org_admin'],
-  // },
+  {
+    id:          'google-ads-monitor',
+    name:        'Google Ads Monitor',
+    description: 'AI-powered analysis of Google Ads campaign performance, search intent, and budget pacing.',
+    icon:        'bar-chart',
+    path:        '/tools/google-ads-monitor',
+    roles:       ['ads_operator', 'org_admin'],
+  },
 ];
 
 /**

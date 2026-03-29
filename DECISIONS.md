@@ -404,6 +404,32 @@ Both pages added to `App.jsx` under the existing `RequireRole(['org_admin'])` gu
 
 ---
 
+### Google Ads Monitor — First Agent Migration
+**Date:** 2026-03-29
+**Status:** Settled — Complete
+**Context:** Google Ads Monitor was the sole agent in ToolsForge. Migrating it to MCP_curamTools required introducing the agent execution engine (AgentOrchestrator) and adapting the tool pattern to the new platform primitives.
+**Decision:** Three layers introduced:
+1. **`server/platform/AgentOrchestrator.js`** — platform primitive shared by all agents. ReAct loop: call Claude → parse tool_use blocks → execute tools → feed results back. Strips `execute`, `requiredPermissions`, `toolSlug` from tool defs before sending to Anthropic. Preserves full assistant response content (including thinking blocks) per Anthropic API requirement. Token usage accumulated across all iterations. `onStep` callback maps directly to `createAgentRoute`'s `emit` — agents opt in to mid-run budget checks by passing it.
+2. **`server/services/GoogleAdsService.js` + `GoogleAnalyticsService.js`** — shared domain services. Placed in `services/` not in the agent folder because future ads agents will reuse them. Google Ads uses direct `fetch` to REST API v23; GA4 uses direct `fetch` to Data API v1beta. Both use `googleapis` only for OAuth2 token rotation. All monetary values in AUD (÷ 1,000,000).
+3. **`server/agents/googleAdsMonitor/`** — agent folder: `tools.js` (4 tool definitions exported as array), `prompt.js` (`buildSystemPrompt(config)`), `index.js` (`runGoogleAdsMonitor` — the runFn).
+**No ToolRegistry or StateManager**: ToolsForge's `ToolRegistry` singleton was a pre-registration pattern; with a single agent there is no cross-agent tool sharing to enforce. The agent's `tools.js` exports the array directly; `index.js` passes it to `agentOrchestrator.run()`. `toolSlug` annotation is preserved on each tool definition for forward-compatibility when a registry is introduced. `StateManager`/`agent_conclusions` pattern deferred — `agent_runs` serves the history purpose; conclusions can be added when needed.
+**runFn context adaptation**: ToolsForge's `runFn` received model/maxTokens as top-level context fields. MCP_curamTools's `createAgentRoute` passes them inside `context.adminConfig`. The agent's `index.js` reads `context.adminConfig.model`, `context.adminConfig.max_tokens`, `context.adminConfig.max_iterations`.
+**Days resolution**: `req.body.days` (UI selection) > `config.lookback_days` (operator default) > `30` (hardcoded fallback). Priority order is preserved from ToolsForge.
+**Frontend**: `GoogleAdsMonitorPage` with tab layout (Results / History / Settings). Uses platform primitives: `LineChart` for spend+conversions chart, `MarkdownRenderer` for summary, `Button`/`InlineBanner`. Sub-components (`CampaignPerformanceTable`, `SearchTermsTable`, `AISuggestionsPanel`) are tool-scoped — placed under `pages/tools/GoogleAdsMonitor/` not in `components/` as they are specific to this agent's data shape.
+**Constraints it must not violate:** `AgentOrchestrator` must remain zero agent-specific code. `GoogleAdsService`/`GoogleAnalyticsService` must be importable by any future ads agent with no modification. New ads agents add their own tools.js and register into the tools array; no platform file changes needed.
+**References:** `server/platform/AgentOrchestrator.js`; `server/services/GoogleAdsService.js`; `server/services/GoogleAnalyticsService.js`; `server/agents/googleAdsMonitor/`; `server/routes/agents.js`; `client/src/pages/tools/GoogleAdsMonitorPage.jsx`.
+
+---
+
+### Ads Agent Namespace — Shared Services, Isolated Tools
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** The intent is to build multiple Google Ads agents (e.g. keyword research, bid optimisation, audience analysis). Each will be a separate agent with its own `tools.js`, `prompt.js`, and `index.js`. They must not share tool definitions to preserve toolSlug scoping, but they should share the underlying API clients.
+**Decision:** `GoogleAdsService` and `GoogleAnalyticsService` are platform-level domain services (`server/services/`). Each agent imports them directly in its own `tools.js`. There is no "ads platform layer" abstraction — direct imports are sufficient and avoid premature abstraction. If a third service is needed (e.g. Google Merchant Centre), it follows the same pattern: new file in `server/services/`, imported by agents that need it.
+**Constraints it must not violate:** Agents must not share tool definition objects (same object with two toolSlugs). Each agent defines its own tools even if the underlying `execute()` call is identical — this keeps toolSlug scoping clean and allows per-agent prompt tuning of tool descriptions.
+
+---
+
 ## Open Questions
 
 _(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_

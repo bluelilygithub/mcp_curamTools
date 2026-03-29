@@ -18,14 +18,27 @@ const agentsRouter = express.Router();
 const agentConfigsRouter = express.Router();
 
 // ── Agent registrations ───────────────────────────────────────────────────
-// Agents slot in here when built. Example:
-//
-// const { createAgentRoute } = require('../platform/createAgentRoute');
-// const { runGoogleAdsMonitor } = require('../agents/googleAdsMonitor');
-// agentsRouter.use(
-//   '/google-ads-monitor',
-//   createAgentRoute({ slug: 'google-ads-monitor', runFn: runGoogleAdsMonitor, requiredPermission: 'ads_operator' })
-// );
+
+const { createAgentRoute } = require('../platform/createAgentRoute');
+const { AgentScheduler }   = require('../platform/AgentScheduler');
+
+// ── Google Ads Monitor ────────────────────────────────────────────────────
+const { runGoogleAdsMonitor } = require('../agents/googleAdsMonitor');
+
+agentsRouter.use(
+  '/google-ads-monitor',
+  createAgentRoute({
+    slug:               'google-ads-monitor',
+    runFn:              runGoogleAdsMonitor,
+    requiredPermission: 'ads_operator',
+  })
+);
+
+AgentScheduler.register({
+  slug:     'google-ads-monitor',
+  schedule: '0 6,18 * * *',
+  runFn:    runGoogleAdsMonitor,
+});
 
 // ── Agent config routes (/api/agent-configs/:slug) ────────────────────────
 

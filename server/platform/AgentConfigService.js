@@ -12,25 +12,24 @@ const { pool } = require('../db');
 // New agents append their defaults here. Do not remove existing entries.
 
 const AGENT_DEFAULTS = {
-  // Example (Google Ads Monitor — add when agent is built):
-  // 'google-ads-monitor': {
-  //   schedule: '0 6,18 * * *',
-  //   lookback_days: 30,
-  //   ctr_threshold_pct: 2.0,
-  //   wasted_clicks_threshold: 5,
-  //   impressions_min: 100,
-  //   max_suggestions: 5,
-  // },
+  'google-ads-monitor': {
+    schedule:                  '0 6,18 * * *', // 6 am and 6 pm UTC
+    lookback_days:             30,
+    ctr_low_threshold:         0.03,           // 3% — campaigns below this flagged as low CTR
+    wasted_clicks_threshold:   5,              // clicks with 0 conversions before flagging
+    impressions_ctr_threshold: 100,            // impressions floor for ad-copy opportunity check
+    max_suggestions:           8,
+  },
 };
 
 const ADMIN_DEFAULTS = {
-  // Example (Google Ads Monitor — add when agent is built):
-  // 'google-ads-monitor': {
-  //   enabled: true,
-  //   model: 'claude-sonnet-4-6',
-  //   max_tokens: 4096,
-  //   max_iterations: 10,
-  // },
+  'google-ads-monitor': {
+    enabled:              true,
+    model:                'claude-sonnet-4-6',
+    max_tokens:           8192,
+    max_iterations:       10,
+    max_task_budget_aud:  0.50,
+  },
   _platform: {
     enabled: true,
     model: 'claude-sonnet-4-6',
