@@ -650,37 +650,104 @@ router.get('/logs', async (req, res) => {
 
 // ── SQL Console ───────────────────────────────────────────────────────────
 
+const WRITE_KEYWORDS = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE'];
+
+function firstSqlKeyword(sql) {
+  return sql.trim().replace(/\/\*[\s\S]*?\*\//g, '').replace(/--[^\n]*/g, '').trim().split(/\s+/)[0].toUpperCase();
+}
+
+async function execSql(sql, allowWrite, userEmail) {
+  const kw = firstSqlKeyword(sql);
+  if (WRITE_KEYWORDS.includes(kw) && !allowWrite) {
+    throw Object.assign(new Error(`Write statements are blocked. Enable "Allow writes" to run ${kw}.`), { status: 400 });
+  }
+  const start = Date.now();
+  const result = await pool.query(sql);
+  const duration = Date.now() - start;
+  const rows = result.rows ?? [];
+  const columns = rows.length > 0 ? Object.keys(rows[0]) : (result.fields?.map(f => f.name) ?? []);
+  console.log(`[SQL Console] ${userEmail} ran: ${sql.slice(0, 120).replace(/\n/g, ' ')} — ${rows.length} rows in ${duration}ms`);
+  return { command: result.command ?? kw, rowCount: result.rowCount ?? rows.length, columns, rows, duration };
+}
+
+async function getDbSchema() {
+  const { rows } = await pool.query(`
+    SELECT
+      c.table_name,
+      c.column_name,
+      c.data_type,
+      c.is_nullable,
+      c.column_default
+    FROM information_schema.columns c
+    JOIN information_schema.tables t
+      ON t.table_name = c.table_name AND t.table_schema = 'public'
+    WHERE c.table_schema = 'public'
+      AND t.table_type = 'BASE TABLE'
+    ORDER BY c.table_name, c.ordinal_position
+  `);
+
+  // Group into table → columns map
+  const tables = {};
+  for (const r of rows) {
+    if (!tables[r.table_name]) tables[r.table_name] = [];
+    const nullable = r.is_nullable === 'YES' ? '' : ' NOT NULL';
+    const def = r.column_default ? ` DEFAULT ${r.column_default}` : '';
+    tables[r.table_name].push(`  ${r.column_name} ${r.data_type}${nullable}${def}`);
+  }
+
+  return Object.entries(tables)
+    .map(([tbl, cols]) => `${tbl} (\n${cols.join(',\n')}\n)`)
+    .join('\n\n');
+}
+
 router.post('/sql', async (req, res) => {
   const { sql, allowWrite = false } = req.body;
   if (!sql?.trim()) return res.status(400).json({ error: 'No SQL provided.' });
-
-  // Strip leading comments/whitespace to find the first keyword
-  const firstKeyword = sql.trim().replace(/\/\*[\s\S]*?\*\//g, '').replace(/--[^\n]*/g, '').trim().split(/\s+/)[0].toUpperCase();
-
-  const writeKeywords = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE'];
-  const isWrite = writeKeywords.includes(firstKeyword);
-
-  if (isWrite && !allowWrite) {
-    return res.status(400).json({ error: `Write statements are blocked. Enable "Allow writes" to run ${firstKeyword}.` });
-  }
-
-  const start = Date.now();
   try {
-    const result = await pool.query(sql);
-    const duration = Date.now() - start;
-    const rows   = result.rows ?? [];
-    const columns = rows.length > 0 ? Object.keys(rows[0]) : (result.fields?.map(f => f.name) ?? []);
-    console.log(`[SQL Console] ${req.user.email} ran: ${sql.slice(0, 120).replace(/\n/g, ' ')} — ${rows.length} rows in ${duration}ms`);
-    res.json({
-      command:  result.command ?? firstKeyword,
-      rowCount: result.rowCount ?? rows.length,
-      columns,
-      rows,
-      duration,
-    });
+    const data = await execSql(sql, allowWrite, req.user.email);
+    res.json(data);
   } catch (err) {
     console.error(`[SQL Console] Error for ${req.user.email}:`, err.message);
-    res.status(400).json({ error: err.message });
+    res.status(err.status ?? 400).json({ error: err.message });
+  }
+});
+
+router.post('/sql/nlp', async (req, res) => {
+  const Anthropic = require('@anthropic-ai/sdk');
+  const { question, allowWrite = false } = req.body;
+  if (!question?.trim()) return res.status(400).json({ error: 'No question provided.' });
+
+  try {
+    const schema = await getDbSchema();
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      messages: [{
+        role: 'user',
+        content: `You are a PostgreSQL expert. Given the database schema below, write a single SQL query to answer the question.
+
+Return ONLY the raw SQL query — no explanation, no markdown, no code fences. The query must be valid PostgreSQL.
+
+## Schema
+${schema}
+
+## Question
+${question}`,
+      }],
+    });
+
+    const generatedSql = message.content[0]?.text?.trim() ?? '';
+    if (!generatedSql) throw new Error('Claude returned an empty response.');
+
+    console.log(`[SQL Console NLP] ${req.user.email}: "${question.slice(0, 80)}" → ${generatedSql.slice(0, 120)}`);
+
+    const data = await execSql(generatedSql, allowWrite, req.user.email);
+    res.json({ ...data, generatedSql });
+  } catch (err) {
+    console.error(`[SQL Console NLP] Error for ${req.user.email}:`, err.message);
+    res.status(err.status ?? 500).json({ error: err.message });
   }
 });
 
