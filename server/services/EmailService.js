@@ -8,35 +8,50 @@
 const nodemailer = require('nodemailer');
 const EmailTemplateService = require('./EmailTemplateService');
 
-const FROM_EMAIL = process.env.MAIL_FROM_EMAIL || 'noreply@example.com';
+const FROM_EMAIL = process.env.MAIL_FROM_EMAIL || 'noreply@curam-ai.com.au';
 const FROM_NAME = process.env.MAIL_FROM_NAME || 'MCP CuramTools';
 
 // ── MailChannels delivery ─────────────────────────────────────────────────
 
+const https = require('https');
+
 async function sendViaMailChannels({ to, subject, html, text }) {
-  const body = {
+  const apiKey = process.env.MAIL_CHANNEL_API_KEY;
+  const payload = JSON.stringify({
     personalizations: [{ to: [{ email: to }] }],
     from: { email: FROM_EMAIL, name: FROM_NAME },
     subject,
     content: [
       { type: 'text/plain', value: text },
-      { type: 'text/html', value: html },
+      { type: 'text/html',  value: html },
     ],
-  };
-
-  const res = await fetch('https://api.mailchannels.net/tx/v1/send', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Api-Key': process.env.MAIL_CHANNEL_API_KEY,
-    },
-    body: JSON.stringify(body),
   });
 
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`MailChannels error ${res.status}: ${detail}`);
-  }
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: 'api.mailchannels.net',
+        path: '/tx/v1/send',
+        method: 'POST',
+        headers: {
+          'Content-Type':   'application/json',
+          'X-Api-Key':      apiKey,
+          'Content-Length': Buffer.byteLength(payload),
+        },
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', c => chunks.push(c));
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) resolve();
+          else reject(new Error(`MailChannels error ${res.statusCode}: ${Buffer.concat(chunks).toString()}`));
+        });
+      }
+    );
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
 }
 
 // ── nodemailer fallback ───────────────────────────────────────────────────
