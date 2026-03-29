@@ -613,7 +613,7 @@ server/agents/email-campaign-analyzer/
 2. **Customize project-specific values**:
    - Change `MCP_curamTools` to your project name
    - Update `APP_NAME`, `ORG_NAME` in the .env section
-   - Update `ADMIN_EMAIL` to your email
+   - Update `SEED_ADMIN_EMAIL` to your email
    - Adjust port numbers if needed (5174/3002)
 3. **Ensure all referenced .md files exist** in your project directory
 4. **Paste the prompt** into a new Claude session

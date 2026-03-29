@@ -23,7 +23,7 @@ export default function App() {
     <ThemeProvider>
       <IconProvider>
         <ToastProvider>
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />

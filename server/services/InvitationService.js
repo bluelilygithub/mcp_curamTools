@@ -70,7 +70,7 @@ async function createInvitation(email, orgId, roleName = 'org_member', invitedBy
   );
 
   // Send invitation email
-  const appUrl = process.env.APP_URL || 'http://localhost:5174';
+  const appUrl = (process.env.APP_URL || 'http://localhost:5174').replace(/\/$/, '');
   const activationUrl = `${appUrl}/invite/${token}`;
   console.log(`[InvitationService] Activation URL for ${email}: ${activationUrl}`);
   await EmailService.sendInvitation(email, activationUrl);

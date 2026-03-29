@@ -246,8 +246,8 @@ async function seedEmailTemplates() {
 }
 
 async function seedAdminUser() {
-  const email = process.env.ADMIN_EMAIL;
-  const password = process.env.ADMIN_PASSWORD;
+  const email = process.env.SEED_ADMIN_EMAIL;
+  const password = process.env.SEED_ADMIN_PASSWORD;
   const orgName = process.env.ORG_NAME || 'Default Organisation';
 
   if (!email || !password) return;

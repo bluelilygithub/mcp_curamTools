@@ -251,7 +251,7 @@ router.post('/forgot-password', async (req, res) => {
       ]
     );
 
-    const appUrl = process.env.APP_URL || 'http://localhost:5173';
+    const appUrl = (process.env.APP_URL || 'http://localhost:5174').replace(/\/$/, '');
     await EmailService.sendPasswordReset(email, `${appUrl}/reset-password/${resetToken}`);
   } catch (err) {
     console.error('[auth/forgot-password]', err.message);

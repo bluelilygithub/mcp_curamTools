@@ -22,6 +22,7 @@ export default function LoginPage({ mode = 'default' }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [resetSent, setResetSent] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -100,12 +101,33 @@ export default function LoginPage({ mode = 'default' }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
-    setSuccess('If that email exists, a reset link has been sent.');
     setLoading(false);
+    setResetSent(true);
   }
 
   const title = mode === 'register' ? 'Set your password' : mode === 'reset' ? 'Reset your password' : 'Sign in';
   const buttonLabel = mode === 'register' ? 'Create account' : mode === 'reset' ? 'Reset password' : 'Sign in';
+
+  if (resetSent) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--color-bg)' }}>
+        <div className="w-full max-w-sm rounded-2xl border p-8 space-y-4 text-center" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+          <div className="text-4xl">✉️</div>
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Check your email</h2>
+          <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
+            If <strong>{email}</strong> has an account, a password reset link has been sent. Check your inbox and spam folder.
+          </p>
+          <button
+            onClick={() => setResetSent(false)}
+            className="text-xs hover:opacity-70 transition-all"
+            style={{ color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            Back to sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
