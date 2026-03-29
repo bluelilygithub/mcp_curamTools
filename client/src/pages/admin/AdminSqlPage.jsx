@@ -119,6 +119,7 @@ export default function AdminSqlPage() {
   const [results, setResults]       = useState(null);
   const [generatedSql, setGeneratedSql] = useState('');
   const [nlpMeta, setNlpMeta]       = useState(null); // { modelId, tokensUsed, costAud }
+  const [nlpAnswer, setNlpAnswer]   = useState('');
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState('');
   const [allowWrite, setAllowWrite] = useState(false);
@@ -128,6 +129,7 @@ export default function AdminSqlPage() {
     setResults(null);
     setGeneratedSql('');
     setNlpMeta(null);
+    setNlpAnswer('');
     setError('');
   }
 

@@ -779,7 +779,22 @@ ${question}`,
     console.log(`[SQL Console NLP] ${req.user.email} (${modelDef.id}): "${question.slice(0, 80)}" → ${generatedSql.slice(0, 120)} [${tokensUsed.input}in/${tokensUsed.output}out, A$${costAud.toFixed(4)}]`);
 
     const data = await execSql(generatedSql, allowWrite, req.user.email);
-    res.json({ ...data, generatedSql, modelId: modelDef.id, tokensUsed, costAud });
+
+    // Generate a plain-English answer for read-aloud
+    const resultSummary = data.rows.length === 0
+      ? 'The query returned no results.'
+      : JSON.stringify(data.rows.slice(0, 20)); // cap rows sent to Claude
+    const answerMsg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001', // fast + cheap for a one-sentence answer
+      max_tokens: 256,
+      messages: [{
+        role: 'user',
+        content: `Question: ${question}\n\nSQL results: ${resultSummary}\n\nAnswer the question in 1–2 plain English sentences based on the results. No markdown, no SQL.`,
+      }],
+    });
+    const answer = answerMsg.content[0]?.text?.trim() ?? '';
+
+    res.json({ ...data, generatedSql, modelId: modelDef.id, tokensUsed, costAud, answer });
   } catch (err) {
     console.error(`[SQL Console NLP] Error for ${req.user.email}:`, err.message);
     res.status(err.status ?? 500).json({ error: err.message });
