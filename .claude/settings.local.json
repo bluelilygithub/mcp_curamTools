@@ -17,7 +17,8 @@
       "Bash(find 'C:\\\\Users\\\\micha\\\\Local Sites\\\\toolsforge\\\\tools\\\\ads' -type f -name *.ts -o -name *.js -o -name *.json)",
       "Bash(ls:*)",
       "Bash(find '/c/Users/micha/Local Sites/toolsforge/client/src' -type f -name *.js)",
-      "Bash(find '/c/Users/micha/Local Sites/toolsforge/client/src' -type d -name hooks -o -type f -name *useAuth* -o -type f -name *useTool*)"
+      "Bash(find '/c/Users/micha/Local Sites/toolsforge/client/src' -type d -name hooks -o -type f -name *useAuth* -o -type f -name *useTool*)",
+      "Bash(grep -r remove-markdown /c/Users/micha/Local Sites/mcp_curamTools/client --include=*.js --include=*.jsx --include=*.json)"
     ]
   }
 }

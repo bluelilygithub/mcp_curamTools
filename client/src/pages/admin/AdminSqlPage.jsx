@@ -7,6 +7,8 @@ import { useState, useRef } from 'react';
 import api from '../../api/client';
 import Button from '../../components/ui/Button';
 import InlineBanner from '../../components/ui/InlineBanner';
+import MicButton from '../../components/ui/MicButton';
+import ReadAloudButton from '../../components/ui/ReadAloudButton';
 
 const SQL_PLACEHOLDER = `-- Examples:
 -- SELECT * FROM users WHERE org_id = 1 LIMIT 20;
@@ -18,7 +20,17 @@ e.g. "Show me the last 10 agent runs with their status and cost"
 e.g. "How many users are in each organisation?"
 e.g. "Which agents have been run today?"`;
 
-function ResultsTable({ results }) {
+function buildSpeakSummary(results) {
+  if (!results?.rows?.length) return `Query complete. ${results.rowCount ?? 0} rows returned.`;
+  const cols = results.columns ?? [];
+  const preview = results.rows.slice(0, 3).map((row, i) => {
+    const parts = cols.slice(0, 4).map((c) => `${c}: ${row[c] ?? 'null'}`).join(', ');
+    return `Row ${i + 1}: ${parts}`;
+  }).join('. ');
+  return `Query returned ${results.rowCount} row${results.rowCount !== 1 ? 's' : ''}. ${preview}${results.rows.length > 3 ? '. And more.' : '.'}`;
+}
+
+function ResultsTable({ results, showReadAloud = false }) {
   const hasRows = results?.rows?.length > 0;
   return (
     <div className="space-y-2">
@@ -38,6 +50,9 @@ function ResultsTable({ results }) {
           >
             {results.command}
           </span>
+        )}
+        {showReadAloud && (
+          <ReadAloudButton text={buildSpeakSummary(results)} size={14} />
         )}
       </div>
 
@@ -282,9 +297,19 @@ export default function AdminSqlPage() {
             }}
           />
           <div className="flex items-center justify-between px-4 py-2" style={{ background: 'var(--color-surface)' }}>
-            <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
-              Claude reads your schema and generates SQL — Ctrl+Enter to run
-            </span>
+            <div className="flex items-center gap-1">
+              <MicButton
+                onResult={(t) => setQuestion((q) => q ? q + ' ' + t : t)}
+                onPartial={(t) => setQuestion((q) => {
+                  // Replace any trailing interim text with new interim
+                  const base = q.replace(/\s*\[.*\]$/, '');
+                  return base + (base ? ' ' : '') + '[' + t + ']';
+                })}
+              />
+              <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
+                Claude reads your schema and generates SQL — Ctrl+Enter to run
+              </span>
+            </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => { setQuestion(''); reset(); }}
@@ -351,7 +376,7 @@ export default function AdminSqlPage() {
       )}
 
       {/* Results */}
-      {results && <ResultsTable results={results} />}
+      {results && <ResultsTable results={results} showReadAloud={mode === 'nlp'} />}
 
       {/* Empty state */}
       {!results && !loading && !error && (

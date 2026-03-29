@@ -3,7 +3,7 @@
  * each integration: Database, Anthropic API, MailChannels, MCP Registry,
  * Google OAuth, Google Ads API, Google Analytics GA4.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../../api/client';
 import Button from '../../components/ui/Button';
 import InlineBanner from '../../components/ui/InlineBanner';
@@ -41,6 +41,8 @@ export default function AdminDiagnosticsPage() {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
+
+  useEffect(() => { runChecks(); }, []);
 
   async function runChecks() {
     setLoading(true);

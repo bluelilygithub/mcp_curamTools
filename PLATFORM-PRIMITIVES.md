@@ -1060,6 +1060,125 @@ class BudgetExceededError extends Error {
 
 ---
 
+---
+
+## Voice Input & Read Aloud
+
+**Purpose:** Reusable voice primitives for any NLP-capable UI in the platform. Mic for dictation; speaker for reading results back. Built on the browser's Web Speech API — no server calls, no dependencies.
+
+---
+
+### `useSpeechInput` — `client/src/hooks/useSpeechInput.js`
+
+**What it does:** Headless hook wrapping `SpeechRecognition` / `webkitSpeechRecognition`.
+
+**Interface:**
+```js
+const { listening, supported, start, stop } = useSpeechInput({
+  onResult:  (transcript) => setValue(transcript),  // called with final transcript
+  onPartial: (interim)    => setPreview(interim),   // optional; interim results while speaking
+});
+```
+
+- `supported` — `false` on browsers without `SpeechRecognition` (Firefox without flag); components should render null when false
+- `start()` — begins listening; aborts any prior session first
+- `stop()` — cancels before a result is emitted
+- Language: `en-AU`; `continuous: false` (single utterance per `start()` call)
+- Cleans up via `useEffect` return — aborts the recognition session on unmount
+
+---
+
+### `useReadAloud` — `client/src/hooks/useReadAloud.js`
+
+**What it does:** Headless hook wrapping `speechSynthesis`.
+
+**Interface:**
+```js
+const { speaking, supported, speak, stop } = useReadAloud();
+speak(text);  // strips markdown, then speaks
+stop();       // cancels mid-speech
+```
+
+- `speak(text)` called while `speaking` is true acts as a toggle — cancels the current utterance
+- Text is cleaned by `stripForSpeech()` before passing to `SpeechSynthesisUtterance`
+- Language: `en-AU`; rate/pitch: 1.0
+- Cancels any queued speech before starting a new utterance (`speechSynthesis.cancel()`)
+- Cleans up on unmount
+
+---
+
+### `stripForSpeech` — `client/src/utils/stripForSpeech.js`
+
+**What it does:** Strips markdown, code blocks, URLs, HTML, and list markers from a string before passing to `speechSynthesis`. Fenced code blocks are replaced with `"code block."` so the listener knows one was present.
+
+```js
+import { stripForSpeech } from '../utils/stripForSpeech';
+const clean = stripForSpeech(markdownText);
+```
+
+Strips: fenced code blocks, inline code, images, links (keeps label), bare URLs, headings (`#`), bold/italic (`**`, `__`, `*`, `_`), unordered/ordered list markers, horizontal rules, HTML tags, table rows.
+
+---
+
+### `MicButton` — `client/src/components/ui/MicButton.jsx`
+
+**What it does:** Stateless UI primitive that wires `useSpeechInput` to a button. Renders `null` when `SpeechRecognition` is not supported.
+
+**Props:**
+| Prop | Type | Description |
+|---|---|---|
+| `onResult` | `fn(transcript)` | Called with the final transcript |
+| `onPartial` | `fn(interim)` | Optional; called with interim text while speaking |
+| `size` | `number` | Icon size (default: 16) |
+| `style` | `object` | Extra inline styles |
+| `className` | `string` | |
+
+**Visual states:**
+- Idle: transparent background, muted icon colour
+- Listening: red background, white icon, pulsing ring animation (`_mic_pulse` keyframes)
+
+---
+
+### `ReadAloudButton` — `client/src/components/ui/ReadAloudButton.jsx`
+
+**What it does:** Stateless UI primitive that wires `useReadAloud` to a button. Renders `null` when `speechSynthesis` is not supported. Disabled (opacity 0.4) when `text` is empty.
+
+**Props:**
+| Prop | Type | Description |
+|---|---|---|
+| `text` | `string` | Text to speak; markdown is stripped automatically |
+| `size` | `number` | Icon size (default: 16) |
+| `style` | `object` | Extra inline styles |
+| `className` | `string` | |
+
+**Visual states:**
+- Idle: transparent background, muted icon
+- Speaking: primary colour background, white icon
+
+Clicking while speaking stops playback (toggle).
+
+---
+
+### Adding voice to a new NLP feature
+
+1. Import `MicButton` and place it near the input textarea — wire `onResult` to append the transcript to the input value
+2. Import `ReadAloudButton` and place it near the result output — pass the result text to the `text` prop (markdown is stripped automatically)
+3. Both components are self-contained — no state needed in the parent beyond what you already have for the input and result
+
+**Interim text pattern used in SQL Console NLP mode:**
+```js
+// Appends final transcript; shows interim in brackets while speaking
+onResult:  (t) => setQuestion((q) => q ? q + ' ' + t : t)
+onPartial: (t) => setQuestion((q) => {
+  const base = q.replace(/\s*\[.*\]$/, '');
+  return base + (base ? ' ' : '') + '[' + t + ']';
+})
+```
+
+**Browser support:** Chrome, Edge, Safari. Firefox requires `media.webspeech.recognition.enable` flag. Both components return `null` when unsupported — safe to add unconditionally.
+
+---
+
 ## Open Questions
 
 1. **`AgentScheduler.register` orgId resolution from DB:** The README vault notes "resolves orgId from DB if omitted (single active org fallback)" but does not specify which table or query is used for this resolution. `Learnings-ToolsForge.md` notes that `scope.orgId = null` throws `AgentSchedulerError` "until the `org_tools` table is built" — implying this fallback is not yet fully implemented for multi-org scenarios. The exact behaviour when `orgId` is omitted and multiple orgs exist is ambiguous.
