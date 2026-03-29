@@ -31,9 +31,13 @@ router.get('/users', async (req, res) => {
   try {
     const res2 = await pool.query(
       `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.is_active, u.created_at,
-              array_agg(DISTINCT r.role_name) FILTER (WHERE r.role_name IS NOT NULL) AS roles
+              u.default_model_id,
+              array_agg(DISTINCT r.role_name) FILTER (WHERE r.role_name IS NOT NULL) AS roles,
+              array_agg(DISTINCT d.name)      FILTER (WHERE d.id       IS NOT NULL) AS department_names
          FROM users u
-         LEFT JOIN user_roles r ON r.user_id = u.id
+         LEFT JOIN user_roles r       ON r.user_id       = u.id
+         LEFT JOIN user_departments ud ON ud.user_id      = u.id
+         LEFT JOIN departments d       ON d.id            = ud.department_id
         WHERE u.org_id = $1
         GROUP BY u.id
         ORDER BY u.created_at DESC`,
@@ -67,15 +71,14 @@ router.post('/users/:id/resend-invite', async (req, res) => {
 });
 
 router.put('/users/:id', async (req, res) => {
-  const { firstName, lastName, phone, isActive, role } = req.body;
+  const { firstName, lastName, phone, isActive, role, defaultModelId } = req.body;
   const userId = parseInt(req.params.id);
   try {
     await pool.query(
-      `UPDATE users SET first_name = $1, last_name = $2, phone = $3, is_active = $4 WHERE id = $5`,
-      [firstName, lastName, phone, isActive, userId]
+      `UPDATE users SET first_name = $1, last_name = $2, phone = $3, is_active = $4, default_model_id = $5 WHERE id = $6`,
+      [firstName, lastName, phone, isActive, defaultModelId ?? null, userId]
     );
     if (role) {
-      // Replace global role
       await pool.query(`DELETE FROM user_roles WHERE user_id = $1 AND scope_type = 'global'`, [userId]);
       await grantRole(userId, role, { scopeType: 'global', scopeId: null }, req.user.id);
     }
@@ -139,6 +142,224 @@ router.post('/users/:id/revoke-role', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to revoke role.' });
+  }
+});
+
+// ── User departments ──────────────────────────────────────────────────────
+
+router.get('/users/:id/departments', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT d.id, d.name, d.description, d.color
+         FROM user_departments ud
+         JOIN departments d ON d.id = ud.department_id
+        WHERE ud.user_id = $1`,
+      [parseInt(req.params.id)]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load user departments.' });
+  }
+});
+
+router.put('/users/:id/departments', async (req, res) => {
+  const userId = parseInt(req.params.id);
+  const { departmentIds = [] } = req.body;
+  try {
+    await pool.query('DELETE FROM user_departments WHERE user_id = $1', [userId]);
+    if (departmentIds.length > 0) {
+      const values = departmentIds.map((id, i) => `($1, $${i + 2})`).join(', ');
+      await pool.query(
+        `INSERT INTO user_departments (user_id, department_id) VALUES ${values}`,
+        [userId, ...departmentIds]
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update user departments.' });
+  }
+});
+
+// ── User org-roles ────────────────────────────────────────────────────────
+
+router.get('/users/:id/org-roles', async (req, res) => {
+  try {
+    // Return only roles that exist in org_roles (custom roles, not system roles)
+    const r = await pool.query(
+      `SELECT ur.role_name
+         FROM user_roles ur
+         JOIN org_roles rl ON rl.name = ur.role_name AND rl.org_id = $2
+        WHERE ur.user_id = $1 AND ur.scope_type = 'global'`,
+      [parseInt(req.params.id), req.user.orgId]
+    );
+    res.json(r.rows.map(row => row.role_name));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load user org-roles.' });
+  }
+});
+
+router.put('/users/:id/org-roles', async (req, res) => {
+  const userId = parseInt(req.params.id);
+  const { roleNames = [] } = req.body;
+  try {
+    // Get all valid org role names for this org
+    const validRoles = await pool.query(
+      'SELECT name FROM org_roles WHERE org_id = $1', [req.user.orgId]
+    );
+    const validNames = validRoles.rows.map(r => r.name);
+    // Remove existing custom role assignments
+    if (validNames.length > 0) {
+      await pool.query(
+        `DELETE FROM user_roles WHERE user_id = $1 AND scope_type = 'global' AND role_name = ANY($2)`,
+        [userId, validNames]
+      );
+    }
+    // Grant selected roles
+    for (const name of roleNames.filter(n => validNames.includes(n))) {
+      await grantRole(userId, name, { scopeType: 'global', scopeId: null }, req.user.id);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update user org-roles.' });
+  }
+});
+
+// ── Departments CRUD ──────────────────────────────────────────────────────
+
+router.get('/departments', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT d.id, d.name, d.description, d.color, d.created_at,
+              COUNT(ud.user_id)::int AS member_count
+         FROM departments d
+         LEFT JOIN user_departments ud ON ud.department_id = d.id
+        WHERE d.org_id = $1
+        GROUP BY d.id
+        ORDER BY d.name`,
+      [req.user.orgId]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load departments.' });
+  }
+});
+
+router.post('/departments', async (req, res) => {
+  const { name, description = '', color = '#6366f1' } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'Name is required.' });
+  try {
+    const r = await pool.query(
+      `INSERT INTO departments (org_id, name, description, color)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [req.user.orgId, name.trim(), description, color]
+    );
+    res.json(r.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'A department with that name already exists.' });
+    res.status(500).json({ error: 'Failed to create department.' });
+  }
+});
+
+router.put('/departments/:id', async (req, res) => {
+  const { name, description, color } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'Name is required.' });
+  try {
+    const r = await pool.query(
+      `UPDATE departments SET name = $1, description = $2, color = $3
+        WHERE id = $4 AND org_id = $5 RETURNING *`,
+      [name.trim(), description ?? '', color ?? '#6366f1', req.params.id, req.user.orgId]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Department not found.' });
+    res.json(r.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'A department with that name already exists.' });
+    res.status(500).json({ error: 'Failed to update department.' });
+  }
+});
+
+router.delete('/departments/:id', async (req, res) => {
+  try {
+    await pool.query(
+      'DELETE FROM departments WHERE id = $1 AND org_id = $2',
+      [req.params.id, req.user.orgId]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete department.' });
+  }
+});
+
+// ── Org-roles CRUD ────────────────────────────────────────────────────────
+
+router.get('/org-roles', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT or2.id, or2.name, or2.label, or2.description, or2.color, or2.created_at,
+              COUNT(ur.id)::int AS member_count
+         FROM org_roles or2
+         LEFT JOIN user_roles ur ON ur.role_name = or2.name AND ur.scope_type = 'global'
+        WHERE or2.org_id = $1
+        GROUP BY or2.id
+        ORDER BY or2.label`,
+      [req.user.orgId]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load org roles.' });
+  }
+});
+
+router.post('/org-roles', async (req, res) => {
+  const { name, label, description = '', color = '#6366f1' } = req.body;
+  if (!name?.trim() || !label?.trim()) return res.status(400).json({ error: 'Name and label are required.' });
+  // Enforce slug format (lowercase, alphanumeric + hyphens/underscores only)
+  const slug = name.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+  try {
+    const r = await pool.query(
+      `INSERT INTO org_roles (org_id, name, label, description, color)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [req.user.orgId, slug, label.trim(), description, color]
+    );
+    res.json(r.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'A role with that name already exists.' });
+    res.status(500).json({ error: 'Failed to create role.' });
+  }
+});
+
+router.put('/org-roles/:id', async (req, res) => {
+  const { label, description, color } = req.body;
+  if (!label?.trim()) return res.status(400).json({ error: 'Label is required.' });
+  try {
+    const r = await pool.query(
+      `UPDATE org_roles SET label = $1, description = $2, color = $3
+        WHERE id = $4 AND org_id = $5 RETURNING *`,
+      [label.trim(), description ?? '', color ?? '#6366f1', req.params.id, req.user.orgId]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Role not found.' });
+    res.json(r.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update role.' });
+  }
+});
+
+router.delete('/org-roles/:id', async (req, res) => {
+  try {
+    // Get role name before deleting so we can clean up user_roles
+    const r = await pool.query(
+      'SELECT name FROM org_roles WHERE id = $1 AND org_id = $2',
+      [req.params.id, req.user.orgId]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Role not found.' });
+    const { name } = r.rows[0];
+    // Remove all user assignments for this role
+    await pool.query(
+      `DELETE FROM user_roles WHERE role_name = $1 AND scope_type = 'global'`, [name]
+    );
+    await pool.query('DELETE FROM org_roles WHERE id = $1 AND org_id = $2', [req.params.id, req.user.orgId]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete role.' });
   }
 });
 

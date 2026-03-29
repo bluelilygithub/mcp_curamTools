@@ -5,7 +5,15 @@
       "Bash(npm audit:*)",
       "Bash(npm show:*)",
       "Bash(curl:*)",
-      "Bash(\"C:\\\\Users\\\\micha\\\\Local Sites\\\\mcp_curamTools\\\\setup.md\")"
+      "Bash(\"C:\\\\Users\\\\micha\\\\Local Sites\\\\mcp_curamTools\\\\setup.md\")",
+      "Bash(find 'C:\\\\Users\\\\micha\\\\Local Sites\\\\toolsforge\\\\client\\\\src\\\\pages' -type f -name *.jsx -o -name *.js)",
+      "Bash(find 'C:\\\\Users\\\\micha\\\\Local Sites\\\\toolsforge\\\\server\\\\routes' -type f -name *.js)",
+      "Bash(find 'C:\\\\Users\\\\micha\\\\Local Sites\\\\toolsforge\\\\server\\\\services' -type f -name *.js)",
+      "Bash(find '/c/Users/micha/Local Sites/mcp_curamTools' -type f \\\\\\(-name *.sql -o -name *migration* -o -name *schema* \\\\\\))",
+      "Bash(find 'C:\\\\Users\\\\micha\\\\Local Sites\\\\toolsforge' -type f \\\\\\(-name *model*.js -o -name *schema*.js \\\\\\))",
+      "Bash(find 'C:\\\\Users\\\\micha\\\\Local Sites\\\\toolsforge\\\\server' -maxdepth 3 -type f -name *.js ! -path */node_modules/*)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -r department 'C:\\\\Users\\\\micha\\\\Local Sites\\\\toolsforge' --include=*.js --include=*.jsx)"
     ]
   }
 }

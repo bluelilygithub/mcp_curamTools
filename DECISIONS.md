@@ -366,6 +366,44 @@ Both pages added to `App.jsx` under the existing `RequireRole(['org_admin'])` gu
 
 ---
 
+### Org Structure — Departments, Custom Roles, and Per-User Default Model
+**Date:** 2026-03-29
+**Status:** Settled — Complete
+**Context:** ToolsForge had a flat user model: every user had exactly one of two roles (`admin` or `member`). MCP_curamTools needs to support organisations with internal structure — multiple teams (departments), varied responsibilities (custom roles), and different tool preferences (default model). This is the first feature that goes beyond ToolsForge parity.
+**Decision:** Three orthogonal additions to the user model, all scoped to `org_id`:
+1. **Departments** (`departments` + `user_departments` tables) — named groups with a colour, many-to-many with users. An admin creates and edits departments on `/admin/departments`; assigns users via the Manage modal on `/admin/users`. Pure grouping — no access control implications.
+2. **Custom Org Roles** (`org_roles` table + `user_roles` rows) — admin-defined named roles beyond `org_admin`/`org_member`. The role `name` (slug) is auto-derived from `label` via `toSlug()` at creation and is immutable thereafter — it becomes the `role_name` key in `user_roles` (`scope_type = 'global'`), making it compatible with `requireRole()` checks and `resource_permissions`. An admin creates and edits roles on `/admin/org-roles`; assigns users via the Manage modal.
+3. **Default Model** (`default_model_id` column on `users`) — the user's preferred LLM. Set per-user in the Manage modal's Default Model section via `PUT /users/:id`. Persisted as a model ID string; the UI shows a select of enabled models.
+**Rationale:** Departments answer "who is this user?" for display and reporting without coupling to access control. Custom roles answer "what can this user do?" using the existing `user_roles` + `PermissionService` infrastructure — no new permission code required. Per-user default model answers "which model does this user prefer?" with a single column, no separate table needed.
+**Constraints it must not violate:** Custom org role assignments via `PUT /users/:id/org-roles` must only touch custom roles — the route first queries all valid org_role names for the org and restricts its DELETE/INSERT to that set, leaving `org_admin`/`org_member` assignments untouched. `PermissionService.grantRole`/`revokeRole` remain the only code paths for all role mutations. `org_id` is always from `req.user.orgId`. Role name slugs are stable and immutable after creation — they are used as role_name keys in user_roles and resource_permissions.
+**Schema additions (all idempotent):**
+- `ALTER TABLE users ADD COLUMN IF NOT EXISTS default_model_id TEXT`
+- `CREATE TABLE IF NOT EXISTS departments (id, org_id, name, description, color, UNIQUE(org_id, name))`
+- `CREATE TABLE IF NOT EXISTS user_departments (user_id, department_id, PRIMARY KEY(user_id, department_id))`
+- `CREATE TABLE IF NOT EXISTS org_roles (id, org_id, name, label, description, color, UNIQUE(org_id, name))`
+- `CREATE INDEX IF NOT EXISTS idx_user_departments_user_id ON user_departments(user_id)`
+**API surface (all under `router.use(requireAuth, requireRole(['org_admin']))`):**
+- `GET/POST /admin/departments`, `PUT/DELETE /admin/departments/:id`
+- `GET/POST /admin/org-roles`, `PUT/DELETE /admin/org-roles/:id`
+- `GET/PUT /admin/users/:id/departments`
+- `GET/PUT /admin/users/:id/org-roles`
+- `GET /admin/users/:id/roles` (existing, now also returns custom org role assignments)
+**References:** `server/db.js`; `server/routes/admin.js`; `client/src/pages/admin/AdminDepartmentsPage.jsx`; `client/src/pages/admin/AdminOrgRolesPage.jsx`; `client/src/pages/admin/AdminUsersPage.jsx` (ManageModal).
+
+---
+
+### toSlug — Role Name Immutability Contract
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** Custom org role names are used as `role_name` keys in `user_roles` and `resource_permissions`. If a role's slug could be renamed, all existing user assignments and resource permissions referencing the old name would become orphaned — no FK constraint catches this because `role_name` is stored as denormalised TEXT.
+**Decision:** The `name` (slug) field of an org role is set once at creation via `toSlug(label)` and cannot be modified thereafter. The `PUT /admin/org-roles/:id` route accepts only `label`, `description`, and `color` — the `name` field is ignored. The UI shows the auto-generated slug during creation with the note "immutable after creation" and shows the fixed slug on the edit form.
+**toSlug implementation:** `label.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')`
+**Rationale:** Immutability is the correct posture for any value used as a join key in other tables without FK enforcement. Changing the slug would silently orphan all downstream references. The UI shows the slug prominently so admins can verify the generated key before committing.
+**Constraints it must not violate:** The server-side `PUT /org-roles/:id` must never update the `name` column. The `DELETE /org-roles/:id` handler must clean up `user_roles` rows for the role's name before deleting the org_roles row — in that order, within a transaction if possible.
+**References:** `server/routes/admin.js` (`PUT /admin/org-roles/:id`, `DELETE /admin/org-roles/:id`); `client/src/pages/admin/AdminOrgRolesPage.jsx` (`toSlug`).
+
+---
+
 ## Open Questions
 
 _(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_

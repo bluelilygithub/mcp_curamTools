@@ -215,6 +215,52 @@ async function initSchema() {
         WHERE role_name IS NOT NULL
     `);
 
+    // ── Org structure tables ───────────────────────────────────────────────
+
+    // Idempotent: add default_model_id to users
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS default_model_id TEXT
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS departments (
+        id          SERIAL PRIMARY KEY,
+        org_id      INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        name        TEXT NOT NULL,
+        description TEXT,
+        color       TEXT NOT NULL DEFAULT '#6366f1',
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (org_id, name)
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_departments (
+        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+        PRIMARY KEY (user_id, department_id)
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS org_roles (
+        id          SERIAL PRIMARY KEY,
+        org_id      INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        name        TEXT NOT NULL,
+        label       TEXT NOT NULL,
+        description TEXT,
+        color       TEXT NOT NULL DEFAULT '#6366f1',
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (org_id, name)
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_departments_user_id
+        ON user_departments(user_id)
+    `);
+
     await client.query('COMMIT');
 
     // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)

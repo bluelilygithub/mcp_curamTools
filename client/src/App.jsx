@@ -18,6 +18,8 @@ import AdminLogsPage from './pages/admin/AdminLogsPage';
 import AdminMcpServersPage from './pages/admin/AdminMcpServersPage';
 import AdminMcpResourcesPage from './pages/admin/AdminMcpResourcesPage';
 import AdminDiagnosticsPage from './pages/admin/AdminDiagnosticsPage';
+import AdminDepartmentsPage from './pages/admin/AdminDepartmentsPage';
+import AdminOrgRolesPage from './pages/admin/AdminOrgRolesPage';
 
 export default function App() {
   return (
@@ -50,6 +52,8 @@ export default function App() {
                   <Route path="/admin/mcp-servers" element={<AdminMcpServersPage />} />
                   <Route path="/admin/mcp-resources" element={<AdminMcpResourcesPage />} />
                   <Route path="/admin/diagnostics" element={<AdminDiagnosticsPage />} />
+                  <Route path="/admin/departments" element={<AdminDepartmentsPage />} />
+                  <Route path="/admin/org-roles" element={<AdminOrgRolesPage />} />
                 </Route>
               </Route>
             </Route>

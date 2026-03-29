@@ -289,12 +289,27 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
   const { showToast } = useToast();
   const isSelf = currentUser?.id === user.id;
 
-  // Role state
+  // Org role (admin/member toggle)
   const [isAdmin,       setIsAdmin]       = useState(false);
   const [roleLoading,   setRoleLoading]   = useState(true);
   const [roleWorking,   setRoleWorking]   = useState(false);
 
-  // Profile state
+  // Departments
+  const [allDepts,      setAllDepts]      = useState([]);
+  const [userDeptIds,   setUserDeptIds]   = useState([]);
+  const [deptSaving,    setDeptSaving]    = useState(false);
+
+  // Custom org roles
+  const [allOrgRoles,   setAllOrgRoles]   = useState([]);
+  const [userRoleNames, setUserRoleNames] = useState([]);
+  const [orgRoleSaving, setOrgRoleSaving] = useState(false);
+
+  // Default model
+  const [models,        setModels]        = useState([]);
+  const [defaultModel,  setDefaultModel]  = useState(user.default_model_id || '');
+  const [modelSaving,   setModelSaving]   = useState(false);
+
+  // Profile
   const [firstName,     setFirstName]     = useState(user.first_name || '');
   const [lastName,      setLastName]      = useState(user.last_name  || '');
   const [phone,         setPhone]         = useState(user.phone       || '');
@@ -302,18 +317,78 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError,  setProfileError]  = useState('');
 
-  // Delete state
+  // Delete
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting,      setDeleting]      = useState(false);
 
   useEffect(() => {
-    api.get(`/admin/users/${user.id}/roles`)
-      .then((roles) => {
-        setIsAdmin(roles.some((r) => r.role_name === 'org_admin' && r.scope_type === 'global'));
-      })
-      .catch(() => showToast('Failed to load roles', 'error'))
+    Promise.all([
+      api.get(`/admin/users/${user.id}/roles`),
+      api.get(`/admin/users/${user.id}/departments`),
+      api.get(`/admin/users/${user.id}/org-roles`),
+      api.get('/admin/departments'),
+      api.get('/admin/org-roles'),
+      api.get('/admin/models'),
+    ]).then(([roles, userDepts, userOrgRoles, depts, orgRoles, modelList]) => {
+      setIsAdmin(roles.some((r) => r.role_name === 'org_admin' && r.scope_type === 'global'));
+      setUserDeptIds(userDepts.map((d) => d.id));
+      setUserRoleNames(userOrgRoles);
+      setAllDepts(depts);
+      setAllOrgRoles(orgRoles);
+      setModels(modelList.filter((m) => m.enabled));
+    }).catch(() => showToast('Failed to load user data', 'error'))
       .finally(() => setRoleLoading(false));
   }, [user.id]);
+
+  const toggleDept = (id) => {
+    setUserDeptIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
+
+  const saveDepts = async () => {
+    setDeptSaving(true);
+    try {
+      await api.put(`/admin/users/${user.id}/departments`, { departmentIds: userDeptIds });
+      showToast('Departments updated', 'success');
+      onSaved();
+    } catch (e) {
+      showToast(e.message || 'Failed to update departments', 'error');
+    } finally {
+      setDeptSaving(false);
+    }
+  };
+
+  const toggleOrgRole = (name) => {
+    setUserRoleNames((prev) => prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]);
+  };
+
+  const saveOrgRoles = async () => {
+    setOrgRoleSaving(true);
+    try {
+      await api.put(`/admin/users/${user.id}/org-roles`, { roleNames: userRoleNames });
+      showToast('Roles updated', 'success');
+      onSaved();
+    } catch (e) {
+      showToast(e.message || 'Failed to update roles', 'error');
+    } finally {
+      setOrgRoleSaving(false);
+    }
+  };
+
+  const saveDefaultModel = async () => {
+    setModelSaving(true);
+    try {
+      await api.put(`/admin/users/${user.id}`, {
+        firstName, lastName, phone, isActive,
+        defaultModelId: defaultModel || null,
+      });
+      showToast('Default model updated', 'success');
+      onSaved();
+    } catch (e) {
+      showToast(e.message || 'Failed to update model', 'error');
+    } finally {
+      setModelSaving(false);
+    }
+  };
 
   const toggleAdmin = async () => {
     if (isSelf) { showToast('You cannot change your own admin role', 'error'); return; }
@@ -391,6 +466,115 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
               }}
             >
               {roleWorking ? '…' : isAdmin ? 'Remove admin' : 'Make admin'}
+            </button>
+          </div>
+        </section>
+
+        {/* ── Departments ───────────────────────────────────────────────── */}
+        <section>
+          <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>
+            Departments
+          </p>
+          {roleLoading ? (
+            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>Loading…</p>
+          ) : allDepts.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+              No departments configured.{' '}
+              <span style={{ color: 'var(--color-primary)' }}>Add them on the Departments page.</span>
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {allDepts.map((d) => (
+                <label
+                  key={d.id}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl border cursor-pointer"
+                  style={{
+                    borderColor: userDeptIds.includes(d.id) ? 'var(--color-primary)' : 'var(--color-border)',
+                    background:  userDeptIds.includes(d.id) ? 'rgba(var(--color-primary-rgb,99,102,241),0.06)' : 'var(--color-bg)',
+                  }}
+                >
+                  <input type="checkbox" checked={userDeptIds.includes(d.id)}
+                    onChange={() => toggleDept(d.id)} className="accent-[var(--color-primary)]" />
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: d.color }} />
+                  <span className="text-xs font-medium flex-1" style={{ color: 'var(--color-text)' }}>{d.name}</span>
+                </label>
+              ))}
+              <button onClick={saveDepts} disabled={deptSaving}
+                className="mt-2 text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40"
+                style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', cursor: 'pointer' }}>
+                {deptSaving ? 'Saving…' : 'Save departments'}
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* ── Custom roles ───────────────────────────────────────────────── */}
+        <section>
+          <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>
+            Custom Roles
+          </p>
+          {roleLoading ? (
+            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>Loading…</p>
+          ) : allOrgRoles.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+              No custom roles configured.{' '}
+              <span style={{ color: 'var(--color-primary)' }}>Add them on the Roles page.</span>
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {allOrgRoles.map((r) => (
+                <label
+                  key={r.id}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl border cursor-pointer"
+                  style={{
+                    borderColor: userRoleNames.includes(r.name) ? 'var(--color-primary)' : 'var(--color-border)',
+                    background:  userRoleNames.includes(r.name) ? 'rgba(var(--color-primary-rgb,99,102,241),0.06)' : 'var(--color-bg)',
+                  }}
+                >
+                  <input type="checkbox" checked={userRoleNames.includes(r.name)}
+                    onChange={() => toggleOrgRole(r.name)} className="accent-[var(--color-primary)]" />
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: r.color }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>{r.label}</p>
+                    {r.description && (
+                      <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{r.description}</p>
+                    )}
+                  </div>
+                  <span className="text-xs font-mono" style={{ color: 'var(--color-muted)' }}>{r.name}</span>
+                </label>
+              ))}
+              <button onClick={saveOrgRoles} disabled={orgRoleSaving}
+                className="mt-2 text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40"
+                style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', cursor: 'pointer' }}>
+                {orgRoleSaving ? 'Saving…' : 'Save roles'}
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* ── Default model ──────────────────────────────────────────────── */}
+        <section>
+          <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>
+            Default AI Model
+          </p>
+          <p className="text-xs mb-2" style={{ color: 'var(--color-muted)' }}>
+            Pre-selects this model when the user opens a tool. They can still change it per session.
+          </p>
+          <div className="flex gap-2">
+            <select
+              value={defaultModel}
+              onChange={(e) => setDefaultModel(e.target.value)}
+              style={{ ...inputStyle, flex: 1 }}
+            >
+              <option value="">— No preference (use tool default) —</option>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+            <button onClick={saveDefaultModel} disabled={modelSaving}
+              className="text-xs px-3 py-1.5 rounded-xl transition-opacity hover:opacity-80 disabled:opacity-40 flex-shrink-0"
+              style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', cursor: 'pointer' }}>
+              {modelSaving ? 'Saving…' : 'Save'}
             </button>
           </div>
         </section>
