@@ -650,6 +650,29 @@ router.get('/logs', async (req, res) => {
 
 // ── SQL Console ───────────────────────────────────────────────────────────
 
+const { logUsage } = require('../services/UsageLogger');
+const AUD_PER_USD_SQL = 1.55;
+
+/**
+ * Resolves the best enabled model for the org.
+ * Prefers 'advanced' tier; falls back to first enabled, then Sonnet default.
+ * Returns { id, inputPricePer1M, outputPricePer1M }.
+ */
+async function getDefaultModel(orgId) {
+  const r = await pool.query(
+    `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'ai_models' LIMIT 1`,
+    [orgId]
+  );
+  const models = Array.isArray(r.rows[0]?.value) ? r.rows[0].value : MODEL_DEFAULTS;
+  const enabled = models.filter((m) => m.enabled);
+  return (
+    enabled.find((m) => m.tier === 'advanced') ??
+    enabled[0] ??
+    MODEL_DEFAULTS.find((m) => m.tier === 'advanced') ??
+    { id: 'claude-sonnet-4-6', inputPricePer1M: 3.00, outputPricePer1M: 15.00 }
+  );
+}
+
 const WRITE_KEYWORDS = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE'];
 
 function firstSqlKeyword(sql) {
@@ -718,11 +741,15 @@ router.post('/sql/nlp', async (req, res) => {
   if (!question?.trim()) return res.status(400).json({ error: 'No question provided.' });
 
   try {
-    const schema = await getDbSchema();
+    const [schema, modelDef] = await Promise.all([
+      getDbSchema(),
+      getDefaultModel(req.user.orgId),
+    ]);
+
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: modelDef.id,
       max_tokens: 1024,
       messages: [{
         role: 'user',
@@ -741,10 +768,18 @@ ${question}`,
     const generatedSql = message.content[0]?.text?.trim() ?? '';
     if (!generatedSql) throw new Error('Claude returned an empty response.');
 
-    console.log(`[SQL Console NLP] ${req.user.email}: "${question.slice(0, 80)}" → ${generatedSql.slice(0, 120)}`);
+    // Log usage to usage_logs
+    const tokensUsed = { input: message.usage.input_tokens, output: message.usage.output_tokens };
+    const costAud = (
+      tokensUsed.input  * (modelDef.inputPricePer1M  / 1_000_000) +
+      tokensUsed.output * (modelDef.outputPricePer1M / 1_000_000)
+    ) * AUD_PER_USD_SQL;
+    logUsage({ orgId: req.user.orgId, userId: req.user.id, slug: 'sql-console-nlp', modelId: modelDef.id, tokensUsed, costAud }).catch(() => {});
+
+    console.log(`[SQL Console NLP] ${req.user.email} (${modelDef.id}): "${question.slice(0, 80)}" → ${generatedSql.slice(0, 120)} [${tokensUsed.input}in/${tokensUsed.output}out, A$${costAud.toFixed(4)}]`);
 
     const data = await execSql(generatedSql, allowWrite, req.user.email);
-    res.json({ ...data, generatedSql });
+    res.json({ ...data, generatedSql, modelId: modelDef.id, tokensUsed, costAud });
   } catch (err) {
     console.error(`[SQL Console NLP] Error for ${req.user.email}:`, err.message);
     res.status(err.status ?? 500).json({ error: err.message });

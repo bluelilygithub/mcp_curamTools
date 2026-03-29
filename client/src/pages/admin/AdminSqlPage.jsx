@@ -103,6 +103,7 @@ export default function AdminSqlPage() {
   const [question, setQuestion]     = useState('');
   const [results, setResults]       = useState(null);
   const [generatedSql, setGeneratedSql] = useState('');
+  const [nlpMeta, setNlpMeta]       = useState(null); // { modelId, tokensUsed, costAud }
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState('');
   const [allowWrite, setAllowWrite] = useState(false);
@@ -111,6 +112,7 @@ export default function AdminSqlPage() {
   function reset() {
     setResults(null);
     setGeneratedSql('');
+    setNlpMeta(null);
     setError('');
   }
 
@@ -142,6 +144,7 @@ export default function AdminSqlPage() {
     try {
       const data = await api.post('/admin/sql/nlp', { question: q, allowWrite });
       setGeneratedSql(data.generatedSql ?? '');
+      if (data.modelId) setNlpMeta({ modelId: data.modelId, tokensUsed: data.tokensUsed, costAud: data.costAud });
       setResults(data);
     } catch (e) {
       setError(e.message);
@@ -307,12 +310,29 @@ export default function AdminSqlPage() {
           style={{ borderColor: 'var(--color-border)' }}
         >
           <div
-            className="flex items-center justify-between px-4 py-2 border-b"
+            className="flex items-center justify-between px-4 py-2 border-b flex-wrap gap-2"
             style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
           >
-            <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
-              Generated SQL
-            </span>
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+                Generated SQL
+              </span>
+              {nlpMeta?.modelId && (
+                <span className="text-xs font-mono px-2 py-0.5 rounded" style={{ background: 'var(--color-border)', color: 'var(--color-text)' }}>
+                  {nlpMeta.modelId}
+                </span>
+              )}
+              {nlpMeta?.tokensUsed && (
+                <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
+                  {nlpMeta.tokensUsed.input + nlpMeta.tokensUsed.output} tokens
+                </span>
+              )}
+              {nlpMeta?.costAud != null && (
+                <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
+                  A${nlpMeta.costAud.toFixed(4)}
+                </span>
+              )}
+            </div>
             <button
               onClick={() => { setSql(generatedSql); switchMode('sql'); }}
               className="text-xs px-3 py-1 rounded-lg"

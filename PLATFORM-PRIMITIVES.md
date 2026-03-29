@@ -989,11 +989,15 @@ class BudgetExceededError extends Error {
 ## Admin — SQL Console
 
 **Type:** Route handler + admin page
-**Backend:** `POST /api/admin/sql` in `server/routes/admin.js`
+**Backend:** `POST /api/admin/sql`, `POST /api/admin/sql/nlp` in `server/routes/admin.js`
 **Frontend:** `client/src/pages/admin/AdminSqlPage.jsx` → `/admin/sql`
 **Auth:** `requireAuth` + `requireRole(['org_admin'])`
 
-**What it does:** Executes arbitrary SQL against the platform PostgreSQL database and returns structured results. Intended for admin debugging, schema inspection, and data queries.
+**What it does:** Two-mode query tool for the platform PostgreSQL database. SQL mode executes raw queries directly. NLP mode accepts a natural language question, generates SQL via Claude, then executes it.
+
+---
+
+### SQL mode — `POST /api/admin/sql`
 
 **Request body:**
 ```json
@@ -1005,17 +1009,54 @@ class BudgetExceededError extends Error {
 { "command": "SELECT", "rowCount": 12, "columns": ["id", "email"], "rows": [...], "duration": 43 }
 ```
 
-**Write guard:** By default, statements beginning with `INSERT`, `UPDATE`, `DELETE`, `DROP`, `TRUNCATE`, `ALTER`, `CREATE`, `GRANT`, or `REVOKE` are rejected with a 400 error. Pass `"allowWrite": true` to bypass. The frontend toggle shows a red warning banner when write mode is active.
+**Write guard:** By default, statements beginning with `INSERT`, `UPDATE`, `DELETE`, `DROP`, `TRUNCATE`, `ALTER`, `CREATE`, `GRANT`, or `REVOKE` are rejected with a 400 error. Pass `"allowWrite": true` to bypass. The frontend toggle shows a red warning banner when write mode is active. The same guard applies in NLP mode.
 
 **Audit log:** Every query is logged to server console: `[SQL Console] user@example.com ran: SELECT ... — N rows in Xms`.
 
-**UI features:**
-- Ctrl+Enter to run, Tab to indent (2 spaces)
-- Sticky-header results table, max 480px height with scroll
-- `null` values displayed in italics, object/JSON values serialised inline
-- Row count + duration + PG command tag shown above results
+---
 
-**Does not handle:** Multi-statement batches (pg driver executes the full string; behaviour for `;`-separated statements depends on pg). Query cancellation. Result export/download. Row limit is not enforced server-side — large queries will return all rows.
+### NLP mode — `POST /api/admin/sql/nlp`
+
+**Request body:**
+```json
+{ "question": "Show me the last 10 agent runs", "allowWrite": false }
+```
+
+**Response shape:**
+```json
+{
+  "command": "SELECT", "rowCount": 10, "columns": [...], "rows": [...], "duration": 43,
+  "generatedSql": "SELECT ...",
+  "modelId": "claude-sonnet-4-6",
+  "tokensUsed": { "input": 1840, "output": 64 },
+  "costAud": 0.0031
+}
+```
+
+**How it works:**
+1. Queries `information_schema.columns` + `information_schema.tables` to build a live schema string (all `public` base tables, columns with types/nullability/defaults)
+2. Calls Claude with the schema + question; instructs it to return raw SQL only (no markdown, no fences)
+3. Executes the generated SQL via the same `execSql` helper as SQL mode (write guard applies)
+4. Returns results plus `generatedSql`, `modelId`, `tokensUsed`, `costAud`
+
+**Model selection — `getDefaultModel(orgId)`:** Reads `ai_models` from `system_settings` (the list managed in Admin → Models). Picks the first enabled `advanced` tier model; falls back to first enabled model; falls back to `claude-sonnet-4-6`. This means swapping the active model in Admin → Models immediately affects NLP query generation — no code change needed.
+
+**Usage logging:** Every NLP call writes to `usage_logs` with `tool_slug = 'sql-console-nlp'`, the resolved model ID, token counts, and AUD cost. Cost is computed from the model's own `inputPricePer1M` / `outputPricePer1M` from `MODEL_DEFAULTS` (not the hardcoded Sonnet rate in `CostGuardService`). Appears in Admin → Logs alongside agent runs.
+
+**Audit log:** `[SQL Console NLP] user@example.com (model-id): "question..." → generated SQL... [Nin/Nout, A$X.XXXX]`
+
+---
+
+### UI features (both modes)
+
+- Mode toggle: **SQL** | **Natural Language** — switching clears results
+- Ctrl+Enter to run in both modes; Tab inserts 2 spaces in SQL mode
+- "Allow writes" toggle with red warning banner
+- Sticky-header results table, max 480px height with scroll; `null` in italics, objects serialised as JSON
+- Row count + duration + PG command tag above results
+- **NLP only:** Generated SQL panel shows model ID, token count, A$ cost, and an "Edit in SQL mode" button that pre-loads the generated SQL into SQL mode for refinement
+
+**Does not handle:** Multi-statement batches. Query cancellation. Result export. No server-side row limit — large queries return all rows.
 
 ---
 
