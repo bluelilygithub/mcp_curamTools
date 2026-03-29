@@ -70,16 +70,16 @@ async function sendViaSmtp({ to, subject, html, text }) {
  * Low-level send — accepts pre-composed content.
  */
 async function send({ to, subject, html, text }) {
+  if (!process.env.MAIL_CHANNEL_API_KEY) {
+    console.error('[EmailService] MAIL_CHANNEL_API_KEY is not set — email not sent');
+    return;
+  }
   try {
-    if (process.env.MAIL_CHANNEL_API_KEY) {
-      await sendViaMailChannels({ to, subject, html, text });
-    } else {
-      await sendViaSmtp({ to, subject, html, text });
-    }
+    await sendViaMailChannels({ to, subject, html, text });
     console.log(`[EmailService] Sent "${subject}" → ${to}`);
   } catch (err) {
     console.error(`[EmailService] Failed to send to ${to}:`, err.message);
-    // Non-blocking — swallow error after logging
+    throw err;
   }
 }
 
