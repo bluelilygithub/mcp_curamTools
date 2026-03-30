@@ -564,6 +564,46 @@ All inline styles include `fontFamily: 'inherit'` to respect the user's platform
 
 ---
 
+### user_roles Table Requires Partial Unique Indexes (not a plain UNIQUE constraint)
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `scope_id` is nullable. A standard `UNIQUE(user_id, role_name, scope_type, scope_id)` does not deduplicate NULL scope_id rows because SQL treats `NULL != NULL`. The bootstrap code in `db.js` was running `INSERT ... ON CONFLICT DO NOTHING` on every server start, but the conflict never fired — so a new `org_admin` row was inserted for user 1 on every restart.
+**Decision:** Two partial unique indexes replace a single unique constraint: `uq_user_roles_no_scope` on `(user_id, role_name, scope_type) WHERE scope_id IS NULL`, and `uq_user_roles_with_scope` on `(user_id, role_name, scope_type, scope_id) WHERE scope_id IS NOT NULL`. A dedup DELETE (keep MIN(id) per logical combination) runs before the index creation so the migration is idempotent even on a dirty table.
+**Rationale:** Partial indexes are the standard PostgreSQL pattern for unique constraints on nullable columns. The dedup must precede index creation — creating a unique index on a table with duplicates fails immediately.
+**Constraints it must not violate:** The dedup DELETE must always appear before the `CREATE UNIQUE INDEX` statements in `db.js`. Any future `INSERT INTO user_roles` that wants idempotent behaviour must use `ON CONFLICT (user_id, role_name, scope_type) WHERE scope_id IS NULL DO NOTHING` (explicit conflict target), not bare `ON CONFLICT DO NOTHING`.
+
+---
+
+### Admin Route Responses Must Be Plain Arrays, Not Wrapped Objects
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `POST /admin/diagnostics` was returning `{ results: [...] }` but the frontend called `.filter()` directly on the response, expecting a plain array. This caused a `TypeError: e.filter is not a function` crash.
+**Decision:** Admin routes that return lists must use `res.json(array)` not `res.json({ key: array })`. The frontend API client returns `response.json()` directly — there is no unwrapping layer.
+**Rationale:** Consistent with every other list-returning route in the platform. Wrapping adds no value and breaks array methods used in components.
+**Constraints it must not violate:** If a route needs to return both a list and metadata (e.g. pagination), the metadata must be in a separate field and the component must explicitly destructure it. The list itself must never be the sole content of a wrapper object unless the component is written to unwrap it.
+
+---
+
+### NLP-to-SQL Pattern: Schema Introspection → SQL Generation → Answer Generation
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** The SQL Console NLP mode needs to translate natural language questions into SQL and execute them. The raw row results are not meaningful to speak aloud or present as a direct answer.
+**Decision:** Three steps per NLP query: (1) Query `information_schema` dynamically for live schema. (2) Call the org's configured model to generate SQL — returns raw SQL only, no markdown. (3) After execution, call `claude-haiku-4-5-20251001` with the question + result rows (capped at 20) to generate a 1–2 sentence plain-English answer. The answer is returned as `answer` in the response and passed to `ReadAloudButton`. SQL generation uses the admin-configured model (`getDefaultModel(orgId)`); answer generation always uses Haiku for speed and cost.
+**Rationale:** Separating SQL generation (needs full schema context, benefits from a capable model) from answer generation (needs only the question + small result set, fast and cheap) is more efficient and more accurate than trying to do both in one call. The plain-English answer is what users want to hear — not "Row 1: email is john@…".
+**Constraints it must not violate:** Schema introspection must always be live — never cached or hardcoded. The answer generation step must not be used for the SQL generation step (Haiku may produce lower-quality SQL). Row count passed to the answer call must be capped (currently 20) to avoid large token bills.
+
+---
+
+### Voice Primitives Are Platform-Level, Not Feature-Level
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** The SQL Console NLP mode needed mic input and read-aloud. Voice features will be needed in any future NLP-capable UI in the platform.
+**Decision:** Voice is implemented as four reusable platform primitives: `useSpeechInput` (hook), `useReadAloud` (hook), `MicButton` (component), `ReadAloudButton` (component), plus `stripForSpeech` (utility). All live in `client/src/hooks/`, `client/src/components/ui/`, and `client/src/utils/` respectively. Feature pages import these primitives — they do not implement their own speech logic.
+**Rationale:** Consistent voice UX across all NLP features. One place to fix browser quirks (e.g. `stoppedRef` guard against Chrome's async `onend` after `cancel()`). Both components return `null` when the Web Speech API is unsupported — safe to add unconditionally.
+**Constraints it must not violate:** No feature page may use `SpeechRecognition` or `speechSynthesis` directly. All text passed to `ReadAloudButton` is auto-stripped by `stripForSpeech` inside `useReadAloud` — callers must not pre-strip. `MicButton` renders null on unsupported browsers; callers must not conditionally render it themselves.
+
+---
+
 ## Open Questions
 
 _(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_
