@@ -9,6 +9,70 @@ import InlineBanner from '../../components/ui/InlineBanner';
 import EmptyState from '../../components/ui/EmptyState';
 import { useIcon } from '../../providers/IconProvider';
 
+function ToolRunner({ tool, serverId }) {
+  const [argsJson, setArgsJson] = useState(() => {
+    const props = tool.inputSchema?.properties ?? {};
+    const required = tool.inputSchema?.required ?? [];
+    if (required.length === 0 && Object.keys(props).length === 0) return '{}';
+    const example = {};
+    for (const key of required) {
+      const p = props[key];
+      example[key] = p?.type === 'number' ? 1 : '';
+    }
+    return JSON.stringify(example, null, 2);
+  });
+  const [result, setResult] = useState(null);
+  const [callError, setCallError] = useState('');
+  const [running, setRunning] = useState(false);
+
+  async function run() {
+    setRunning(true);
+    setResult(null);
+    setCallError('');
+    try {
+      let args = {};
+      if (argsJson.trim()) args = JSON.parse(argsJson);
+      const data = await api.post(`/admin/mcp-servers/${serverId}/call`, { toolName: tool.name, args });
+      const text = data?.content?.[0]?.text ?? JSON.stringify(data, null, 2);
+      setResult(text);
+    } catch (e) {
+      setCallError(e.message);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <li className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+      <div className="px-4 py-3" style={{ background: 'var(--color-surface)' }}>
+        <div className="text-sm font-semibold font-mono" style={{ color: 'var(--color-text)' }}>{tool.name}</div>
+        {tool.description && <div className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>{tool.description}</div>}
+      </div>
+      <div className="px-4 py-3 space-y-2" style={{ background: 'var(--color-bg)' }}>
+        <textarea
+          rows={3}
+          value={argsJson}
+          onChange={(e) => setArgsJson(e.target.value)}
+          className="w-full px-3 py-2 rounded-xl border text-xs outline-none"
+          style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace', resize: 'vertical' }}
+          placeholder="{}"
+        />
+        <div className="flex items-center gap-2">
+          <Button variant="primary" onClick={run} disabled={running}>
+            {running ? 'Running…' : 'Call tool'}
+          </Button>
+          {callError && <span className="text-xs text-red-500">{callError}</span>}
+        </div>
+        {result && (
+          <pre className="text-xs rounded-xl p-3 overflow-auto" style={{ background: 'var(--color-surface)', color: 'var(--color-text)', maxHeight: 200, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {result}
+          </pre>
+        )}
+      </div>
+    </li>
+  );
+}
+
 const STATUS_STYLES = {
   connected:    { background: '#dcfce7', color: '#166534' },
   connecting:   { background: '#fef9c3', color: '#854d0e' },
@@ -154,7 +218,7 @@ export default function AdminMcpServersPage() {
     setError('');
     try {
       const tools = await api.get(`/admin/mcp-servers/${s.id}/tools`);
-      setToolsModal({ serverName: s.name, tools });
+      setToolsModal({ serverName: s.name, serverId: s.id, tools });
       load();
     } catch (e) {
       setError(e.message);
@@ -262,23 +326,22 @@ export default function AdminMcpServersPage() {
       </div>
 
       {/* Tools modal */}
-      <Modal open={!!toolsModal} onClose={() => setToolsModal(null)} title={`Tools — ${toolsModal?.serverName ?? ''}`} maxWidth="max-w-lg">
-        {toolsModal?.tools?.length === 0 ? (
-          <p className="text-sm" style={{ color: 'var(--color-muted)' }}>No tools returned by this server.</p>
-        ) : (
-          <ul className="space-y-3">
-            {(toolsModal?.tools ?? []).map((t) => (
-              <li key={t.name} className="rounded-xl p-3 border" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
-                <div className="text-sm font-semibold font-mono" style={{ color: 'var(--color-text)' }}>{t.name}</div>
-                {t.description && <div className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>{t.description}</div>}
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="flex justify-end pt-4">
-          <Button variant="secondary" onClick={() => setToolsModal(null)}>Close</Button>
-        </div>
-      </Modal>
+      {toolsModal && (
+        <Modal open onClose={() => setToolsModal(null)} title={`Tools — ${toolsModal.serverName}`} maxWidth="max-w-xl">
+          {toolsModal.tools.length === 0 ? (
+            <p className="text-sm" style={{ color: 'var(--color-muted)' }}>No tools returned by this server.</p>
+          ) : (
+            <ul className="space-y-4">
+              {toolsModal.tools.map((t) => (
+                <ToolRunner key={t.name} tool={t} serverId={toolsModal.serverId} />
+              ))}
+            </ul>
+          )}
+          <div className="flex justify-end pt-4">
+            <Button variant="secondary" onClick={() => setToolsModal(null)}>Close</Button>
+          </div>
+        </Modal>
+      )}
 
       {/* Edit modal */}
       <Modal open={!!editServer} onClose={closeEdit} title={`Edit — ${editServer?.name ?? ''}`} maxWidth="max-w-md">

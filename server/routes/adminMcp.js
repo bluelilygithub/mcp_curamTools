@@ -116,6 +116,25 @@ router.get('/mcp-servers/:id/tools', async (req, res) => {
   }
 });
 
+router.post('/mcp-servers/:id/call', async (req, res) => {
+  const { toolName, args } = req.body;
+  if (!toolName) return res.status(400).json({ error: 'toolName is required.' });
+  try {
+    const existing = MCPRegistry._connections.get(req.params.id);
+    if (!existing || existing.status !== 'connected') {
+      await MCPRegistry.connect(req.user.orgId, req.params.id);
+    }
+    const result = await MCPRegistry.send(req.user.orgId, req.params.id, 'tools/call', {
+      name: toolName,
+      arguments: args || {},
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[admin/mcp-servers/call]', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.post('/mcp-servers/:id/connect', async (req, res) => {
   try {
     await MCPRegistry.connect(req.user.orgId, req.params.id);
