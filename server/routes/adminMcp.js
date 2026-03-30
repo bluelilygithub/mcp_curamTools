@@ -101,6 +101,21 @@ router.delete('/mcp-servers/:id', async (req, res) => {
   }
 });
 
+router.get('/mcp-servers/:id/tools', async (req, res) => {
+  try {
+    // Auto-connect if not already connected
+    const existing = MCPRegistry._connections.get(req.params.id);
+    if (!existing || existing.status !== 'connected') {
+      await MCPRegistry.connect(req.user.orgId, req.params.id);
+    }
+    const result = await MCPRegistry.send(req.user.orgId, req.params.id, 'tools/list');
+    res.json(result.tools || []);
+  } catch (err) {
+    console.error('[admin/mcp-servers/tools]', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.post('/mcp-servers/:id/connect', async (req, res) => {
   try {
     await MCPRegistry.connect(req.user.orgId, req.params.id);

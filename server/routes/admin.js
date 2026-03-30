@@ -922,7 +922,39 @@ router.post('/diagnostics', async (req, res) => {
     return `Customer ${id} accessible`;
   });
 
-  // ── 7. Google Analytics (GA4) ──────────────────────────────────────────────
+  // ── 7. WordPress REST API ─────────────────────────────────────────────────
+  await check('WordPress API', async () => {
+    if (!process.env.WP_APP_VAR) throw new Error('WP_APP_VAR is not set');
+    const wpUrl  = (process.env.WP_URL  || 'https://diamondplate.com.au').replace(/\/$/, '');
+    const wpUser = process.env.WP_USER  || 'master';
+    const auth   = Buffer.from(`${wpUser}:${process.env.WP_APP_VAR}`).toString('base64');
+    const url    = new URL(`${wpUrl}/wp-json/wp/v2/users/1`);
+    const name   = await new Promise((resolve, reject) => {
+      const req2 = https.request(
+        {
+          hostname: url.hostname,
+          port: 443,
+          path: url.pathname,
+          method: 'GET',
+          headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' },
+        },
+        (r) => {
+          let data = '';
+          r.setEncoding('utf8');
+          r.on('data', (c) => { data += c; });
+          r.on('end', () => {
+            if (r.statusCode >= 400) return reject(new Error(`HTTP ${r.statusCode}`));
+            try { resolve(JSON.parse(data).name); } catch { reject(new Error('Invalid JSON response')); }
+          });
+        }
+      );
+      req2.on('error', reject);
+      req2.end();
+    });
+    return `Connected — admin user: ${name}`;
+  });
+
+  // ── 8. Google Analytics (GA4) ──────────────────────────────────────────────
   await check('Google Analytics (GA4)', async () => {
     if (!accessToken) throw new Error('Skipped — Google OAuth check failed');
     const propertyId = process.env.GOOGLE_GA4_PROPERTY_ID ?? '';

@@ -44,6 +44,7 @@ export default function AdminMcpServersPage() {
   const [formLoading, setFormLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState({});
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [toolsModal, setToolsModal] = useState(null); // { serverName, tools[] }
 
   async function load() {
     try {
@@ -148,6 +149,20 @@ export default function AdminMcpServersPage() {
     }
   }
 
+  async function handleDiscoverTools(s) {
+    setAction(s.id, 'tools');
+    setError('');
+    try {
+      const tools = await api.get(`/admin/mcp-servers/${s.id}/tools`);
+      setToolsModal({ serverName: s.name, tools });
+      load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAction(s.id, null);
+    }
+  }
+
   async function handleDelete(id) {
     try {
       await api.delete(`/admin/mcp-servers/${id}`);
@@ -193,7 +208,7 @@ export default function AdminMcpServersPage() {
             <tbody>
               {servers.map((s) => {
                 const busy = actionLoading[s.id];
-                const isConnected = s.status === 'connected';
+                const isConnected = s.connection_status === 'connected';
                 return (
                   <tr key={s.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                     <td className="px-4 py-3 text-sm font-medium" style={{ color: 'var(--color-text)' }}>{s.name}</td>
@@ -201,7 +216,7 @@ export default function AdminMcpServersPage() {
                     <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {s.endpoint_url || '—'}
                     </td>
-                    <td className="px-4 py-3"><StatusPill status={s.status} /></td>
+                    <td className="px-4 py-3"><StatusPill status={s.connection_status} /></td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1 items-center">
                         {isConnected ? (
@@ -213,6 +228,12 @@ export default function AdminMcpServersPage() {
                           <Button variant="primary" onClick={() => handleConnect(s.id)} disabled={!!busy}>
                             {busy === 'connect' ? getIcon('loading', { size: 14 }) : getIcon('toggle-off', { size: 14 })}
                             {' '}Connect
+                          </Button>
+                        )}
+                        {isConnected && (
+                          <Button variant="secondary" onClick={() => handleDiscoverTools(s)} disabled={!!busy} title="Discover tools">
+                            {busy === 'tools' ? getIcon('loading', { size: 14 }) : getIcon('search', { size: 14 })}
+                            {' '}Tools
                           </Button>
                         )}
                         <Button variant="icon" onClick={() => openEdit(s)} title="Edit server">
@@ -239,6 +260,25 @@ export default function AdminMcpServersPage() {
           </table>
         )}
       </div>
+
+      {/* Tools modal */}
+      <Modal open={!!toolsModal} onClose={() => setToolsModal(null)} title={`Tools — ${toolsModal?.serverName ?? ''}`} maxWidth="max-w-lg">
+        {toolsModal?.tools?.length === 0 ? (
+          <p className="text-sm" style={{ color: 'var(--color-muted)' }}>No tools returned by this server.</p>
+        ) : (
+          <ul className="space-y-3">
+            {(toolsModal?.tools ?? []).map((t) => (
+              <li key={t.name} className="rounded-xl p-3 border" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
+                <div className="text-sm font-semibold font-mono" style={{ color: 'var(--color-text)' }}>{t.name}</div>
+                {t.description && <div className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>{t.description}</div>}
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex justify-end pt-4">
+          <Button variant="secondary" onClick={() => setToolsModal(null)}>Close</Button>
+        </div>
+      </Modal>
 
       {/* Edit modal */}
       <Modal open={!!editServer} onClose={closeEdit} title={`Edit — ${editServer?.name ?? ''}`} maxWidth="max-w-md">
