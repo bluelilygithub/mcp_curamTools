@@ -74,6 +74,18 @@ agentsRouter.use(
   })
 );
 
+// ── Ads Attribution Summary ───────────────────────────────────────────────
+const { runAdsAttributionSummary } = require('../agents/adsAttributionSummary');
+
+agentsRouter.use(
+  '/ads-attribution-summary',
+  createAgentRoute({
+    slug:               'ads-attribution-summary',
+    runFn:              runAdsAttributionSummary,
+    requiredPermission: 'ads_operator',
+  })
+);
+
 // Email report — POST /api/agents/google-ads-monitor/email
 agentsRouter.post('/google-ads-monitor/email', requireAuth, async (req, res) => {
   try {

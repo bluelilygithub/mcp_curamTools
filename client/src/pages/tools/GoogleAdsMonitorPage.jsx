@@ -488,6 +488,13 @@ export default function GoogleAdsMonitorPage() {
               startDate={startDate}
               endDate={endDate}
             />
+            <AgentDashboardCard
+              slug="ads-attribution-summary"
+              title="Attribution Summary"
+              description="Connects ad spend, GA4 traffic, and WordPress enquiries — shows which campaigns are generating actual leads."
+              startDate={startDate}
+              endDate={endDate}
+            />
           </div>
         </div>
       )}

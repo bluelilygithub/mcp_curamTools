@@ -5,6 +5,162 @@ and ToolsForge itself. Intended as a checklist and decision record for future wo
 
 ---
 
+## MCP (Model Context Protocol) — stdio Transport
+
+### What MCP Is
+
+MCP is a protocol for connecting AI agents to external tools and data sources over a standardised JSON-RPC interface. The stdio transport variant spawns a child process, communicates over stdin/stdout (one JSON-RPC message per line), and is ideal for local tools that don't need a network server.
+
+Flow:
+```
+Platform (MCPRegistry) → spawn child process → stdin/stdout JSON-RPC
+  initialize →
+  ← { protocolVersion, capabilities, serverInfo }
+  tools/list →
+  ← { tools: [...] }
+  tools/call { name, arguments } →
+  ← { content: [{ type: 'text', text: '...' }] }
+```
+
+### Building a stdio MCP Server
+
+A minimal stdio MCP server needs:
+1. Read from `process.stdin` line-by-line (readline interface)
+2. Write JSON-RPC responses to `process.stdout`
+3. Handle at minimum: `initialize`, `tools/list`, `tools/call`
+4. `notifications/initialized` is a one-way notification — no response needed, don't reply to it
+
+```js
+const rl = readline.createInterface({ input: process.stdin, terminal: false });
+rl.on('line', async (line) => {
+  const { id, method, params = {} } = JSON.parse(line);
+  // handle method, send: process.stdout.write(JSON.stringify(response) + '\n')
+});
+rl.on('close', () => process.exit(0));
+```
+
+### MCPRegistry — Promise Lifecycle Gotcha
+
+The `_connectStdio` promise must settle on process exit, not just on first stdout message. If the child process crashes before writing anything, the promise hangs forever.
+
+**Fix:** Add an `exit` handler that rejects if the promise hasn't settled yet:
+```js
+let settled = false;
+child.on('exit', (code) => {
+  if (!settled) {
+    settled = true;
+    reject(new Error(`Process exited (code ${code}) before responding`));
+  }
+  this._connections.delete(server.id);
+});
+```
+
+### Stdio Server Path on Railway
+
+The CWD of the Node server on Railway is `/app/server`. So the path in the MCP server config must be relative to that:
+
+- Correct: `args: ["mcp-servers/wordpress.js"]`
+- Wrong: `args: ["server/mcp-servers/wordpress.js"]` — doubles the `server/` prefix
+
+### WordPress REST API via MCP
+
+**Authentication:** WordPress application passwords with Basic Auth.
+```js
+const AUTH = Buffer.from(`${WP_USER}:${WP_PASS}`).toString('base64');
+headers: { Authorization: `Basic ${AUTH}` }
+```
+
+**Always set a User-Agent.** Shared hosting (e.g. SiteGround) bot protection intercepts
+server-to-server requests with no User-Agent and returns HTTP 202 with HTML (not JSON).
+```js
+'User-Agent': 'MCP-curamTools/1.0 (WordPress REST API client)'
+```
+
+**Error handling:** Check for `statusCode !== 200`, not just `>= 400`. Bot-protection
+responses like 202 pass a `>= 400` check but contain HTML, not JSON. Include the response
+body snippet in the error message for faster diagnosis.
+
+### ACF (Advanced Custom Fields) REST API Exposure
+
+ACF fields only appear in the REST API response when "Show in REST API" is enabled on the
+field group in ACF UI (Field Groups → Edit → Settings → Show in REST API: Yes).
+
+When not enabled: `item.acf` is an empty array `[]`, not an object.
+When enabled: `item.acf` is an object with field keys as properties.
+
+**Guard against the array case:**
+```js
+const acf = Array.isArray(item.acf) ? {} : (item.acf || {});
+```
+
+**Safe string extraction from ACF values:**
+```js
+const str = (v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
+```
+Do NOT use `v || null` — ACF can return `true` (boolean) for misconfigured fields and
+`true || null` evaluates to `true`, not null.
+
+**Wrong filter that causes fields to return `true`:**
+```php
+// DO NOT USE — returns the literal boolean true as each field's value
+add_filter('acf/rest/format_value_for_rest', '__return_true');
+```
+The correct fix is purely in the ACF UI setting. No PHP filter is needed.
+
+**Diagnostic approach:** Build a `*_field_check` tool that returns `acf_type`, `acf_keys`,
+and a `acf_sample` (non-empty values only) so you can inspect the live REST response
+shape before building the real mapping.
+
+### MCP as the Integration Layer for Agents
+
+The point of MCP is that external integrations live in one place — the MCP server — and agents consume them through the registry. Don't bypass MCP by calling the same API directly in an agent tool; that duplicates the integration and defeats the purpose.
+
+**Wrong pattern** — agent tool calls the WordPress REST API directly:
+```js
+// Duplicates auth, URL construction, and field mapping from wordpress.js
+const items = await wpRequest(`/clientenquiry?${params}`);
+```
+
+**Right pattern** — agent tool routes through MCPRegistry:
+```js
+const wp = await getWordpressServer(context.orgId);  // find by config args
+await MCPRegistry.connect(orgId, wp.id);             // auto-connect if needed
+const result = await MCPRegistry.send(orgId, wp.id, 'tools/call', {
+  name: 'wp_get_enquiries',
+  arguments: { per_page: 100, start_date, end_date },
+});
+const data = JSON.parse(result.content[0].text);
+```
+
+**Why it matters:**
+- The WordPress integration is defined once in `mcp-servers/wordpress.js`.
+- Adding a new tool (e.g. `wp_get_orders`) to that server makes it available to every agent automatically — no service code to update.
+- Swapping the WordPress server for a different one (staging vs production, different site) requires only an Admin config change, not a code change.
+- The MCP server is the integration contract. Agents are consumers of that contract.
+
+**Finding the right server:** Match by config args rather than by name, since names are user-editable:
+```js
+const wp = servers.find((s) =>
+  (s.config?.args ?? []).some((a) => String(a).includes('wordpress'))
+);
+```
+
+**Auto-connect pattern:** Always check `connection_status` before sending. The connection
+may have been dropped since the last Admin page visit:
+```js
+if (wp.connection_status !== 'connected') {
+  await MCPRegistry.connect(orgId, wp.id);
+}
+```
+
+**MCP response envelope:** Tool call responses come wrapped — always unwrap before returning:
+```js
+// MCPRegistry.send returns: { content: [{ type: 'text', text: '...' }] }
+const data = JSON.parse(result?.content?.[0]?.text);
+```
+
+---
+
 ## AgentOrchestrator — Implementation Notes
 
 Low-level decisions made while building the platform's core ReAct loop engine — the execution primitive every future agent module runs through.
