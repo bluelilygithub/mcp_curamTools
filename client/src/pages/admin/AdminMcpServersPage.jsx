@@ -10,6 +10,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import { useIcon } from '../../providers/IconProvider';
 
 function ToolRunner({ tool, serverId }) {
+  const [open, setOpen] = useState(false);
   const [argsJson, setArgsJson] = useState(() => {
     const props = tool.inputSchema?.properties ?? {};
     const required = tool.inputSchema?.required ?? [];
@@ -44,31 +45,42 @@ function ToolRunner({ tool, serverId }) {
 
   return (
     <li className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-      <div className="px-4 py-3" style={{ background: 'var(--color-surface)' }}>
-        <div className="text-sm font-semibold font-mono" style={{ color: 'var(--color-text)' }}>{tool.name}</div>
-        {tool.description && <div className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>{tool.description}</div>}
-      </div>
-      <div className="px-4 py-3 space-y-2" style={{ background: 'var(--color-bg)' }}>
-        <textarea
-          rows={3}
-          value={argsJson}
-          onChange={(e) => setArgsJson(e.target.value)}
-          className="w-full px-3 py-2 rounded-xl border text-xs outline-none"
-          style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace', resize: 'vertical' }}
-          placeholder="{}"
-        />
-        <div className="flex items-center gap-2">
-          <Button variant="primary" onClick={run} disabled={running}>
-            {running ? 'Running…' : 'Call tool'}
-          </Button>
-          {callError && <span className="text-xs text-red-500">{callError}</span>}
+      {/* Header row — click to expand */}
+      <button
+        className="w-full px-4 py-3 flex items-center justify-between text-left"
+        style={{ background: 'var(--color-surface)' }}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div>
+          <div className="text-sm font-semibold font-mono" style={{ color: 'var(--color-text)' }}>{tool.name}</div>
+          {tool.description && <div className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>{tool.description}</div>}
         </div>
-        {result && (
-          <pre className="text-xs rounded-xl p-3 overflow-auto" style={{ background: 'var(--color-surface)', color: 'var(--color-text)', maxHeight: 200, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            {result}
-          </pre>
-        )}
-      </div>
+        <span className="text-xs ml-4 shrink-0" style={{ color: 'var(--color-muted)' }}>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div className="px-4 py-3 space-y-2" style={{ background: 'var(--color-bg)' }}>
+          <textarea
+            rows={3}
+            value={argsJson}
+            onChange={(e) => setArgsJson(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border text-xs outline-none"
+            style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace', resize: 'vertical' }}
+            placeholder="{}"
+          />
+          <div className="flex items-center gap-2">
+            <Button variant="primary" onClick={run} disabled={running}>
+              {running ? 'Running…' : 'Call tool'}
+            </Button>
+            {callError && <span className="text-xs text-red-500">{callError}</span>}
+          </div>
+          {result && (
+            <pre className="text-xs rounded-xl p-3 overflow-auto" style={{ background: 'var(--color-surface)', color: 'var(--color-text)', maxHeight: 200, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {result}
+            </pre>
+          )}
+        </div>
+      )}
     </li>
   );
 }

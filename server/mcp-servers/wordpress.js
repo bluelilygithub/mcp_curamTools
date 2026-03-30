@@ -178,26 +178,29 @@ async function callTool(name, args = {}) {
       if (!Array.isArray(items)) return { error: 'Unexpected response', raw: items };
 
       // Try both acf and meta key locations — which one has data depends on WP setup
+      const str = (v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
+
       return items.map((item) => {
-        const acf  = item.acf  || {};
+        const acf  = Array.isArray(item.acf) ? {} : (item.acf  || {});
         const meta = item.meta || {};
-        const fields = Object.keys(acf).length ? acf : meta;
+        // Prefer acf key if it has string values, fall back to meta
+        const f = Object.keys(acf).length ? acf : meta;
         return {
-          id:              item.id,
-          date:            item.date,
-          enquirystatus:   fields.enquirystatus  || acf.enquirystatus  || meta.enquirystatus  || null,
-          utm_source:      fields.utm_source     || null,
-          utm_medium:      fields.utm_medium     || null,
-          utm_campaign:    fields.utm_campaign   || null,
-          utm_ad_group:    fields.utm_ad_group   || null,
-          utm_term:        fields.utm_term       || null,
-          utm_content:     fields.utm_content    || null,
-          search_term:     fields.search_term    || null,
-          device_type:     fields.device_type    || null,
-          landing_page:    fields.landing_page   || null,
-          referral_page:   fields.referral_page  || null,
-          gclid:           fields.gclib          || null,
-          ga4_client_id:   fields.ga4_client_id  || null,
+          id:            item.id,
+          date:          item.date,
+          enquirystatus: str(f.enquirystatus),
+          utm_source:    str(f.utm_source),
+          utm_medium:    str(f.utm_medium),
+          utm_campaign:  str(f.utm_campaign),
+          utm_ad_group:  str(f.utm_ad_group),
+          utm_term:      str(f.utm_term),
+          utm_content:   str(f.utm_content),
+          search_term:   str(f.search_term),
+          device_type:   str(f.device_type),
+          landing_page:  str(f.landing_page),
+          referral_page: str(f.referral_page),
+          gclid:         str(f.gclib),
+          ga4_client_id: str(f.ga4_client_id),
         };
       });
     }

@@ -29,14 +29,15 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
       aria-modal="true"
     >
       <div
-        className={`relative w-full ${maxWidth} rounded-2xl border p-6 space-y-4`}
+        className={`relative w-full ${maxWidth} rounded-2xl border flex flex-col`}
         style={{
           background: 'var(--color-surface)',
           borderColor: 'var(--color-border)',
+          maxHeight: '90vh',
         }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between">
+        {/* Header — fixed, never scrolls */}
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
           <h2 className="text-base font-semibold" style={{ color: 'var(--color-text)' }}>
             {title}
           </h2>
@@ -50,7 +51,10 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
           </button>
         </div>
 
-        {children}
+        {/* Scrollable body */}
+        <div className="overflow-y-auto px-6 pb-6 space-y-4">
+          {children}
+        </div>
       </div>
     </div>
   );
