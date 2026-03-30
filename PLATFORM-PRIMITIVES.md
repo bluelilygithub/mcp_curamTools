@@ -953,7 +953,83 @@ class BudgetExceededError extends Error {
 
 **Reuse contract:** Follow existing admin page patterns — `api.get/post/delete` from `../../api/client`, `InlineBanner` for errors, `EmptyState` for empty tables, `Modal` for create forms, inline confirm for destructive actions (no `ConfirmModal` — inline Yes/No is sufficient for these operations).
 
-**Does not handle:** Editing a registered server after creation (delete and re-register). Bulk permission import. Displaying which users currently have access to a resource (PermissionService runtime check — not a UI concern).
+**Does not handle:** Bulk permission import. Displaying which users currently have access to a resource (PermissionService runtime check — not a UI concern).
+
+**Updates since initial build:**
+- Edit button added to each server row — opens pre-populated modal, calls `PUT /admin/mcp-servers/:id`
+- Discover Tools button (visible when connected) — calls `GET /admin/mcp-servers/:id/tools`, shows tool list with inline test runner (args JSON textarea + Call button + result display)
+- `POST /admin/mcp-servers/:id/call` — executes a named tool with args against a connected server; returns `content[0].text`
+
+---
+
+## MCP Servers — Building a Stdio Server
+
+**What it is:** A Node.js script that speaks the MCP protocol over stdin/stdout (newline-delimited JSON-RPC). Register it in Admin > MCP Servers as transport `stdio` with `config: { "command": "node", "args": ["path/to/server.js"] }`.
+
+**Protocol sequence:**
+1. Platform spawns the process and sends `initialize` on stdin
+2. Server responds with `{ protocolVersion, capabilities, serverInfo }` → connection resolves
+3. Platform calls `tools/list` → server returns `{ tools: [...] }`
+4. Platform calls `tools/call` with `{ name, arguments }` → server returns `{ content: [{ type: "text", text: "..." }] }`
+
+**Minimal server skeleton:**
+```js
+const readline = require('readline');
+const rl = readline.createInterface({ input: process.stdin, terminal: false });
+
+function send(obj) { process.stdout.write(JSON.stringify(obj) + '\n'); }
+function respond(id, result) { send({ jsonrpc: '2.0', id, result }); }
+
+rl.on('line', async (line) => {
+  const { id, method, params = {} } = JSON.parse(line);
+  if (method === 'initialize') {
+    respond(id, { protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'my-server', version: '1.0.0' } });
+  } else if (method === 'tools/list') {
+    respond(id, { tools: TOOLS });
+  } else if (method === 'tools/call') {
+    const result = await callTool(params.name, params.arguments || {});
+    respond(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] });
+  }
+});
+```
+
+**Key rules:**
+- Only write to stdout via `process.stdout.write` — `console.log` also writes to stdout and will corrupt the JSON-RPC stream. Use `process.stderr.write` for debug output.
+- The process must respond to `initialize` before any other call is made — the platform waits for the first stdout line to resolve the connection promise.
+- If the process exits before writing anything to stdout, the connection promise rejects immediately with "Process exited before responding".
+- All env vars from the platform process are inherited by the child process via `{ ...process.env }` in the spawn call.
+
+**Path resolution:** The `args` path is relative to the process CWD. On Railway, the server starts from `/app/server`, so a file at `server/mcp-servers/wordpress.js` in the repo is referenced as `mcp-servers/wordpress.js` in the config (not `server/mcp-servers/wordpress.js`).
+
+---
+
+## WordPress MCP Server
+
+**Location:** `server/mcp-servers/wordpress.js`
+**Transport:** stdio
+**Admin config:** `{ "command": "node", "args": ["mcp-servers/wordpress.js"] }`
+
+**Required env vars:**
+- `WP_URL` — WordPress site base URL (e.g. `https://diamondplate.com.au`)
+- `WP_USER` — WordPress username for Basic Auth
+- `WP_APP_VAR` — WordPress application password
+
+**What it demonstrates:** A stdio MCP server wrapping an external REST API. The platform spawns it as a child process; any agent in the platform can call its tools without containing any WordPress-specific code.
+
+**Tools exposed:**
+
+| Tool | Input | Returns |
+|---|---|---|
+| `wp_get_user` | `{ user_id: number }` | `{ id, name, slug, email, roles, registered }` |
+| `wp_list_users` | `{ per_page?: number }` | Array of `{ id, name, slug, roles }` |
+| `wp_list_posts` | `{ per_page?: number, status?: string }` | Array of `{ id, title, status, date, link }` |
+| `wp_get_post` | `{ post_id: number }` | `{ id, title, content (stripped, first 500 chars), status, date, link }` |
+
+**Authentication:** HTTP Basic Auth — `Authorization: Basic base64(WP_USER:WP_APP_VAR)`. WordPress application passwords are generated in WP Admin > Users > Profile > Application Passwords.
+
+**Bot protection note:** If the WordPress host uses SiteGround (or similar) bot protection, server-to-server API calls may be intercepted with an HTTP 202 captcha redirect. Fix: whitelist the `/wp-json/` path or the Railway outbound IP in the host's security settings. A `User-Agent: MCP-curamTools/1.0` header is sent on all requests to aid whitelisting.
+
+**Diagnostics:** The WordPress API is checked on every diagnostics run (`POST /admin/diagnostics`). It fetches user ID 1 and returns the display name. A failed check indicates missing env vars or bot protection blocking the request.
 
 ---
 
@@ -1176,6 +1252,43 @@ onPartial: (t) => setQuestion((q) => {
 ```
 
 **Browser support:** Chrome, Edge, Safari. Firefox requires `media.webspeech.recognition.enable` flag. Both components return `null` when unsupported — safe to add unconditionally.
+
+---
+
+## Admin — Logs
+
+**Type:** Admin page + route handlers
+**Location:** `client/src/pages/admin/AdminLogsPage.jsx`
+**Route:** `/admin/logs`
+
+Two tabs:
+
+### Usage Logs tab
+- Calls existing `GET /api/admin/logs?limit=100`
+- Shows: Time, User, Tool, Model, In tokens, Out tokens, Cost
+- Summary cards: total tokens, estimated cost (USD)
+
+### Server Logs tab
+- Calls `GET /api/admin/server-logs` with level filter, search, pagination
+- Shows: Time, Level pill (error/warn/info), Message, expandable meta JSON
+- Controls: level filter tabs (all/error/warn/info), search, auto-refresh (15s), manual refresh
+- Pagination: 50 per page
+
+**Backend:** `GET /api/admin/server-logs` in `server/routes/admin.js`
+- Params: `level`, `search`, `limit` (max 500), `offset`
+- Returns: `{ logs: [...], total, limit, offset }`
+- Queries `app_logs` table
+
+**Logger:** `server/utils/logger.js` — Winston logger with DB transport
+- Writes `info`/`warn`/`error` entries to `app_logs` table via `DBTransport`
+- Console transport always active; DB transport level: `info`
+- Dev: coloured human-readable; production: JSON (Railway-friendly)
+- Usage: `const logger = require('../utils/logger'); logger.info('msg', { meta })`
+
+**DB table:** `app_logs (id, level, message, meta JSONB, created_at)`
+- Indexed on `level` and `created_at DESC`
+
+**Reuse contract:** All server-side logging goes through `logger` from `utils/logger.js`. Never use `console.log` for application events — those won't appear in the admin log viewer.
 
 ---
 

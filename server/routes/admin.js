@@ -648,6 +648,46 @@ router.get('/logs', async (req, res) => {
   }
 });
 
+// ── Server logs ───────────────────────────────────────────────────────────
+
+router.get('/server-logs', async (req, res) => {
+  const level  = req.query.level  || null;
+  const search = req.query.search || null;
+  const limit  = Math.min(parseInt(req.query.limit  || '100', 10), 500);
+  const offset = parseInt(req.query.offset || '0', 10);
+
+  try {
+    const conditions = [];
+    const params = [];
+
+    if (level && level !== 'all') {
+      params.push(level);
+      conditions.push(`level = $${params.length}`);
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`message ILIKE $${params.length}`);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const [rows, count] = await Promise.all([
+      pool.query(
+        `SELECT id, level, message, meta, created_at
+           FROM app_logs ${where}
+           ORDER BY created_at DESC
+           LIMIT ${limit} OFFSET ${offset}`,
+        params
+      ),
+      pool.query(`SELECT COUNT(*) FROM app_logs ${where}`, params),
+    ]);
+
+    res.json({ logs: rows.rows, total: parseInt(count.rows[0].count, 10), limit, offset });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load server logs.' });
+  }
+});
+
 // ── SQL Console ───────────────────────────────────────────────────────────
 
 const { logUsage } = require('../services/UsageLogger');

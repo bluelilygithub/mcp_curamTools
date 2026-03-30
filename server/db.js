@@ -322,6 +322,21 @@ async function initSchema() {
       )
     `);
 
+    // ── Application logs ──────────────────────────────────────────────────────
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS app_logs (
+        id         SERIAL PRIMARY KEY,
+        level      TEXT NOT NULL,
+        message    TEXT NOT NULL,
+        meta       JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_app_logs_level      ON app_logs(level)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_app_logs_created_at ON app_logs(created_at DESC)`);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS campaign_agent_assignments (
         id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),

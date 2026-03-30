@@ -604,6 +604,26 @@ All inline styles include `fontFamily: 'inherit'` to respect the user's platform
 
 ---
 
+### WordPress as a Stdio MCP Server
+**Date:** 2026-03-30
+**Status:** Settled
+**Context:** WordPress data (posts, users) needs to be accessible to platform agents without coupling agent code to the WordPress REST API. The platform already has MCPRegistry and stdio transport support.
+**Decision:** WordPress is implemented as a standalone Node.js stdio MCP server at `server/mcp-servers/wordpress.js`. It exposes 4 tools (`wp_get_user`, `wp_list_users`, `wp_list_posts`, `wp_get_post`). Registered in Admin > MCP Servers as transport `stdio` with `config: { "command": "node", "args": ["mcp-servers/wordpress.js"] }`. Credentials are env vars (`WP_URL`, `WP_USER`, `WP_APP_VAR`). A WordPress API check was added to the diagnostics suite.
+**Rationale:** Demonstrates the core MCP principle — tools live outside the model and outside agent code. Any future agent can call WordPress tools via `MCPRegistry.send()` without knowing the REST API. The stdio transport runs the server as an isolated child process.
+**Constraints it must not violate:** The `args` path is relative to the server CWD (`/app/server` on Railway) — use `mcp-servers/wordpress.js`, not `server/mcp-servers/wordpress.js`. The server must only write JSON-RPC to stdout — `console.log` corrupts the stream. If the process exits before writing to stdout, the connection promise now rejects immediately (fixed in `mcpRegistry.js`) rather than hanging.
+
+---
+
+### Admin Logs Page: Two-Tab Layout (Usage + Server)
+**Date:** 2026-03-30
+**Status:** Settled
+**Context:** `AdminLogsPage` only showed AI usage logs. Server-side events (errors, warnings, connection failures) were invisible in the UI. ToolsForge had a server log viewer backed by `app_logs` + Winston.
+**Decision:** `AdminLogsPage` now has two tabs. "Usage Logs" retains the existing token/cost table. "Server Logs" is a new tab querying `app_logs` via `GET /admin/server-logs`, with level filter, search, auto-refresh (15s), pagination, and expandable meta JSON. The `app_logs` table and `server/utils/logger.js` (Winston + DBTransport) were ported from ToolsForge.
+**Rationale:** Server logs are essential for diagnosing MCP connection failures and agent errors without accessing Railway's raw log stream.
+**Constraints it must not violate:** All application logging uses `logger` from `utils/logger.js` — never `console.log` for events that should appear in the viewer. `DBTransport` uses `setImmediate` and silently catches errors so a DB failure never blocks the logging pipeline.
+
+---
+
 ## Open Questions
 
 _(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_

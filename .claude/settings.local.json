@@ -18,7 +18,8 @@
       "Bash(ls:*)",
       "Bash(find '/c/Users/micha/Local Sites/toolsforge/client/src' -type f -name *.js)",
       "Bash(find '/c/Users/micha/Local Sites/toolsforge/client/src' -type d -name hooks -o -type f -name *useAuth* -o -type f -name *useTool*)",
-      "Bash(grep -r remove-markdown /c/Users/micha/Local Sites/mcp_curamTools/client --include=*.js --include=*.jsx --include=*.json)"
+      "Bash(grep -r remove-markdown /c/Users/micha/Local Sites/mcp_curamTools/client --include=*.js --include=*.jsx --include=*.json)",
+      "Bash(find /c/Users/micha/Local Sites -maxdepth 2 -name package.json -not -path */node_modules/*)"
     ]
   }
 }
