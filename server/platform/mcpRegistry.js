@@ -394,6 +394,7 @@ class MCPRegistryClass extends EventEmitter {
       });
 
       child.on('exit', (code) => {
+        if (!settled) { settled = true; reject(new Error(`Process exited (code ${code}) before responding — check command/args in config`)); }
         this._connections.delete(server.id);
         this.emit('disconnected', { serverId: server.id, reason: `exit code ${code}` });
       });
