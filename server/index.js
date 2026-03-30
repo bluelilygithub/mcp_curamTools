@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const path = require('path');
 const { initSchema } = require('./db');
+const logger = require('./utils/logger');
 
 const app = express();
 
@@ -66,7 +67,7 @@ app.get('*', (req, res) => {
 
 // ── Global error handler ───────────────────────────────────────────────────
 app.use((err, req, res, _next) => {
-  console.error('[error]', err.message);
+  logger.error(err.message, { path: req.path, method: req.method });
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
 
@@ -78,7 +79,7 @@ const MCPRegistry = require('./platform/mcpRegistry');
 initSchema()
   .then(() => {
     const server = app.listen(PORT, () => {
-      console.log(`[server] MCP_curamTools running on port ${PORT}`);
+      logger.info(`MCP_curamTools running on port ${PORT}`);
     });
 
     // Graceful shutdown — disconnect all MCP server connections cleanly
@@ -90,7 +91,7 @@ initSchema()
     process.once('SIGINT', shutdown);
   })
   .catch((err) => {
-    console.error('[server] Failed to initialise schema — exiting', err.message);
+    logger.error('Failed to initialise schema — exiting', { error: err.message });
     process.exit(1);
   });
 

@@ -33,13 +33,16 @@ const fmtDate = (s) => {
 
 function isoDate(d) { return d.toISOString().slice(0, 10); }
 function daysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return isoDate(d); }
+function startOfMonth() { const d = new Date(); return isoDate(new Date(d.getFullYear(), d.getMonth(), 1)); }
 
 const PRESETS = [
-  { label: '7d',  days: 7 },
-  { label: '14d', days: 14 },
-  { label: '30d', days: 30 },
-  { label: '60d', days: 60 },
-  { label: '90d', days: 90 },
+  { label: 'Today', key: 'today', getRange: () => ({ start: isoDate(new Date()), end: isoDate(new Date()) }) },
+  { label: 'Month', key: 'month', getRange: () => ({ start: startOfMonth(),      end: isoDate(new Date()) }) },
+  { label: '7d',    key: '7d',    getRange: () => ({ start: daysAgo(7),          end: isoDate(new Date()) }) },
+  { label: '14d',   key: '14d',   getRange: () => ({ start: daysAgo(14),         end: isoDate(new Date()) }) },
+  { label: '30d',   key: '30d',   getRange: () => ({ start: daysAgo(30),         end: isoDate(new Date()) }) },
+  { label: '60d',   key: '60d',   getRange: () => ({ start: daysAgo(60),         end: isoDate(new Date()) }) },
+  { label: '90d',   key: '90d',   getRange: () => ({ start: daysAgo(90),         end: isoDate(new Date()) }) },
 ];
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -178,12 +181,13 @@ export default function GoogleAdsMonitorPage() {
 
   // ── Preset quick-select ───────────────────────────────────────────────────
 
-  const [activePreset, setActivePreset] = useState(30);
+  const [activePreset, setActivePreset] = useState('30d');
 
-  function applyPreset(days) {
-    setActivePreset(days);
-    setEndDate(isoDate(new Date()));
-    setStartDate(daysAgo(days));
+  function applyPreset(preset) {
+    setActivePreset(preset.key);
+    const { start, end } = preset.getRange();
+    setStartDate(start);
+    setEndDate(end);
   }
 
   function onDateChange(field, value) {
@@ -353,12 +357,12 @@ export default function GoogleAdsMonitorPage() {
           {/* Quick presets */}
           <div className="flex gap-1 rounded-lg p-1" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
             {PRESETS.map((p) => (
-              <button key={p.days} onClick={() => applyPreset(p.days)} style={{
+              <button key={p.key} onClick={() => applyPreset(p)} style={{
                 padding: '3px 10px', fontSize: 12, borderRadius: 6, border: 'none', cursor: 'pointer',
                 fontFamily: 'inherit',
-                background: activePreset === p.days ? 'var(--color-primary)' : 'transparent',
-                color: activePreset === p.days ? '#fff' : 'var(--color-muted)',
-                fontWeight: activePreset === p.days ? 600 : 400,
+                background: activePreset === p.key ? 'var(--color-primary)' : 'transparent',
+                color: activePreset === p.key ? '#fff' : 'var(--color-muted)',
+                fontWeight: activePreset === p.key ? 600 : 400,
               }}>{p.label}</button>
             ))}
           </div>

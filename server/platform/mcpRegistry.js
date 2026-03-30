@@ -19,6 +19,7 @@ const https = require('https');
 const http = require('http');
 const { spawn } = require('child_process');
 const { EventEmitter } = require('events');
+const logger = require('../utils/logger');
 
 class MCPRegistryClass extends EventEmitter {
   constructor() {
@@ -141,11 +142,11 @@ class MCPRegistryClass extends EventEmitter {
 
       this._connections.set(serverId, conn);
       this.emit('connected', { serverId, name: server.name });
-      console.log(`[mcpRegistry] Connected: ${server.name} (${server.transport_type})`);
+      logger.info(`MCP connected: ${server.name}`, { transport: server.transport_type, serverId });
       return conn;
     } catch (err) {
       this._connections.delete(serverId);
-      console.error(`[mcpRegistry] Connection failed: ${server.name} —`, err.message);
+      logger.error(`MCP connection failed: ${server.name}`, { error: err.message, serverId });
       throw err;
     }
   }
@@ -165,7 +166,7 @@ class MCPRegistryClass extends EventEmitter {
 
     this._connections.delete(serverId);
     this.emit('disconnected', { serverId });
-    console.log(`[mcpRegistry] Disconnected: ${serverId}`);
+    logger.info(`MCP disconnected: ${serverId}`);
   }
 
   /**
@@ -318,7 +319,7 @@ class MCPRegistryClass extends EventEmitter {
         ...extraHeaders,
       },
     });
-    req.on('error', (err) => console.error('[mcpRegistry] SSE post error:', err.message));
+    req.on('error', (err) => logger.error('MCP SSE post error', { error: err.message }));
     req.write(body);
     req.end();
   }
@@ -382,7 +383,7 @@ class MCPRegistryClass extends EventEmitter {
       });
 
       child.stderr.on('data', (data) => {
-        console.error(`[mcpRegistry] stdio stderr (${server.name}):`, data.toString().trim());
+        logger.warn(`MCP stdio stderr: ${server.name}`, { output: data.toString().trim() });
       });
 
       child.on('error', (err) => {

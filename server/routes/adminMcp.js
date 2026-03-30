@@ -25,6 +25,7 @@ const { pool } = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
 const { requireRole } = require('../middleware/requireRole');
 const MCPRegistry = require('../platform/mcpRegistry');
+const logger = require('../utils/logger');
 const {
   grantResourcePermission,
   revokeResourcePermission,
@@ -41,7 +42,7 @@ router.get('/mcp-servers', async (req, res) => {
     const servers = await MCPRegistry.list(req.user.orgId);
     res.json(servers);
   } catch (err) {
-    console.error('[admin/mcp-servers GET]', err.message);
+    logger.error('admin/mcp-servers GET', { error: err.message });
     res.status(500).json({ error: 'Failed to list MCP servers.' });
   }
 });
@@ -60,7 +61,7 @@ router.post('/mcp-servers', async (req, res) => {
     });
     res.status(201).json(server);
   } catch (err) {
-    console.error('[admin/mcp-servers POST]', err.message);
+    logger.error('admin/mcp-servers POST', { error: err.message });
     res.status(400).json({ error: err.message });
   }
 });
@@ -86,7 +87,7 @@ router.put('/mcp-servers/:id', async (req, res) => {
     }
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[admin/mcp-servers PUT]', err.message);
+    logger.error('admin/mcp-servers PUT', { error: err.message });
     res.status(400).json({ error: err.message });
   }
 });
@@ -96,7 +97,7 @@ router.delete('/mcp-servers/:id', async (req, res) => {
     await MCPRegistry.deregister(req.user.orgId, req.params.id);
     res.json({ ok: true });
   } catch (err) {
-    console.error('[admin/mcp-servers DELETE]', err.message);
+    logger.error('admin/mcp-servers DELETE', { error: err.message });
     res.status(404).json({ error: err.message });
   }
 });
@@ -111,7 +112,7 @@ router.get('/mcp-servers/:id/tools', async (req, res) => {
     const result = await MCPRegistry.send(req.user.orgId, req.params.id, 'tools/list');
     res.json(result.tools || []);
   } catch (err) {
-    console.error('[admin/mcp-servers/tools]', err.message);
+    logger.error('admin/mcp-servers/tools', { error: err.message });
     res.status(400).json({ error: err.message });
   }
 });
@@ -130,7 +131,7 @@ router.post('/mcp-servers/:id/call', async (req, res) => {
     });
     res.json(result);
   } catch (err) {
-    console.error('[admin/mcp-servers/call]', err.message);
+    logger.error('admin/mcp-servers/call', { error: err.message });
     res.status(400).json({ error: err.message });
   }
 });
@@ -140,7 +141,7 @@ router.post('/mcp-servers/:id/connect', async (req, res) => {
     await MCPRegistry.connect(req.user.orgId, req.params.id);
     res.json({ ok: true, status: 'connected' });
   } catch (err) {
-    console.error('[admin/mcp-servers/connect]', err.message);
+    logger.error('admin/mcp-servers/connect', { error: err.message });
     res.status(400).json({ error: err.message });
   }
 });
@@ -150,7 +151,7 @@ router.post('/mcp-servers/:id/disconnect', async (req, res) => {
     await MCPRegistry.disconnect(req.user.orgId, req.params.id);
     res.json({ ok: true, status: 'disconnected' });
   } catch (err) {
-    console.error('[admin/mcp-servers/disconnect]', err.message);
+    logger.error('admin/mcp-servers/disconnect', { error: err.message });
     res.status(400).json({ error: err.message });
   }
 });
@@ -174,7 +175,7 @@ router.get('/mcp-resources', async (req, res) => {
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
-    console.error('[admin/mcp-resources GET]', err.message);
+    logger.error('admin/mcp-resources GET', { error: err.message });
     res.status(500).json({ error: 'Failed to list MCP resources.' });
   }
 });
@@ -200,7 +201,7 @@ router.post('/mcp-resources', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('[admin/mcp-resources POST]', err.message);
+    logger.error('admin/mcp-resources POST', { error: err.message });
     res.status(400).json({ error: err.message });
   }
 });
@@ -216,7 +217,7 @@ router.delete('/mcp-resources/:id', async (req, res) => {
     }
     res.json({ ok: true });
   } catch (err) {
-    console.error('[admin/mcp-resources DELETE]', err.message);
+    logger.error('admin/mcp-resources DELETE', { error: err.message });
     res.status(500).json({ error: 'Failed to delete resource.' });
   }
 });
@@ -231,7 +232,7 @@ router.get('/mcp-resources/permissions', async (req, res) => {
     );
     res.json(permissions);
   } catch (err) {
-    console.error('[admin/mcp-resources/permissions GET]', err.message);
+    logger.error('admin/mcp-resources/permissions GET', { error: err.message });
     res.status(500).json({ error: 'Failed to list permissions.' });
   }
 });
@@ -254,7 +255,7 @@ router.post('/mcp-resources/permissions', async (req, res) => {
     );
     res.status(201).json({ ok: true });
   } catch (err) {
-    console.error('[admin/mcp-resources/permissions POST]', err.message);
+    logger.error('admin/mcp-resources/permissions POST', { error: err.message });
     res.status(400).json({ error: err.message });
   }
 });
@@ -264,7 +265,7 @@ router.delete('/mcp-resources/permissions/:id', async (req, res) => {
     await revokeResourcePermission(req.user.orgId, req.params.id);
     res.json({ ok: true });
   } catch (err) {
-    console.error('[admin/mcp-resources/permissions DELETE]', err.message);
+    logger.error('admin/mcp-resources/permissions DELETE', { error: err.message });
     res.status(404).json({ error: err.message });
   }
 });
