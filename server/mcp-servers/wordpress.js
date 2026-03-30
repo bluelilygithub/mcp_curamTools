@@ -83,6 +83,7 @@ function wpRequest(path) {
         headers: {
           Authorization: `Basic ${AUTH}`,
           Accept:        'application/json',
+          'User-Agent':  'MCP-curamTools/1.0 (WordPress REST API client)',
         },
       },
       (res) => {

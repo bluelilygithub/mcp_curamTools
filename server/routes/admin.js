@@ -936,7 +936,7 @@ router.post('/diagnostics', async (req, res) => {
           port: 443,
           path: url.pathname,
           method: 'GET',
-          headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' },
+          headers: { Authorization: `Basic ${auth}`, Accept: 'application/json', 'User-Agent': 'MCP-curamTools/1.0 (WordPress REST API client)' },
         },
         (r) => {
           let data = '';
