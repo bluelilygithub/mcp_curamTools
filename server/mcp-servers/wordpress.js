@@ -162,11 +162,23 @@ async function callTool(name, args = {}) {
     }
 
     case 'wp_enquiry_field_check': {
-      // Fetch 1 enquiry — raw response so we can see exactly what keys the REST API returns
-      const items = await wpRequest('/clientenquiry?per_page=1&orderby=date&order=desc');
+      // Fetch several recent enquiries and return their raw acf + meta so we can
+      // see exactly which keys hold the data and what the values look like.
+      const items = await wpRequest('/clientenquiry?per_page=10&orderby=date&order=desc');
       if (!Array.isArray(items) || items.length === 0) return { error: 'No clientenquiry posts found — post type may not be REST-enabled' };
-      // Return the raw item so all keys are visible
-      return items[0];
+      return items.map((item) => ({
+        id:       item.id,
+        date:     item.date,
+        acf_type: Array.isArray(item.acf) ? 'array (empty — REST not enabled for this group)' : typeof item.acf,
+        acf_keys: item.acf && !Array.isArray(item.acf) ? Object.keys(item.acf) : [],
+        acf_sample: item.acf && !Array.isArray(item.acf)
+          ? Object.fromEntries(Object.entries(item.acf).filter(([, v]) => v !== '' && v !== null && v !== false).slice(0, 10))
+          : null,
+        meta_keys: item.meta ? Object.keys(item.meta) : [],
+        meta_sample: item.meta
+          ? Object.fromEntries(Object.entries(item.meta).filter(([, v]) => v !== '' && v !== null).slice(0, 10))
+          : null,
+      }));
     }
 
     case 'wp_get_enquiries': {
@@ -188,7 +200,7 @@ async function callTool(name, args = {}) {
         return {
           id:            item.id,
           date:          item.date,
-          enquirystatus: str(f.enquirystatus),
+          enquiry_status: str(f.enquiry_status),
           utm_source:    str(f.utm_source),
           utm_medium:    str(f.utm_medium),
           utm_campaign:  str(f.utm_campaign),
