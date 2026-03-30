@@ -65,6 +65,32 @@ router.post('/mcp-servers', async (req, res) => {
   }
 });
 
+router.put('/mcp-servers/:id', async (req, res) => {
+  const { name, transportType, endpointUrl, config } = req.body;
+  if (!name || !transportType) {
+    return res.status(400).json({ error: 'name and transportType are required.' });
+  }
+  try {
+    const result = await pool.query(
+      `UPDATE mcp_servers
+          SET name           = $1,
+              transport_type = $2,
+              endpoint_url   = $3,
+              config         = $4
+        WHERE id = $5 AND org_id = $6
+        RETURNING *`,
+      [name, transportType, endpointUrl || null, JSON.stringify(config || {}), req.params.id, req.user.orgId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'MCP server not found for this organisation.' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('[admin/mcp-servers PUT]', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.delete('/mcp-servers/:id', async (req, res) => {
   try {
     await MCPRegistry.deregister(req.user.orgId, req.params.id);

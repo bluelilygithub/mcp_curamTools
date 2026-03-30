@@ -39,6 +39,7 @@ export default function AdminMcpServersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [editServer, setEditServer] = useState(null); // server being edited
   const [form, setForm] = useState(EMPTY_FORM);
   const [formLoading, setFormLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState({});
@@ -59,6 +60,21 @@ export default function AdminMcpServersPage() {
     setActionLoading((prev) => ({ ...prev, [id]: val }));
   }
 
+  function openEdit(s) {
+    setEditServer(s);
+    setForm({
+      name: s.name,
+      transportType: s.transport_type,
+      endpointUrl: s.endpoint_url || '',
+      configJson: s.config && Object.keys(s.config).length ? JSON.stringify(s.config, null, 2) : '',
+    });
+  }
+
+  function closeEdit() {
+    setEditServer(null);
+    setForm(EMPTY_FORM);
+  }
+
   async function handleRegister(e) {
     e.preventDefault();
     setFormLoading(true);
@@ -76,6 +92,30 @@ export default function AdminMcpServersPage() {
       });
       setRegisterOpen(false);
       setForm(EMPTY_FORM);
+      load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setFormLoading(false);
+    }
+  }
+
+  async function handleEdit(e) {
+    e.preventDefault();
+    setFormLoading(true);
+    setError('');
+    try {
+      let config = {};
+      if (form.configJson.trim()) {
+        config = JSON.parse(form.configJson);
+      }
+      await api.put(`/admin/mcp-servers/${editServer.id}`, {
+        name: form.name,
+        transportType: form.transportType,
+        endpointUrl: form.endpointUrl || null,
+        config,
+      });
+      closeEdit();
       load();
     } catch (e) {
       setError(e.message);
@@ -175,6 +215,9 @@ export default function AdminMcpServersPage() {
                             {' '}Connect
                           </Button>
                         )}
+                        <Button variant="icon" onClick={() => openEdit(s)} title="Edit server">
+                          {getIcon('edit', { size: 14 })}
+                        </Button>
                         {deleteConfirm === s.id ? (
                           <span className="flex items-center gap-1 text-xs ml-1" style={{ color: 'var(--color-text)' }}>
                             Delete?{' '}
@@ -196,6 +239,60 @@ export default function AdminMcpServersPage() {
           </table>
         )}
       </div>
+
+      {/* Edit modal */}
+      <Modal open={!!editServer} onClose={closeEdit} title={`Edit — ${editServer?.name ?? ''}`} maxWidth="max-w-md">
+        <form onSubmit={handleEdit} className="space-y-4">
+          <div>
+            <label className={LABEL} style={LABEL_STYLE}>Name</label>
+            <input
+              type="text" required value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              className={FIELD} style={FIELD_STYLE}
+            />
+          </div>
+          <div>
+            <label className={LABEL} style={LABEL_STYLE}>Transport type</label>
+            <select
+              value={form.transportType}
+              onChange={(e) => setForm((f) => ({ ...f, transportType: e.target.value }))}
+              className={FIELD} style={FIELD_STYLE}
+            >
+              <option value="sse">SSE (HTTP)</option>
+              <option value="stdio">Stdio (subprocess)</option>
+            </select>
+          </div>
+          {form.transportType === 'sse' && (
+            <div>
+              <label className={LABEL} style={LABEL_STYLE}>Endpoint URL</label>
+              <input
+                type="url" value={form.endpointUrl}
+                onChange={(e) => setForm((f) => ({ ...f, endpointUrl: e.target.value }))}
+                placeholder="https://…/sse"
+                className={FIELD} style={FIELD_STYLE}
+              />
+            </div>
+          )}
+          {form.transportType === 'stdio' && (
+            <div>
+              <label className={LABEL} style={LABEL_STYLE}>Config JSON</label>
+              <textarea
+                rows={4} value={form.configJson}
+                onChange={(e) => setForm((f) => ({ ...f, configJson: e.target.value }))}
+                placeholder={'{"command": "node", "args": ["server/mcp-servers/wordpress.js"]}'}
+                className={FIELD} style={{ ...FIELD_STYLE, resize: 'vertical', fontFamily: 'monospace', fontSize: 12 }}
+              />
+              <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>Valid JSON. Use "command" and "args" keys.</p>
+            </div>
+          )}
+          <div className="flex gap-2 justify-end pt-2">
+            <Button variant="secondary" type="button" onClick={closeEdit}>Cancel</Button>
+            <Button variant="primary" type="submit" disabled={formLoading}>
+              {formLoading ? 'Saving…' : 'Save changes'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Register modal */}
       <Modal open={registerOpen} onClose={() => { setRegisterOpen(false); setForm(EMPTY_FORM); }} title="Register MCP server" maxWidth="max-w-md">
