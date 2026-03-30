@@ -943,8 +943,8 @@ router.post('/diagnostics', async (req, res) => {
           r.setEncoding('utf8');
           r.on('data', (c) => { data += c; });
           r.on('end', () => {
-            if (r.statusCode >= 400) return reject(new Error(`HTTP ${r.statusCode}`));
-            try { resolve(JSON.parse(data).name); } catch { reject(new Error('Invalid JSON response')); }
+            if (r.statusCode !== 200) return reject(new Error(`HTTP ${r.statusCode} — ${data.slice(0, 120)}`));
+            try { resolve(JSON.parse(data).name); } catch { reject(new Error(`Invalid JSON (HTTP 200) — ${data.slice(0, 120)}`)); }
           });
         }
       );
