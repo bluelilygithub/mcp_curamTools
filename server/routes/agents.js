@@ -86,6 +86,18 @@ agentsRouter.use(
   })
 );
 
+// ── Competitor Keyword Intel ──────────────────────────────────────────────
+const { runCompetitorKeywordIntel } = require('../agents/competitorKeywordIntel');
+
+agentsRouter.use(
+  '/competitor-keyword-intel',
+  createAgentRoute({
+    slug:               'competitor-keyword-intel',
+    runFn:              runCompetitorKeywordIntel,
+    requiredPermission: 'ads_operator',
+  })
+);
+
 // ── Ads Attribution Summary ───────────────────────────────────────────────
 const { runAdsAttributionSummary } = require('../agents/adsAttributionSummary');
 

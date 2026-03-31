@@ -218,6 +218,93 @@ class GoogleAdsService {
     }));
   }
   /**
+   * Generate keyword ideas from a competitor URL or seed keywords.
+   * Uses the Google Ads Keyword Plan Idea Service — free, no extra quota.
+   *
+   * @param {object} options
+   * @param {string}   [options.url]       — competitor or seed URL
+   * @param {string[]} [options.keywords]  — seed keyword list (used if no url)
+   * @param {string|null} [customerId]
+   * @returns keyword ideas with avg monthly searches, competition, and CPC range (AUD)
+   */
+  async generateKeywordIdeas({ url = null, keywords = [] } = {}, customerId = null) {
+    const accessToken = await this._getAccessToken();
+    const cid = customerId ? customerId.replace(/-/g, '') : this._customerId;
+
+    const seed = url
+      ? { urlSeed: { url } }
+      : { keywordSeed: { keywords } };
+
+    const body = {
+      pageSize: 100,
+      language:          'languageConstants/1000',       // English
+      geoTargetConstants: ['geoTargetConstants/2036'],   // Australia
+      keywordPlanNetwork: 'GOOGLE_SEARCH',
+      ...seed,
+    };
+
+    const response = await fetch(
+      `${ADS_BASE}/customers/${cid}:generateKeywordIdeas`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization':     `Bearer ${accessToken}`,
+          'developer-token':   this._devToken,
+          'login-customer-id': this._managerId,
+          'Content-Type':      'application/json',
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Google Ads generateKeywordIdeas ${response.status}: ${text}`);
+    }
+
+    const data = await response.json();
+    return (data.results ?? []).map((r) => ({
+      keyword:          r.text ?? '',
+      avgMonthlySearches: parseInt(r.keywordIdeaMetrics?.avgMonthlySearches ?? '0'),
+      competition:      r.keywordIdeaMetrics?.competition ?? 'UNSPECIFIED',
+      competitionIndex: parseInt(r.keywordIdeaMetrics?.competitionIndex ?? '0'),
+      lowCpc:           parseInt(r.keywordIdeaMetrics?.lowTopOfPageBidMicros  ?? '0') / 1_000_000,
+      highCpc:          parseInt(r.keywordIdeaMetrics?.highTopOfPageBidMicros ?? '0') / 1_000_000,
+    })).sort((a, b) => b.avgMonthlySearches - a.avgMonthlySearches);
+  }
+
+  /**
+   * Returns all active keywords currently in Diamond Plate's Google Ads account.
+   * @param {string|null} [customerId]
+   */
+  async getActiveKeywords(customerId = null) {
+    const results = await this._search(`
+      SELECT
+        ad_group_criterion.keyword.text,
+        ad_group_criterion.keyword.match_type,
+        ad_group_criterion.status,
+        ad_group_criterion.cpc_bid_micros,
+        campaign.name,
+        ad_group.name
+      FROM ad_group_criterion
+      WHERE ad_group_criterion.type = 'KEYWORD'
+        AND ad_group_criterion.status = 'ENABLED'
+        AND campaign.status = 'ENABLED'
+        AND ad_group.status = 'ENABLED'
+      ORDER BY ad_group_criterion.cpc_bid_micros DESC
+      LIMIT 200
+    `, customerId);
+
+    return results.map((r) => ({
+      keyword:   r.adGroupCriterion?.keyword?.text      ?? '',
+      matchType: r.adGroupCriterion?.keyword?.matchType ?? '',
+      bid:       parseInt(r.adGroupCriterion?.cpcBidMicros ?? '0') / 1_000_000,
+      campaign:  r.campaign?.name                       ?? '',
+      adGroup:   r.adGroup?.name                        ?? '',
+    }));
+  }
+
+  /**
    * Returns recent change history events (bid/budget/status changes, ad edits).
    * @param {number|{startDate,endDate}} [options=7]
    * @param {string|null} [customerId]

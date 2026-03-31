@@ -152,6 +152,7 @@ export default function GoogleAdsMonitorPage() {
   const [savingCfg,  setSavingCfg]  = useState(false);
   const [cfgSuccess, setCfgSuccess] = useState('');
   const [activeTab,  setActiveTab]  = useState('dashboard');
+  const [openCard,   setOpenCard]   = useState(null);
   const [emailModal, setEmailModal] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
   const [monitorCopied, setMonitorCopied] = useState(false);
@@ -228,7 +229,7 @@ export default function GoogleAdsMonitorPage() {
           try {
             const msg = JSON.parse(raw);
             if (msg.type === 'progress') setProgress((p) => [...p, msg.text]);
-            else if (msg.type === 'result') { setResult(msg.data); setActiveTab('results'); }
+            else if (msg.type === 'result') { setResult(msg.data); setActiveTab('dashboard'); setOpenCard('monitor'); }
             else if (msg.type === 'error')  setError(msg.error);
           } catch { /* ignore malformed */ }
         }
@@ -324,6 +325,10 @@ export default function GoogleAdsMonitorPage() {
     color: 'var(--color-muted)', cursor: 'pointer',
   };
 
+  function toggleCard(slug) {
+    setOpenCard((current) => current === slug ? null : slug);
+  }
+
   function handleMonitorCopy() {
     navigator.clipboard.writeText(summary).then(() => {
       setMonitorCopied(true);
@@ -394,110 +399,133 @@ export default function GoogleAdsMonitorPage() {
 
       {/* ── Dashboard ──────────────────────────────────────────────────── */}
       {activeTab === 'dashboard' && (
-        <div>
-          {/* Google Ads Monitor — main analysis */}
-          <Section title="Google Ads Monitor">
-            {!hasResult && !running && (
-              <p className="text-sm text-center py-4" style={{ color: 'var(--color-muted)', fontFamily: 'inherit' }}>
-                No results yet. Select a date range and click "Run now" to analyse your account.
-              </p>
-            )}
-            {hasResult && (
-              <>
-                {/* Action buttons */}
-                <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-                  <button onClick={handleMonitorCopy} style={actionBtnStyle}>
-                    {monitorCopied ? 'Copied!' : 'Copy'}
-                  </button>
-                  <button onClick={exportCSV} style={actionBtnStyle}>Export CSV</button>
-                  <button onClick={() => window.print()} style={actionBtnStyle}>Print / PDF</button>
-                  <button onClick={() => setEmailModal(true)} style={actionBtnStyle}>Email</button>
-                </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-                {summary && <MarkdownRenderer text={summary} />}
-
-                {campaigns.length > 0 && (
-                  <div className="mt-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>Campaign Performance</p>
-                    <CampaignPerformanceTable campaigns={campaigns} />
-                  </div>
-                )}
-
-                {dailyData.length > 1 && (
-                  <div className="mt-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>Spend & Conversions Trend</p>
-                    <LineChart
-                      data={dailyData}
-                      xKey="date"
-                      leftKey="cost"
-                      rightKey="conversions"
-                      leftLabel="Spend (AUD)"
-                      rightLabel="Conversions"
-                      leftFormat={(v) => `$${Math.round(v).toLocaleString('en-AU')}`}
-                      rightFormat={(v) => Number(v).toFixed(1)}
-                      leftColor="var(--color-primary)"
-                      rightColor="#10b981"
-                    />
-                  </div>
-                )}
-
-                {searchTerms.length > 0 && (
-                  <div className="mt-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>Search Terms</p>
-                    <SearchTermsTable terms={searchTerms} />
-                  </div>
-                )}
-
-                {suggestions.length > 0 && (
-                  <div className="mt-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>Recommendations ({suggestions.length})</p>
-                    <AISuggestionsPanel suggestions={suggestions} />
-                  </div>
-                )}
-
-                {result.costAud != null && (
-                  <p className="text-xs text-right mt-3" style={{ color: 'var(--color-muted)', fontFamily: 'inherit' }}>
-                    Run cost: A${Number(result.costAud).toFixed(4)}
-                    {result.tokensUsed?.input != null && (
-                      <span> · {fmtNum((result.tokensUsed.input ?? 0) + (result.tokensUsed.output ?? 0))} tokens</span>
+          {/* ── Google Ads Monitor — main analysis card ─────────────────── */}
+          <div style={{
+            borderRadius: 16, border: '1px solid var(--color-border)',
+            background: 'var(--color-surface)', overflow: 'hidden', fontFamily: 'inherit',
+          }}>
+            {/* Header */}
+            <div style={{ padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <button
+                  onClick={() => toggleCard('monitor')}
+                  style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                    <span style={{ fontSize: 13, color: 'var(--color-muted)', lineHeight: 1 }}>
+                      {openCard === 'monitor' ? '▼' : '▶'}
+                    </span>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', margin: 0, fontFamily: 'inherit' }}>
+                      Google Ads Monitor
+                    </p>
+                    {running && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
+                        background: '#d9770620', color: '#d97706',
+                        fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.04em',
+                      }}>running</span>
                     )}
+                    {!running && hasResult && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
+                        background: '#16a34a20', color: '#16a34a',
+                        fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.04em',
+                      }}>complete</span>
+                    )}
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--color-muted)', margin: '0 0 0 21px', fontFamily: 'inherit' }}>
+                    {openCard !== 'monitor' && summary
+                      ? <>{summary.replace(/#{1,3}\s/g, '').slice(0, 140).trim()}{summary.length > 140 ? '…' : ''}</>
+                      : 'AI-powered campaign analysis, search intent, and budget pacing.'
+                    }
+                  </p>
+                </button>
+                <Button variant="primary" onClick={handleRun} disabled={running}
+                  style={{ flexShrink: 0, fontSize: 12, padding: '5px 14px' }}>
+                  {running ? 'Running…' : 'Run now'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Expanded body */}
+            {openCard === 'monitor' && (
+              <div style={{ borderTop: '1px solid var(--color-border)', padding: '16px' }}>
+                {!hasResult && !running && (
+                  <p style={{ fontSize: 13, color: 'var(--color-muted)', textAlign: 'center', padding: '12px 0', fontFamily: 'inherit' }}>
+                    No results yet — select a date range and click "Run now".
                   </p>
                 )}
-              </>
+                {hasResult && (
+                  <>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                      <button onClick={handleMonitorCopy} style={actionBtnStyle}>{monitorCopied ? 'Copied!' : 'Copy'}</button>
+                      <button onClick={exportCSV} style={actionBtnStyle}>Export CSV</button>
+                      <button onClick={() => window.print()} style={actionBtnStyle}>Print / PDF</button>
+                      <button onClick={() => setEmailModal(true)} style={actionBtnStyle}>Email</button>
+                      {result.costAud != null && (
+                        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--color-muted)', fontFamily: 'inherit', alignSelf: 'center' }}>
+                          Run cost: A${Number(result.costAud).toFixed(4)}
+                        </span>
+                      )}
+                    </div>
+                    {summary && <MarkdownRenderer text={summary} />}
+                    {campaigns.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>Campaign Performance</p>
+                        <CampaignPerformanceTable campaigns={campaigns} />
+                      </div>
+                    )}
+                    {dailyData.length > 1 && (
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>Spend & Conversions Trend</p>
+                        <LineChart
+                          data={dailyData} xKey="date" leftKey="cost" rightKey="conversions"
+                          leftLabel="Spend (AUD)" rightLabel="Conversions"
+                          leftFormat={(v) => `$${Math.round(v).toLocaleString('en-AU')}`}
+                          rightFormat={(v) => Number(v).toFixed(1)}
+                          leftColor="var(--color-primary)" rightColor="#10b981"
+                        />
+                      </div>
+                    )}
+                    {searchTerms.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>Search Terms</p>
+                        <SearchTermsTable terms={searchTerms} />
+                      </div>
+                    )}
+                    {suggestions.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>Recommendations ({suggestions.length})</p>
+                        <AISuggestionsPanel suggestions={suggestions} />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             )}
-          </Section>
-
-          {/* Sub-agent cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16 }}>
-            <AgentDashboardCard
-              slug="google-ads-change-impact"
-              title="Change Impact"
-              description="Identifies what changed and narrates the performance effect of each change."
-              startDate={startDate}
-              endDate={endDate}
-            />
-            <AgentDashboardCard
-              slug="google-ads-change-audit"
-              title="Change Audit"
-              description="Before/after metric comparison per change. Scores each change as Positive, Neutral, or Negative."
-              startDate={startDate}
-              endDate={endDate}
-            />
-            <AgentDashboardCard
-              slug="ads-attribution-summary"
-              title="Attribution Summary"
-              description="Connects ad spend, GA4 traffic, and WordPress enquiries — shows which campaigns are generating actual leads."
-              startDate={startDate}
-              endDate={endDate}
-            />
-            <AgentDashboardCard
-              slug="ads-bounce-analysis"
-              title="Bounce Analysis"
-              description="Paid keywords that sent traffic to high-bounce landing pages, broken down by device."
-              startDate={startDate}
-              endDate={endDate}
-            />
           </div>
+
+          {/* ── Sub-agent cards ──────────────────────────────────────────── */}
+          {[
+            { slug: 'google-ads-change-impact',  title: 'Change Impact',       description: 'Identifies what changed and narrates the performance effect of each change.' },
+            { slug: 'google-ads-change-audit',   title: 'Change Audit',        description: 'Before/after metric comparison per change. Scores each change as Positive, Neutral, or Negative.' },
+            { slug: 'ads-attribution-summary',   title: 'Attribution Summary', description: 'Connects ad spend, GA4 traffic, and WordPress enquiries — shows which campaigns are generating actual leads.' },
+            { slug: 'ads-bounce-analysis',       title: 'Bounce Analysis',     description: 'Paid keywords that sent traffic to high-bounce landing pages, broken down by device.' },
+            { slug: 'competitor-keyword-intel',  title: 'Competitor Keywords', description: 'Keyword gaps for Diamond Plate Australia — what competitors are targeting that we are not.' },
+          ].map(({ slug, title, description }) => (
+            <AgentDashboardCard
+              key={slug}
+              slug={slug}
+              title={title}
+              description={description}
+              startDate={startDate}
+              endDate={endDate}
+              expanded={openCard === slug}
+              onToggle={() => toggleCard(slug)}
+            />
+          ))}
         </div>
       )}
 
