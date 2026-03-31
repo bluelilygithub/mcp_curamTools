@@ -3,12 +3,14 @@
 /**
  * Google Ads Change Impact — tool definitions.
  *
- * Includes get_change_history (not present in other agents) alongside
- * the standard performance tools for before/after comparison.
+ * All external data is fetched via registered MCP servers (Admin > MCP Servers).
+ *
+ * Required MCP servers:
+ *   - Google Ads       (args include 'google-ads.js')
+ *   - Google Analytics (args include 'google-analytics.js')
  */
 
-const { googleAdsService }       = require('../../services/GoogleAdsService');
-const { googleAnalyticsService } = require('../../services/GoogleAnalyticsService');
+const { getAdsServer, getAnalyticsServer, callMcpTool, resolveRangeArgs } = require('../../platform/mcpTools');
 
 const TOOL_SLUG = 'google-ads-change-impact';
 
@@ -24,13 +26,6 @@ const daysSchema = {
   required: [],
 };
 
-function rangeOrDays(context, input, defaultDays = 7) {
-  if (context.startDate && context.endDate) {
-    return { startDate: context.startDate, endDate: context.endDate };
-  }
-  return context.days ?? input.days ?? defaultDays;
-}
-
 const getChangeHistoryTool = {
   name: 'get_change_history',
   description:
@@ -43,7 +38,11 @@ const getChangeHistoryTool = {
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
-    return googleAdsService.getChangeHistory(rangeOrDays(context, input, 7), context.customerId ?? null);
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_change_history', {
+      ...resolveRangeArgs(context, input, 7),
+      customer_id: context.customerId ?? null,
+    });
   },
 };
 
@@ -57,7 +56,11 @@ const getCampaignPerformanceTool = {
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
-    return googleAdsService.getCampaignPerformance(rangeOrDays(context, input, 7), context.customerId ?? null);
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_campaign_performance', {
+      ...resolveRangeArgs(context, input, 7),
+      customer_id: context.customerId ?? null,
+    });
   },
 };
 
@@ -71,7 +74,11 @@ const getDailyPerformanceTool = {
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
-    return googleAdsService.getDailyPerformance(rangeOrDays(context, input, 7), context.customerId ?? null);
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_daily_performance', {
+      ...resolveRangeArgs(context, input, 7),
+      customer_id: context.customerId ?? null,
+    });
   },
 };
 
@@ -85,7 +92,8 @@ const getAnalyticsOverviewTool = {
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
-    return googleAnalyticsService.getSessionsOverview(rangeOrDays(context, input, 7));
+    const ga = await getAnalyticsServer(context.orgId);
+    return callMcpTool(context.orgId, ga, 'ga4_get_sessions_overview', resolveRangeArgs(context, input, 7));
   },
 };
 

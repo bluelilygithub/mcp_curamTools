@@ -3,19 +3,18 @@
 /**
  * Ads Attribution Summary — tool definitions.
  *
- * Pulls Google Ads campaign totals, GA4 session overview, and WordPress
- * client enquiries into one context so the agent can write a brief
- * cross-channel attribution summary.
+ * All external data is fetched via registered MCP servers (Admin > MCP Servers).
+ * Google Ads, Google Analytics, and WordPress each have their own registered
+ * MCP server — configured once in Admin > MCP Servers, consumed here.
  *
- * WordPress data is fetched via the registered MCP server for the org
- * (the server whose config command includes "wordpress.js"). This keeps
- * the WordPress integration in one place — configured once in Admin > MCP
- * Servers, used by any agent that needs it.
+ * Required MCP servers:
+ *   - Google Ads       (args include 'google-ads.js')
+ *   - Google Analytics (args include 'google-analytics.js')
+ *   - WordPress        (args include 'wordpress.js')
  */
 
-const { googleAdsService }       = require('../../services/GoogleAdsService');
-const { googleAnalyticsService } = require('../../services/GoogleAnalyticsService');
-const MCPRegistry                = require('../../platform/mcpRegistry');
+const { getAdsServer, getAnalyticsServer, callMcpTool, resolveRangeArgs } = require('../../platform/mcpTools');
+const MCPRegistry = require('../../platform/mcpRegistry');
 
 const TOOL_SLUG = 'ads-attribution-summary';
 
@@ -27,16 +26,9 @@ const daysSchema = {
   required: [],
 };
 
-function rangeOrDays(context, input) {
-  if (context.startDate && context.endDate) {
-    return { startDate: context.startDate, endDate: context.endDate };
-  }
-  return context.days ?? input.days ?? 30;
-}
-
 /**
  * Find and auto-connect the WordPress MCP server for this org.
- * Matches by looking for a server whose config args include "wordpress.js".
+ * Matches by looking for a server whose config args include 'wordpress'.
  */
 async function getWordpressServer(orgId) {
   const servers = await MCPRegistry.list(orgId);
@@ -45,8 +37,6 @@ async function getWordpressServer(orgId) {
     return args.some((a) => String(a).includes('wordpress'));
   });
   if (!wp) throw new Error('No WordPress MCP server registered for this organisation. Add one in Admin > MCP Servers.');
-
-  // Auto-connect if not already connected
   if (wp.connection_status !== 'connected') {
     await MCPRegistry.connect(orgId, wp.id);
   }
@@ -64,7 +54,11 @@ const getCampaignPerformanceTool = {
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
-    return googleAdsService.getCampaignPerformance(rangeOrDays(context, input), context.customerId ?? null);
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_campaign_performance', {
+      ...resolveRangeArgs(context, input),
+      customer_id: context.customerId ?? null,
+    });
   },
 };
 
@@ -79,7 +73,8 @@ const getAnalyticsOverviewTool = {
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
-    return googleAnalyticsService.getSessionsOverview(rangeOrDays(context, input));
+    const ga = await getAnalyticsServer(context.orgId);
+    return callMcpTool(context.orgId, ga, 'ga4_get_sessions_overview', resolveRangeArgs(context, input));
   },
 };
 
@@ -92,19 +87,12 @@ const getWpEnquiriesTool = {
     'Returns each enquiry with its status, UTM source/medium/campaign, and device type. ' +
     'Use this to count leads generated, understand their sales status, and attribute them ' +
     'to ad campaigns via utm_campaign and utm_source.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      days: { type: 'integer', description: 'Number of days to look back. Defaults to 30.', default: 30 },
-    },
-    required: [],
-  },
+  input_schema: daysSchema,
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
     const wp = await getWordpressServer(context.orgId);
 
-    // Determine date range
     let startDate = context.startDate ?? null;
     let endDate   = context.endDate   ?? null;
     if (!startDate || !endDate) {
@@ -121,7 +109,6 @@ const getWpEnquiriesTool = {
       arguments: { per_page: 100, start_date: startDate, end_date: endDate },
     });
 
-    // MCP returns { content: [{ type: 'text', text: '...' }] }
     const raw = result?.content?.[0]?.text;
     if (!raw) throw new Error('Empty response from WordPress MCP server');
     return JSON.parse(raw);

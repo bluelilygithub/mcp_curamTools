@@ -3,13 +3,14 @@
 /**
  * Competitor Keyword Intel — tool definitions.
  *
- * Uses the Google Ads Keyword Plan Idea Service (free, part of existing API
- * access) to pull keyword data from competitor URLs and seed terms relevant
- * to Diamond Plate Australia — graphene ceramic coating for cars.
+ * All external data is fetched via the registered Google Ads MCP server.
+ *
+ * Required MCP servers:
+ *   - Google Ads (args include 'google-ads.js')
  */
 
-const { googleAdsService }   = require('../../services/GoogleAdsService');
-const AgentConfigService     = require('../../platform/AgentConfigService');
+const { getAdsServer, callMcpTool } = require('../../platform/mcpTools');
+const AgentConfigService            = require('../../platform/AgentConfigService');
 
 const TOOL_SLUG = 'competitor-keyword-intel';
 
@@ -24,7 +25,6 @@ const DEFAULT_COMPETITORS = [
   { name: 'Xpel Australia',         url: 'https://xpel.com.au' },
 ];
 
-/** Load competitor list from monitor config, falling back to defaults. */
 async function loadCompetitors(orgId) {
   try {
     const monitorConfig = await AgentConfigService.getAgentConfig(orgId, 'google-ads-monitor');
@@ -43,7 +43,6 @@ async function loadCompetitors(orgId) {
   }
 }
 
-/** Load min search volume from monitor config. */
 async function loadMinVolume(orgId) {
   try {
     const monitorConfig = await AgentConfigService.getAgentConfig(orgId, 'google-ads-monitor');
@@ -68,7 +67,18 @@ const SEED_KEYWORDS = [
   'best ceramic coating australia',
 ];
 
-// ── Tool: keyword ideas from a competitor URL ─────────────────────────────────
+// ── Tools ─────────────────────────────────────────────────────────────────────
+
+const getCompetitorListTool = {
+  name: 'get_competitor_list',
+  description: 'Returns the list of competitor URLs configured for analysis. Call this first to know which competitors to pass to get_competitor_keywords.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+  requiredPermissions: [],
+  toolSlug: TOOL_SLUG,
+  async execute(_input, context) {
+    return loadCompetitors(context.orgId);
+  },
+};
 
 const getCompetitorKeywordsTool = {
   name: 'get_competitor_keywords',
@@ -91,28 +101,15 @@ const getCompetitorKeywordsTool = {
   toolSlug: TOOL_SLUG,
   async execute(input, context) {
     const minVolume = await loadMinVolume(context.orgId);
-    const ideas = await googleAdsService.generateKeywordIdeas(
-      { url: input.competitor_url },
-      context.customerId ?? null
-    );
+    const ads       = await getAdsServer(context.orgId);
+    const ideas     = await callMcpTool(context.orgId, ads, 'ads_generate_keyword_ideas', {
+      url:         input.competitor_url,
+      customer_id: context.customerId ?? null,
+    });
     const filtered = ideas.filter((k) => k.avgMonthlySearches >= minVolume);
     return { url: input.competitor_url, minVolumeApplied: minVolume, keywords: filtered };
   },
 };
-
-const getCompetitorListTool = {
-  name: 'get_competitor_list',
-  description: 'Returns the list of competitor URLs configured for analysis. Call this first to know which competitors to pass to get_competitor_keywords.',
-  input_schema: { type: 'object', properties: {}, required: [] },
-  requiredPermissions: [],
-  toolSlug: TOOL_SLUG,
-  async execute(_input, context) {
-    const competitors = await loadCompetitors(context.orgId);
-    return competitors;
-  },
-};
-
-// ── Tool: keyword ideas from seed terms ──────────────────────────────────────
 
 const getSeedKeywordsTool = {
   name: 'get_seed_keywords',
@@ -120,25 +117,20 @@ const getSeedKeywordsTool = {
     'Expand keyword ideas from Diamond Plate\'s core seed terms using the Google Ads Keyword Planner. ' +
     'Returns related keywords with Australian monthly search volume, competition level, and CPC range. ' +
     'Use this to find keyword gaps — terms with search volume that competitors target but Diamond Plate does not.',
-  input_schema: {
-    type:       'object',
-    properties: {},
-    required:   [],
-  },
+  input_schema: { type: 'object', properties: {}, required: [] },
   requiredPermissions: [],
   toolSlug: TOOL_SLUG,
   async execute(_input, context) {
     const minVolume = await loadMinVolume(context.orgId);
-    const ideas = await googleAdsService.generateKeywordIdeas(
-      { keywords: SEED_KEYWORDS },
-      context.customerId ?? null
-    );
+    const ads       = await getAdsServer(context.orgId);
+    const ideas     = await callMcpTool(context.orgId, ads, 'ads_generate_keyword_ideas', {
+      keywords:    SEED_KEYWORDS,
+      customer_id: context.customerId ?? null,
+    });
     const filtered = ideas.filter((k) => k.avgMonthlySearches >= minVolume);
     return { seedKeywords: SEED_KEYWORDS, minVolumeApplied: minVolume, keywords: filtered };
   },
 };
-
-// ── Tool: Diamond Plate's own active keywords ─────────────────────────────────
 
 const getOwnKeywordsTool = {
   name: 'get_own_keywords',
@@ -146,15 +138,14 @@ const getOwnKeywordsTool = {
     'Retrieve the keywords Diamond Plate Australia is currently bidding on in Google Ads. ' +
     'Returns keyword text, match type, status, and bid. ' +
     'Use this to identify gaps — keywords competitors rank for that Diamond Plate is not bidding on.',
-  input_schema: {
-    type:       'object',
-    properties: {},
-    required:   [],
-  },
+  input_schema: { type: 'object', properties: {}, required: [] },
   requiredPermissions: [],
   toolSlug: TOOL_SLUG,
   async execute(_input, context) {
-    return googleAdsService.getActiveKeywords(context.customerId ?? null);
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_active_keywords', {
+      customer_id: context.customerId ?? null,
+    });
   },
 };
 

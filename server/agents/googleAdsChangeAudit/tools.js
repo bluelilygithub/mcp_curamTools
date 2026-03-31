@@ -3,14 +3,16 @@
 /**
  * Google Ads Change Audit — tool definitions.
  *
- * Key difference from other agents: tools expose start_date/end_date in
- * their input schema so the agent can request specific before/after windows
- * for each change rather than just "last N days". This is what enables
- * quantitative before/after metric comparison per change event.
+ * All external data is fetched via registered MCP servers (Admin > MCP Servers).
+ * Tools expose start_date/end_date in their input schema so the agent can request
+ * precise before/after windows per change event.
+ *
+ * Required MCP servers:
+ *   - Google Ads       (args include 'google-ads.js')
+ *   - Google Analytics (args include 'google-analytics.js')
  */
 
-const { googleAdsService }       = require('../../services/GoogleAdsService');
-const { googleAnalyticsService } = require('../../services/GoogleAnalyticsService');
+const { getAdsServer, getAnalyticsServer, callMcpTool } = require('../../platform/mcpTools');
 
 const TOOL_SLUG = 'google-ads-change-audit';
 
@@ -35,20 +37,17 @@ const dateRangeSchema = {
 };
 
 /**
- * Resolve date range:
- *   1. Explicit start_date + end_date from tool input (for targeted before/after windows)
- *   2. Context dates (set by index.js from req.body)
- *   3. days parameter
- *   4. Default 30 days
+ * Change Audit tools can use explicit start_date/end_date from tool input (for
+ * targeted before/after windows), context dates, or days — in that priority order.
  */
-function resolveInput(context, input) {
+function resolveAuditArgs(context, input) {
   if (input.start_date && input.end_date) {
-    return { startDate: input.start_date, endDate: input.end_date };
+    return { start_date: input.start_date, end_date: input.end_date };
   }
   if (context.startDate && context.endDate) {
-    return { startDate: context.startDate, endDate: context.endDate };
+    return { start_date: context.startDate, end_date: context.endDate };
   }
-  return input.days ?? 30;
+  return { days: input.days ?? 30 };
 }
 
 const getChangeHistoryTool = {
@@ -63,7 +62,11 @@ const getChangeHistoryTool = {
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
-    return googleAdsService.getChangeHistory(resolveInput(context, input), context.customerId ?? null);
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_change_history', {
+      ...resolveAuditArgs(context, input),
+      customer_id: context.customerId ?? null,
+    });
   },
 };
 
@@ -79,7 +82,11 @@ const getCampaignPerformanceTool = {
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
-    return googleAdsService.getCampaignPerformance(resolveInput(context, input), context.customerId ?? null);
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_campaign_performance', {
+      ...resolveAuditArgs(context, input),
+      customer_id: context.customerId ?? null,
+    });
   },
 };
 
@@ -93,7 +100,11 @@ const getDailyPerformanceTool = {
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
-    return googleAdsService.getDailyPerformance(resolveInput(context, input), context.customerId ?? null);
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_daily_performance', {
+      ...resolveAuditArgs(context, input),
+      customer_id: context.customerId ?? null,
+    });
   },
 };
 
@@ -107,7 +118,8 @@ const getAnalyticsOverviewTool = {
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
-    return googleAnalyticsService.getSessionsOverview(resolveInput(context, input));
+    const ga = await getAnalyticsServer(context.orgId);
+    return callMcpTool(context.orgId, ga, 'ga4_get_sessions_overview', resolveAuditArgs(context, input));
   },
 };
 

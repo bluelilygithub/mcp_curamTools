@@ -3,12 +3,14 @@
 /**
  * Ads Bounce Analysis — tool definitions.
  *
- * Identifies paid keywords that led to bounced sessions, which landing
- * pages they hit, and what device the visitor was using.
+ * All external data is fetched via registered MCP servers (Admin > MCP Servers).
+ *
+ * Required MCP servers:
+ *   - Google Ads       (args include 'google-ads.js')
+ *   - Google Analytics (args include 'google-analytics.js')
  */
 
-const { googleAdsService }       = require('../../services/GoogleAdsService');
-const { googleAnalyticsService } = require('../../services/GoogleAnalyticsService');
+const { getAdsServer, getAnalyticsServer, callMcpTool, resolveRangeArgs } = require('../../platform/mcpTools');
 
 const TOOL_SLUG = 'ads-bounce-analysis';
 
@@ -20,15 +22,6 @@ const daysSchema = {
   required: [],
 };
 
-function rangeOrDays(context, input) {
-  if (context.startDate && context.endDate) {
-    return { startDate: context.startDate, endDate: context.endDate };
-  }
-  return context.days ?? input.days ?? 30;
-}
-
-// ── Tool: paid search terms ───────────────────────────────────────────────────
-
 const getSearchTermsTool = {
   name: 'get_search_terms',
   description:
@@ -39,11 +32,13 @@ const getSearchTermsTool = {
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
-    return googleAdsService.getSearchTerms(rangeOrDays(context, input), context.customerId ?? null);
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_search_terms', {
+      ...resolveRangeArgs(context, input),
+      customer_id: context.customerId ?? null,
+    });
   },
 };
-
-// ── Tool: paid bounced sessions by landing page + device ──────────────────────
 
 const getPaidBouncedSessionsTool = {
   name: 'get_paid_bounced_sessions',
@@ -56,7 +51,8 @@ const getPaidBouncedSessionsTool = {
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
-    return googleAnalyticsService.getPaidBouncedSessions(rangeOrDays(context, input));
+    const ga = await getAnalyticsServer(context.orgId);
+    return callMcpTool(context.orgId, ga, 'ga4_get_paid_bounced_sessions', resolveRangeArgs(context, input));
   },
 };
 

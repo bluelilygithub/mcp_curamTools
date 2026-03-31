@@ -3,12 +3,13 @@
 /**
  * Auction Insights — tool definitions.
  *
- * Uses the Google Ads Auction Insights report, which works with Explorer/Test
- * developer token access. Shows which competitor domains are appearing in the
- * same auctions as Diamond Plate, with impression share and outranking data.
+ * All external data is fetched via the registered Google Ads MCP server.
+ *
+ * Required MCP servers:
+ *   - Google Ads (args include 'google-ads.js')
  */
 
-const { googleAdsService } = require('../../services/GoogleAdsService');
+const { getAdsServer, callMcpTool, resolveRangeArgs } = require('../../platform/mcpTools');
 
 const TOOL_SLUG = 'auction-insights';
 
@@ -19,15 +20,6 @@ const daysSchema = {
   },
   required: [],
 };
-
-function rangeOrDays(context, input) {
-  if (context.startDate && context.endDate) {
-    return { startDate: context.startDate, endDate: context.endDate };
-  }
-  return context.days ?? input.days ?? 30;
-}
-
-// ── Tool: auction insights by competitor domain ───────────────────────────────
 
 const getAuctionInsightsTool = {
   name: 'get_auction_insights',
@@ -41,13 +33,15 @@ const getAuctionInsightsTool = {
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
-    return googleAdsService.getAuctionInsights(rangeOrDays(context, input), context.customerId ?? null);
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_auction_insights', {
+      ...resolveRangeArgs(context, input),
+      customer_id: context.customerId ?? null,
+    });
   },
 };
 
-// ── Tool: own campaign performance for context ────────────────────────────────
-
-const getCampaignPerformanceTool = {
+const getOwnImpressionShareTool = {
   name: 'get_own_impression_share',
   description:
     'Returns Diamond Plate\'s own impression share, lost impression share (budget vs rank), ' +
@@ -58,13 +52,17 @@ const getCampaignPerformanceTool = {
   requiredPermissions: [],
   toolSlug:            TOOL_SLUG,
   async execute(input, context) {
-    return googleAdsService.getImpressionShareByCampaign(rangeOrDays(context, input), context.customerId ?? null);
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_impression_share_by_campaign', {
+      ...resolveRangeArgs(context, input),
+      customer_id: context.customerId ?? null,
+    });
   },
 };
 
 const auctionInsightsTools = [
   getAuctionInsightsTool,
-  getCampaignPerformanceTool,
+  getOwnImpressionShareTool,
 ];
 
 module.exports = { auctionInsightsTools, TOOL_SLUG };
