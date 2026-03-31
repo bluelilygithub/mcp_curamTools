@@ -149,6 +149,43 @@ class GoogleAnalyticsService {
     }));
   }
 
+  /**
+   * Paid sessions that bounced, grouped by landing page and device category.
+   * Filtered to cpc medium (Google Ads traffic only).
+   */
+  async getPaidBouncedSessions(options = 30) {
+    const { startDate, endDate } = resolveRange(options);
+
+    const data = await this._runReport({
+      dateRanges: [{ startDate, endDate }],
+      dimensions: [
+        { name: 'landingPage' },
+        { name: 'deviceCategory' },
+      ],
+      metrics: [
+        { name: 'sessions' },
+        { name: 'bounceRate' },
+        { name: 'averageSessionDuration' },
+      ],
+      dimensionFilter: {
+        filter: {
+          fieldName: 'sessionMedium',
+          stringFilter: { matchType: 'EXACT', value: 'cpc', caseSensitive: false },
+        },
+      },
+      orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+      limit: 50,
+    });
+
+    return this._parseRows(data).map((r) => ({
+      landingPage:        r.landingPage                       ?? '',
+      device:             r.deviceCategory                    ?? '',
+      sessions:           parseInt(r.sessions                 ?? '0'),
+      bounceRate:         parseFloat(r.bounceRate             ?? '0'),
+      avgSessionDuration: parseFloat(r.averageSessionDuration ?? '0'),
+    }));
+  }
+
   async getConversionEvents(options = 30) {
     const { startDate, endDate } = resolveRange(options);
 

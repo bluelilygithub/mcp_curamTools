@@ -495,6 +495,13 @@ export default function GoogleAdsMonitorPage() {
               startDate={startDate}
               endDate={endDate}
             />
+            <AgentDashboardCard
+              slug="ads-bounce-analysis"
+              title="Bounce Analysis"
+              description="Paid keywords that sent traffic to high-bounce landing pages, broken down by device."
+              startDate={startDate}
+              endDate={endDate}
+            />
           </div>
         </div>
       )}

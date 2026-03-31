@@ -74,6 +74,18 @@ agentsRouter.use(
   })
 );
 
+// ── Ads Bounce Analysis ───────────────────────────────────────────────────
+const { runAdsBounceAnalysis } = require('../agents/adsBounceAnalysis');
+
+agentsRouter.use(
+  '/ads-bounce-analysis',
+  createAgentRoute({
+    slug:               'ads-bounce-analysis',
+    runFn:              runAdsBounceAnalysis,
+    requiredPermission: 'ads_operator',
+  })
+);
+
 // ── Ads Attribution Summary ───────────────────────────────────────────────
 const { runAdsAttributionSummary } = require('../agents/adsAttributionSummary');
 
