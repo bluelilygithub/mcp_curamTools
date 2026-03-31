@@ -1242,3 +1242,130 @@ The `auction_insight` GAQL resource uses **different metric names** from the cam
 The domain field is `auction_insight.domain` (dot notation) — not `auction_insight_domain` (snake case). Parsed in response as `r.auctionInsight?.domain`.
 
 `metrics.search_top_impression_percentage` and `metrics.search_absolute_top_impression_percentage` are **not valid** on the `campaign` resource in v23. `getImpressionShareByCampaign` uses only `search_impression_share`, `search_rank_lost_impression_share`, and `search_budget_lost_impression_share`.
+
+---
+
+### Persistent Multi-Turn Conversation Pattern
+
+The conversation feature is a **separate route** (`routes/conversation.js`) — not a `createAgentRoute` agent. It reads and writes `agent_conversations`, never `agent_runs`.
+
+**DB table:**
+```sql
+CREATE TABLE IF NOT EXISTS agent_conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  slug TEXT NOT NULL DEFAULT 'google-ads-conversation',
+  title TEXT,
+  messages JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+)
+```
+`messages` stores **text-only** `{ role, content }` exchanges. Tool calls within each turn are ephemeral — they run during the ReAct loop but are not stored. This keeps storage simple and avoids replaying complex tool interaction chains across turns.
+
+**AgentOrchestrator multi-turn support:** `agentOrchestrator.run()` accepts an optional `conversationHistory` param (default `[]`). When provided, history is prepended to `messages[]` before each API call:
+```js
+const messages = conversationHistory.length > 0
+  ? [...conversationHistory, { role: 'user', content: userMessage }]
+  : [{ role: 'user', content: userMessage }];
+```
+All existing single-shot agents pass no `conversationHistory` and are completely unaffected.
+
+**Per-turn flow:**
+1. Load stored messages from `agent_conversations` for the org
+2. Pass as `conversationHistory` to `agentOrchestrator.run()`
+3. Run full ReAct loop (Claude can re-call any tool as needed)
+4. Append `{ role: 'user' }` + `{ role: 'assistant' }` to stored messages
+5. Auto-title from first user message if title is still default `'New conversation'`
+6. Emit SSE `result` event with `{ message, title, costAud, tokensUsed }`
+
+**Auto-titling:** When the stored title is `'New conversation'` or null, the server slices the first 60 chars of the user message and saves it as the title. The SSE result event includes `title` so the client sidebar updates immediately without a reload.
+
+**Why conversation route vs createAgentRoute:** `createAgentRoute` writes to `agent_runs` and returns a single structured `result` payload. Conversations need a different persistence model (appending to a messages array) and a different response shape (text message, not structured report). They share `AgentOrchestrator` and the same SSE pattern, but the storage and route logic are custom.
+
+---
+
+### Date Range Persistence in resultPayload
+
+`server/platform/createAgentRoute.js` now injects `startDate` and `endDate` from `req.body` into every persisted `resultPayload`:
+```js
+resultPayload = {
+  ...agentResult,
+  startDate: req.body.startDate ?? null,
+  endDate:   req.body.endDate   ?? null,
+};
+```
+This means every `agent_runs` row records the date range used when the agent ran. History loads can read `result.startDate` / `result.endDate` and display them without having to infer from `run_at`.
+
+**Display pattern (DD/MM/YYYY):**
+```js
+const fmtDay = (s) => { const [y, m, d] = s.split('-'); return `${d}/${m}/${y}`; };
+// Used in collapsed footer and expanded action bar:
+result?.startDate && result?.endDate
+  ? <>{fmtDay(result.startDate)} – {fmtDay(result.endDate)}</>
+  : <>Run {fmtDate(lastRun.run_at)}</>
+```
+
+---
+
+### Controlled Date Input key Fix
+
+When preset buttons (e.g. "Last 30 days") update `startDate`/`endDate` state in React, `<input type="date">` can display a stale value in some browsers even when the `value` prop changes. The fix: add a `key` prop derived from the value so React remounts the input when the date changes:
+```jsx
+<input type="date" key={`start-${startDate}`} value={startDate} onChange={...} />
+<input type="date" key={`end-${endDate}`}   value={endDate}   onChange={...} />
+```
+This forces a fresh DOM element on every preset selection, bypassing browser display caching entirely.
+
+---
+
+### Strategic Review Agent Pattern
+
+`google-ads-strategic-review` is a card-style agent where the user enters free-form strategic observations. The agent validates each observation against live data and returns a structured verdict.
+
+**Card design:** The textarea is always visible in the card header (not gated behind expand). "Run now" is disabled until observations are entered. The card expands when results arrive.
+
+**Prompt output format per observation:**
+- **Verdict:** Validated / Refuted / Partially Supported
+- **Evidence:** specific metric data from the tools
+- **Refinement:** a sharpened version of the observation if partially supported
+
+Plus a **Counter-Proposals** section for significant data-driven findings the user did not mention.
+
+**Agent registration:** registered via `createAgentRoute` in `routes/agents.js` with slug `google-ads-strategic-review`. The agent reads `req.body.observations` (throws if empty) and passes it as `userMessage`.
+
+---
+
+### Conversation Seeding Pattern (StrategicReviewCard → ConversationView)
+
+"Continue in Conversation" button on `StrategicReviewCard` seeds a new conversation thread with the strategic review context:
+```js
+const seed = `Here are my strategic observations from a recent review:\n\n${observations}\n\nThe analysis returned:\n\n${summary}`;
+onContinueInConversation(seed);
+```
+
+**Parent page wiring (`GoogleAdsMonitorPage`):**
+```js
+const [conversationSeed, setConversationSeed] = useState('');
+
+// Passed to StrategicReviewCard:
+onContinueInConversation={(seed) => { setConversationSeed(seed); setActiveTab('conversation'); }}
+
+// Passed to ConversationView:
+<ConversationView seedText={conversationSeed} onSeedConsumed={() => setConversationSeed('')} />
+```
+
+**ConversationView seed handling:** uses a `seedUsed` ref to prevent double-fire on re-renders. When `seedText` arrives, it auto-creates a new conversation, pre-fills the draft, and focuses the input — so the user lands on a ready-to-send thread.
+```js
+const seedUsed = useRef(false);
+useEffect(() => {
+  if (seedText && !seedUsed.current) {
+    seedUsed.current = true;
+    setDraft(seedText);
+    if (typeof onSeedConsumed === 'function') onSeedConsumed();
+    handleNewConversation(seedText);
+  }
+}, [seedText]);
+```
+
+**Tab structure:** `GoogleAdsMonitorPage` has four tabs: Dashboard · Conversation · History · Settings. The Conversation tab hosts `ConversationView` which has its own sidebar (list of threads) and chat area, all within the page layout.

@@ -61,6 +61,25 @@ async function getAnalyticsServer(orgId) {
   return server;
 }
 
+/**
+ * Resolve the registered WordPress MCP server for this org.
+ * Matches by looking for a server whose config args include 'wordpress'.
+ * Auto-connects if the server is registered but not yet connected.
+ *
+ * @param {string} orgId
+ * @returns {Promise<object>} server record from MCPRegistry
+ */
+async function getWordPressServer(orgId) {
+  const server = await findAndConnect(orgId, 'wordpress');
+  if (!server) {
+    throw new Error(
+      'No WordPress MCP server registered for this organisation. ' +
+      'Add one in Admin > MCP Servers (command: node, args: [.../mcp-servers/wordpress.js]).'
+    );
+  }
+  return server;
+}
+
 /** @private Find a server matching a slug keyword and auto-connect if needed. */
 async function findAndConnect(orgId, keyword) {
   const servers = await MCPRegistry.list(orgId);
@@ -114,4 +133,4 @@ function resolveRangeArgs(context, input, defaultDays = 30) {
   return { days: context.days ?? input.days ?? defaultDays };
 }
 
-module.exports = { getAdsServer, getAnalyticsServer, callMcpTool, resolveRangeArgs };
+module.exports = { getAdsServer, getAnalyticsServer, getWordPressServer, callMcpTool, resolveRangeArgs };

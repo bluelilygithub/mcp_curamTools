@@ -3,16 +3,22 @@
 /**
  * Google Ads Conversation — full tool suite.
  *
- * All data via registered MCP servers — Google Ads and Google Analytics.
+ * All data via registered MCP servers — Google Ads, Google Analytics, and WordPress CRM.
  * The conversation agent has access to every data dimension so it can
  * answer any question the user asks across the thread.
  *
  * Required MCP servers:
  *   - Google Ads       (args include 'google-ads.js')
  *   - Google Analytics (args include 'google-analytics.js')
+ *   - WordPress        (args include 'wordpress.js')
+ *
+ * DATA COVERAGE NOTE:
+ *   Google Ads and GA4 data: available from ~March 2026 onwards only.
+ *   WordPress CRM enquiries: 3 years of history available.
+ *   Do NOT cross-reference CRM data with Google data for periods before March 2026.
  */
 
-const { getAdsServer, getAnalyticsServer, callMcpTool, resolveRangeArgs } = require('../../platform/mcpTools');
+const { getAdsServer, getAnalyticsServer, getWordPressServer, callMcpTool, resolveRangeArgs } = require('../../platform/mcpTools');
 
 const TOOL_SLUG = 'google-ads-conversation';
 
@@ -179,6 +185,29 @@ const getConversionEventsTool = {
   },
 };
 
+// ── WordPress / CRM tools ─────────────────────────────────────────────────────
+
+const getEnquiriesTool = {
+  name: 'get_enquiries',
+  description: 'CRM enquiry/lead records from WordPress. Includes UTM source, medium, campaign, ad group, search term, device type, landing page, gclid, GA4 client ID, and enquiry status. Up to 3 years of history. Use for lead volume, lead quality, campaign-to-lead attribution, or any question about what happened after the click. NOTE: this CRM data predates Google Ads tracking — do not attempt to join it with Ads/GA4 metrics for periods before March 2026.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      limit:  { type: 'integer', description: 'Max records to return. Default 100.', default: 100 },
+      status: { type: 'string',  description: 'Filter by enquiry_status value if known.' },
+    },
+    required: [],
+  },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(input, context) {
+    const wp = await getWordPressServer(context.orgId);
+    return callMcpTool(context.orgId, wp, 'wp_get_enquiries', {
+      limit:  input.limit  ?? 100,
+      status: input.status ?? undefined,
+    });
+  },
+};
+
 const googleAdsConversationTools = [
   getCampaignPerformanceTool,
   getDailyPerformanceTool,
@@ -193,6 +222,7 @@ const googleAdsConversationTools = [
   getLandingPagePerformanceTool,
   getPaidBouncedSessionsTool,
   getConversionEventsTool,
+  getEnquiriesTool,
 ];
 
 module.exports = { googleAdsConversationTools, TOOL_SLUG };
