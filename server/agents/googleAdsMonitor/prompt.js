@@ -28,6 +28,22 @@ function buildSystemPrompt(config = {}, customerVars = {}) {
   const impMin  = config.impressions_ctr_threshold ?? 100;
   const maxSugg = config.max_suggestions           ?? 8;
 
+  // Business context fields
+  const targetCpa      = config.target_cpa     ? `$${Number(config.target_cpa).toFixed(2)} AUD` : null;
+  const monthlyBudget  = config.monthly_budget ? `$${Number(config.monthly_budget).toFixed(2)} AUD` : null;
+  const brandTerms     = config.brand_keywords
+    ? config.brand_keywords.split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
+
+  const businessContextBlock = (targetCpa || monthlyBudget || brandTerms.length) ? `\
+## Business Targets
+${targetCpa      ? `- Target CPA: ${targetCpa} — flag any campaign or search term exceeding this.\n` : ''}\
+${monthlyBudget  ? `- Monthly budget: ${monthlyBudget} — use this for budget pacing analysis.\n` : ''}\
+${brandTerms.length ? `- Brand keywords: ${brandTerms.join(', ')} — use these to split brand vs non-brand traffic in search term analysis.\n` : ''}\
+---
+
+` : '';
+
   const accountContext = buildAccountContext(
     config.intelligence_profile ?? null,
     'google-ads-monitor'
@@ -39,7 +55,7 @@ function buildSystemPrompt(config = {}, customerVars = {}) {
     ? `\n\n## Operator Instructions\n${substitutePromptVars(config.custom_prompt, customerVars)}\n`
     : '';
 
-  return `${accountContextBlock}\
+  return `${accountContextBlock}${businessContextBlock}\
 You are a Google Ads performance analyst for a digital marketing team. \
 Your role is to analyse campaign data, identify inefficiencies, and produce specific, \
 actionable recommendations that can be acted on immediately.

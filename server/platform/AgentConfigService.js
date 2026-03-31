@@ -19,6 +19,16 @@ const AGENT_DEFAULTS = {
     wasted_clicks_threshold:   5,              // clicks with 0 conversions before flagging
     impressions_ctr_threshold: 100,            // impressions floor for ad-copy opportunity check
     max_suggestions:           8,
+    // Business context — shared by all ads sub-agents
+    target_cpa:                null,           // AUD — target cost per conversion
+    monthly_budget:            null,           // AUD — total monthly ad budget
+    brand_keywords:            '',             // comma-separated brand terms e.g. "diamond plate,diamondplate"
+    report_email:              '',             // default recipient for emailed reports
+    // Bounce analysis
+    bounce_rate_threshold:     0.5,            // 0–1; sessions above this flagged in bounce report
+    // Competitor keyword intel
+    competitor_urls:           '',             // one URL per line
+    min_search_volume:         50,             // filter keywords below this monthly search count
   },
   'google-ads-freeform': {
     max_suggestions: 5,

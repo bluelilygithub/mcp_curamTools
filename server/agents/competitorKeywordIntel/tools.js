@@ -8,13 +8,14 @@
  * to Diamond Plate Australia — graphene ceramic coating for cars.
  */
 
-const { googleAdsService } = require('../../services/GoogleAdsService');
+const { googleAdsService }   = require('../../services/GoogleAdsService');
+const AgentConfigService     = require('../../platform/AgentConfigService');
 
 const TOOL_SLUG = 'competitor-keyword-intel';
 
-// ── Known competitors in the Australian ceramic/graphene coating market ───────
+// ── Fallback competitors if none configured in settings ───────────────────────
 
-const COMPETITORS = [
+const DEFAULT_COMPETITORS = [
   { name: 'Ceramic Pro Australia',  url: 'https://ceramicpro.com.au' },
   { name: 'Gtechniq Australia',     url: 'https://gtechniq.com/en-au' },
   { name: 'Gyeon Australia',        url: 'https://gyeonquartz.com.au' },
@@ -22,6 +23,35 @@ const COMPETITORS = [
   { name: 'CarPro Australia',       url: 'https://carpro.com.au' },
   { name: 'Xpel Australia',         url: 'https://xpel.com.au' },
 ];
+
+/** Load competitor list from monitor config, falling back to defaults. */
+async function loadCompetitors(orgId) {
+  try {
+    const monitorConfig = await AgentConfigService.getAgentConfig(orgId, 'google-ads-monitor');
+    const raw = (monitorConfig.competitor_urls ?? '').trim();
+    if (!raw) return DEFAULT_COMPETITORS;
+    return raw
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((url) => ({
+        name: new URL(url).hostname.replace(/^www\./, ''),
+        url,
+      }));
+  } catch {
+    return DEFAULT_COMPETITORS;
+  }
+}
+
+/** Load min search volume from monitor config. */
+async function loadMinVolume(orgId) {
+  try {
+    const monitorConfig = await AgentConfigService.getAgentConfig(orgId, 'google-ads-monitor');
+    return parseInt(monitorConfig.min_search_volume ?? 50);
+  } catch {
+    return 50;
+  }
+}
 
 // ── Seed keywords for Diamond Plate's market ─────────────────────────────────
 
@@ -46,32 +76,39 @@ const getCompetitorKeywordsTool = {
     'Pull keyword ideas from a competitor website URL using the Google Ads Keyword Planner. ' +
     'Returns keywords Google associates with that URL, with Australian monthly search volume, ' +
     'competition level (LOW/MEDIUM/HIGH), and CPC range (AUD). ' +
-    `Available competitors: ${COMPETITORS.map((c) => c.name).join(', ')}. ` +
-    'Call this once per competitor. Use the name field to select — e.g. "Ceramic Pro Australia".',
+    'First call get_competitor_list to see available competitors, then call this once per competitor.',
   input_schema: {
     type: 'object',
     properties: {
-      competitor_name: {
+      competitor_url: {
         type:        'string',
-        description: `One of: ${COMPETITORS.map((c) => c.name).join(', ')}`,
+        description: 'The competitor URL to analyse — get the list from get_competitor_list first.',
       },
     },
-    required: ['competitor_name'],
+    required: ['competitor_url'],
   },
   requiredPermissions: [],
   toolSlug: TOOL_SLUG,
   async execute(input, context) {
-    const competitor = COMPETITORS.find(
-      (c) => c.name.toLowerCase() === (input.competitor_name ?? '').toLowerCase()
-    );
-    if (!competitor) {
-      return { error: `Unknown competitor "${input.competitor_name}". Choose from: ${COMPETITORS.map((c) => c.name).join(', ')}` };
-    }
+    const minVolume = await loadMinVolume(context.orgId);
     const ideas = await googleAdsService.generateKeywordIdeas(
-      { url: competitor.url },
+      { url: input.competitor_url },
       context.customerId ?? null
     );
-    return { competitor: competitor.name, url: competitor.url, keywords: ideas };
+    const filtered = ideas.filter((k) => k.avgMonthlySearches >= minVolume);
+    return { url: input.competitor_url, minVolumeApplied: minVolume, keywords: filtered };
+  },
+};
+
+const getCompetitorListTool = {
+  name: 'get_competitor_list',
+  description: 'Returns the list of competitor URLs configured for analysis. Call this first to know which competitors to pass to get_competitor_keywords.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+  requiredPermissions: [],
+  toolSlug: TOOL_SLUG,
+  async execute(_input, context) {
+    const competitors = await loadCompetitors(context.orgId);
+    return competitors;
   },
 };
 
@@ -91,11 +128,13 @@ const getSeedKeywordsTool = {
   requiredPermissions: [],
   toolSlug: TOOL_SLUG,
   async execute(_input, context) {
+    const minVolume = await loadMinVolume(context.orgId);
     const ideas = await googleAdsService.generateKeywordIdeas(
       { keywords: SEED_KEYWORDS },
       context.customerId ?? null
     );
-    return { seedKeywords: SEED_KEYWORDS, keywords: ideas };
+    const filtered = ideas.filter((k) => k.avgMonthlySearches >= minVolume);
+    return { seedKeywords: SEED_KEYWORDS, minVolumeApplied: minVolume, keywords: filtered };
   },
 };
 
@@ -120,6 +159,7 @@ const getOwnKeywordsTool = {
 };
 
 const competitorKeywordIntelTools = [
+  getCompetitorListTool,
   getCompetitorKeywordsTool,
   getSeedKeywordsTool,
   getOwnKeywordsTool,

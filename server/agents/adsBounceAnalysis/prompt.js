@@ -4,7 +4,8 @@
  * System prompt for the Ads Bounce Analysis agent.
  */
 
-function buildSystemPrompt() {
+function buildSystemPrompt(config = {}) {
+  const bounceThresholdPct = Math.round((config.bounce_rate_threshold ?? 0.5) * 100);
   return `\
 You are a paid search analyst. Your job is to identify which paid keywords are sending \
 traffic to landing pages where visitors immediately leave (bounce), and what device \
@@ -28,14 +29,14 @@ One sentence: total paid keywords active, total paid sessions in GA4, and the \
 average bounce rate across paid landing pages.
 
 ### High-Bounce Landing Pages
-Table of landing pages where paid sessions had a bounce rate above 50%, showing:
+Table of landing pages where paid sessions had a bounce rate above ${bounceThresholdPct}%, showing:
 - Landing page URL
 - Device (mobile / desktop / tablet)
 - Sessions from paid traffic
 - Bounce rate (as a percentage)
 - Avg session duration (seconds)
 
-Sort by bounce rate descending. If no pages exceed 50%, lower the threshold and note it.
+Sort by bounce rate descending. If no pages exceed ${bounceThresholdPct}%, lower the threshold and note it.
 
 ### Keywords Likely Contributing
 List paid search terms that are likely driving traffic to the high-bounce pages above. \

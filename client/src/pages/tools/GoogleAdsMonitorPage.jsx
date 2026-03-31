@@ -589,43 +589,99 @@ export default function GoogleAdsMonitorPage() {
 
       {/* ── Settings ───────────────────────────────────────────────────── */}
       {activeTab === 'settings' && config && (
-        <div className="rounded-2xl border p-5 space-y-4"
-          style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
+        <div className="space-y-4" style={{ fontFamily: 'inherit' }}>
           {cfgSuccess && <InlineBanner type="neutral" message={cfgSuccess} onDismiss={() => setCfgSuccess('')} />}
-          <div className="grid grid-cols-2 gap-4">
-            {[
-              { key: 'lookback_days',             label: 'Default lookback (days)',             type: 'number' },
-              { key: 'ctr_low_threshold',         label: 'Low CTR threshold (e.g. 0.03 = 3%)', type: 'number', step: 0.001 },
-              { key: 'wasted_clicks_threshold',   label: 'Wasted clicks minimum',               type: 'number' },
-              { key: 'impressions_ctr_threshold', label: 'Impressions floor (ad copy check)',   type: 'number' },
-              { key: 'max_suggestions',           label: 'Max recommendations',                 type: 'number' },
-              { key: 'schedule',                  label: 'Cron schedule (UTC)',                 type: 'text' },
-            ].map(({ key, label, type, step }) => (
+
+          {/* Helper components */}
+          {(() => {
+            const fieldStyle = { ...inputStyle, width: '100%', boxSizing: 'border-box' };
+            const sectionHd  = (label) => (
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3"
+                style={{ color: 'var(--color-muted)' }}>{label}</p>
+            );
+            const numField = (key, label, step) => (
               <div key={key}>
-                <label className="block text-xs font-medium mb-1"
-                  style={{ color: 'var(--color-muted)', fontFamily: 'inherit' }}>{label}</label>
-                <input type={type} step={step} style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }}
-                  value={config[key] ?? ''}
-                  onChange={(e) => setConfig((c) => ({
-                    ...c,
-                    [key]: type === 'number'
-                      ? (step ? parseFloat(e.target.value) : parseInt(e.target.value))
-                      : e.target.value,
-                  }))}
-                />
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-muted)' }}>{label}</label>
+                <input type="number" step={step} style={fieldStyle} value={config[key] ?? ''}
+                  onChange={(e) => setConfig((c) => ({ ...c, [key]: step ? parseFloat(e.target.value) : parseInt(e.target.value) }))} />
               </div>
-            ))}
-          </div>
-          <Button variant="primary" onClick={handleSaveConfig} disabled={savingCfg}>
-            {savingCfg ? 'Saving…' : 'Save settings'}
-          </Button>
+            );
+            const txtField = (key, label, placeholder = '') => (
+              <div key={key}>
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-muted)' }}>{label}</label>
+                <input type="text" style={fieldStyle} value={config[key] ?? ''} placeholder={placeholder}
+                  onChange={(e) => setConfig((c) => ({ ...c, [key]: e.target.value }))} />
+              </div>
+            );
+            const areaField = (key, label, placeholder = '', rows = 4) => (
+              <div key={key}>
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-muted)' }}>{label}</label>
+                <textarea rows={rows} style={{ ...fieldStyle, resize: 'vertical' }} value={config[key] ?? ''} placeholder={placeholder}
+                  onChange={(e) => setConfig((c) => ({ ...c, [key]: e.target.value }))} />
+              </div>
+            );
+
+            return (
+              <>
+                {/* Business context */}
+                <div className="rounded-2xl border p-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
+                  {sectionHd('Business Context')}
+                  <div className="grid grid-cols-2 gap-4">
+                    {numField('target_cpa',     'Target CPA (AUD)',          0.01)}
+                    {numField('monthly_budget', 'Monthly budget (AUD)',      0.01)}
+                    {txtField('brand_keywords', 'Brand keywords (comma-separated)', 'diamond plate, diamondplate')}
+                    {txtField('report_email',   'Default report email',      'you@example.com')}
+                  </div>
+                </div>
+
+                {/* Analysis thresholds */}
+                <div className="rounded-2xl border p-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
+                  {sectionHd('Analysis Thresholds')}
+                  <div className="grid grid-cols-2 gap-4">
+                    {numField('lookback_days',             'Default lookback (days)')}
+                    {numField('ctr_low_threshold',         'Low CTR threshold (e.g. 0.03 = 3%)',  0.001)}
+                    {numField('wasted_clicks_threshold',   'Wasted clicks minimum')}
+                    {numField('impressions_ctr_threshold', 'Impressions floor (ad copy check)')}
+                    {numField('max_suggestions',           'Max recommendations')}
+                    {numField('bounce_rate_threshold',     'Bounce rate flag threshold (0–1)',     0.01)}
+                  </div>
+                </div>
+
+                {/* Competitor intelligence */}
+                <div className="rounded-2xl border p-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
+                  {sectionHd('Competitor Intelligence')}
+                  <div className="space-y-4">
+                    {areaField(
+                      'competitor_urls',
+                      'Competitor URLs (one per line)',
+                      'https://ceramicpro.com.au\nhttps://gtechniq.com/en-au\nhttps://gyeonquartz.com.au',
+                      5
+                    )}
+                    <div className="grid grid-cols-2 gap-4">
+                      {numField('min_search_volume', 'Minimum monthly search volume')}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Schedule */}
+                <div className="rounded-2xl border p-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
+                  {sectionHd('Schedule')}
+                  {txtField('schedule', 'Cron schedule (UTC)', '0 6,18 * * *')}
+                </div>
+
+                <Button variant="primary" onClick={handleSaveConfig} disabled={savingCfg}>
+                  {savingCfg ? 'Saving…' : 'Save settings'}
+                </Button>
+              </>
+            );
+          })()}
         </div>
       )}
 
       {/* ── Email modal ─────────────────────────────────────────────────── */}
       {emailModal && (
         <EmailModal
-          defaultEmail={user?.email ?? ''}
+          defaultEmail={config?.report_email || user?.email || ''}
           sending={emailSending}
           onClose={() => setEmailModal(false)}
           onSend={handleEmail}

@@ -32,8 +32,8 @@ high-value keywords with real search volume that competitors own but Diamond Pla
 
 1. Call get_own_keywords — Diamond Plate's current active keywords in Google Ads.
 2. Call get_seed_keywords — keyword expansion from Diamond Plate's core market terms.
-3. Call get_competitor_keywords for each major competitor (Ceramic Pro Australia, Gtechniq Australia, \
-Gyeon Australia). Limit to 3 competitors to stay within free-tier limits.
+3. Call get_competitor_list — get the configured list of competitor URLs.
+4. Call get_competitor_keywords for each competitor URL returned. Limit to 3 if there are many.
 
 ## Output format
 

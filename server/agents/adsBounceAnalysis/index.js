@@ -13,9 +13,10 @@ const { adsBounceAnalysisTools, TOOL_SLUG } = require('./tools');
 const { buildSystemPrompt } = require('./prompt');
 
 async function runAdsBounceAnalysis(context) {
-  const { req, emit } = context;
+  const { orgId, req, emit } = context;
 
-  const adminConfig = await AgentConfigService.getAdminConfig(TOOL_SLUG);
+  const adminConfig   = await AgentConfigService.getAdminConfig(TOOL_SLUG);
+  const monitorConfig = await AgentConfigService.getAgentConfig(orgId, 'google-ads-monitor');
 
   let startDate = req?.body?.startDate ?? null;
   let endDate   = req?.body?.endDate   ?? null;
@@ -36,7 +37,7 @@ async function runAdsBounceAnalysis(context) {
     'Identify which landing pages are failing paid traffic and what device the visitors were using.';
 
   const { result, trace, tokensUsed } = await agentOrchestrator.run({
-    systemPrompt:  buildSystemPrompt(),
+    systemPrompt:  buildSystemPrompt(monitorConfig),
     userMessage,
     tools:         adsBounceAnalysisTools,
     model:         adminConfig.model          ?? 'claude-sonnet-4-6',
