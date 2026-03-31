@@ -86,6 +86,18 @@ agentsRouter.use(
   })
 );
 
+// ── Auction Insights ──────────────────────────────────────────────────────
+const { runAuctionInsights } = require('../agents/auctionInsights');
+
+agentsRouter.use(
+  '/auction-insights',
+  createAgentRoute({
+    slug:               'auction-insights',
+    runFn:              runAuctionInsights,
+    requiredPermission: 'ads_operator',
+  })
+);
+
 // ── Competitor Keyword Intel ──────────────────────────────────────────────
 const { runCompetitorKeywordIntel } = require('../agents/competitorKeywordIntel');
 

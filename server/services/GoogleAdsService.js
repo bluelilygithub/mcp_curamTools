@@ -274,6 +274,94 @@ class GoogleAdsService {
   }
 
   /**
+   * Auction Insights — competitor domains appearing in the same auctions.
+   * Works with Explorer/Test developer token access.
+   * @param {number|{startDate,endDate}} [options=30]
+   * @param {string|null} [customerId]
+   */
+  async getAuctionInsights(options = 30, customerId = null) {
+    const { from, to } = resolveRange(options);
+
+    const results = await this._search(`
+      SELECT
+        auction_insight_domain,
+        metrics.search_impression_share,
+        metrics.search_rank_lost_impression_share,
+        metrics.search_top_impression_percentage,
+        metrics.search_absolute_top_impression_percentage,
+        metrics.search_outranking_share,
+        campaign.name
+      FROM auction_insight
+      WHERE segments.date BETWEEN '${from}' AND '${to}'
+      ORDER BY metrics.search_impression_share DESC
+    `, customerId);
+
+    // Aggregate by domain across campaigns
+    const byDomain = new Map();
+    for (const r of results) {
+      const domain = r.auctionInsightDomain ?? '(unknown)';
+      if (!byDomain.has(domain)) {
+        byDomain.set(domain, {
+          domain,
+          campaigns:                   [],
+          impressionShare:             0,
+          topOfPageRate:               0,
+          absoluteTopOfPageRate:       0,
+          outrankingShare:             0,
+          _count:                      0,
+        });
+      }
+      const entry = byDomain.get(domain);
+      entry.campaigns.push(r.campaign?.name ?? '');
+      entry.impressionShare           += parseFloat(r.metrics?.searchImpressionShare           ?? '0');
+      entry.topOfPageRate             += parseFloat(r.metrics?.searchTopImpressionPercentage   ?? '0');
+      entry.absoluteTopOfPageRate     += parseFloat(r.metrics?.searchAbsoluteTopImpressionPercentage ?? '0');
+      entry.outrankingShare           += parseFloat(r.metrics?.searchOutrankingShare           ?? '0');
+      entry._count                    += 1;
+    }
+
+    return [...byDomain.values()].map((e) => ({
+      domain:               e.domain,
+      campaigns:            [...new Set(e.campaigns)],
+      impressionShare:      e._count ? e.impressionShare       / e._count : 0,
+      topOfPageRate:        e._count ? e.topOfPageRate         / e._count : 0,
+      absoluteTopOfPageRate: e._count ? e.absoluteTopOfPageRate / e._count : 0,
+      outrankingShare:      e._count ? e.outrankingShare       / e._count : 0,
+    })).sort((a, b) => b.impressionShare - a.impressionShare);
+  }
+
+  /**
+   * Impression share per campaign — own visibility metrics for context alongside auction insights.
+   * @param {number|{startDate,endDate}} [options=30]
+   * @param {string|null} [customerId]
+   */
+  async getImpressionShareByCampaign(options = 30, customerId = null) {
+    const { from, to } = resolveRange(options);
+
+    const results = await this._search(`
+      SELECT
+        campaign.name,
+        metrics.search_impression_share,
+        metrics.search_rank_lost_impression_share,
+        metrics.search_budget_lost_impression_share,
+        metrics.search_top_impression_percentage,
+        metrics.search_absolute_top_impression_percentage
+      FROM campaign
+      WHERE campaign.status = 'ENABLED'
+        AND segments.date BETWEEN '${from}' AND '${to}'
+    `, customerId);
+
+    return results.map((r) => ({
+      campaign:                  r.campaign?.name ?? '',
+      impressionShare:           parseFloat(r.metrics?.searchImpressionShare                    ?? '0'),
+      lostToRank:                parseFloat(r.metrics?.searchRankLostImpressionShare             ?? '0'),
+      lostToBudget:              parseFloat(r.metrics?.searchBudgetLostImpressionShare           ?? '0'),
+      topOfPageRate:             parseFloat(r.metrics?.searchTopImpressionPercentage             ?? '0'),
+      absoluteTopOfPageRate:     parseFloat(r.metrics?.searchAbsoluteTopImpressionPercentage    ?? '0'),
+    })).sort((a, b) => b.impressionShare - a.impressionShare);
+  }
+
+  /**
    * Returns all active keywords currently in Diamond Plate's Google Ads account.
    * @param {string|null} [customerId]
    */

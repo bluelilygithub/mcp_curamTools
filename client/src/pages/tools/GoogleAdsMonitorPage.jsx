@@ -513,7 +513,8 @@ export default function GoogleAdsMonitorPage() {
             { slug: 'google-ads-change-audit',   title: 'Change Audit',        description: 'Before/after metric comparison per change. Scores each change as Positive, Neutral, or Negative.' },
             { slug: 'ads-attribution-summary',   title: 'Attribution Summary', description: 'Connects ad spend, GA4 traffic, and WordPress enquiries — shows which campaigns are generating actual leads.' },
             { slug: 'ads-bounce-analysis',       title: 'Bounce Analysis',     description: 'Paid keywords that sent traffic to high-bounce landing pages, broken down by device.' },
-            { slug: 'competitor-keyword-intel',  title: 'Competitor Keywords', description: 'Keyword gaps for Diamond Plate Australia — what competitors are targeting that we are not.' },
+            { slug: 'auction-insights',          title: 'Auction Insights',    description: 'Which competitors are bidding in the same auctions — impression share, top-of-page rate, and where Diamond Plate is losing visibility.' },
+            { slug: 'competitor-keyword-intel',  title: 'Competitor Keywords', description: 'Keyword gaps for Diamond Plate Australia — what competitors are targeting that we are not. Requires Standard API access.' },
           ].map(({ slug, title, description }) => (
             <AgentDashboardCard
               key={slug}
