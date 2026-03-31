@@ -284,12 +284,11 @@ class GoogleAdsService {
 
     const results = await this._search(`
       SELECT
-        auction_insight_domain,
+        auction_insight.domain,
         metrics.search_impression_share,
-        metrics.search_rank_lost_impression_share,
-        metrics.search_top_impression_percentage,
-        metrics.search_absolute_top_impression_percentage,
-        metrics.search_outranking_share,
+        metrics.auction_insight_search_top_impression_percentage,
+        metrics.auction_insight_search_absolute_top_impression_percentage,
+        metrics.auction_insight_search_outranking_share,
         campaign.name
       FROM auction_insight
       WHERE segments.date BETWEEN '${from}' AND '${to}'
@@ -299,25 +298,25 @@ class GoogleAdsService {
     // Aggregate by domain across campaigns
     const byDomain = new Map();
     for (const r of results) {
-      const domain = r.auctionInsightDomain ?? '(unknown)';
+      const domain = r.auctionInsight?.domain ?? '(unknown)';
       if (!byDomain.has(domain)) {
         byDomain.set(domain, {
           domain,
-          campaigns:                   [],
-          impressionShare:             0,
-          topOfPageRate:               0,
-          absoluteTopOfPageRate:       0,
-          outrankingShare:             0,
-          _count:                      0,
+          campaigns:             [],
+          impressionShare:       0,
+          topOfPageRate:         0,
+          absoluteTopOfPageRate: 0,
+          outrankingShare:       0,
+          _count:                0,
         });
       }
       const entry = byDomain.get(domain);
       entry.campaigns.push(r.campaign?.name ?? '');
-      entry.impressionShare           += parseFloat(r.metrics?.searchImpressionShare           ?? '0');
-      entry.topOfPageRate             += parseFloat(r.metrics?.searchTopImpressionPercentage   ?? '0');
-      entry.absoluteTopOfPageRate     += parseFloat(r.metrics?.searchAbsoluteTopImpressionPercentage ?? '0');
-      entry.outrankingShare           += parseFloat(r.metrics?.searchOutrankingShare           ?? '0');
-      entry._count                    += 1;
+      entry.impressionShare       += parseFloat(r.metrics?.searchImpressionShare                              ?? '0');
+      entry.topOfPageRate         += parseFloat(r.metrics?.auctionInsightSearchTopImpressionPercentage        ?? '0');
+      entry.absoluteTopOfPageRate += parseFloat(r.metrics?.auctionInsightSearchAbsoluteTopImpressionPercentage ?? '0');
+      entry.outrankingShare       += parseFloat(r.metrics?.auctionInsightSearchOutrankingShare                ?? '0');
+      entry._count                += 1;
     }
 
     return [...byDomain.values()].map((e) => ({
@@ -343,21 +342,17 @@ class GoogleAdsService {
         campaign.name,
         metrics.search_impression_share,
         metrics.search_rank_lost_impression_share,
-        metrics.search_budget_lost_impression_share,
-        metrics.search_top_impression_percentage,
-        metrics.search_absolute_top_impression_percentage
+        metrics.search_budget_lost_impression_share
       FROM campaign
       WHERE campaign.status = 'ENABLED'
         AND segments.date BETWEEN '${from}' AND '${to}'
     `, customerId);
 
     return results.map((r) => ({
-      campaign:                  r.campaign?.name ?? '',
-      impressionShare:           parseFloat(r.metrics?.searchImpressionShare                    ?? '0'),
-      lostToRank:                parseFloat(r.metrics?.searchRankLostImpressionShare             ?? '0'),
-      lostToBudget:              parseFloat(r.metrics?.searchBudgetLostImpressionShare           ?? '0'),
-      topOfPageRate:             parseFloat(r.metrics?.searchTopImpressionPercentage             ?? '0'),
-      absoluteTopOfPageRate:     parseFloat(r.metrics?.searchAbsoluteTopImpressionPercentage    ?? '0'),
+      campaign:       r.campaign?.name ?? '',
+      impressionShare: parseFloat(r.metrics?.searchImpressionShare          ?? '0'),
+      lostToRank:      parseFloat(r.metrics?.searchRankLostImpressionShare   ?? '0'),
+      lostToBudget:    parseFloat(r.metrics?.searchBudgetLostImpressionShare ?? '0'),
     })).sort((a, b) => b.impressionShare - a.impressionShare);
   }
 
