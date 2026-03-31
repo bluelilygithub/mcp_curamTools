@@ -284,7 +284,7 @@ class GoogleAdsService {
 
     const results = await this._search(`
       SELECT
-        auction_insight.domain,
+        segments.auction_insight_domain,
         metrics.search_impression_share,
         metrics.auction_insight_search_top_impression_percentage,
         metrics.auction_insight_search_absolute_top_impression_percentage,
@@ -298,7 +298,7 @@ class GoogleAdsService {
     // Aggregate by domain across campaigns
     const byDomain = new Map();
     for (const r of results) {
-      const domain = r.auctionInsight?.domain ?? '(unknown)';
+      const domain = r.segments?.auctionInsightDomain ?? '(unknown)';
       if (!byDomain.has(domain)) {
         byDomain.set(domain, {
           domain,
@@ -393,7 +393,12 @@ class GoogleAdsService {
    * @param {string|null} [customerId]
    */
   async getChangeHistory(options = 7, customerId = null) {
-    const { from, to } = resolveRange(options);
+    let { from, to } = resolveRange(options);
+    // change_event API only allows up to 30 days back — cap the start date
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const maxFrom = thirtyDaysAgo.toISOString().slice(0, 10);
+    if (from < maxFrom) from = maxFrom;
 
     const results = await this._search(`
       SELECT

@@ -82,6 +82,11 @@ const TOOLS = [
     description: 'Fetches a single clientenquiry post (the most recent one) and returns its full raw REST API response. Use this to discover exactly which keys hold the ACF/meta fields.',
     inputSchema: { type: 'object', properties: {} },
   },
+  {
+    name: 'wp_get_server_ip',
+    description: 'Returns the outbound IP address of this MCP server process. Use this to find the IP that needs to be whitelisted in SiteGround or any WAF/firewall protecting the WordPress site.',
+    inputSchema: { type: 'object', properties: {} },
+  },
 ];
 
 // ── WordPress REST API helper ─────────────────────────────────────────────────
@@ -214,6 +219,23 @@ async function callTool(name, args = {}) {
           gclid:         str(f.gclib),
           ga4_client_id: str(f.ga4_client_id),
         };
+      });
+    }
+
+    case 'wp_get_server_ip': {
+      return new Promise((resolve, reject) => {
+        https.get('https://api.ipify.org?format=json', (res) => {
+          let data = '';
+          res.on('data', (chunk) => { data += chunk; });
+          res.on('end', () => {
+            try {
+              const { ip } = JSON.parse(data);
+              resolve({ ip, note: 'Whitelist this IP in SiteGround Site Tools > Security > IP Manager' });
+            } catch {
+              resolve({ raw: data });
+            }
+          });
+        }).on('error', reject);
       });
     }
 
