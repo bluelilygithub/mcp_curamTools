@@ -53,6 +53,7 @@ app.use('/api/agents', agentsRouter);
 app.use('/api/agent-configs', agentConfigsRouter);
 
 app.use('/api/google-ads', require('./routes/googleAds'));
+app.use('/api/conversation', require('./routes/conversation'));
 
 // ── Static files (production) ──────────────────────────────────────────────
 const publicDir = path.join(__dirname, 'public');

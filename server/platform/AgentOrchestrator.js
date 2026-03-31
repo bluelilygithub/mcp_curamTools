@@ -69,6 +69,7 @@ class AgentOrchestrator {
   async run({
     systemPrompt,
     userMessage,
+    conversationHistory = [],
     tools = [],
     maxIterations = 10,
     onStep = null,
@@ -93,7 +94,9 @@ class AgentOrchestrator {
 
     const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]));
 
-    const messages  = [{ role: 'user', content: userMessage }];
+    const messages  = conversationHistory.length > 0
+      ? [...conversationHistory, { role: 'user', content: userMessage }]
+      : [{ role: 'user', content: userMessage }];
     const trace     = [];
     const tokensUsed = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 

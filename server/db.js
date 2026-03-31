@@ -352,6 +352,23 @@ async function initSchema() {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS agent_conversations (
+        id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id     INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        slug       TEXT NOT NULL DEFAULT 'google-ads-conversation',
+        title      TEXT,
+        messages   JSONB NOT NULL DEFAULT '[]',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_agent_conversations_org
+        ON agent_conversations(org_id, slug, created_at DESC)
+    `);
+
     await client.query('COMMIT');
 
     // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)

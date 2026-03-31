@@ -34,7 +34,7 @@ const PLACEHOLDER =
   `• Weekend performance is weaker than weekdays\n` +
   `• We are wasting budget on irrelevant search terms`;
 
-export default function StrategicReviewCard({ startDate, endDate, expanded, onToggle }) {
+export default function StrategicReviewCard({ startDate, endDate, expanded, onToggle, onContinueInConversation }) {
   const [observations, setObservations] = useState('');
   const [lastRun,      setLastRun]      = useState(null);
   const [running,      setRunning]      = useState(false);
@@ -221,6 +221,17 @@ export default function StrategicReviewCard({ startDate, endDate, expanded, onTo
         <div style={{ borderTop: '1px solid var(--color-border)', padding: '16px' }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <button onClick={handleCopy} style={actionBtnStyle}>{copied ? 'Copied!' : 'Copy'}</button>
+            {onContinueInConversation && (
+              <button
+                onClick={() => {
+                  const seed = `Here are my strategic observations from a recent review:\n\n${observations}\n\nThe analysis returned:\n\n${summary}`;
+                  onContinueInConversation(seed);
+                }}
+                style={{ ...actionBtnStyle, color: 'var(--color-primary)', borderColor: 'var(--color-primary)' }}
+              >
+                Continue in Conversation
+              </button>
+            )}
             <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
               {result?.startDate && result?.endDate
                 ? <>{fmtDay(result.startDate)} – {fmtDay(result.endDate)}</>
