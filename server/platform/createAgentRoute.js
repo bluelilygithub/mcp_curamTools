@@ -182,11 +182,13 @@ function createAgentRoute({ slug, runFn, requiredPermission }) {
         const suggestions = extractSuggestions(result?.summary ?? '');
 
         const resultPayload = {
-          summary: result?.summary ?? '',
-          data: { ...toolData, ...(result?.data ?? {}) },
+          summary:   result?.summary ?? '',
+          data:      { ...toolData, ...(result?.data ?? {}) },
           suggestions,
           tokensUsed: tokensUsed ?? {},
-          costAud: taskCostAud,
+          costAud:   taskCostAud,
+          startDate: req.body.startDate ?? null,
+          endDate:   req.body.endDate   ?? null,
         };
 
         await persistRun({ slug, orgId, status: 'complete', result: resultPayload, runId });

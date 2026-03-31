@@ -18,10 +18,19 @@ import Button from '../../../components/ui/Button';
 import MarkdownRenderer from '../../../components/ui/MarkdownRenderer';
 
 const fmtAud  = (n) => `$${Number(n ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** Run timestamp — DD/MM/YYYY HH:MM */
 const fmtDate = (s) => {
   if (!s) return '—';
   try { return new Date(s).toLocaleString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
   catch { return s; }
+};
+
+/** ISO date string → DD/MM/YYYY */
+const fmtDay = (s) => {
+  if (!s) return '—';
+  const [y, m, d] = s.split('-');
+  return `${d}/${m}/${y}`;
 };
 
 const STATUS_COLOR = { complete: '#16a34a', error: '#dc2626', running: '#d97706' };
@@ -223,7 +232,10 @@ export default function AgentDashboardCard({ slug, title, description, startDate
         {/* Last run meta — only shown when collapsed */}
         {!expanded && lastRun && !running && (
           <p style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 6, marginLeft: 21, fontFamily: 'inherit' }}>
-            Last run: {fmtDate(lastRun.run_at)}
+            {result?.startDate && result?.endDate
+              ? <>{fmtDay(result.startDate)} – {fmtDay(result.endDate)}</>
+              : <>Run {fmtDate(lastRun.run_at)}</>
+            }
             {runCost != null && <span> · {fmtAud(runCost)}</span>}
           </p>
         )}
@@ -232,16 +244,18 @@ export default function AgentDashboardCard({ slug, title, description, startDate
       {/* ── Expanded body ───────────────────────────────────────────────── */}
       {expanded && hasResult && (
         <div style={{ borderTop: '1px solid var(--color-border)', padding: '16px' }}>
-          {/* Action buttons */}
+          {/* Action buttons + run meta */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <button onClick={handleCopy} style={actionBtnStyle}>{copied ? 'Copied!' : 'Copy'}</button>
             <button onClick={handlePrint} style={actionBtnStyle}>Print / PDF</button>
             <button onClick={() => { setEmailModal(true); setEmailError(''); }} style={actionBtnStyle}>Email</button>
-            {runCost != null && (
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
-                Last run: {fmtDate(lastRun?.run_at)} · {fmtAud(runCost)}
-              </span>
-            )}
+            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
+              {result?.startDate && result?.endDate
+                ? <>{fmtDay(result.startDate)} – {fmtDay(result.endDate)}</>
+                : lastRun?.run_at ? <>Run {fmtDate(lastRun.run_at)}</> : null
+              }
+              {runCost != null && <span> · {fmtAud(runCost)}</span>}
+            </span>
           </div>
           <MarkdownRenderer text={summary} />
         </div>

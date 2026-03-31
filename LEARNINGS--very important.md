@@ -1171,3 +1171,74 @@ When adding a new sidebar link or UI element with an icon:
 This was the cause of the missing Agents sidebar icon. The `bot` entry was absent; the sidebar link rendered with no icon and no indication of the problem.
 
 **When to check:** any time a new icon name is used in a component via `getIcon('name')` — verify it exists in `semanticMap` before shipping.
+
+---
+
+### MCP as the Integration Layer — Agents Must Not Import Services Directly
+
+**Principle:** Agents call external integrations (Google Ads, Google Analytics, WordPress, and any future API) via registered MCP servers — not by importing service classes directly. The service classes (`GoogleAdsService`, `GoogleAnalyticsService`) are implementation details of the MCP server processes. Agent code must never `require` them.
+
+**Why:** When an agent imports a service directly, the integration is invisible to the platform. It cannot be configured, toggled, or diagnosed from Admin > MCP Servers. It bypasses the single place where API credentials and connection state are managed. It also creates a tight coupling that breaks the platform-first principle.
+
+**Correct pattern — agent tools.js:**
+```js
+const { getAdsServer, getAnalyticsServer, callMcpTool, resolveRangeArgs } = require('../../platform/mcpTools');
+
+async execute(input, context) {
+  const ads = await getAdsServer(context.orgId);
+  return callMcpTool(context.orgId, ads, 'ads_get_campaign_performance', {
+    ...resolveRangeArgs(context, input),
+    customer_id: context.customerId ?? null,
+  });
+}
+```
+
+**Wrong pattern — never do this in agent tools.js:**
+```js
+const { googleAdsService } = require('../../services/GoogleAdsService'); // ✗
+
+async execute(input, context) {
+  return googleAdsService.getCampaignPerformance(...); // ✗
+}
+```
+
+**The shared helper:** `server/platform/mcpTools.js` provides:
+- `getAdsServer(orgId)` — finds the registered Google Ads MCP server by matching config args that include `'google-ads'`; auto-connects if disconnected
+- `getAnalyticsServer(orgId)` — finds the registered Google Analytics MCP server by matching `'google-analytics'`
+- `callMcpTool(orgId, server, toolName, args)` — calls `MCPRegistry.send()` and unwraps `JSON.parse(result.content[0].text)`
+- `resolveRangeArgs(context, input, defaultDays)` — converts agent context (startDate/endDate or days) into MCP tool-compatible `{ start_date, end_date }` or `{ days }` args
+
+**MCP servers registered for Google Ads agents:**
+
+| Server file | Match keyword | Tools exposed |
+|---|---|---|
+| `mcp-servers/google-ads.js` | `'google-ads'` | 9 tools: `ads_get_campaign_performance`, `ads_get_daily_performance`, `ads_get_search_terms`, `ads_get_budget_pacing`, `ads_generate_keyword_ideas`, `ads_get_auction_insights`, `ads_get_impression_share_by_campaign`, `ads_get_active_keywords`, `ads_get_change_history` |
+| `mcp-servers/google-analytics.js` | `'google-analytics'` | 5 tools: `ga4_get_sessions_overview`, `ga4_get_traffic_sources`, `ga4_get_landing_page_performance`, `ga4_get_paid_bounced_sessions`, `ga4_get_conversion_events` |
+| `mcp-servers/wordpress.js` | `'wordpress'` | 6 tools: `wp_get_user`, `wp_list_users`, `wp_list_posts`, `wp_get_post`, `wp_get_enquiries`, `wp_enquiry_field_check` |
+
+**All 8 Google Ads agent tools.js files** (`googleAdsMonitor`, `googleAdsFreeform`, `googleAdsChangeImpact`, `googleAdsChangeAudit`, `adsBounceAnalysis`, `adsAttributionSummary`, `competitorKeywordIntel`, `auctionInsights`) use `mcpTools.js` exclusively. None import `GoogleAdsService` or `GoogleAnalyticsService` directly.
+
+**Server registration (Admin > MCP Servers):**
+- Transport type: `stdio`
+- Google Ads config: `{ "command": "node", "args": ["/app/server/mcp-servers/google-ads.js"] }`
+- Google Analytics config: `{ "command": "node", "args": ["/app/server/mcp-servers/google-analytics.js"] }`
+
+Both servers inherit env vars from the parent process — no `env` block needed in config.
+
+**Server matching is by args substring, not by name.** The `getAdsServer` helper scans `server.config.args` for any element that includes `'google-ads'`. This means the server can be named anything in the UI — only the file path in args matters for matching.
+
+---
+
+### Google Ads API v23 — Auction Insights Field Names
+
+The `auction_insight` GAQL resource uses **different metric names** from the campaign resource. Metrics that are prefixed `search_` at the campaign level use an `auction_insight_search_` prefix in the auction insight resource.
+
+| Campaign resource | Auction insight resource |
+|---|---|
+| `metrics.search_top_impression_percentage` | `metrics.auction_insight_search_top_impression_percentage` |
+| `metrics.search_absolute_top_impression_percentage` | `metrics.auction_insight_search_absolute_top_impression_percentage` |
+| `metrics.search_outranking_share` | `metrics.auction_insight_search_outranking_share` |
+
+The domain field is `auction_insight.domain` (dot notation) — not `auction_insight_domain` (snake case). Parsed in response as `r.auctionInsight?.domain`.
+
+`metrics.search_top_impression_percentage` and `metrics.search_absolute_top_impression_percentage` are **not valid** on the `campaign` resource in v23. `getImpressionShareByCampaign` uses only `search_impression_share`, `search_rank_lost_impression_share`, and `search_budget_lost_impression_share`.
