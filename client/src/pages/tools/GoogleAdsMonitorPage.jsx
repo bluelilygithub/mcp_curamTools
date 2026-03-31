@@ -12,6 +12,7 @@ import CampaignPerformanceTable from './GoogleAdsMonitor/CampaignPerformanceTabl
 import SearchTermsTable from './GoogleAdsMonitor/SearchTermsTable';
 import AISuggestionsPanel from './GoogleAdsMonitor/AISuggestionsPanel';
 import AgentDashboardCard from './GoogleAdsMonitor/AgentDashboardCard';
+import StrategicReviewCard from './GoogleAdsMonitor/StrategicReviewCard';
 
 const AGENT_SLUG = 'google-ads-monitor';
 
@@ -365,23 +366,20 @@ export default function GoogleAdsMonitorPage() {
             ))}
           </div>
 
-          {/* Date pickers + Run */}
+          {/* Date pickers */}
           <div className="flex items-center gap-2 flex-wrap justify-end">
             <div className="flex items-center gap-1.5">
               <span className="text-xs" style={{ color: 'var(--color-muted)', fontFamily: 'inherit' }}>From</span>
-              <input type="date" value={startDate} max={endDate}
+              <input key={`start-${startDate}`} type="date" value={startDate} max={endDate}
                 onChange={(e) => onDateChange('start', e.target.value)}
                 style={{ ...inputStyle, fontSize: '0.8rem' }} />
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-xs" style={{ color: 'var(--color-muted)', fontFamily: 'inherit' }}>To</span>
-              <input type="date" value={endDate} min={startDate} max={isoDate(new Date())}
+              <input key={`end-${endDate}`} type="date" value={endDate} min={startDate} max={isoDate(new Date())}
                 onChange={(e) => onDateChange('end', e.target.value)}
                 style={{ ...inputStyle, fontSize: '0.8rem' }} />
             </div>
-            <Button variant="primary" onClick={handleRun} disabled={running}>
-              {running ? 'Running…' : 'Run now'}
-            </Button>
           </div>
         </div>
       </div>
@@ -527,6 +525,14 @@ export default function GoogleAdsMonitorPage() {
               onToggle={() => toggleCard(slug)}
             />
           ))}
+
+          {/* ── Strategic Review ─────────────────────────────────────────── */}
+          <StrategicReviewCard
+            startDate={startDate}
+            endDate={endDate}
+            expanded={openCard === 'google-ads-strategic-review'}
+            onToggle={() => toggleCard('google-ads-strategic-review')}
+          />
         </div>
       )}
 

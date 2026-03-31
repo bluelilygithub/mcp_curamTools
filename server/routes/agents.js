@@ -110,6 +110,18 @@ agentsRouter.use(
   })
 );
 
+// ── Google Ads Strategic Review ───────────────────────────────────────────
+const { runGoogleAdsStrategicReview } = require('../agents/googleAdsStrategicReview');
+
+agentsRouter.use(
+  '/google-ads-strategic-review',
+  createAgentRoute({
+    slug:               'google-ads-strategic-review',
+    runFn:              runGoogleAdsStrategicReview,
+    requiredPermission: 'ads_operator',
+  })
+);
+
 // ── Ads Attribution Summary ───────────────────────────────────────────────
 const { runAdsAttributionSummary } = require('../agents/adsAttributionSummary');
 
