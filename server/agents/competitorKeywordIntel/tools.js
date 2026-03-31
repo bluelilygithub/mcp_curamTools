@@ -165,4 +165,4 @@ const competitorKeywordIntelTools = [
   getOwnKeywordsTool,
 ];
 
-module.exports = { competitorKeywordIntelTools, COMPETITORS, TOOL_SLUG };
+module.exports = { competitorKeywordIntelTools, TOOL_SLUG };
