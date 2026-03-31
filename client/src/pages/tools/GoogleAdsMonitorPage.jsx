@@ -151,9 +151,10 @@ export default function GoogleAdsMonitorPage() {
   const [config,     setConfig]     = useState(null);
   const [savingCfg,  setSavingCfg]  = useState(false);
   const [cfgSuccess, setCfgSuccess] = useState('');
-  const [activeTab,  setActiveTab]  = useState('results');
+  const [activeTab,  setActiveTab]  = useState('dashboard');
   const [emailModal, setEmailModal] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
+  const [monitorCopied, setMonitorCopied] = useState(false);
 
   // Warn before leaving while a run is in progress
   useEffect(() => {
@@ -317,26 +318,18 @@ export default function GoogleAdsMonitorPage() {
 
   const hasResult = !!result;
 
-  // Export/email buttons — shown alongside tab bar when there's a result
-  const actionButtons = hasResult && !running ? (
-    <div className="flex gap-1.5 ml-auto">
-      <button onClick={exportCSV} style={{
-        fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'inherit',
-        border: '1px solid var(--color-border)', background: 'transparent',
-        color: 'var(--color-muted)', cursor: 'pointer',
-      }}>Export CSV</button>
-      <button onClick={() => window.print()} style={{
-        fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'inherit',
-        border: '1px solid var(--color-border)', background: 'transparent',
-        color: 'var(--color-muted)', cursor: 'pointer',
-      }}>Print / PDF</button>
-      <button onClick={() => setEmailModal(true)} style={{
-        fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'inherit',
-        border: '1px solid var(--color-border)', background: 'transparent',
-        color: 'var(--color-muted)', cursor: 'pointer',
-      }}>Email</button>
-    </div>
-  ) : null;
+  const actionBtnStyle = {
+    fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'inherit',
+    border: '1px solid var(--color-border)', background: 'transparent',
+    color: 'var(--color-muted)', cursor: 'pointer',
+  };
+
+  function handleMonitorCopy() {
+    navigator.clipboard.writeText(summary).then(() => {
+      setMonitorCopied(true);
+      setTimeout(() => setMonitorCopied(false), 2000);
+    });
+  }
 
   return (
     <div className="p-5 max-w-5xl mx-auto" style={{ fontFamily: 'inherit' }}>
@@ -394,85 +387,87 @@ export default function GoogleAdsMonitorPage() {
 
       {/* ── Tabs ───────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1 mb-4 flex-wrap">
-        {tabBtn('results',   'Results')}
         {tabBtn('dashboard', 'Dashboard')}
         {tabBtn('history',   'History')}
         {tabBtn('settings',  'Settings')}
-        {actionButtons}
       </div>
-
-      {/* ── Results ────────────────────────────────────────────────────── */}
-      {activeTab === 'results' && (
-        <>
-          {!hasResult && !running && (
-            <div className="rounded-2xl border p-10 text-center text-sm"
-              style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted)', fontFamily: 'inherit' }}>
-              No results yet. Select a date range and click "Run now" to analyse your account.
-            </div>
-          )}
-
-          {hasResult && (
-            <>
-              {summary && (
-                <Section title="Analysis">
-                  <MarkdownRenderer text={summary} />
-                </Section>
-              )}
-
-              {campaigns.length > 0 && (
-                <Section title="Campaign Performance">
-                  <CampaignPerformanceTable campaigns={campaigns} />
-                </Section>
-              )}
-
-              {dailyData.length > 1 && (
-                <Section title="Spend & Conversions Trend">
-                  <LineChart
-                    data={dailyData}
-                    xKey="date"
-                    leftKey="cost"
-                    rightKey="conversions"
-                    leftLabel="Spend (AUD)"
-                    rightLabel="Conversions"
-                    leftFormat={(v) => `$${Math.round(v).toLocaleString('en-AU')}`}
-                    rightFormat={(v) => Number(v).toFixed(1)}
-                    leftColor="var(--color-primary)"
-                    rightColor="#10b981"
-                  />
-                </Section>
-              )}
-
-              {searchTerms.length > 0 && (
-                <Section title="Search Terms">
-                  <SearchTermsTable terms={searchTerms} />
-                </Section>
-              )}
-
-              {suggestions.length > 0 && (
-                <Section title={`Recommendations (${suggestions.length})`}>
-                  <AISuggestionsPanel suggestions={suggestions} />
-                </Section>
-              )}
-
-              {result.costAud != null && (
-                <p className="text-xs text-right mt-2" style={{ color: 'var(--color-muted)', fontFamily: 'inherit' }}>
-                  Run cost: A${Number(result.costAud).toFixed(4)}
-                  {result.tokensUsed?.input != null && (
-                    <span> · {fmtNum((result.tokensUsed.input ?? 0) + (result.tokensUsed.output ?? 0))} tokens</span>
-                  )}
-                </p>
-              )}
-            </>
-          )}
-        </>
-      )}
 
       {/* ── Dashboard ──────────────────────────────────────────────────── */}
       {activeTab === 'dashboard' && (
         <div>
-          <p className="text-xs mb-4" style={{ color: 'var(--color-muted)', fontFamily: 'inherit' }}>
-            Related agents — run against the same date range selected above.
-          </p>
+          {/* Google Ads Monitor — main analysis */}
+          <Section title="Google Ads Monitor">
+            {!hasResult && !running && (
+              <p className="text-sm text-center py-4" style={{ color: 'var(--color-muted)', fontFamily: 'inherit' }}>
+                No results yet. Select a date range and click "Run now" to analyse your account.
+              </p>
+            )}
+            {hasResult && (
+              <>
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                  <button onClick={handleMonitorCopy} style={actionBtnStyle}>
+                    {monitorCopied ? 'Copied!' : 'Copy'}
+                  </button>
+                  <button onClick={exportCSV} style={actionBtnStyle}>Export CSV</button>
+                  <button onClick={() => window.print()} style={actionBtnStyle}>Print / PDF</button>
+                  <button onClick={() => setEmailModal(true)} style={actionBtnStyle}>Email</button>
+                </div>
+
+                {summary && <MarkdownRenderer text={summary} />}
+
+                {campaigns.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>Campaign Performance</p>
+                    <CampaignPerformanceTable campaigns={campaigns} />
+                  </div>
+                )}
+
+                {dailyData.length > 1 && (
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>Spend & Conversions Trend</p>
+                    <LineChart
+                      data={dailyData}
+                      xKey="date"
+                      leftKey="cost"
+                      rightKey="conversions"
+                      leftLabel="Spend (AUD)"
+                      rightLabel="Conversions"
+                      leftFormat={(v) => `$${Math.round(v).toLocaleString('en-AU')}`}
+                      rightFormat={(v) => Number(v).toFixed(1)}
+                      leftColor="var(--color-primary)"
+                      rightColor="#10b981"
+                    />
+                  </div>
+                )}
+
+                {searchTerms.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>Search Terms</p>
+                    <SearchTermsTable terms={searchTerms} />
+                  </div>
+                )}
+
+                {suggestions.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>Recommendations ({suggestions.length})</p>
+                    <AISuggestionsPanel suggestions={suggestions} />
+                  </div>
+                )}
+
+                {result.costAud != null && (
+                  <p className="text-xs text-right mt-3" style={{ color: 'var(--color-muted)', fontFamily: 'inherit' }}>
+                    Run cost: A${Number(result.costAud).toFixed(4)}
+                    {result.tokensUsed?.input != null && (
+                      <span> · {fmtNum((result.tokensUsed.input ?? 0) + (result.tokensUsed.output ?? 0))} tokens</span>
+                    )}
+                  </p>
+                )}
+              </>
+            )}
+          </Section>
+
+          {/* Sub-agent cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16 }}>
             <AgentDashboardCard
               slug="google-ads-change-impact"
@@ -549,7 +544,7 @@ export default function GoogleAdsMonitorPage() {
                       </td>
                       <td style={{ padding: '8px 14px', textAlign: 'right' }}>
                         {run.status === 'complete' && run.result && (
-                          <button onClick={() => { setResult(run.result); setActiveTab('results'); }}
+                          <button onClick={() => { setResult(run.result); setActiveTab('dashboard'); }}
                             style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
                             View
                           </button>
