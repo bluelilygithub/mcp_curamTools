@@ -189,12 +189,13 @@ const getConversionEventsTool = {
 
 const getEnquiriesTool = {
   name: 'get_enquiries',
-  description: 'CRM enquiry/lead records from WordPress. Includes UTM source, medium, campaign, ad group, search term, device type, landing page, gclid, GA4 client ID, and enquiry status. Up to 3 years of history. Use for lead volume, lead quality, campaign-to-lead attribution, or any question about what happened after the click. NOTE: this CRM data predates Google Ads tracking — do not attempt to join it with Ads/GA4 metrics for periods before March 2026.',
+  description: 'CRM enquiry/lead records from WordPress. Includes UTM source, medium, campaign, ad group, search term, device type, landing page, gclid, GA4 client ID, and enquiry status. Years of history available. Use for lead volume, lead quality, campaign-to-lead attribution, or any question about what happened after the click. Use start_date and end_date to fetch specific periods; use a high limit to retrieve bulk data.',
   input_schema: {
     type: 'object',
     properties: {
-      limit:  { type: 'integer', description: 'Max records to return. Default 100.', default: 100 },
-      status: { type: 'string',  description: 'Filter by enquiry_status value if known.' },
+      limit:      { type: 'integer', description: 'Max records to return. Default 500. Use 2000+ for full historical analysis.' },
+      start_date: { type: 'string',  description: 'Fetch enquiries on or after this date (YYYY-MM-DD).' },
+      end_date:   { type: 'string',  description: 'Fetch enquiries on or before this date (YYYY-MM-DD).' },
     },
     required: [],
   },
@@ -202,8 +203,9 @@ const getEnquiriesTool = {
   async execute(input, context) {
     const wp = await getWordPressServer(context.orgId);
     return callMcpTool(context.orgId, wp, 'wp_get_enquiries', {
-      limit:  input.limit  ?? 100,
-      status: input.status ?? undefined,
+      limit:      input.limit      ?? 500,
+      start_date: input.start_date ?? undefined,
+      end_date:   input.end_date   ?? undefined,
     });
   },
 };
