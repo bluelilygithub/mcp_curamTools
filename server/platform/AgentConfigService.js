@@ -327,8 +327,32 @@ async function updateOrgBudgetSettings(orgId, patch, updatedBy) {
   return merged;
 }
 
+/**
+ * Returns lightweight metadata for a prompt row — last editor, timestamp,
+ * and the model that was active when the prompt was last saved.
+ */
+async function getAgentConfigMeta(orgId, slug) {
+  try {
+    const res = await pool.query(
+      `SELECT
+         ac.updated_at,
+         ac.config->>'model_at_last_edit' AS model_at_last_edit,
+         u.email                           AS updated_by_email
+       FROM agent_configs ac
+       LEFT JOIN users u ON u.id = ac.updated_by
+      WHERE ac.org_id = $1 AND ac.slug = $2 AND ac.customer_id IS NULL`,
+      [orgId, slug]
+    );
+    if (res.rows.length === 0) return { updated_at: null, updated_by_email: null, model_at_last_edit: null };
+    return res.rows[0];
+  } catch {
+    return { updated_at: null, updated_by_email: null, model_at_last_edit: null };
+  }
+}
+
 module.exports = {
   getAgentConfig,
+  getAgentConfigMeta,
   updateAgentConfig,
   getAgentConfigForCustomer,
   updateAgentConfigForCustomer,

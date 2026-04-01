@@ -6,7 +6,8 @@
  * Scoped to Diamond Plate Australia — graphene ceramic coating for cars.
  */
 
-function buildSystemPrompt() {
+function buildSystemPrompt(config = {}) {
+  if (config.custom_prompt) return config.custom_prompt;
   return `\
 You are a competitive keyword intelligence analyst for Diamond Plate Australia, \
 a maker and professional applicator of graphene ceramic coating for cars, operating in Australia.

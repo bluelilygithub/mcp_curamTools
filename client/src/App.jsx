@@ -19,6 +19,7 @@ import AdminMcpServersPage from './pages/admin/AdminMcpServersPage';
 import AdminMcpResourcesPage from './pages/admin/AdminMcpResourcesPage';
 import AdminDiagnosticsPage from './pages/admin/AdminDiagnosticsPage';
 import AdminSqlPage from './pages/admin/AdminSqlPage';
+import AdminPromptsPage from './pages/admin/AdminPromptsPage';
 import AdminDepartmentsPage from './pages/admin/AdminDepartmentsPage';
 import AdminOrgRolesPage from './pages/admin/AdminOrgRolesPage';
 import GoogleAdsMonitorPage from './pages/tools/GoogleAdsMonitorPage';
@@ -56,6 +57,7 @@ export default function App() {
                   <Route path="/admin/mcp-resources" element={<AdminMcpResourcesPage />} />
                   <Route path="/admin/diagnostics" element={<AdminDiagnosticsPage />} />
                   <Route path="/admin/sql" element={<AdminSqlPage />} />
+                  <Route path="/admin/prompts" element={<AdminPromptsPage />} />
                   <Route path="/admin/departments" element={<AdminDepartmentsPage />} />
                   <Route path="/admin/org-roles" element={<AdminOrgRolesPage />} />
                 </Route>

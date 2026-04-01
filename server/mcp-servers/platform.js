@@ -58,6 +58,19 @@ const TOOLS = [
       required: ['org_id', 'query'],
     },
   },
+  {
+    name: 'flag_prompt_for_review',
+    description: 'Raise a flag on a prompt that needs admin review. Call this when you notice your own system prompt is outdated, references stale context, uses capabilities no longer available, or would benefit from an update. Flags are visible to administrators in the MCP Prompts page.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        org_id: { type: 'number', description: 'Organisation ID.' },
+        slug:   { type: 'string', description: 'Agent slug whose prompt needs review (e.g. "google-ads-conversation").' },
+        reason: { type: 'string', description: 'Concise explanation of why the prompt needs review (max 300 chars).' },
+      },
+      required: ['org_id', 'slug', 'reason'],
+    },
+  },
 ];
 
 // ── Tool handlers ─────────────────────────────────────────────────────────────
@@ -154,6 +167,16 @@ async function callTool(name, args = {}) {
         end_date:   r.end_date,
         summary:    r.summary ?? '',
       }));
+    }
+
+    case 'flag_prompt_for_review': {
+      const { org_id, slug, reason } = args;
+      if (!org_id || !slug || !reason) throw new Error('org_id, slug, and reason are required');
+      await pool.query(
+        `INSERT INTO prompt_flags (org_id, slug, reason) VALUES ($1, $2, $3)`,
+        [org_id, slug, reason]
+      );
+      return { flagged: true, slug, reason };
     }
 
     default:

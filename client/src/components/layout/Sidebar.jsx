@@ -83,6 +83,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
           <NavItem to="/admin/logs" icon="activity" label="Logs" collapsed={collapsed} onClick={onLinkClick} />
           <NavItem to="/admin/mcp-servers" icon="server" label="MCP Servers" collapsed={collapsed} onClick={onLinkClick} />
           <NavItem to="/admin/mcp-resources" icon="layers" label="MCP Resources" collapsed={collapsed} onClick={onLinkClick} />
+          <NavItem to="/admin/prompts" icon="file-text" label="MCP Prompts" collapsed={collapsed} onClick={onLinkClick} />
           <NavItem to="/admin/diagnostics" icon="zap" label="Diagnostics" collapsed={collapsed} onClick={onLinkClick} />
           <NavItem to="/admin/sql" icon="database" label="SQL Console" collapsed={collapsed} onClick={onLinkClick} />
           <NavItem to="/admin/departments" icon="bookmark" label="Departments" collapsed={collapsed} onClick={onLinkClick} />

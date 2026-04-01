@@ -391,6 +391,24 @@ async function initSchema() {
         ON embeddings(org_id, source_type)
     `);
 
+    // Prompt flags — raised by agents or model-change detection; resolved by admins
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS prompt_flags (
+        id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id      INTEGER     NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        slug        TEXT        NOT NULL,
+        reason      TEXT        NOT NULL,
+        flagged_at  TIMESTAMPTZ DEFAULT NOW(),
+        resolved_at TIMESTAMPTZ,
+        resolved_by INTEGER     REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_prompt_flags_org_slug
+        ON prompt_flags(org_id, slug)
+        WHERE resolved_at IS NULL
+    `);
+
     await client.query('COMMIT');
 
     // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)

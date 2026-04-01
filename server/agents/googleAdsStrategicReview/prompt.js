@@ -1,6 +1,7 @@
 'use strict';
 
-function buildSystemPrompt() {
+function buildSystemPrompt(config = {}) {
+  if (config.custom_prompt) return config.custom_prompt;
   return `\
 You are a senior paid search strategist reviewing campaign observations for Diamond Plate Australia, \
 a professional applicator of graphene ceramic coating for cars.

@@ -7,7 +7,8 @@
  * GA4 traffic, and WordPress enquiries with UTM attribution.
  */
 
-function buildSystemPrompt() {
+function buildSystemPrompt(config = {}) {
+  if (config.custom_prompt) return config.custom_prompt;
   return `\
 You are a digital marketing analyst. Your job is to produce a concise attribution \
 summary that connects Google Ads spend, website traffic, and actual client enquiries.

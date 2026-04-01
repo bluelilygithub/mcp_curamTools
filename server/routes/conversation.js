@@ -203,7 +203,7 @@ router.post('/:id/message', requireAuth, async (req, res) => {
     };
 
     const { result, tokensUsed } = await agentOrchestrator.run({
-      systemPrompt:        buildSystemPrompt(),
+      systemPrompt:        buildSystemPrompt(await AgentConfigService.getAgentConfig(orgId, TOOL_SLUG).catch(() => ({}))),
       userMessage:         message.trim(),
       conversationHistory: history,
       tools:               googleAdsConversationTools,

@@ -13,6 +13,7 @@ const express = require('express');
 const { requireAuth } = require('../middleware/requireAuth');
 const { requireRole } = require('../middleware/requireRole');
 const AgentConfigService = require('../platform/AgentConfigService');
+const { pool } = require('../db');
 
 const agentsRouter = express.Router();
 const agentConfigsRouter = express.Router();
@@ -297,6 +298,50 @@ agentConfigsRouter.put('/:slug/customers/:customerId', requireAuth, requireRole(
   } catch (err) {
     console.error('[agent-configs customers PUT]', err.message);
     res.status(500).json({ error: 'Failed to update customer config.' });
+  }
+});
+
+// GET /api/agent-configs/:slug/meta — prompt metadata (updated_at, editor, model)
+agentConfigsRouter.get('/:slug/meta', requireAuth, async (req, res) => {
+  try {
+    const meta = await AgentConfigService.getAgentConfigMeta(req.user.orgId, req.params.slug);
+    res.json(meta);
+  } catch (err) {
+    console.error('[agent-configs meta GET]', err.message);
+    res.status(500).json({ error: 'Failed to load agent config meta.' });
+  }
+});
+
+// GET /api/agent-configs/:slug/flags — open prompt flags
+agentConfigsRouter.get('/:slug/flags', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, reason, flagged_at
+         FROM prompt_flags
+        WHERE org_id = $1 AND slug = $2 AND resolved_at IS NULL
+        ORDER BY flagged_at DESC`,
+      [req.user.orgId, req.params.slug]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[agent-configs flags GET]', err.message);
+    res.status(500).json({ error: 'Failed to load prompt flags.' });
+  }
+});
+
+// POST /api/agent-configs/:slug/flags/:id/resolve — resolve a prompt flag
+agentConfigsRouter.post('/:slug/flags/:id/resolve', requireAuth, requireRole(['org_admin']), async (req, res) => {
+  try {
+    await pool.query(
+      `UPDATE prompt_flags
+          SET resolved_at = NOW(), resolved_by = $1
+        WHERE id = $2 AND org_id = $3 AND slug = $4`,
+      [req.user.id, req.params.id, req.user.orgId, req.params.slug]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[agent-configs flags resolve]', err.message);
+    res.status(500).json({ error: 'Failed to resolve flag.' });
   }
 });
 

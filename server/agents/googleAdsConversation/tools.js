@@ -344,6 +344,28 @@ const addDocumentTool = {
   },
 };
 
+const flagPromptForReviewTool = {
+  name: 'flag_prompt_for_review',
+  description: 'Raise a flag for admin review of a system prompt. Use when you notice your own prompt is outdated, references stale business context, or would benefit from an update.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      slug:   { type: 'string', description: 'Agent slug whose prompt needs review.' },
+      reason: { type: 'string', description: 'Why the prompt needs updating (max 300 chars).' },
+    },
+    required: ['slug', 'reason'],
+  },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(input, context) {
+    const platform = await getPlatformServer(context.orgId);
+    return callMcpTool(context.orgId, platform, 'flag_prompt_for_review', {
+      org_id: context.orgId,
+      slug:   input.slug,
+      reason: input.reason,
+    });
+  },
+};
+
 const googleAdsConversationTools = [
   getCampaignPerformanceTool,
   getDailyPerformanceTool,
@@ -365,6 +387,7 @@ const googleAdsConversationTools = [
   searchReportHistoryTool,
   searchKnowledgeTool,
   addDocumentTool,
+  flagPromptForReviewTool,
 ];
 
 module.exports = { googleAdsConversationTools, TOOL_SLUG };
