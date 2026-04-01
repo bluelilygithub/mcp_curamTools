@@ -187,9 +187,30 @@ const getConversionEventsTool = {
 
 // ── WordPress / CRM tools ─────────────────────────────────────────────────────
 
+const getNotInterestedReasonsTool = {
+  name: 'get_not_interested_reasons',
+  description: 'Returns ALL CRM records where a reason_not_interested value was recorded, with UTM attribution and search term. Use this for any question about why leads did not proceed — it fetches the full dataset regardless of volume, not limited to the most recent records.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      start_date: { type: 'string', description: 'Filter on or after this date (YYYY-MM-DD).' },
+      end_date:   { type: 'string', description: 'Filter on or before this date (YYYY-MM-DD).' },
+    },
+    required: [],
+  },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(input, context) {
+    const wp = await getWordPressServer(context.orgId);
+    return callMcpTool(context.orgId, wp, 'wp_get_not_interested_reasons', {
+      start_date: input.start_date ?? undefined,
+      end_date:   input.end_date   ?? undefined,
+    });
+  },
+};
+
 const getEnquiriesTool = {
   name: 'get_enquiries',
-  description: 'CRM enquiry/lead records from WordPress. Includes UTM source, medium, campaign, ad group, search term, device type, landing page, gclid, GA4 client ID, enquiry status, and reason_not_interested (why a lead did not proceed). Years of history available. Use for lead volume, lead quality, campaign-to-lead attribution, or any question about what happened after the click. Use start_date and end_date to fetch specific periods; use a high limit to retrieve bulk data.',
+  description: 'CRM enquiry/lead records from WordPress. Includes UTM source, medium, campaign, ad group, search term, device type, landing page, gclid, GA4 client ID, enquiry status, and reason_not_interested (why a lead did not proceed). Years of history available. Use for lead volume, lead quality, campaign-to-lead attribution, or any question about what happened after the click. Use start_date and end_date to fetch specific periods; use a high limit to retrieve bulk data. For specific analysis of not-interested reasons, use wp_get_not_interested_reasons instead — it queries all records with that field populated regardless of volume.',
   input_schema: {
     type: 'object',
     properties: {
@@ -225,6 +246,7 @@ const googleAdsConversationTools = [
   getPaidBouncedSessionsTool,
   getConversionEventsTool,
   getEnquiriesTool,
+  getNotInterestedReasonsTool,
 ];
 
 module.exports = { googleAdsConversationTools, TOOL_SLUG };

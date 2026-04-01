@@ -71,6 +71,17 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: {} },
   },
   {
+    name: 'wp_get_not_interested_reasons',
+    description: 'Returns all clientenquiry records that have a reason_not_interested value, with their UTM attribution. Use this specifically for analysing why leads did not proceed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        start_date: { type: 'string', description: 'Filter on or after this date (YYYY-MM-DD).' },
+        end_date:   { type: 'string', description: 'Filter on or before this date (YYYY-MM-DD).' },
+      },
+    },
+  },
+  {
     name: 'wp_find_meta_key',
     description: 'Search bqq_postmeta for rows matching a key or value pattern. Use to find the exact meta_key a field is stored under.',
     inputSchema: {
@@ -166,6 +177,47 @@ async function callTool(name, args = {}) {
         });
       }
       return results;
+    }
+
+    case 'wp_get_not_interested_reasons': {
+      const params = [];
+      let sql = `
+        SELECT
+          p.ID            AS id,
+          p.post_date     AS date,
+          MAX(CASE WHEN pm.meta_key = 'reason_not_interested' THEN pm.meta_value END) AS reason_not_interested,
+          MAX(CASE WHEN pm.meta_key = 'enquiry_status'        THEN pm.meta_value END) AS enquiry_status,
+          MAX(CASE WHEN pm.meta_key = 'utm_source'            THEN pm.meta_value END) AS utm_source,
+          MAX(CASE WHEN pm.meta_key = 'utm_campaign'          THEN pm.meta_value END) AS utm_campaign,
+          MAX(CASE WHEN pm.meta_key = 'utm_medium'            THEN pm.meta_value END) AS utm_medium,
+          MAX(CASE WHEN pm.meta_key = 'device_type'           THEN pm.meta_value END) AS device_type,
+          MAX(CASE WHEN pm.meta_key = 'search_term'           THEN pm.meta_value END) AS search_term
+        FROM bqq_posts p
+        JOIN bqq_postmeta pm ON p.ID = pm.post_id
+        WHERE p.post_type = 'clientenquiry'
+          AND p.post_status != 'trash'
+          AND p.ID IN (
+            SELECT post_id FROM bqq_postmeta
+            WHERE meta_key = 'reason_not_interested' AND meta_value != ''
+          )
+      `;
+      if (args.start_date) { sql += ` AND p.post_date >= ?`; params.push(args.start_date + ' 00:00:00'); }
+      if (args.end_date)   { sql += ` AND p.post_date <= ?`; params.push(args.end_date   + ' 23:59:59'); }
+      sql += ` GROUP BY p.ID, p.post_date ORDER BY p.post_date DESC`;
+
+      const rows = await query(sql, params);
+      const str = (v) => (v != null && String(v).trim() !== '' ? String(v).trim() : null);
+      return rows.map((r) => ({
+        id:                    r.id,
+        date:                  r.date,
+        reason_not_interested: str(r.reason_not_interested),
+        enquiry_status:        str(r.enquiry_status),
+        utm_source:            str(r.utm_source),
+        utm_campaign:          str(r.utm_campaign),
+        utm_medium:            str(r.utm_medium),
+        device_type:           str(r.device_type),
+        search_term:           str(r.search_term),
+      }));
     }
 
     case 'wp_find_meta_key': {
