@@ -18,7 +18,7 @@
  *   Do NOT cross-reference CRM data with Google data for periods before March 2026.
  */
 
-const { getAdsServer, getAnalyticsServer, getWordPressServer, callMcpTool, resolveRangeArgs } = require('../../platform/mcpTools');
+const { getAdsServer, getAnalyticsServer, getWordPressServer, getPlatformServer, callMcpTool, resolveRangeArgs } = require('../../platform/mcpTools');
 
 const TOOL_SLUG = 'google-ads-conversation';
 
@@ -231,6 +231,69 @@ const getEnquiriesTool = {
   },
 };
 
+// ── Platform / report history tools ──────────────────────────────────────────
+
+const listReportAgentsTool = {
+  name: 'list_report_agents',
+  description: 'Lists all report agents that have stored history — with run counts and last run date. Call this before get_report_history to discover what historical data is available.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(_input, context) {
+    const platform = await getPlatformServer(context.orgId);
+    return callMcpTool(context.orgId, platform, 'list_report_agents', { org_id: context.orgId });
+  },
+};
+
+const getReportHistoryTool = {
+  name: 'get_report_history',
+  description: 'Fetches stored historical reports for a specific agent — full summary text included. Use to analyse trends, compare periods, or answer questions about what past reports found. Available slugs: google-ads-monitor, google-ads-strategic-review, ads-attribution-summary, google-ads-change-impact, google-ads-change-audit.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      slug:       { type: 'string',  description: 'Agent slug to fetch history for.' },
+      limit:      { type: 'integer', description: 'Number of runs to return. Default 10.' },
+      start_date: { type: 'string',  description: 'Only runs on or after this date (YYYY-MM-DD).' },
+      end_date:   { type: 'string',  description: 'Only runs on or before this date (YYYY-MM-DD).' },
+    },
+    required: ['slug'],
+  },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(input, context) {
+    const platform = await getPlatformServer(context.orgId);
+    return callMcpTool(context.orgId, platform, 'get_report_history', {
+      org_id:     context.orgId,
+      slug:       input.slug,
+      limit:      input.limit      ?? 10,
+      start_date: input.start_date ?? undefined,
+      end_date:   input.end_date   ?? undefined,
+    });
+  },
+};
+
+const searchReportHistoryTool = {
+  name: 'search_report_history',
+  description: 'Full-text search across all stored report summaries. Use to find reports that mentioned a specific topic, campaign, keyword, issue, or metric value. Returns matching reports ranked by relevance.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string',  description: 'Search terms, e.g. "CPA conversion rate" or "brand campaign negative keywords".' },
+      slug:  { type: 'string',  description: 'Optional: restrict search to a specific agent slug.' },
+      limit: { type: 'integer', description: 'Max results. Default 10.' },
+    },
+    required: ['query'],
+  },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(input, context) {
+    const platform = await getPlatformServer(context.orgId);
+    return callMcpTool(context.orgId, platform, 'search_report_history', {
+      org_id: context.orgId,
+      query:  input.query,
+      slug:   input.slug   ?? undefined,
+      limit:  input.limit  ?? 10,
+    });
+  },
+};
+
 const googleAdsConversationTools = [
   getCampaignPerformanceTool,
   getDailyPerformanceTool,
@@ -247,6 +310,9 @@ const googleAdsConversationTools = [
   getConversionEventsTool,
   getEnquiriesTool,
   getNotInterestedReasonsTool,
+  listReportAgentsTool,
+  getReportHistoryTool,
+  searchReportHistoryTool,
 ];
 
 module.exports = { googleAdsConversationTools, TOOL_SLUG };

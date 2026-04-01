@@ -105,34 +105,47 @@ async function callTool(name, args = {}) {
 
       let sql = `
         SELECT
-          p.ID            AS id,
-          p.post_date     AS date,
-          p.post_status   AS post_status,
-          MAX(CASE WHEN pm.meta_key = 'enquiry_status'  THEN pm.meta_value END) AS enquiry_status,
-          MAX(CASE WHEN pm.meta_key = 'utm_source'      THEN pm.meta_value END) AS utm_source,
-          MAX(CASE WHEN pm.meta_key = 'utm_medium'      THEN pm.meta_value END) AS utm_medium,
-          MAX(CASE WHEN pm.meta_key = 'utm_campaign'    THEN pm.meta_value END) AS utm_campaign,
-          MAX(CASE WHEN pm.meta_key = 'utm_ad_group'    THEN pm.meta_value END) AS utm_ad_group,
-          MAX(CASE WHEN pm.meta_key = 'utm_term'        THEN pm.meta_value END) AS utm_term,
-          MAX(CASE WHEN pm.meta_key = 'utm_content'     THEN pm.meta_value END) AS utm_content,
-          MAX(CASE WHEN pm.meta_key = 'search_term'     THEN pm.meta_value END) AS search_term,
-          MAX(CASE WHEN pm.meta_key = 'device_type'     THEN pm.meta_value END) AS device_type,
-          MAX(CASE WHEN pm.meta_key = 'landing_page'    THEN pm.meta_value END) AS landing_page,
-          MAX(CASE WHEN pm.meta_key = 'referral_page'   THEN pm.meta_value END) AS referral_page,
-          MAX(CASE WHEN pm.meta_key = 'gclib'                    THEN pm.meta_value END) AS gclid,
-          MAX(CASE WHEN pm.meta_key = 'ga4_client_id'            THEN pm.meta_value END) AS ga4_client_id,
-          MAX(CASE WHEN pm.meta_key = 'reason_not_interested'    THEN pm.meta_value END) AS reason_not_interested
+          p.ID              AS id,
+          p.post_date       AS date,
+          p.post_status     AS post_status,
+          pm_es.meta_value  AS enquiry_status,
+          pm_src.meta_value AS utm_source,
+          pm_med.meta_value AS utm_medium,
+          pm_cmp.meta_value AS utm_campaign,
+          pm_ag.meta_value  AS utm_ad_group,
+          pm_trm.meta_value AS utm_term,
+          pm_con.meta_value AS utm_content,
+          pm_st.meta_value  AS search_term,
+          pm_dev.meta_value AS device_type,
+          pm_lp.meta_value  AS landing_page,
+          pm_rp.meta_value  AS referral_page,
+          pm_gc.meta_value  AS gclid,
+          pm_ga.meta_value  AS ga4_client_id,
+          pm_ni.meta_value  AS reason_not_interested
         FROM bqq_posts p
-        LEFT JOIN bqq_postmeta pm ON p.ID = pm.post_id
+        LEFT JOIN bqq_postmeta pm_es  ON p.ID = pm_es.post_id  AND pm_es.meta_key  = 'enquiry_status'
+        LEFT JOIN bqq_postmeta pm_src ON p.ID = pm_src.post_id AND pm_src.meta_key = 'utm_source'
+        LEFT JOIN bqq_postmeta pm_med ON p.ID = pm_med.post_id AND pm_med.meta_key = 'utm_medium'
+        LEFT JOIN bqq_postmeta pm_cmp ON p.ID = pm_cmp.post_id AND pm_cmp.meta_key = 'utm_campaign'
+        LEFT JOIN bqq_postmeta pm_ag  ON p.ID = pm_ag.post_id  AND pm_ag.meta_key  = 'utm_ad_group'
+        LEFT JOIN bqq_postmeta pm_trm ON p.ID = pm_trm.post_id AND pm_trm.meta_key = 'utm_term'
+        LEFT JOIN bqq_postmeta pm_con ON p.ID = pm_con.post_id AND pm_con.meta_key = 'utm_content'
+        LEFT JOIN bqq_postmeta pm_st  ON p.ID = pm_st.post_id  AND pm_st.meta_key  = 'search_term'
+        LEFT JOIN bqq_postmeta pm_dev ON p.ID = pm_dev.post_id AND pm_dev.meta_key = 'device_type'
+        LEFT JOIN bqq_postmeta pm_lp  ON p.ID = pm_lp.post_id  AND pm_lp.meta_key  = 'landing_page'
+        LEFT JOIN bqq_postmeta pm_rp  ON p.ID = pm_rp.post_id  AND pm_rp.meta_key  = 'referral_page'
+        LEFT JOIN bqq_postmeta pm_gc  ON p.ID = pm_gc.post_id  AND pm_gc.meta_key  = 'gclib'
+        LEFT JOIN bqq_postmeta pm_ga  ON p.ID = pm_ga.post_id  AND pm_ga.meta_key  = 'ga4_client_id'
+        LEFT JOIN bqq_postmeta pm_ni  ON p.ID = pm_ni.post_id  AND pm_ni.meta_key  = 'reason_not_interested'
         WHERE p.post_type = 'clientenquiry'
           AND p.post_status != 'trash'
       `;
 
       if (args.start_date) { sql += ` AND p.post_date >= ?`; params.push(args.start_date + ' 00:00:00'); }
       if (args.end_date)   { sql += ` AND p.post_date <= ?`; params.push(args.end_date   + ' 23:59:59'); }
-      if (args.status)     { sql += ` AND EXISTS (SELECT 1 FROM bqq_postmeta WHERE post_id = p.ID AND meta_key = 'enquiry_status' AND meta_value = ?)`; params.push(args.status); }
+      if (args.status)     { sql += ` AND pm_es.meta_value = ?`; params.push(args.status); }
 
-      sql += ` GROUP BY p.ID, p.post_date, p.post_status ORDER BY p.post_date DESC LIMIT ${limit}`;
+      sql += ` ORDER BY p.post_date DESC LIMIT ${limit}`;
 
       const rows = await query(sql, params);
 
@@ -183,27 +196,36 @@ async function callTool(name, args = {}) {
       const params = [];
       let sql = `
         SELECT
-          p.ID            AS id,
-          p.post_date     AS date,
-          MAX(CASE WHEN pm.meta_key = 'reason_not_interested' THEN pm.meta_value END) AS reason_not_interested,
-          MAX(CASE WHEN pm.meta_key = 'enquiry_status'        THEN pm.meta_value END) AS enquiry_status,
-          MAX(CASE WHEN pm.meta_key = 'utm_source'            THEN pm.meta_value END) AS utm_source,
-          MAX(CASE WHEN pm.meta_key = 'utm_campaign'          THEN pm.meta_value END) AS utm_campaign,
-          MAX(CASE WHEN pm.meta_key = 'utm_medium'            THEN pm.meta_value END) AS utm_medium,
-          MAX(CASE WHEN pm.meta_key = 'device_type'           THEN pm.meta_value END) AS device_type,
-          MAX(CASE WHEN pm.meta_key = 'search_term'           THEN pm.meta_value END) AS search_term
+          p.ID              AS id,
+          p.post_date       AS date,
+          pm_r.meta_value   AS reason_not_interested,
+          pm_es.meta_value  AS enquiry_status,
+          pm_src.meta_value AS utm_source,
+          pm_cmp.meta_value AS utm_campaign,
+          pm_med.meta_value AS utm_medium,
+          pm_dev.meta_value AS device_type,
+          pm_st.meta_value  AS search_term
         FROM bqq_posts p
-        JOIN bqq_postmeta pm ON p.ID = pm.post_id
+        INNER JOIN bqq_postmeta pm_r
+          ON p.ID = pm_r.post_id AND pm_r.meta_key = 'reason_not_interested' AND pm_r.meta_value != ''
+        LEFT JOIN bqq_postmeta pm_es
+          ON p.ID = pm_es.post_id  AND pm_es.meta_key  = 'enquiry_status'
+        LEFT JOIN bqq_postmeta pm_src
+          ON p.ID = pm_src.post_id AND pm_src.meta_key = 'utm_source'
+        LEFT JOIN bqq_postmeta pm_cmp
+          ON p.ID = pm_cmp.post_id AND pm_cmp.meta_key = 'utm_campaign'
+        LEFT JOIN bqq_postmeta pm_med
+          ON p.ID = pm_med.post_id AND pm_med.meta_key = 'utm_medium'
+        LEFT JOIN bqq_postmeta pm_dev
+          ON p.ID = pm_dev.post_id AND pm_dev.meta_key = 'device_type'
+        LEFT JOIN bqq_postmeta pm_st
+          ON p.ID = pm_st.post_id  AND pm_st.meta_key  = 'search_term'
         WHERE p.post_type = 'clientenquiry'
           AND p.post_status != 'trash'
-          AND p.ID IN (
-            SELECT post_id FROM bqq_postmeta
-            WHERE meta_key = 'reason_not_interested' AND meta_value != ''
-          )
       `;
       if (args.start_date) { sql += ` AND p.post_date >= ?`; params.push(args.start_date + ' 00:00:00'); }
       if (args.end_date)   { sql += ` AND p.post_date <= ?`; params.push(args.end_date   + ' 23:59:59'); }
-      sql += ` GROUP BY p.ID, p.post_date ORDER BY p.post_date DESC`;
+      sql += ` ORDER BY p.post_date DESC`;
 
       const rows = await query(sql, params);
       const str = (v) => (v != null && String(v).trim() !== '' ? String(v).trim() : null);

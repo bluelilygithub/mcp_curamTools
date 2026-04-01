@@ -80,6 +80,21 @@ async function getWordPressServer(orgId) {
   return server;
 }
 
+/**
+ * Resolve the registered Platform MCP server for this org.
+ * Matches by looking for a server whose config args include 'platform'.
+ */
+async function getPlatformServer(orgId) {
+  const server = await findAndConnect(orgId, 'platform');
+  if (!server) {
+    throw new Error(
+      'No Platform MCP server registered for this organisation. ' +
+      'Add one in Admin > MCP Servers (command: node, args: [.../mcp-servers/platform.js]).'
+    );
+  }
+  return server;
+}
+
 /** @private Find a server matching a slug keyword and auto-connect if needed. */
 async function findAndConnect(orgId, keyword) {
   const servers = await MCPRegistry.list(orgId);
@@ -133,4 +148,4 @@ function resolveRangeArgs(context, input, defaultDays = 30) {
   return { days: context.days ?? input.days ?? defaultDays };
 }
 
-module.exports = { getAdsServer, getAnalyticsServer, getWordPressServer, callMcpTool, resolveRangeArgs };
+module.exports = { getAdsServer, getAnalyticsServer, getWordPressServer, getPlatformServer, callMcpTool, resolveRangeArgs };
