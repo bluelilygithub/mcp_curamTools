@@ -138,9 +138,6 @@ function EmailModal({ onClose, onSend, defaultEmail, sending }) {
   );
 }
 
-// ── Inline history chat ───────────────────────────────────────────────────────
-
-/**
 // ── All-agents history tab ────────────────────────────────────────────────────
 
 const ALL_AGENT_SLUGS = [
