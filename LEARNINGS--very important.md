@@ -1369,3 +1369,76 @@ useEffect(() => {
 ```
 
 **Tab structure:** `GoogleAdsMonitorPage` has four tabs: Dashboard · Conversation · History · Settings. The Conversation tab hosts `ConversationView` which has its own sidebar (list of threads) and chat area, all within the page layout.
+
+---
+
+### WordPress MCP — Use Direct MySQL, Not the REST API
+
+SiteGround's security layer (`sgcaptcha`) intercepts REST API requests from server IPs and challenges them with a CAPTCHA redirect (HTTP 202 with meta-refresh). This is SiteGround's hosting-level bot protection — it is not a WordPress plugin and cannot be disabled from within WordPress. Basic Auth credentials do not bypass it.
+
+**Fix: connect directly to the WordPress MySQL database using `mysql2`.** This bypasses HTTP entirely and is faster, more reliable, and not subject to any WAF or CAPTCHA.
+
+**Required env vars:**
+```
+WP_DB_HOST=<SiteGround server IP — same as site's A record>
+WP_DB_NAME=<WordPress database name>
+WP_DB_USER=<MySQL username>
+WP_DB_PASS=<MySQL password>
+WP_DB_PORT=3306
+```
+
+**SiteGround remote MySQL access:**
+- Enable in Site Tools → Site → MySQL → Remote Access
+- Add the Railway outbound IP as an allowed host
+- Railway's outbound IP can rotate between deploys — enable **Railway Static IP** (Networking settings in the Railway project) to get a permanent outbound IP, then whitelist that single IP in SiteGround permanently
+
+**WordPress table prefix:** The default `wp_` prefix is not always used. Check `wp-config.php` for `$table_prefix`. For this project the prefix is `bqq_` — so tables are `bqq_posts` and `bqq_postmeta`.
+
+**Query pattern for custom post type with ACF meta fields:**
+```sql
+SELECT
+  p.ID, p.post_date, p.post_status,
+  MAX(CASE WHEN pm.meta_key = 'utm_source'   THEN pm.meta_value END) AS utm_source,
+  MAX(CASE WHEN pm.meta_key = 'utm_campaign' THEN pm.meta_value END) AS utm_campaign,
+  ...
+FROM bqq_posts p
+LEFT JOIN bqq_postmeta pm ON p.ID = pm.post_id
+WHERE p.post_type = 'clientenquiry'
+  AND p.post_status != 'trash'
+GROUP BY p.ID, p.post_date, p.post_status
+ORDER BY p.post_date DESC
+LIMIT ?
+```
+
+ACF fields are stored as rows in `bqq_postmeta` (one row per field per post). Use `MAX(CASE WHEN meta_key = '...' THEN meta_value END)` to pivot them into columns in a single query — no pagination needed regardless of record count.
+
+**`wp_enquiry_field_check` tool:** fetches 5 recent posts and returns all meta keys + sample values. Run this first after any schema change to verify which keys are populated.
+
+---
+
+### Google Ads API — auction_insight Field Is a Segment, Not a Resource Attribute
+
+The competitor domain in the `auction_insight` resource is a **segment**, not a resource attribute:
+
+```sql
+-- WRONG
+SELECT auction_insight.domain FROM auction_insight
+
+-- CORRECT
+SELECT segments.auction_insight_domain FROM auction_insight
+```
+
+Response parsing uses `r.segments?.auctionInsightDomain` (camelCase of `segments.auction_insight_domain`).
+
+---
+
+### Google Ads API — change_event Maximum Date Range Is 30 Days
+
+The `change_event` resource only retains data for the last 30 days. Any query with a start date older than 30 days returns `START_DATE_TOO_OLD`. Always cap the from-date:
+
+```js
+const thirtyDaysAgo = new Date();
+thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+const maxFrom = thirtyDaysAgo.toISOString().slice(0, 10);
+if (from < maxFrom) from = maxFrom;
+```

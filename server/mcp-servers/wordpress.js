@@ -40,7 +40,7 @@ function getPool() {
 }
 
 async function query(sql, params = []) {
-  const [rows] = await getPool().execute(sql, params);
+  const [rows] = await getPool().query(sql, params);
   return rows;
 }
 
@@ -109,8 +109,7 @@ async function callTool(name, args = {}) {
       if (args.end_date)   { sql += ` AND p.post_date <= ?`; params.push(args.end_date   + ' 23:59:59'); }
       if (args.status)     { sql += ` AND EXISTS (SELECT 1 FROM bqq_postmeta WHERE post_id = p.ID AND meta_key = 'enquiry_status' AND meta_value = ?)`; params.push(args.status); }
 
-      sql += ` GROUP BY p.ID, p.post_date, p.post_status ORDER BY p.post_date DESC LIMIT ?`;
-      params.push(limit);
+      sql += ` GROUP BY p.ID, p.post_date, p.post_status ORDER BY p.post_date DESC LIMIT ${limit}`;
 
       const rows = await query(sql, params);
 
