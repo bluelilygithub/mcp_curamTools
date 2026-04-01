@@ -215,18 +215,18 @@ function HistoryChat({ agentLabel, runs, startDate, endDate }) {
 
   function openAndSeed() {
     setOpen(true);
-    if (messages.length > 0) return; // already seeded
+    if (messages.length > 0) return; // already open
 
-    // Build a concise history digest from available runs (cap summaries to avoid huge prompts)
-    const digest = runs.slice(0, 6).map((r, i) => {
-      const dateLabel = r.result?.startDate && r.result?.endDate
+    // Keep the opening message short — the agent has get_report_history and search_report_history
+    // tools to fetch the actual data. Embedding summaries here bloats the conversation history
+    // and multiplies cost across every subsequent turn.
+    const runDates = runs.slice(0, 3).map((r) =>
+      r.result?.startDate && r.result?.endDate
         ? `${fmtDate(r.result.startDate)} – ${fmtDate(r.result.endDate)}`
-        : fmtDate(r.run_at);
-      const snippet = (r.result?.summary ?? '').replace(/#{1,3} /g, '').slice(0, 500).trim();
-      return `**Run ${i + 1} (${dateLabel})**\n${snippet}${snippet.length >= 500 ? '…' : ''}`;
-    }).join('\n\n---\n\n');
+        : fmtDate(r.run_at)
+    ).join(', ');
 
-    const seed = `I'm reviewing the history of the "${agentLabel}" report across ${runs.length} run${runs.length !== 1 ? 's' : ''}.\n\nHere is the history digest:\n\n${digest}\n\nPlease give me a brief progress summary — what's trending, what's improved, and what needs attention. Use your tools to pull any additional detail if helpful.`;
+    const seed = `Please summarise the history of the "${agentLabel}" report. There are ${runs.length} run${runs.length !== 1 ? 's' : ''} on record (most recent: ${runDates}). Use your report history tools to fetch the data, then tell me what's trending, what's improved, and what needs attention.`;
     send(seed);
   }
 

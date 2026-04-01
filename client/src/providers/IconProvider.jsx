@@ -54,6 +54,8 @@ import {
   Send,
   Mic,
   Volume2,
+  Pause,
+  Play,
   Bookmark,
   Star,
   Clock,
@@ -145,6 +147,8 @@ const semanticMap = {
   send: Send,
   mic: Mic,
   volume: Volume2,
+  pause: Pause,
+  play: Play,
   bookmark: Bookmark,
   star: Star,
 
