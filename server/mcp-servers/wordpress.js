@@ -99,15 +99,15 @@ async function callTool(name, args = {}) {
           MAX(CASE WHEN pm.meta_key = 'referral_page'   THEN pm.meta_value END) AS referral_page,
           MAX(CASE WHEN pm.meta_key = 'gclib'           THEN pm.meta_value END) AS gclid,
           MAX(CASE WHEN pm.meta_key = 'ga4_client_id'   THEN pm.meta_value END) AS ga4_client_id
-        FROM wp_posts p
-        LEFT JOIN wp_postmeta pm ON p.ID = pm.post_id
+        FROM bbq_posts p
+        LEFT JOIN bbq_postmeta pm ON p.ID = pm.post_id
         WHERE p.post_type = 'clientenquiry'
           AND p.post_status != 'trash'
       `;
 
       if (args.start_date) { sql += ` AND p.post_date >= ?`; params.push(args.start_date + ' 00:00:00'); }
       if (args.end_date)   { sql += ` AND p.post_date <= ?`; params.push(args.end_date   + ' 23:59:59'); }
-      if (args.status)     { sql += ` AND EXISTS (SELECT 1 FROM wp_postmeta WHERE post_id = p.ID AND meta_key = 'enquiry_status' AND meta_value = ?)`; params.push(args.status); }
+      if (args.status)     { sql += ` AND EXISTS (SELECT 1 FROM bbq_postmeta WHERE post_id = p.ID AND meta_key = 'enquiry_status' AND meta_value = ?)`; params.push(args.status); }
 
       sql += ` GROUP BY p.ID, p.post_date, p.post_status ORDER BY p.post_date DESC LIMIT ?`;
       params.push(limit);
@@ -138,13 +138,13 @@ async function callTool(name, args = {}) {
     case 'wp_enquiry_field_check': {
       // Fetch the raw meta keys for the 5 most recent enquiries
       const posts = await query(
-        `SELECT ID, post_date FROM wp_posts WHERE post_type = 'clientenquiry' AND post_status != 'trash' ORDER BY post_date DESC LIMIT 5`
+        `SELECT ID, post_date FROM bbq_posts WHERE post_type = 'clientenquiry' AND post_status != 'trash' ORDER BY post_date DESC LIMIT 5`
       );
       if (!posts.length) return { error: 'No clientenquiry posts found.' };
 
       const results = [];
       for (const post of posts) {
-        const meta = await query(`SELECT meta_key, meta_value FROM wp_postmeta WHERE post_id = ?`, [post.ID]);
+        const meta = await query(`SELECT meta_key, meta_value FROM bbq_postmeta WHERE post_id = ?`, [post.ID]);
         const populated = meta.filter((m) => m.meta_value != null && String(m.meta_value).trim() !== '');
         results.push({
           id:    post.ID,
