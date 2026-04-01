@@ -163,7 +163,7 @@ function HistoryChat({ agentLabel, runs, startDate, endDate }) {
 
   async function ensureConv() {
     if (convId) return convId;
-    const conv = await api.post('/conversations', { title: `${agentLabel} — history chat` });
+    const conv = await api.post('/conversation', { title: `${agentLabel} — history chat` });
     setConvId(conv.id);
     return conv.id;
   }
@@ -179,7 +179,7 @@ function HistoryChat({ agentLabel, runs, startDate, endDate }) {
 
     try {
       const id  = await ensureConv();
-      const res = await api.stream(`/conversations/${id}/message`, { message: trimmed, startDate, endDate });
+      const res = await api.stream(`/conversation/${id}/message`, { message: trimmed, startDate, endDate });
       const reader  = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -302,8 +302,14 @@ function HistoryChat({ agentLabel, runs, startDate, endDate }) {
           }}
         />
         <MicButton
-          onResult={(text) => setDraft((d) => (d ? d + ' ' : '') + text)}
-          onPartial={(t)   => setDraft((d) => d.replace(/\s*\[.*?\]$/, '') + ` [${t}]`)}
+          onResult={(t) => setDraft((d) => {
+            const base = d.replace(/\s*\[.*?\]$/, '').trim();
+            return base ? base + ' ' + t : t;
+          })}
+          onPartial={(t) => setDraft((d) => {
+            const base = d.replace(/\s*\[.*?\]$/, '').trim();
+            return base ? base + ' [' + t + ']' : '[' + t + ']';
+          })}
           size={18}
         />
         <button
