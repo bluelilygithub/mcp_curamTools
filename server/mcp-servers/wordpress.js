@@ -70,6 +70,17 @@ const TOOLS = [
     description: 'Returns the outbound IP address of this MCP server process.',
     inputSchema: { type: 'object', properties: {} },
   },
+  {
+    name: 'wp_find_meta_key',
+    description: 'Search bqq_postmeta for rows matching a key or value pattern. Use to find the exact meta_key a field is stored under.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key_like:   { type: 'string', description: 'Partial meta_key to search for (SQL LIKE pattern, e.g. "reason").' },
+        value_like: { type: 'string', description: 'Partial meta_value to search for.' },
+      },
+    },
+  },
 ];
 
 // ── Tool handlers ─────────────────────────────────────────────────────────────
@@ -155,6 +166,24 @@ async function callTool(name, args = {}) {
         });
       }
       return results;
+    }
+
+    case 'wp_find_meta_key': {
+      const conditions = [];
+      const params = [];
+      if (args.key_like)   { conditions.push(`pm.meta_key   LIKE ?`); params.push(`%${args.key_like}%`); }
+      if (args.value_like) { conditions.push(`pm.meta_value LIKE ?`); params.push(`%${args.value_like}%`); }
+      if (!conditions.length) throw new Error('Provide key_like or value_like.');
+      const rows = await query(
+        `SELECT DISTINCT pm.meta_key, pm.meta_value, p.post_type
+           FROM bqq_postmeta pm
+           JOIN bqq_posts p ON p.ID = pm.post_id
+          WHERE ${conditions.join(' AND ')}
+            AND pm.meta_value != ''
+          LIMIT 30`,
+        params
+      );
+      return rows;
     }
 
     case 'wp_get_server_ip': {
