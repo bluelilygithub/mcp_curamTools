@@ -19,7 +19,11 @@
       "Bash(find '/c/Users/micha/Local Sites/toolsforge/client/src' -type f -name *.js)",
       "Bash(find '/c/Users/micha/Local Sites/toolsforge/client/src' -type d -name hooks -o -type f -name *useAuth* -o -type f -name *useTool*)",
       "Bash(grep -r remove-markdown /c/Users/micha/Local Sites/mcp_curamTools/client --include=*.js --include=*.jsx --include=*.json)",
-      "Bash(find /c/Users/micha/Local Sites -maxdepth 2 -name package.json -not -path */node_modules/*)"
+      "Bash(find /c/Users/micha/Local Sites -maxdepth 2 -name package.json -not -path */node_modules/*)",
+      "Bash(find /c/Users/micha/Local Sites/mcp_curamTools/client/src -type f \\\\\\(-name *.ts -o -name *.tsx -o -name *.js -o -name *.jsx \\\\\\))",
+      "Bash(find /c/Users/micha/Local Sites/mcp_curamTools/server -type f \\\\\\(-name *.js -o -name *.ts \\\\\\))",
+      "Bash(grep -r \"voice\\\\|tts\\\\|stt\\\\|speech\\\\|audio\" /c/Users/micha/Local Sites/mcp_curamTools/server --include=*.js --include=*.ts)",
+      "Bash(grep -i \"voice\\\\|tts\\\\|stt\\\\|speech\\\\|mic\\\\|audio\\\\|speaker\" /c/Users/micha/Local Sites/mcp_curamTools/*.md)"
     ]
   }
 }

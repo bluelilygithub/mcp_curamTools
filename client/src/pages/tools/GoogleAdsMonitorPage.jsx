@@ -14,6 +14,8 @@ import AISuggestionsPanel from './GoogleAdsMonitor/AISuggestionsPanel';
 import AgentDashboardCard from './GoogleAdsMonitor/AgentDashboardCard';
 import StrategicReviewCard from './GoogleAdsMonitor/StrategicReviewCard';
 import ConversationView    from './GoogleAdsMonitor/ConversationView';
+import MicButton           from '../../components/ui/MicButton';
+import ReadAloudButton     from '../../components/ui/ReadAloudButton';
 
 const AGENT_SLUG = 'google-ads-monitor';
 
@@ -138,6 +140,187 @@ function EmailModal({ onClose, onSend, defaultEmail, sending }) {
   );
 }
 
+// ── Inline history chat ───────────────────────────────────────────────────────
+
+/**
+ * HistoryChat — inline multi-turn voice-enabled conversation scoped to one
+ * agent's run history. Creates a real server-persisted conversation so the
+ * full tool-set (RAG, CRM, Ads data) is available for follow-up questions.
+ */
+function HistoryChat({ agentLabel, runs, startDate, endDate }) {
+  const [open,         setOpen]         = useState(false);
+  const [convId,       setConvId]       = useState(null);
+  const [messages,     setMessages]     = useState([]);
+  const [draft,        setDraft]        = useState('');
+  const [streaming,    setStreaming]     = useState(false);
+  const [progressText, setProgressText] = useState('');
+  const [error,        setError]        = useState('');
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, progressText]);
+
+  async function ensureConv() {
+    if (convId) return convId;
+    const conv = await api.post('/conversations', { title: `${agentLabel} — history chat` });
+    setConvId(conv.id);
+    return conv.id;
+  }
+
+  async function send(text) {
+    const trimmed = text.trim();
+    if (!trimmed || streaming) return;
+    setDraft('');
+    setError('');
+    setMessages((m) => [...m, { role: 'user', text: trimmed }]);
+    setStreaming(true);
+    setProgressText('Thinking…');
+
+    try {
+      const id  = await ensureConv();
+      const res = await api.stream(`/conversations/${id}/message`, { message: trimmed, startDate, endDate });
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n');
+        buffer = parts.pop();
+
+        for (const line of parts) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]') { setStreaming(false); setProgressText(''); return; }
+          try {
+            const msg = JSON.parse(raw);
+            if (msg.type === 'progress') setProgressText(msg.text);
+            else if (msg.type === 'result') {
+              setMessages((m) => [...m, { role: 'assistant', text: msg.message }]);
+              setProgressText('');
+            } else if (msg.type === 'error') setError(msg.error);
+          } catch { /* ignore malformed */ }
+        }
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setStreaming(false);
+      setProgressText('');
+    }
+  }
+
+  function openAndSeed() {
+    setOpen(true);
+    if (messages.length > 0) return; // already seeded
+
+    // Build a concise history digest from available runs (cap summaries to avoid huge prompts)
+    const digest = runs.slice(0, 6).map((r, i) => {
+      const dateLabel = r.result?.startDate && r.result?.endDate
+        ? `${fmtDate(r.result.startDate)} – ${fmtDate(r.result.endDate)}`
+        : fmtDate(r.run_at);
+      const snippet = (r.result?.summary ?? '').replace(/#{1,3} /g, '').slice(0, 500).trim();
+      return `**Run ${i + 1} (${dateLabel})**\n${snippet}${snippet.length >= 500 ? '…' : ''}`;
+    }).join('\n\n---\n\n');
+
+    const seed = `I'm reviewing the history of the "${agentLabel}" report across ${runs.length} run${runs.length !== 1 ? 's' : ''}.\n\nHere is the history digest:\n\n${digest}\n\nPlease give me a brief progress summary — what's trending, what's improved, and what needs attention. Use your tools to pull any additional detail if helpful.`;
+    send(seed);
+  }
+
+  if (!open) {
+    return (
+      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
+        <button onClick={openAndSeed} style={{
+          fontSize: 12, padding: '5px 14px', borderRadius: 8, fontFamily: 'inherit',
+          border: '1px solid var(--color-primary)', background: 'transparent',
+          color: 'var(--color-primary)', cursor: 'pointer',
+        }}>
+          Ask about this history
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
+      {/* Message thread */}
+      <div style={{ maxHeight: 420, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {messages.map((m, i) => (
+          <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '88%' }}>
+            {m.role === 'user' ? (
+              <div style={{
+                background: 'var(--color-primary)', color: '#fff', borderRadius: 12,
+                padding: '8px 12px', fontSize: 13, fontFamily: 'inherit', lineHeight: 1.5,
+              }}>{m.text}</div>
+            ) : (
+              <div>
+                <div style={{
+                  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                  borderRadius: 12, padding: '10px 14px', fontSize: 13, fontFamily: 'inherit',
+                }}>
+                  <MarkdownRenderer text={m.text} />
+                </div>
+                <div style={{ marginTop: 4, paddingLeft: 4 }}>
+                  <ReadAloudButton text={m.text} size={14} />
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {streaming && (
+          <div style={{ alignSelf: 'flex-start', fontSize: 11, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
+            <span style={{ color: 'var(--color-primary)', marginRight: 4 }}>›</span>
+            {progressText || 'Thinking…'}
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {error && (
+        <p style={{ fontSize: 11, color: '#dc2626', padding: '0 16px 8px', fontFamily: 'inherit' }}>{error}</p>
+      )}
+
+      {/* Input bar */}
+      <div style={{
+        display: 'flex', gap: 8, alignItems: 'center',
+        padding: '10px 16px', borderTop: '1px solid var(--color-border)',
+      }}>
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(draft); } }}
+          placeholder="Ask a follow-up question…"
+          disabled={streaming}
+          style={{
+            flex: 1, padding: '7px 12px', borderRadius: 8, fontSize: 13, fontFamily: 'inherit',
+            border: '1px solid var(--color-border)', background: 'var(--color-surface)',
+            color: 'var(--color-text)', outline: 'none',
+          }}
+        />
+        <MicButton
+          onResult={(text) => setDraft((d) => (d ? d + ' ' : '') + text)}
+          onPartial={(t)   => setDraft((d) => d.replace(/\s*\[.*?\]$/, '') + ` [${t}]`)}
+          size={18}
+        />
+        <button
+          onClick={() => send(draft)}
+          disabled={streaming || !draft.trim()}
+          style={{
+            padding: '7px 14px', borderRadius: 8, fontSize: 13, fontFamily: 'inherit',
+            background: 'var(--color-primary)', color: '#fff', border: 'none',
+            cursor: streaming || !draft.trim() ? 'not-allowed' : 'pointer',
+            opacity: streaming || !draft.trim() ? 0.5 : 1,
+          }}
+        >{streaming ? '…' : 'Send'}</button>
+      </div>
+    </div>
+  );
+}
+
 // ── All-agents history tab ────────────────────────────────────────────────────
 
 const ALL_AGENT_SLUGS = [
@@ -151,7 +334,7 @@ const ALL_AGENT_SLUGS = [
   { slug: 'google-ads-strategic-review', label: 'Strategic Review' },
 ];
 
-function AllAgentsHistory({ onDiscuss }) {
+function AllAgentsHistory({ onDiscuss, startDate, endDate }) {
   const [grouped,    setGrouped]    = useState({});   // { slug: [run, …] }
   const [loading,    setLoading]    = useState(true);
   const [openSlug,   setOpenSlug]   = useState(null);
@@ -289,6 +472,14 @@ function AllAgentsHistory({ onDiscuss }) {
                     </div>
                   );
                 })}
+
+                {/* Inline history chat — at the bottom of each agent's run list */}
+                <HistoryChat
+                  agentLabel={label}
+                  runs={runs}
+                  startDate={startDate}
+                  endDate={endDate}
+                />
               </div>
             )}
           </div>
@@ -721,6 +912,8 @@ export default function GoogleAdsMonitorPage() {
       {activeTab === 'history' && (
         <AllAgentsHistory
           onDiscuss={(seed) => { setConversationSeed(seed); setActiveTab('conversation'); }}
+          startDate={startDate}
+          endDate={endDate}
         />
       )}
 

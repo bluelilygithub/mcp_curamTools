@@ -295,6 +295,38 @@ Output. useReadAloud() — Speech Synthesis API. stripForSpeech() removes markdo
 
 Both follow the three-layer pattern: headless logic hook → UI button component → integration in page.
 
+Three-layer usage pattern (canonical):
+1. Headless logic — useSpeechInput() / useReadAloud()
+2. UI button — MicButton (pulsing red ring when listening; renders null if unsupported) / ReadAloudButton (primary colour when speaking; renders null if unsupported)
+3. Integration in page — compose MicButton on text inputs, ReadAloudButton beneath assistant replies
+
+Reference implementations:
+- AdminSqlPage — MicButton appends dictated text to query draft; ReadAloudButton reads query results aloud
+- HistoryChat (GoogleAdsMonitorPage) — MicButton on conversation input with interim-result display ([speaking…]); ReadAloudButton under each assistant message; voice wired into a full streaming multi-turn conversation
+
+Inline voice conversation pattern (HistoryChat):
+An inline chat panel that creates a server-persisted conversation on first open, seeds it with context (e.g. run history digest), then supports multi-turn voice Q&A. Use this pattern wherever a tool page needs in-context NLP + voice without navigating away to the Conversation tab.
+
+```
+onOpen →
+  POST /conversations { title }        → convId
+  send(seedMessage)                    → streams first response
+onSend(text) →
+  POST /conversations/:id/message      → SSE stream
+  progress events → show in UI
+  result event → append assistant bubble + ReadAloudButton
+MicButton.onResult → append to draft
+MicButton.onPartial → update draft with [interim…] suffix
+```
+
+MicButton interim-result display pattern (copy this):
+```js
+<MicButton
+  onResult={(text) => setDraft((d) => (d ? d + ' ' : '') + text)}
+  onPartial={(t)   => setDraft((d) => d.replace(/\s*\[.*?\]$/, '') + ` [${t}]`)}
+/>
+```
+
 Timezone handling
 Priority: user setting → org default → browser (Intl.DateTimeFormat().resolvedOptions().timeZone). Resolved timezone used in system prompts and message timestamps. [FROM VAULT — Vault documented this priority chain explicitly.]
 
