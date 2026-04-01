@@ -366,28 +366,23 @@ const flagPromptForReviewTool = {
   },
 };
 
+// Core 12 tools — covers all high-value question types with minimal schema overhead.
+// Niche tools (auction insights, impression share, traffic sources, paid bounce,
+// conversion events, not-interested reasons, list agents, search history, flag prompt)
+// removed to reduce per-turn token cost.
 const googleAdsConversationTools = [
   getCampaignPerformanceTool,
   getDailyPerformanceTool,
   getSearchTermsTool,
   getBudgetPacingTool,
-  getAuctionInsightsTool,
-  getImpressionShareTool,
   getActiveKeywordsTool,
   getChangeHistoryTool,
   getSessionsOverviewTool,
-  getTrafficSourcesTool,
   getLandingPagePerformanceTool,
-  getPaidBouncedSessionsTool,
-  getConversionEventsTool,
   getEnquiriesTool,
-  getNotInterestedReasonsTool,
-  listReportAgentsTool,
   getReportHistoryTool,
-  searchReportHistoryTool,
   searchKnowledgeTool,
   addDocumentTool,
-  flagPromptForReviewTool,
 ];
 
 module.exports = { googleAdsConversationTools, TOOL_SLUG };

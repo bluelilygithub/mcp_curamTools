@@ -22,7 +22,16 @@ const fmtDate = (s) => {
   } catch { return ''; }
 };
 
-const fmtAud = (n) => `$${Number(n ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtAud    = (n) => `$${Number(n ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtCost   = (n) => n != null ? `$${Number(n).toFixed(3)}` : null;
+
+const SUGGESTED_QUESTIONS = [
+  'Which campaigns are wasting budget right now?',
+  'Where are we losing impression share and why?',
+  'Which search terms should become negative keywords?',
+  'What changed in the last 30 days and did it help?',
+  'Which landing pages are failing paid traffic?',
+];
 
 // ── Inline styles ─────────────────────────────────────────────────────────────
 
@@ -52,26 +61,29 @@ const inputBarStyle = {
 
 // ── Bubble ────────────────────────────────────────────────────────────────────
 
-function Bubble({ role, content }) {
+function Bubble({ role, content, costAud }) {
   const isUser = role === 'user';
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: isUser ? 'flex-end' : 'flex-start',
-    }}>
-      <div style={{
-        maxWidth: '82%',
-        padding: isUser ? '10px 14px' : '12px 16px',
-        borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-        background: isUser ? 'var(--color-primary)' : 'var(--color-surface)',
-        border: isUser ? 'none' : '1px solid var(--color-border)',
-        color: isUser ? '#fff' : 'var(--color-text)',
-        fontSize: 14, lineHeight: 1.6, fontFamily: 'inherit',
-      }}>
-        {isUser
-          ? <span style={{ whiteSpace: 'pre-wrap' }}>{content}</span>
-          : <MarkdownRenderer text={content} />
-        }
+    <div style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+      <div style={{ maxWidth: '82%' }}>
+        <div style={{
+          padding: isUser ? '10px 14px' : '12px 16px',
+          borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+          background: isUser ? 'var(--color-primary)' : 'var(--color-surface)',
+          border: isUser ? 'none' : '1px solid var(--color-border)',
+          color: isUser ? '#fff' : 'var(--color-text)',
+          fontSize: 14, lineHeight: 1.6, fontFamily: 'inherit',
+        }}>
+          {isUser
+            ? <span style={{ whiteSpace: 'pre-wrap' }}>{content}</span>
+            : <MarkdownRenderer text={content} />
+          }
+        </div>
+        {!isUser && costAud != null && (
+          <p style={{ fontSize: 10, color: 'var(--color-muted)', margin: '3px 4px 0', fontFamily: 'inherit' }}>
+            {fmtCost(costAud)}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -213,7 +225,7 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
             if (msg.type === 'progress') {
               setProgressText(msg.text);
             } else if (msg.type === 'result') {
-              setMessages((prev) => [...prev, { role: 'assistant', content: msg.message }]);
+              setMessages((prev) => [...prev, { role: 'assistant', content: msg.message, costAud: msg.costAud ?? null }]);
               setProgressText('');
               // Update conversation title in sidebar if auto-titled
               if (msg.title) {
@@ -375,17 +387,34 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
             {/* Thread */}
             <div ref={threadRef} style={threadStyle}>
               {messages.length === 0 && !sending && (
-                <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                  <p style={{ fontSize: 14, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
-                    Ask anything about your Google Ads account.
+                <div style={{ padding: '24px 0' }}>
+                  <p style={{ fontSize: 13, color: 'var(--color-muted)', fontFamily: 'inherit', marginBottom: 16 }}>
+                    Ask anything about your Google Ads account. Data is fetched live.
                   </p>
-                  <p style={{ fontSize: 12, color: 'var(--color-muted)', marginTop: 8, fontFamily: 'inherit' }}>
-                    Data is fetched live. Shift+Enter for new line, Enter to send.
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {SUGGESTED_QUESTIONS.map((q) => (
+                      <button
+                        key={q}
+                        onClick={() => { setDraft(q); setTimeout(() => inputRef.current?.focus(), 50); }}
+                        style={{
+                          textAlign: 'left', padding: '9px 14px', borderRadius: 10,
+                          border: '1px solid var(--color-border)',
+                          background: 'var(--color-surface)', color: 'var(--color-text)',
+                          fontSize: 13, fontFamily: 'inherit', cursor: 'pointer',
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 16, fontFamily: 'inherit' }}>
+                    Shift+Enter for new line · Enter to send
                   </p>
                 </div>
               )}
               {messages.map((m, i) => (
-                <Bubble key={i} role={m.role} content={m.content} />
+                <Bubble key={i} role={m.role} content={m.content} costAud={m.costAud} />
               ))}
               {sending && <TypingIndicator text={progressText} />}
             </div>
