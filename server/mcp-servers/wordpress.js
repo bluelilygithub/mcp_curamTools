@@ -175,11 +175,10 @@ async function callTool(name, args = {}) {
       if (args.value_like) { conditions.push(`pm.meta_value LIKE ?`); params.push(`%${args.value_like}%`); }
       if (!conditions.length) throw new Error('Provide key_like or value_like.');
       const rows = await query(
-        `SELECT DISTINCT pm.meta_key, pm.meta_value, p.post_type
+        `SELECT pm.meta_key, pm.meta_value, pm.post_id, p.post_type
            FROM bqq_postmeta pm
            JOIN bqq_posts p ON p.ID = pm.post_id
           WHERE ${conditions.join(' AND ')}
-            AND pm.meta_value != ''
           LIMIT 30`,
         params
       );
