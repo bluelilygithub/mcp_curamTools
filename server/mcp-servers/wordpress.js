@@ -49,7 +49,7 @@ async function query(sql, params = []) {
 const TOOLS = [
   {
     name: 'wp_get_enquiries',
-    description: 'Fetch clientenquiry leads directly from the WordPress database. Includes UTM attribution, search term, device type, landing page, gclid, GA4 client ID, and enquiry status. Years of history available. Use start_date/end_date for period filtering.',
+    description: 'Fetch clientenquiry leads directly from the WordPress database. Includes UTM attribution, search term, device type, landing page, gclid, GA4 client ID, enquiry status, and reason_not_interested. Years of history available. Use start_date/end_date for period filtering.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -97,8 +97,9 @@ async function callTool(name, args = {}) {
           MAX(CASE WHEN pm.meta_key = 'device_type'     THEN pm.meta_value END) AS device_type,
           MAX(CASE WHEN pm.meta_key = 'landing_page'    THEN pm.meta_value END) AS landing_page,
           MAX(CASE WHEN pm.meta_key = 'referral_page'   THEN pm.meta_value END) AS referral_page,
-          MAX(CASE WHEN pm.meta_key = 'gclib'           THEN pm.meta_value END) AS gclid,
-          MAX(CASE WHEN pm.meta_key = 'ga4_client_id'   THEN pm.meta_value END) AS ga4_client_id
+          MAX(CASE WHEN pm.meta_key = 'gclib'                    THEN pm.meta_value END) AS gclid,
+          MAX(CASE WHEN pm.meta_key = 'ga4_client_id'            THEN pm.meta_value END) AS ga4_client_id,
+          MAX(CASE WHEN pm.meta_key = 'reason_not_interested'    THEN pm.meta_value END) AS reason_not_interested
         FROM bqq_posts p
         LEFT JOIN bqq_postmeta pm ON p.ID = pm.post_id
         WHERE p.post_type = 'clientenquiry'
@@ -129,8 +130,9 @@ async function callTool(name, args = {}) {
         device_type:    str(r.device_type),
         landing_page:   str(r.landing_page),
         referral_page:  str(r.referral_page),
-        gclid:          str(r.gclid),
-        ga4_client_id:  str(r.ga4_client_id),
+        gclid:                  str(r.gclid),
+        ga4_client_id:          str(r.ga4_client_id),
+        reason_not_interested:  str(r.reason_not_interested),
       }));
     }
 

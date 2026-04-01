@@ -189,7 +189,7 @@ const getConversionEventsTool = {
 
 const getEnquiriesTool = {
   name: 'get_enquiries',
-  description: 'CRM enquiry/lead records from WordPress. Includes UTM source, medium, campaign, ad group, search term, device type, landing page, gclid, GA4 client ID, and enquiry status. Years of history available. Use for lead volume, lead quality, campaign-to-lead attribution, or any question about what happened after the click. Use start_date and end_date to fetch specific periods; use a high limit to retrieve bulk data.',
+  description: 'CRM enquiry/lead records from WordPress. Includes UTM source, medium, campaign, ad group, search term, device type, landing page, gclid, GA4 client ID, enquiry status, and reason_not_interested (why a lead did not proceed). Years of history available. Use for lead volume, lead quality, campaign-to-lead attribution, or any question about what happened after the click. Use start_date and end_date to fetch specific periods; use a high limit to retrieve bulk data.',
   input_schema: {
     type: 'object',
     properties: {
