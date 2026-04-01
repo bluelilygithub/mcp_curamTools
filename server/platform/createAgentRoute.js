@@ -19,6 +19,7 @@ const { requireRole } = require('../middleware/requireRole');
 const AgentConfigService = require('./AgentConfigService');
 const CostGuardService = require('../services/CostGuardService');
 const { logUsage } = require('../services/UsageLogger');
+const EmbeddingService = require('../services/EmbeddingService');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -195,6 +196,22 @@ function createAgentRoute({ slug, runFn, requiredPermission }) {
 
         logUsage({ orgId, userId, slug, modelId: adminConfig.model, tokensUsed: tokensUsed ?? {}, costAud: taskCostAud })
           .catch(err => console.error(`[${slug}] usage log error:`, err.message));
+
+        // Auto-index summary for RAG — fire and forget, never blocks the response
+        if (resultPayload.summary && process.env.OPENAI_API_KEY) {
+          EmbeddingService.embedAndStore({
+            orgId,
+            sourceType: 'agent_run',
+            sourceId:   runId,
+            content:    resultPayload.summary,
+            metadata: {
+              slug,
+              run_at:    new Date().toISOString(),
+              startDate: resultPayload.startDate ?? null,
+              endDate:   resultPayload.endDate   ?? null,
+            },
+          }).catch((e) => console.warn(`[${slug}] embedding failed (non-fatal):`, e.message));
+        }
 
         emit('result', { data: resultPayload });
       } catch (runErr) {

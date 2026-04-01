@@ -4,13 +4,14 @@
  * Controlled expand/collapse — parent owns the open state for accordion behaviour.
  *
  * Props:
- *   slug        — agent slug e.g. 'google-ads-change-audit'
- *   title       — display name
- *   description — one-line description shown in the card header
- *   startDate   — ISO date string from the parent page's date range
- *   endDate     — ISO date string from the parent page's date range
- *   expanded    — controlled: whether this card is open
- *   onToggle    — controlled: called when the user clicks expand/collapse
+ *   slug                     — agent slug e.g. 'google-ads-change-audit'
+ *   title                    — display name
+ *   description              — one-line description shown in the card header
+ *   startDate                — ISO date string from the parent page's date range
+ *   endDate                  — ISO date string from the parent page's date range
+ *   expanded                 — controlled: whether this card is open
+ *   onToggle                 — controlled: called when the user clicks expand/collapse
+ *   onContinueInConversation — optional: called with a seed string to open the Conversation tab
  */
 import { useState, useEffect } from 'react';
 import api from '../../../api/client';
@@ -19,14 +20,12 @@ import MarkdownRenderer from '../../../components/ui/MarkdownRenderer';
 
 const fmtAud  = (n) => `$${Number(n ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-/** Run timestamp — DD/MM/YYYY HH:MM */
 const fmtDate = (s) => {
   if (!s) return '—';
   try { return new Date(s).toLocaleString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
   catch { return s; }
 };
 
-/** ISO date string → DD/MM/YYYY */
 const fmtDay = (s) => {
   if (!s) return '—';
   const [y, m, d] = s.split('-');
@@ -58,11 +57,11 @@ function printContent(title, text) {
   win.print();
 }
 
-export default function AgentDashboardCard({ slug, title, description, startDate, endDate, expanded, onToggle }) {
-  const [lastRun,      setLastRun]      = useState(null);
+export default function AgentDashboardCard({ slug, title, description, startDate, endDate, expanded, onToggle, onContinueInConversation }) {
+  const [runs,         setRuns]         = useState([]);   // all complete runs, newest first
+  const [runIndex,     setRunIndex]     = useState(0);    // 0 = most recent
   const [running,      setRunning]      = useState(false);
   const [lines,        setLines]        = useState([]);
-  const [result,       setResult]       = useState(null);
   const [error,        setError]        = useState('');
   const [copied,       setCopied]       = useState(false);
   const [emailModal,   setEmailModal]   = useState(false);
@@ -70,18 +69,21 @@ export default function AgentDashboardCard({ slug, title, description, startDate
   const [emailSending, setEmailSending] = useState(false);
   const [emailError,   setEmailError]   = useState('');
 
-  useEffect(() => { loadLastRun(); }, [slug]);
+  useEffect(() => { loadHistory(); }, [slug]);
 
-  async function loadLastRun() {
+  async function loadHistory() {
     try {
       const rows = await api.get(`/agents/${slug}/history`);
-      const latest = rows?.find((r) => r.status === 'complete');
-      if (latest) {
-        setLastRun(latest);
-        setResult(latest.result ?? null);
-      }
+      const complete = (rows ?? []).filter((r) => r.status === 'complete');
+      setRuns(complete);
+      setRunIndex(0);
     } catch { /* non-fatal */ }
   }
+
+  // Derived from whichever run is currently selected
+  const currentRun = runs[runIndex] ?? null;
+  const result     = currentRun?.result ?? null;
+  const summary    = result?.summary ?? '';
 
   async function handleRun() {
     setRunning(true);
@@ -106,13 +108,13 @@ export default function AgentDashboardCard({ slug, title, description, startDate
           const raw = line.slice(6).trim();
           if (raw === '[DONE]') {
             setRunning(false);
-            loadLastRun();
+            await loadHistory();
             return;
           }
           try {
             const msg = JSON.parse(raw);
             if (msg.type === 'progress') setLines((l) => [...l, msg.text]);
-            else if (msg.type === 'result') { setResult(msg.data); if (onToggle && !expanded) onToggle(); }
+            else if (msg.type === 'result') { if (onToggle && !expanded) onToggle(); }
             else if (msg.type === 'error')  setError(msg.error);
           } catch { /* ignore malformed */ }
         }
@@ -121,20 +123,18 @@ export default function AgentDashboardCard({ slug, title, description, startDate
       setError(err.message);
     } finally {
       setRunning(false);
-      loadLastRun();
+      loadHistory();
     }
   }
 
   function handleCopy() {
-    navigator.clipboard.writeText(result?.summary ?? '').then(() => {
+    navigator.clipboard.writeText(summary).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
   }
 
-  function handlePrint() {
-    printContent(title, result?.summary ?? '');
-  }
+  function handlePrint() { printContent(title, summary); }
 
   async function handleEmail() {
     if (!emailTo) return;
@@ -150,14 +150,29 @@ export default function AgentDashboardCard({ slug, title, description, startDate
     }
   }
 
-  const summary        = result?.summary ?? '';
+  function handleDiscuss() {
+    if (!onContinueInConversation || !summary) return;
+    const dateLabel = result?.startDate && result?.endDate
+      ? `${fmtDay(result.startDate)} – ${fmtDay(result.endDate)}`
+      : currentRun?.run_at ? `run ${fmtDate(currentRun.run_at)}` : '';
+    const seed = `I'd like to discuss the ${title} report${dateLabel ? ` (${dateLabel})` : ''}:\n\n${summary}`;
+    onContinueInConversation(seed);
+  }
+
   const summarySnippet = summary.replace(/#{1,3}\s/g, '').slice(0, 140).trim();
-  const status         = running ? 'running' : (lastRun?.status ?? null);
-  const runCost        = result?.costAud ?? lastRun?.result?.costAud ?? null;
+  const status         = running ? 'running' : (currentRun?.status ?? null);
+  const runCost        = result?.costAud ?? null;
   const hasResult      = !!result;
+  const totalRuns      = runs.length;
 
   const actionBtnStyle = {
     fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'inherit',
+    border: '1px solid var(--color-border)', background: 'transparent',
+    color: 'var(--color-muted)', cursor: 'pointer',
+  };
+
+  const navBtnStyle = {
+    fontSize: 13, lineHeight: 1, padding: '2px 6px', borderRadius: 4, fontFamily: 'inherit',
     border: '1px solid var(--color-border)', background: 'transparent',
     color: 'var(--color-muted)', cursor: 'pointer',
   };
@@ -171,7 +186,6 @@ export default function AgentDashboardCard({ slug, title, description, startDate
       <div style={{ padding: '14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
 
-          {/* Toggle area — clicking title/description row toggles the card */}
           <button
             onClick={onToggle}
             style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
@@ -229,14 +243,15 @@ export default function AgentDashboardCard({ slug, title, description, startDate
 
         {error && <p style={{ fontSize: 11, color: '#dc2626', marginTop: 6, fontFamily: 'inherit' }}>{error}</p>}
 
-        {/* Last run meta — only shown when collapsed */}
-        {!expanded && lastRun && !running && (
+        {/* Collapsed meta */}
+        {!expanded && currentRun && !running && (
           <p style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 6, marginLeft: 21, fontFamily: 'inherit' }}>
             {result?.startDate && result?.endDate
               ? <>{fmtDay(result.startDate)} – {fmtDay(result.endDate)}</>
-              : <>Run {fmtDate(lastRun.run_at)}</>
+              : <>Run {fmtDate(currentRun.run_at)}</>
             }
             {runCost != null && <span> · {fmtAud(runCost)}</span>}
+            {totalRuns > 1 && <span> · {totalRuns} runs</span>}
           </p>
         )}
       </div>
@@ -244,19 +259,48 @@ export default function AgentDashboardCard({ slug, title, description, startDate
       {/* ── Expanded body ───────────────────────────────────────────────── */}
       {expanded && hasResult && (
         <div style={{ borderTop: '1px solid var(--color-border)', padding: '16px' }}>
-          {/* Action buttons + run meta */}
+
+          {/* Action bar */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <button onClick={handleCopy} style={actionBtnStyle}>{copied ? 'Copied!' : 'Copy'}</button>
             <button onClick={handlePrint} style={actionBtnStyle}>Print / PDF</button>
             <button onClick={() => { setEmailModal(true); setEmailError(''); }} style={actionBtnStyle}>Email</button>
+            {onContinueInConversation && (
+              <button onClick={handleDiscuss}
+                style={{ ...actionBtnStyle, color: 'var(--color-primary)', borderColor: 'var(--color-primary)' }}>
+                Discuss
+              </button>
+            )}
+
+            {/* History navigation */}
+            {totalRuns > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <button
+                  onClick={() => setRunIndex((i) => Math.min(i + 1, totalRuns - 1))}
+                  disabled={runIndex >= totalRuns - 1}
+                  style={{ ...navBtnStyle, opacity: runIndex >= totalRuns - 1 ? 0.35 : 1 }}
+                >‹</button>
+                <span style={{ fontSize: 11, color: 'var(--color-muted)', whiteSpace: 'nowrap' }}>
+                  {runIndex + 1} / {totalRuns}
+                </span>
+                <button
+                  onClick={() => setRunIndex((i) => Math.max(i - 1, 0))}
+                  disabled={runIndex === 0}
+                  style={{ ...navBtnStyle, opacity: runIndex === 0 ? 0.35 : 1 }}
+                >›</button>
+              </div>
+            )}
+
+            {/* Date + cost — right-aligned */}
             <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
               {result?.startDate && result?.endDate
                 ? <>{fmtDay(result.startDate)} – {fmtDay(result.endDate)}</>
-                : lastRun?.run_at ? <>Run {fmtDate(lastRun.run_at)}</> : null
+                : currentRun?.run_at ? <>Run {fmtDate(currentRun.run_at)}</> : null
               }
               {runCost != null && <span> · {fmtAud(runCost)}</span>}
             </span>
           </div>
+
           <MarkdownRenderer text={summary} />
         </div>
       )}

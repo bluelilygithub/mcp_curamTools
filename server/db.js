@@ -369,6 +369,28 @@ async function initSchema() {
         ON agent_conversations(org_id, slug, created_at DESC)
     `);
 
+    // ── pgvector RAG ───────────────────────────────────────────────────────────
+    await client.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS embeddings (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id      INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        source_type TEXT NOT NULL,
+        source_id   TEXT,
+        content     TEXT NOT NULL,
+        metadata    JSONB DEFAULT '{}',
+        embedding   vector(${1536}),
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (org_id, source_type, source_id)
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_embeddings_org
+        ON embeddings(org_id, source_type)
+    `);
+
     await client.query('COMMIT');
 
     // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)

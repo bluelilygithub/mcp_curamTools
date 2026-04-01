@@ -138,6 +138,166 @@ function EmailModal({ onClose, onSend, defaultEmail, sending }) {
   );
 }
 
+// ── All-agents history tab ────────────────────────────────────────────────────
+
+const ALL_AGENT_SLUGS = [
+  { slug: 'google-ads-monitor',       label: 'Google Ads Monitor' },
+  { slug: 'google-ads-change-impact', label: 'Change Impact' },
+  { slug: 'google-ads-change-audit',  label: 'Change Audit' },
+  { slug: 'ads-attribution-summary',  label: 'Attribution Summary' },
+  { slug: 'ads-bounce-analysis',      label: 'Bounce Analysis' },
+  { slug: 'auction-insights',         label: 'Auction Insights' },
+  { slug: 'competitor-keyword-intel', label: 'Competitor Keywords' },
+  { slug: 'google-ads-strategic-review', label: 'Strategic Review' },
+];
+
+function AllAgentsHistory({ onDiscuss }) {
+  const [grouped,    setGrouped]    = useState({});   // { slug: [run, …] }
+  const [loading,    setLoading]    = useState(true);
+  const [openSlug,   setOpenSlug]   = useState(null);
+  const [openRunId,  setOpenRunId]  = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      const results = {};
+      await Promise.all(
+        ALL_AGENT_SLUGS.map(async ({ slug }) => {
+          try {
+            const rows = await api.get(`/agents/${slug}/history`);
+            results[slug] = (rows ?? []).filter((r) => r.status === 'complete');
+          } catch { results[slug] = []; }
+        })
+      );
+      setGrouped(results);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ padding: '32px', textAlign: 'center', fontSize: 13, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
+        Loading history…
+      </div>
+    );
+  }
+
+  const totalRuns = Object.values(grouped).reduce((s, rows) => s + rows.length, 0);
+  if (totalRuns === 0) {
+    return (
+      <div style={{ padding: '32px', textAlign: 'center', fontSize: 13, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
+        No completed runs yet.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {ALL_AGENT_SLUGS.map(({ slug, label }) => {
+        const runs = grouped[slug] ?? [];
+        if (runs.length === 0) return null;
+        const isOpen = openSlug === slug;
+
+        return (
+          <div key={slug} style={{
+            borderRadius: 14, border: '1px solid var(--color-border)',
+            background: 'var(--color-surface)', overflow: 'hidden', fontFamily: 'inherit',
+          }}>
+            {/* Group header */}
+            <button
+              onClick={() => setOpenSlug(isOpen ? null : slug)}
+              style={{
+                width: '100%', textAlign: 'left', background: 'none', border: 'none',
+                cursor: 'pointer', padding: '12px 16px',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}
+            >
+              <span style={{ fontSize: 12, color: 'var(--color-muted)' }}>{isOpen ? '▼' : '▶'}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', flex: 1 }}>{label}</span>
+              <span style={{ fontSize: 11, color: 'var(--color-muted)' }}>{runs.length} run{runs.length !== 1 ? 's' : ''}</span>
+            </button>
+
+            {/* Run list */}
+            {isOpen && (
+              <div style={{ borderTop: '1px solid var(--color-border)' }}>
+                {runs.map((run) => {
+                  const dateLabel = run.result?.startDate && run.result?.endDate
+                    ? `${fmtDate(run.result.startDate)} – ${fmtDate(run.result.endDate)}`
+                    : fmtDate(run.run_at);
+                  const tokens = run.result?.tokensUsed
+                    ? (run.result.tokensUsed.input ?? 0) + (run.result.tokensUsed.output ?? 0)
+                    : null;
+                  const isRunOpen = openRunId === run.id;
+                  const summary   = run.result?.summary ?? '';
+
+                  return (
+                    <div key={run.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      {/* Run row */}
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '9px 16px', background: 'var(--color-bg)',
+                      }}>
+                        <button
+                          onClick={() => setOpenRunId(isRunOpen ? null : run.id)}
+                          style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                        >
+                          <span style={{ fontSize: 13, color: 'var(--color-text)', fontFamily: 'inherit' }}>{dateLabel}</span>
+                          {run.result?.costAud != null && (
+                            <span style={{ fontSize: 11, color: 'var(--color-muted)', marginLeft: 10, fontFamily: 'inherit' }}>
+                              {fmtAud(run.result.costAud)}
+                            </span>
+                          )}
+                          {tokens != null && (
+                            <span style={{ fontSize: 11, color: 'var(--color-muted)', marginLeft: 8, fontFamily: 'inherit' }}>
+                              · {fmtNum(tokens)} tok
+                            </span>
+                          )}
+                        </button>
+                        {onDiscuss && summary && (
+                          <button
+                            onClick={() => {
+                              const seed = `I'd like to discuss the ${label} report (${dateLabel}):\n\n${summary}`;
+                              onDiscuss(seed);
+                            }}
+                            style={{
+                              fontSize: 11, padding: '2px 9px', borderRadius: 6, fontFamily: 'inherit',
+                              border: '1px solid var(--color-primary)', background: 'transparent',
+                              color: 'var(--color-primary)', cursor: 'pointer', flexShrink: 0,
+                            }}
+                          >
+                            Discuss
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setOpenRunId(isRunOpen ? null : run.id)}
+                          style={{
+                            fontSize: 11, padding: '2px 9px', borderRadius: 6, fontFamily: 'inherit',
+                            border: '1px solid var(--color-border)', background: 'transparent',
+                            color: 'var(--color-muted)', cursor: 'pointer', flexShrink: 0,
+                          }}
+                        >
+                          {isRunOpen ? 'Hide' : 'View'}
+                        </button>
+                      </div>
+
+                      {/* Expanded summary */}
+                      {isRunOpen && summary && (
+                        <div style={{ padding: '16px', borderTop: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
+                          <MarkdownRenderer text={summary} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function GoogleAdsMonitorPage() {
@@ -526,6 +686,10 @@ export default function GoogleAdsMonitorPage() {
               endDate={endDate}
               expanded={openCard === slug}
               onToggle={() => toggleCard(slug)}
+              onContinueInConversation={(seed) => {
+                setConversationSeed(seed);
+                setActiveTab('conversation');
+              }}
             />
           ))}
 
@@ -555,60 +719,9 @@ export default function GoogleAdsMonitorPage() {
 
       {/* ── History ────────────────────────────────────────────────────── */}
       {activeTab === 'history' && (
-        <div className="rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-          {history.length === 0 ? (
-            <div className="p-8 text-center text-sm" style={{ color: 'var(--color-muted)', fontFamily: 'inherit' }}>
-              No runs yet.
-            </div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'inherit' }}>
-              <thead>
-                <tr style={{ background: 'var(--color-surface)' }}>
-                  {['Date', 'Status', 'Cost (AUD)', 'Tokens', ''].map((h) => (
-                    <th key={h} style={{
-                      padding: '8px 14px', textAlign: h === '' ? 'right' : 'left',
-                      fontSize: 11, fontWeight: 600, color: 'var(--color-muted)',
-                      textTransform: 'uppercase', letterSpacing: '0.05em',
-                      borderBottom: '1px solid var(--color-border)', fontFamily: 'inherit',
-                    }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((run) => {
-                  const tokens = run.result?.tokensUsed
-                    ? (run.result.tokensUsed.input ?? 0) + (run.result.tokensUsed.output ?? 0)
-                    : null;
-                  const statusColor = run.status === 'complete' ? '#16a34a' : run.status === 'error' ? '#dc2626' : '#d97706';
-                  return (
-                    <tr key={run.id} style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
-                      <td style={{ padding: '8px 14px', fontSize: 13, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
-                        {fmtDate(run.run_at)}
-                      </td>
-                      <td style={{ padding: '8px 14px', fontFamily: 'inherit' }}>
-                        <span className="text-xs font-semibold" style={{ color: statusColor }}>{run.status}</span>
-                      </td>
-                      <td style={{ padding: '8px 14px', fontSize: 13, color: 'var(--color-text)', fontFamily: 'inherit' }}>
-                        {run.result?.costAud != null ? fmtAud(run.result.costAud) : '—'}
-                      </td>
-                      <td style={{ padding: '8px 14px', fontSize: 13, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
-                        {tokens != null ? fmtNum(tokens) : '—'}
-                      </td>
-                      <td style={{ padding: '8px 14px', textAlign: 'right' }}>
-                        {run.status === 'complete' && run.result && (
-                          <button onClick={() => { setResult(run.result); setActiveTab('dashboard'); }}
-                            style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-                            View
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+        <AllAgentsHistory
+          onDiscuss={(seed) => { setConversationSeed(seed); setActiveTab('conversation'); }}
+        />
       )}
 
       {/* ── Settings ───────────────────────────────────────────────────── */}

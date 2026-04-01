@@ -52,6 +52,7 @@ Available data:
 - GA4 conversion events (when and how often key actions fire) — from March 2026
 - CRM enquiries (leads with UTM attribution, search term, device, landing page, status) — years of history
 - Report history (past runs of all agents — full summary text, date ranges, cost) — use list_report_agents to discover what's available, get_report_history to fetch, search_report_history to find by topic
+- Knowledge base (semantic RAG search across all indexed content) — use search_knowledge for any question that may be answered by past reports or stored documents; use add_document to store reference material for future retrieval
 
 ## Output style
 

@@ -18,7 +18,7 @@
  *   Do NOT cross-reference CRM data with Google data for periods before March 2026.
  */
 
-const { getAdsServer, getAnalyticsServer, getWordPressServer, getPlatformServer, callMcpTool, resolveRangeArgs } = require('../../platform/mcpTools');
+const { getAdsServer, getAnalyticsServer, getWordPressServer, getPlatformServer, getKnowledgeBaseServer, callMcpTool, resolveRangeArgs } = require('../../platform/mcpTools');
 
 const TOOL_SLUG = 'google-ads-conversation';
 
@@ -294,6 +294,56 @@ const searchReportHistoryTool = {
   },
 };
 
+// ── Knowledge base / RAG tools ────────────────────────────────────────────────
+
+const searchKnowledgeTool = {
+  name: 'search_knowledge',
+  description: 'Semantic search across all indexed knowledge — past report summaries and any custom documents added to the knowledge base. Use when you need context that may have been captured in a previous report or document rather than live data. More powerful than keyword search — finds conceptually related content.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      query:       { type: 'string',  description: 'What you are looking for — natural language.' },
+      source_type: { type: 'string',  description: 'Optional: "agent_run" for report history only, "document" for added docs only.' },
+      limit:       { type: 'integer', description: 'Max results. Default 8.' },
+    },
+    required: ['query'],
+  },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(input, context) {
+    const kb = await getKnowledgeBaseServer(context.orgId);
+    return callMcpTool(context.orgId, kb, 'search_knowledge', {
+      org_id:      context.orgId,
+      query:       input.query,
+      source_type: input.source_type ?? undefined,
+      limit:       input.limit       ?? 8,
+    });
+  },
+};
+
+const addDocumentTool = {
+  name: 'add_document',
+  description: 'Add a document to the knowledge base so it can be retrieved in future conversations. Use to store product information, SOPs, competitor notes, strategic briefs, or any reference material.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      title:    { type: 'string', description: 'Document title.' },
+      content:  { type: 'string', description: 'Full document text.' },
+      category: { type: 'string', description: 'Optional category: "product", "competitor", "sop", "strategy", etc.' },
+    },
+    required: ['title', 'content'],
+  },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(input, context) {
+    const kb = await getKnowledgeBaseServer(context.orgId);
+    return callMcpTool(context.orgId, kb, 'add_document', {
+      org_id:   context.orgId,
+      title:    input.title,
+      content:  input.content,
+      category: input.category ?? undefined,
+    });
+  },
+};
+
 const googleAdsConversationTools = [
   getCampaignPerformanceTool,
   getDailyPerformanceTool,
@@ -313,6 +363,8 @@ const googleAdsConversationTools = [
   listReportAgentsTool,
   getReportHistoryTool,
   searchReportHistoryTool,
+  searchKnowledgeTool,
+  addDocumentTool,
 ];
 
 module.exports = { googleAdsConversationTools, TOOL_SLUG };
