@@ -231,6 +231,38 @@ const getEnquiriesTool = {
   },
 };
 
+const enquiryFieldCheckTool = {
+  name: 'enquiry_field_check',
+  description: 'Shows every populated meta key and its value for the 5 most recent clientenquiry records. Use when you need to verify which fields actually exist in the database, discover unexpected fields, or confirm an ACF field name before referencing it.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(_input, context) {
+    const wp = await getWordPressServer(context.orgId);
+    return callMcpTool(context.orgId, wp, 'wp_enquiry_field_check', {});
+  },
+};
+
+const findMetaKeyTool = {
+  name: 'find_meta_key',
+  description: 'Search bqq_postmeta for rows matching a partial key or value pattern. Use to locate the exact meta_key a field is stored under — useful when a field name is uncertain or when looking for ACF fields. Note: ACF stores each field twice — the real value under the plain key (e.g. reason_not_interested) and an internal pointer under an underscore-prefixed key (e.g. _reason_not_interested). Always use the plain key.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      key_like:   { type: 'string', description: 'Partial meta_key to search for (e.g. "reason" matches reason_not_interested).' },
+      value_like: { type: 'string', description: 'Partial meta_value to search for.' },
+    },
+    required: [],
+  },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(input, context) {
+    const wp = await getWordPressServer(context.orgId);
+    return callMcpTool(context.orgId, wp, 'wp_find_meta_key', {
+      key_like:   input.key_like   ?? undefined,
+      value_like: input.value_like ?? undefined,
+    });
+  },
+};
+
 // ── Platform / report history tools ──────────────────────────────────────────
 
 const listReportAgentsTool = {
@@ -366,20 +398,23 @@ const flagPromptForReviewTool = {
   },
 };
 
-// Core 12 tools — covers all high-value question types with minimal schema overhead.
-// Niche tools (auction insights, impression share, traffic sources, paid bounce,
-// conversion events, not-interested reasons, list agents, search history, flag prompt)
-// removed to reduce per-turn token cost.
 const googleAdsConversationTools = [
+  // Google Ads
   getCampaignPerformanceTool,
   getDailyPerformanceTool,
   getSearchTermsTool,
   getBudgetPacingTool,
   getActiveKeywordsTool,
   getChangeHistoryTool,
+  // GA4
   getSessionsOverviewTool,
   getLandingPagePerformanceTool,
+  // CRM
   getEnquiriesTool,
+  getNotInterestedReasonsTool,
+  enquiryFieldCheckTool,
+  findMetaKeyTool,
+  // Platform history + RAG
   getReportHistoryTool,
   searchKnowledgeTool,
   addDocumentTool,
