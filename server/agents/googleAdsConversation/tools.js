@@ -399,23 +399,31 @@ const flagPromptForReviewTool = {
 };
 
 const googleAdsConversationTools = [
-  // Google Ads
+  // Google Ads — full set
   getCampaignPerformanceTool,
   getDailyPerformanceTool,
   getSearchTermsTool,
   getBudgetPacingTool,
+  getAuctionInsightsTool,
+  getImpressionShareTool,
   getActiveKeywordsTool,
   getChangeHistoryTool,
-  // GA4
+  // GA4 — full set
   getSessionsOverviewTool,
+  getTrafficSourcesTool,
   getLandingPagePerformanceTool,
-  // CRM
+  getPaidBouncedSessionsTool,
+  getConversionEventsTool,
+  // CRM — full set
   getEnquiriesTool,
   getNotInterestedReasonsTool,
   enquiryFieldCheckTool,
   findMetaKeyTool,
-  // Platform history + RAG
+  // Platform history — full set
+  listReportAgentsTool,
   getReportHistoryTool,
+  searchReportHistoryTool,
+  // Knowledge base
   searchKnowledgeTool,
   addDocumentTool,
 ];

@@ -122,21 +122,52 @@ Do not re-fetch the same tool with the same date range. Only call a tool again \
 if the user asks for a different time window or a different dimension.
 
 Available tools:
-- **get_campaign_performance** — spend, conversions, CPA, CTR, CPC by campaign — from March 2026
-- **get_daily_performance** — account-level daily trend data — from March 2026
-- **get_search_terms** — top 50 search queries by clicks — from March 2026
-- **get_budget_pacing** — current month spend vs budget per campaign — from March 2026
+
+Google Ads:
+- **get_campaign_performance** — spend, conversions, CPA, CTR, CPC per campaign — from March 2026
+- **get_daily_performance** — account-level daily metrics for trend and pacing questions — from March 2026
+- **get_search_terms** — top 50 actual user search queries by clicks — from March 2026
+- **get_budget_pacing** — current month spend vs monthly budget per campaign — from March 2026
+- **get_auction_insights** — competitor domains in the same auctions: impression share, top-of-page rate, outranking share — from March 2026
+- **get_impression_share** — own impression share per campaign: lost to rank vs lost to budget — from March 2026
 - **get_active_keywords** — all active keywords with match type and bid — from March 2026
-- **get_change_history** — recent bids, budget, and status changes — from March 2026
-- **get_sessions_overview** — GA4 daily sessions, bounce rate, new users — from March 2026
-- **get_landing_page_performance** — top 20 landing pages by sessions and conversions — from March 2026
-- **get_enquiries** — all CRM enquiry records with full field set (see CRM section above) — years of history; use limit 2000+ for full historical pulls
-- **get_not_interested_reasons** — all records where a reason_not_interested was recorded; use for lead quality and objection analysis
-- **enquiry_field_check** — shows all populated meta keys on the 5 most recent enquiries; use to verify field names or discover unexpected fields
-- **find_meta_key** — search bqq_postmeta by partial key or value pattern; use when a field name is uncertain
-- **get_report_history** — past agent run summaries (google-ads-monitor, change-impact, change-audit, etc.)
+- **get_change_history** — recent bid, budget, status, and ad changes — from March 2026
+
+GA4:
+- **get_sessions_overview** — daily sessions, active users, new users, bounce rate — from March 2026
+- **get_traffic_sources** — sessions and conversions by channel (Paid Search, Organic, Direct, etc.) — from March 2026
+- **get_landing_page_performance** — top 20 landing pages by sessions, conversions, bounce rate — from March 2026
+- **get_paid_bounced_sessions** — paid (cpc) sessions grouped by landing page AND device; sessions, bounce rate, avg duration per combination — from March 2026
+- **get_conversion_events** — conversion events by name and date — from March 2026
+
+CRM (WordPress — years of history):
+- **get_enquiries** — all enquiry records with full field set (see CRM section above); use limit 2000+ for complete historical pulls
+- **get_not_interested_reasons** — all records with a reason_not_interested value; for lead quality and objection analysis
+- **enquiry_field_check** — shows every populated meta key on the 5 most recent enquiries; use to verify field names or discover unexpected fields
+- **find_meta_key** — search bqq_postmeta by partial key or value; use when a field name is uncertain
+
+Report history:
+- **list_report_agents** — lists all agent slugs that have stored run history; call first to discover what's available
+- **get_report_history** — fetches full summary text for past runs of a specific agent
+- **search_report_history** — full-text search across all stored report summaries by topic or keyword
+
+Knowledge base:
 - **search_knowledge** — semantic search across indexed reports and documents
 - **add_document** — store reference material for future retrieval
+
+## Device breakdown — always available
+
+Device data exists in all three systems. Never tell the user device breakdown is unavailable.
+
+- **CRM**: every \`get_enquiries\` record has a \`device_type\` field (mobile / desktop / tablet). \
+  Group by \`device_type\` to get lead volume and conversion quality per device. This covers years of history.
+- **GA4**: \`get_paid_bounced_sessions\` returns sessions, bounce rate, and avg session duration \
+  segmented by landing page AND device category. Use for paid traffic quality by device.
+- **Google Ads**: campaign and search term performance is not segmented by device in the current \
+  tool outputs — use CRM or GA4 for device questions.
+
+When asked about mobile vs desktop, pull from CRM (lead volume by device) and \
+GA4 paid bounce (engagement quality by device) and present both together.
 
 ## Output style
 
