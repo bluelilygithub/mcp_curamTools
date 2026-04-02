@@ -841,6 +841,31 @@ ${question}`,
   }
 });
 
+// ── CRM Privacy ───────────────────────────────────────────────────────────
+
+router.get('/crm-privacy', async (req, res) => {
+  try {
+    const settings = await AgentConfigService.getCrmPrivacySettings(req.user.orgId);
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load CRM privacy settings.' });
+  }
+});
+
+router.put('/crm-privacy', async (req, res) => {
+  try {
+    const { excluded_fields } = req.body;
+    if (!Array.isArray(excluded_fields)) {
+      return res.status(400).json({ error: 'excluded_fields must be an array.' });
+    }
+    const clean = excluded_fields.map((f) => String(f).trim().toLowerCase()).filter(Boolean);
+    const result = await AgentConfigService.updateCrmPrivacySettings(req.user.orgId, { excluded_fields: clean }, req.user.id);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update CRM privacy settings.' });
+  }
+});
+
 // ── Diagnostics ───────────────────────────────────────────────────────────
 
 router.post('/diagnostics', async (req, res) => {

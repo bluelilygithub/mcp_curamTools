@@ -16,6 +16,7 @@ const { pool } = require('../db');
 const { persistRun } = require('./persistRun');
 const { requireAuth } = require('../middleware/requireAuth');
 const { requireRole } = require('../middleware/requireRole');
+const { createRateLimiter } = require('../middleware/rateLimiter');
 const AgentConfigService = require('./AgentConfigService');
 const CostGuardService = require('../services/CostGuardService');
 const { logUsage } = require('../services/UsageLogger');
@@ -69,11 +70,15 @@ function extractSuggestions(text) {
 function createAgentRoute({ slug, runFn, requiredPermission }) {
   const router = express.Router();
 
+  // 5 agent runs per user per 5 minutes — report agents are expensive
+  const runRateLimiter = createRateLimiter({ windowMs: 5 * 60_000, max: 5 });
+
   // ── POST /run — SSE stream ───────────────────────────────────────────────
   router.post(
     '/run',
     requireAuth,
     requireRole(['org_admin', requiredPermission].filter(Boolean)),
+    runRateLimiter,
     async (req, res) => {
       // SSE headers
       res.setHeader('Content-Type', 'text/event-stream');

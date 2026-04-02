@@ -18,6 +18,7 @@
 const express = require('express');
 const { pool } = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
+const { createRateLimiter } = require('../middleware/rateLimiter');
 const { agentOrchestrator } = require('../platform/AgentOrchestrator');
 const AgentConfigService = require('../platform/AgentConfigService');
 const CostGuardService = require('../services/CostGuardService');
@@ -26,6 +27,27 @@ const { googleAdsConversationTools, TOOL_SLUG } = require('../agents/googleAdsCo
 const { buildSystemPrompt } = require('../agents/googleAdsConversation/prompt');
 
 const router = express.Router();
+
+// 20 messages per user per minute — prevents runaway LLM spend
+const messageRateLimiter = createRateLimiter({ windowMs: 60_000, max: 20 });
+
+// ── Context window management ─────────────────────────────────────────────────
+
+const MAX_HISTORY_MESSAGES = 40; // ~20 turns before trimming
+const TRIM_TO              = 36; // keep last 18 turns when over limit
+
+/**
+ * Trim conversation history to prevent context window overflow.
+ * Always starts on a 'user' turn so the history remains well-formed.
+ * Stored messages include text-only assistant replies (not tool call blocks),
+ * so each message is small — but long threads accumulate fast.
+ */
+function trimHistory(history) {
+  if (history.length <= MAX_HISTORY_MESSAGES) return history;
+  const trimmed  = history.slice(-TRIM_TO);
+  const firstUser = trimmed.findIndex((m) => m.role === 'user');
+  return firstUser > 0 ? trimmed.slice(firstUser) : trimmed;
+}
 
 // ── List conversations ────────────────────────────────────────────────────────
 
@@ -124,7 +146,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
 
 // ── Send message (SSE) ────────────────────────────────────────────────────────
 
-router.post('/:id/message', requireAuth, async (req, res) => {
+router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) => {
   // SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -156,7 +178,7 @@ router.post('/:id/message', requireAuth, async (req, res) => {
 
     const conversation = convResult.rows[0];
     // Stored messages: [{ role, content }] — text-only, suitable for Anthropic multi-turn
-    const history = conversation.messages ?? [];
+    const history = trimHistory(conversation.messages ?? []);
 
     // Load agent admin config for model / token limits
     let adminConfig;
@@ -202,7 +224,7 @@ router.post('/:id/message', requireAuth, async (req, res) => {
       req,
     };
 
-    const { result, tokensUsed } = await agentOrchestrator.run({
+    const { result, trace, iterations, tokensUsed } = await agentOrchestrator.run({
       systemPrompt:        buildSystemPrompt(await AgentConfigService.getAgentConfig(orgId, TOOL_SLUG).catch(() => ({}))),
       userMessage:         message.trim(),
       conversationHistory: history,
@@ -228,11 +250,22 @@ router.post('/:id/message', requireAuth, async (req, res) => {
 
     const assistantText = result?.summary ?? '';
 
+    // Log tool calls for audit trail
+    const toolCallNames = (trace ?? []).flatMap((step) => (step.toolCalls ?? []).map((tc) => tc.name));
+    if (toolCallNames.length > 0) {
+      console.log('[conversation:tools]', JSON.stringify({
+        convId: req.params.id, orgId, iterations, tools: toolCallNames,
+      }));
+    }
+
     // Append user message + assistant response to stored history
+    const assistantEntry = { role: 'assistant', content: assistantText };
+    if (toolCallNames.length > 0) assistantEntry.toolCalls = toolCallNames;
+
     const updatedMessages = [
       ...history,
-      { role: 'user',      content: message.trim() },
-      { role: 'assistant', content: assistantText  },
+      { role: 'user', content: message.trim() },
+      assistantEntry,
     ];
 
     // Auto-title from first user message if still default

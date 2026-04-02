@@ -19,6 +19,23 @@
  */
 
 const { getAdsServer, getAnalyticsServer, getWordPressServer, getPlatformServer, getKnowledgeBaseServer, callMcpTool, resolveRangeArgs } = require('../../platform/mcpTools');
+const AgentConfigService = require('../../platform/AgentConfigService');
+
+/**
+ * Strip admin-declared excluded ACF fields from CRM records before they reach the LLM.
+ * Configured in Admin > CRM Privacy. Applies to get_enquiries and get_not_interested_reasons.
+ * Discovery tools (enquiry_field_check, find_meta_key) bypass this intentionally.
+ */
+async function applyFieldExclusions(records, orgId) {
+  if (!Array.isArray(records) || records.length === 0) return records;
+  const { excluded_fields: excluded = [] } = await AgentConfigService.getCrmPrivacySettings(orgId);
+  if (excluded.length === 0) return records;
+  return records.map((record) => {
+    const clean = { ...record };
+    for (const field of excluded) delete clean[field];
+    return clean;
+  });
+}
 
 const TOOL_SLUG = 'google-ads-conversation';
 
@@ -201,10 +218,11 @@ const getNotInterestedReasonsTool = {
   requiredPermissions: [], toolSlug: TOOL_SLUG,
   async execute(input, context) {
     const wp = await getWordPressServer(context.orgId);
-    return callMcpTool(context.orgId, wp, 'wp_get_not_interested_reasons', {
+    const result = await callMcpTool(context.orgId, wp, 'wp_get_not_interested_reasons', {
       start_date: input.start_date ?? undefined,
       end_date:   input.end_date   ?? undefined,
     });
+    return applyFieldExclusions(result, context.orgId);
   },
 };
 
@@ -223,11 +241,12 @@ const getEnquiriesTool = {
   requiredPermissions: [], toolSlug: TOOL_SLUG,
   async execute(input, context) {
     const wp = await getWordPressServer(context.orgId);
-    return callMcpTool(context.orgId, wp, 'wp_get_enquiries', {
+    const result = await callMcpTool(context.orgId, wp, 'wp_get_enquiries', {
       limit:      input.limit      ?? 500,
       start_date: input.start_date ?? undefined,
       end_date:   input.end_date   ?? undefined,
     });
+    return applyFieldExclusions(result, context.orgId);
   },
 };
 
@@ -423,9 +442,8 @@ const googleAdsConversationTools = [
   listReportAgentsTool,
   getReportHistoryTool,
   searchReportHistoryTool,
-  // Knowledge base
+  // Knowledge base — search only; add_document excluded (RAG poisoning vector)
   searchKnowledgeTool,
-  addDocumentTool,
 ];
 
 module.exports = { googleAdsConversationTools, TOOL_SLUG };

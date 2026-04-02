@@ -4,6 +4,8 @@
  * AgentOrchestrator — platform-level ReAct loop engine.
  *
  * Tool-agnostic: nothing in this file knows about any specific domain.
+ * Provider-agnostic: model selection routes to the correct provider adapter
+ * (currently Anthropic; Gemini stub in providers/gemini.js).
  * Shared by every agent in MCP_curamTools.
  *
  * Usage:
@@ -14,10 +16,17 @@
  * budget checks can fire on each iteration.
  */
 
-const Anthropic = require('@anthropic-ai/sdk');
-
-const DEFAULT_MODEL          = 'claude-sonnet-4-6';
+const DEFAULT_MODEL           = 'claude-sonnet-4-6';
 const MAX_ITERATIONS_HARD_CAP = 20;
+
+// ─── Provider selection ───────────────────────────────────────────────────────
+
+function getProvider(model) {
+  if (typeof model === 'string' && model.startsWith('gemini')) {
+    return require('./providers/gemini');
+  }
+  return require('./providers/anthropic');
+}
 
 // ─── AgentError ───────────────────────────────────────────────────────────────
 
@@ -38,28 +47,28 @@ class AgentError extends Error {
 // ─── AgentOrchestrator ────────────────────────────────────────────────────────
 
 class AgentOrchestrator {
-  constructor() {
-    this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  }
-
   /**
-   * Execute a ReAct loop: call Claude → parse tool calls → execute tools →
+   * Execute a ReAct loop: call model → parse tool calls → execute tools →
    * feed results back → repeat until no tool calls or maxIterations reached.
    *
    * @param {object}   params
    * @param {string}   params.systemPrompt          — System prompt
    * @param {string}   params.userMessage           — Initial user message
+   * @param {Array}    [params.conversationHistory] — Prior turns: [{ role, content }].
+   *                                                  Unknown fields (e.g. toolCalls) are stripped
+   *                                                  before sending to the provider.
    * @param {Array}    [params.tools=[]]            — Tool definitions: { name, description,
    *                                                  input_schema, execute(input, context) }
-   *                                                  execute() is stripped before sending to Claude.
+   *                                                  execute() is stripped before sending to model.
    * @param {number}   [params.maxIterations=10]    — Max loop iterations. Clamped to 20.
    * @param {Function} [params.onStep]              — Optional callback(text, tokensUsed) called
-   *                                                  after each step — maps to createAgentRoute's emit.
+   *                                                  after each step.
    * @param {object}   params.context               — REQUIRED. Must contain orgId.
    *                                                  Passed through to every tool.execute() call.
-   * @param {string}   [params.model]               — Claude model ID.
-   * @param {number}   [params.maxTokens=8192]      — Max output tokens per Claude response.
-   * @param {object}   [params.thinking]            — Extended thinking.
+   * @param {string}   [params.model]               — Model ID. Prefix determines provider:
+   *                                                  'claude-*' → Anthropic, 'gemini-*' → Gemini.
+   * @param {number}   [params.maxTokens=8192]      — Max output tokens per model response.
+   * @param {object}   [params.thinking]            — Extended thinking config.
    * @param {boolean}  [params.thinking.enabled=false]
    * @param {number}   [params.thinking.budgetTokens=10000]
    *
@@ -85,47 +94,43 @@ class AgentOrchestrator {
       );
     }
 
-    const capped = Math.min(maxIterations, MAX_ITERATIONS_HARD_CAP);
+    const capped   = Math.min(maxIterations, MAX_ITERATIONS_HARD_CAP);
+    const provider = getProvider(model);
 
-    // Strip execute from tool defs before sending to Anthropic
-    const anthropicTools = tools.length > 0
-      ? tools.map(({ execute: _exec, requiredPermissions: _p, toolSlug: _s, ...schema }) => schema)
+    // Strip execute + meta fields from tool defs before sending to model
+    const providerTools = tools.length > 0
+      ? tools.map(({ execute: _e, requiredPermissions: _p, toolSlug: _s, ...schema }) => schema)
       : undefined;
 
     const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]));
 
-    const messages  = conversationHistory.length > 0
-      ? [...conversationHistory, { role: 'user', content: userMessage }]
+    // Strip any non-standard fields from stored history before passing to provider
+    const cleanHistory = conversationHistory.map(({ role, content }) => ({ role, content }));
+
+    const messages = cleanHistory.length > 0
+      ? [...cleanHistory, { role: 'user', content: userMessage }]
       : [{ role: 'user', content: userMessage }];
-    const trace     = [];
+
+    const trace      = [];
     const tokensUsed = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
     for (let iteration = 1; iteration <= capped; iteration++) {
-      const apiParams = {
-        model,
-        max_tokens: maxTokens,
-        system: systemPrompt,
-        messages,
-      };
-
-      if (anthropicTools) apiParams.tools = anthropicTools;
-
-      if (thinking?.enabled) {
-        apiParams.thinking = {
-          type:          'enabled',
-          budget_tokens: thinking.budgetTokens ?? 10000,
-        };
-      }
-
       let response;
       try {
-        response = await this.anthropic.messages.create(apiParams);
+        response = await provider.chat({
+          model,
+          max_tokens: maxTokens,
+          system:     systemPrompt,
+          messages,
+          tools:      providerTools,
+          thinking,
+        });
       } catch (err) {
-        console.error('[AgentOrchestrator] Anthropic API error', {
+        console.error('[AgentOrchestrator] provider error', {
           error: err.message, iteration, model, orgId: context.orgId,
         });
         throw new AgentError(
-          `Claude API error on iteration ${iteration}: ${err.message}`,
+          `Model API error on iteration ${iteration}: ${err.message}`,
           { iterations: iteration, trace, cause: err }
         );
       }

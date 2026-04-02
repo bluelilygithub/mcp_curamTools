@@ -22,6 +22,7 @@ import AdminSqlPage from './pages/admin/AdminSqlPage';
 import AdminPromptsPage from './pages/admin/AdminPromptsPage';
 import AdminDepartmentsPage from './pages/admin/AdminDepartmentsPage';
 import AdminOrgRolesPage from './pages/admin/AdminOrgRolesPage';
+import AdminCrmPrivacyPage from './pages/admin/AdminCrmPrivacyPage';
 import GoogleAdsMonitorPage from './pages/tools/GoogleAdsMonitorPage';
 
 export default function App() {
@@ -60,6 +61,7 @@ export default function App() {
                   <Route path="/admin/prompts" element={<AdminPromptsPage />} />
                   <Route path="/admin/departments" element={<AdminDepartmentsPage />} />
                   <Route path="/admin/org-roles" element={<AdminOrgRolesPage />} />
+                  <Route path="/admin/crm-privacy" element={<AdminCrmPrivacyPage />} />
                 </Route>
               </Route>
             </Route>

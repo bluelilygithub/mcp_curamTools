@@ -141,6 +141,35 @@ async function callMcpTool(orgId, server, toolName, args = {}) {
   return JSON.parse(raw);
 }
 
+/**
+ * Safe variant of callMcpTool — catches errors and returns a structured
+ * unavailability object instead of throwing. Use this in tools where the
+ * agent should degrade gracefully when a server is unreachable, rather than
+ * treating the failure as a hard error.
+ *
+ * Returns either the normal tool result, or:
+ *   { _unavailable: true, server: string, error: string }
+ *
+ * Claude will see this as data and can reason about which system is down
+ * (e.g. "Google Ads is unavailable right now, but here's what I can tell you from the CRM").
+ *
+ * @param {string} orgId
+ * @param {object|Promise<object>} serverOrPromise — server record OR a promise that resolves to one
+ * @param {string} toolName
+ * @param {object} args
+ * @param {string} serverLabel — human-readable server name for the error object (e.g. 'google-ads')
+ * @returns {Promise<any>}
+ */
+async function callMcpToolSafe(orgId, serverOrPromise, toolName, args = {}, serverLabel = 'unknown') {
+  try {
+    const server = await Promise.resolve(serverOrPromise);
+    return await callMcpTool(orgId, server, toolName, args);
+  } catch (err) {
+    console.warn(`[mcpTools] ${serverLabel}/${toolName} unavailable:`, err.message);
+    return { _unavailable: true, server: serverLabel, error: err.message };
+  }
+}
+
 // ── Date range helper ─────────────────────────────────────────────────────────
 
 /**
@@ -159,4 +188,4 @@ function resolveRangeArgs(context, input, defaultDays = 30) {
   return { days: context.days ?? input.days ?? defaultDays };
 }
 
-module.exports = { getAdsServer, getAnalyticsServer, getWordPressServer, getPlatformServer, getKnowledgeBaseServer, callMcpTool, resolveRangeArgs };
+module.exports = { getAdsServer, getAnalyticsServer, getWordPressServer, getPlatformServer, getKnowledgeBaseServer, callMcpTool, callMcpToolSafe, resolveRangeArgs };

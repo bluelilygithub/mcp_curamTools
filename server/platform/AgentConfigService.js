@@ -350,6 +350,46 @@ async function getAgentConfigMeta(orgId, slug) {
   }
 }
 
+// ── CRM Privacy settings (system_settings key: 'crm_privacy') ───────────────
+
+const CRM_PRIVACY_DEFAULTS = {
+  excluded_fields: [], // ACF field names to strip before data reaches the LLM
+};
+
+/**
+ * Returns org-level CRM privacy settings.
+ * excluded_fields: array of ACF meta_key names to strip from all CRM tool results.
+ */
+async function getCrmPrivacySettings(orgId) {
+  try {
+    const res = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'crm_privacy' LIMIT 1`,
+      [orgId]
+    );
+    if (res.rows.length === 0) return { ...CRM_PRIVACY_DEFAULTS };
+    return { ...CRM_PRIVACY_DEFAULTS, ...(res.rows[0].value || {}) };
+  } catch (err) {
+    console.error('[AgentConfigService] getCrmPrivacySettings error:', err.message);
+    return { ...CRM_PRIVACY_DEFAULTS };
+  }
+}
+
+/**
+ * Saves org-level CRM privacy settings.
+ */
+async function updateCrmPrivacySettings(orgId, patch, updatedBy) {
+  const current = await getCrmPrivacySettings(orgId);
+  const merged  = { ...current, ...patch };
+  await pool.query(
+    `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+     VALUES ($1, 'crm_privacy', $2, $3, NOW())
+     ON CONFLICT (org_id, key)
+     DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+    [orgId, JSON.stringify(merged), updatedBy]
+  );
+  return merged;
+}
+
 module.exports = {
   getAgentConfig,
   getAgentConfigMeta,
@@ -361,6 +401,8 @@ module.exports = {
   updateAdminConfig,
   getOrgBudgetSettings,
   updateOrgBudgetSettings,
+  getCrmPrivacySettings,
+  updateCrmPrivacySettings,
   AGENT_DEFAULTS,
   ADMIN_DEFAULTS,
 };
