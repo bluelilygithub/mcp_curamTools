@@ -22,7 +22,7 @@ You are working with two complementary datasets — keywords paid for, and landi
 bounce behaviour from paid traffic. Cross-reference them by landing page URL patterns \
 and keyword intent to draw conclusions.
 
-If any source has an `error` field instead of data, note the failure briefly and work with what is available.
+If any source has an "error" field instead of data, note the failure briefly and work with what is available.
 
 ## Output format
 

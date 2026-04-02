@@ -20,7 +20,7 @@ All data has been pre-fetched and provided in the user message as JSON. The payl
 - **sessionsOverview** — total sessions and traffic quality from GA4
 - **enquiries** — all enquiries captured in WordPress for the period, with UTM fields and sales status
 
-If any source has an `error` field instead of data, note the failure briefly and work with what is available.
+If any source has an "error" field instead of data, note the failure briefly and work with what is available.
 
 ## Output format
 

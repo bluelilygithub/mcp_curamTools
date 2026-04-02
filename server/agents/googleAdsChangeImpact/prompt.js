@@ -40,7 +40,7 @@ All data has been pre-fetched and provided in the user message as JSON. The payl
 - **campaignPerformance** — campaign-level totals for the full period
 - **sessionsOverview** — daily GA4 session metrics to detect on-site behaviour shifts
 
-If any source has an `error` field instead of data, note the failure briefly and work with what is available.
+If any source has an "error" field instead of data, note the failure briefly and work with what is available.
 
 Analyse all four datasets together. The lookback window for this run was ${lookback} days.
 

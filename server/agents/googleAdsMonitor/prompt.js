@@ -68,7 +68,7 @@ All data has been pre-fetched and provided in the user message as JSON. The payl
 - **searchTerms** — top actual user search queries by clicks
 - **sessionsOverview** — daily GA4 session metrics for on-site behaviour correlation
 
-If any source has an `error` field instead of data, note the failure briefly and work with what is available.
+If any source has an "error" field instead of data, note the failure briefly and work with what is available.
 
 ## What to look for
 

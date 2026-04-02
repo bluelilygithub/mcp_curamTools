@@ -220,6 +220,10 @@ Use `https.request` with explicit `Content-Length`. `fetch` silently fails in th
 **Do not use regex syntax inside JSDoc block comments.**
 `*/` inside a `/** ... */` comment closes the block early and breaks the Vite build.
 
+**Do not use backticks inside template literal strings in prompt.js files.**
+A backtick anywhere in a template literal string closes it immediately — Node throws `SyntaxError: Unexpected identifier`.
+Use double quotes instead: `` `error` `` → `"error"` in prompt text.
+
 **Always state whether a server restart is required after changes.**
 Environment variable changes and new MCP server registrations require a restart.
 Code-only changes in Railway auto-deploy and do not require manual restart.
