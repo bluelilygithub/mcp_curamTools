@@ -51,6 +51,7 @@ const ADMIN_DEFAULTS = {
     max_tokens:           8192,
     max_iterations:       10,
     max_task_budget_aud:  2.00,
+    fallback_model:       null,
   },
   'google-ads-freeform': {
     enabled:             true,
@@ -58,6 +59,7 @@ const ADMIN_DEFAULTS = {
     max_tokens:          8192,
     max_iterations:      12,
     max_task_budget_aud: 2.00,
+    fallback_model:      null,
   },
   'google-ads-change-impact': {
     enabled:             true,
@@ -65,6 +67,7 @@ const ADMIN_DEFAULTS = {
     max_tokens:          8192,
     max_iterations:      10,
     max_task_budget_aud: 2.00,
+    fallback_model:      null,
   },
   'google-ads-change-audit': {
     enabled:             true,
@@ -72,6 +75,7 @@ const ADMIN_DEFAULTS = {
     max_tokens:          8192,
     max_iterations:      15,   // higher — runs multiple before/after tool call pairs
     max_task_budget_aud: 3.00, // higher budget — multiple before/after query pairs per change
+    fallback_model:      null,
   },
   _platform: {
     enabled: true,
@@ -79,8 +83,70 @@ const ADMIN_DEFAULTS = {
     max_tokens: 4096,
     max_iterations: 10,
     max_task_budget_aud: 2.00,  // per-run AUD ceiling; null = unlimited
+    fallback_model: null,
   },
 };
+
+// ── Model requirements per agent ──────────────────────────────────────────
+// tier: the minimum capability tier the agent needs.
+//   'standard' — brief/simple output, pre-fetch, no ReAct loop
+//   'advanced'  — multi-section analysis, cross-source reasoning
+//   'premium'   — complex multi-step reasoning (reserved for future use)
+// reason: shown in the Admin UI next to the recommendation.
+
+const AGENT_MODEL_REQUIREMENTS = {
+  'google-ads-conversation':     { tier: 'advanced', reason: 'Multi-turn reasoning with dynamic tool selection' },
+  'google-ads-strategic-review': { tier: 'advanced', reason: 'Multi-step hypothesis validation against live data' },
+  'google-ads-change-audit':     { tier: 'advanced', reason: 'Complex narrative audit with before/after comparison' },
+  'google-ads-monitor':          { tier: 'advanced', reason: 'Multi-section performance report with cross-source analysis' },
+  'google-ads-change-impact':    { tier: 'advanced', reason: 'Timeline analysis with performance discontinuity detection' },
+  'google-ads-freeform':         { tier: 'advanced', reason: 'Open-ended Q&A with live data retrieval' },
+  'competitor-keyword-intel':    { tier: 'advanced', reason: 'Competitive gap analysis requiring detailed reasoning' },
+  'ads-attribution-summary':     { tier: 'standard', reason: 'Brief structured summary from pre-fetched data' },
+  'ads-bounce-analysis':         { tier: 'standard', reason: 'Structured bounce report from pre-fetched data' },
+  'auction-insights':            { tier: 'standard', reason: 'Structured competitive metrics report' },
+  _platform:                     { tier: 'advanced', reason: 'Default for unrecognised agents' },
+};
+
+// Tier capability order: standard < advanced < premium
+const TIER_ORDER = ['standard', 'advanced', 'premium'];
+
+/**
+ * Given a list of all models (from admin/models), return the recommended model
+ * for the given agent slug.
+ *
+ * @param {string}  slug          — agent slug
+ * @param {Array}   allModels     — full model list from admin/models (may include disabled)
+ * @returns {{ id: string, name: string, tier: string, reason: string } | null}
+ */
+function getRecommendedModel(slug, allModels) {
+  const req         = AGENT_MODEL_REQUIREMENTS[slug] ?? AGENT_MODEL_REQUIREMENTS._platform;
+  const requiredIdx = TIER_ORDER.indexOf(req.tier);
+  const enabled     = allModels.filter((m) => m.enabled !== false);
+
+  if (enabled.length === 0) return null;
+
+  const atOrAbove = enabled.filter((m) => TIER_ORDER.indexOf(m.tier ?? 'advanced') >= requiredIdx);
+  const below     = enabled.filter((m) => TIER_ORDER.indexOf(m.tier ?? 'advanced') <  requiredIdx);
+
+  atOrAbove.sort((a, b) => {
+    const ai = TIER_ORDER.indexOf(a.tier ?? 'advanced');
+    const bi = TIER_ORDER.indexOf(b.tier ?? 'advanced');
+    if (ai !== bi) return (ai - requiredIdx) - (bi - requiredIdx);
+    return (b.outputPricePer1M ?? 0) - (a.outputPricePer1M ?? 0);
+  });
+
+  below.sort((a, b) => {
+    const ai = TIER_ORDER.indexOf(a.tier ?? 'advanced');
+    const bi = TIER_ORDER.indexOf(b.tier ?? 'advanced');
+    if (ai !== bi) return bi - ai;
+    return (b.outputPricePer1M ?? 0) - (a.outputPricePer1M ?? 0);
+  });
+
+  const pick = atOrAbove[0] ?? below[0];
+  if (!pick) return null;
+  return { id: pick.id, name: pick.name, tier: pick.tier, reason: req.reason };
+}
 
 function getDefaultAdminConfig(slug) {
   return ADMIN_DEFAULTS[slug] ?? { ...ADMIN_DEFAULTS._platform };
@@ -405,4 +471,6 @@ module.exports = {
   updateCrmPrivacySettings,
   AGENT_DEFAULTS,
   ADMIN_DEFAULTS,
+  AGENT_MODEL_REQUIREMENTS,
+  getRecommendedModel,
 };

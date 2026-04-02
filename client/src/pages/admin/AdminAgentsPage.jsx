@@ -1,6 +1,6 @@
 /**
- * AdminAgentsPage — admin guardrails: kill switch, model, max tokens, max iterations.
- * Includes IntelligenceProfileSection per agent.
+ * AdminAgentsPage — admin guardrails: kill switch, model, fallback model,
+ * max tokens, max iterations, per-agent intelligence profile.
  */
 import { useState, useEffect } from 'react';
 import api from '../../api/client';
@@ -10,14 +10,9 @@ import EmptyState from '../../components/ui/EmptyState';
 
 function IntelligenceProfileSection({ slug, profile, onChange }) {
   const base = profile ?? {};
-  const agentSpecific = base.agentSpecific ?? {};
 
   function update(key, value) {
     onChange({ ...base, [key]: value });
-  }
-
-  function updateAgentSpecific(key, value) {
-    onChange({ ...base, agentSpecific: { ...agentSpecific, [key]: value } });
   }
 
   const Field = ({ label, fieldKey, type = 'text', placeholder }) => (
@@ -76,20 +71,25 @@ function IntelligenceProfileSection({ slug, profile, onChange }) {
   );
 }
 
-function AgentCard({ agent, onSave }) {
-  const [config, setConfig] = useState(agent);
-  const [profile, setProfile] = useState(null);
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState('');
-  const [error, setError] = useState('');
+const inputCls = "w-full px-3 py-2.5 rounded-xl border text-sm outline-none";
+const inputStyle = { background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' };
+
+function AgentCard({ agent, models, onSave }) {
+  const [config,         setConfig]         = useState(agent);
+  const [profile,        setProfile]        = useState(null);
+  const [saving,         setSaving]         = useState(false);
+  const [success,        setSuccess]        = useState('');
+  const [error,          setError]          = useState('');
+
+  const enabledModels = models.filter((m) => m.enabled !== false);
+  const rec           = agent.recommended_model; // { id, name, tier, reason } | null
+  const hasMismatch   = rec && config.model && config.model !== rec.id;
 
   async function save() {
     setSaving(true);
     setSuccess('');
     try {
       await api.put(`/admin/agents/${agent.slug}`, config);
-      // Save intelligence profile separately via agent-configs
       if (profile !== null) {
         await api.put(`/agent-configs/${agent.slug}`, { intelligence_profile: profile });
       }
@@ -104,13 +104,24 @@ function AgentCard({ agent, onSave }) {
   return (
     <div
       className="rounded-2xl border p-6 space-y-4"
-      style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
+      style={{
+        background:   'var(--color-surface)',
+        borderColor:  hasMismatch ? '#f59e0b' : 'var(--color-border)',
+      }}
     >
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex items-center gap-2 flex-wrap">
           <h2 className="text-base font-semibold" style={{ color: 'var(--color-text)' }}>{agent.slug}</h2>
+          {hasMismatch && (
+            <span
+              className="text-xs font-medium px-2 py-0.5 rounded-full"
+              style={{ background: '#fef3c7', color: '#92400e' }}
+              title={`Recommended: ${rec.name} — ${rec.reason}`}
+            >
+              ⚠ Not on recommended model
+            </span>
+          )}
         </div>
-        {/* Kill switch toggle */}
         <div className="flex items-center gap-2">
           <span className="text-xs" style={{ color: 'var(--color-muted)' }}>Enabled</span>
           <button
@@ -126,26 +137,73 @@ function AgentCard({ agent, onSave }) {
         </div>
       </div>
 
-      {error && <InlineBanner type="error" message={error} onDismiss={() => setError('')} />}
+      {error   && <InlineBanner type="error"   message={error}   onDismiss={() => setError('')} />}
       {success && <InlineBanner type="neutral" message={success} />}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        {/* Primary model */}
         <div className="sm:col-span-2">
-          <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>Model</label>
-          <input
+          <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
+            Model
+          </label>
+          <select
             value={config.model ?? ''}
             onChange={(e) => setConfig((c) => ({ ...c, model: e.target.value }))}
-            className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-            style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
-          />
+            className={inputCls}
+            style={inputStyle}
+          >
+            {enabledModels.length === 0 && (
+              <option value="">No enabled models — add models in Admin › Models</option>
+            )}
+            {enabledModels.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}{rec?.id === m.id ? ' ★ recommended' : ''}
+              </option>
+            ))}
+            {config.model && !enabledModels.some((m) => m.id === config.model) && (
+              <option value={config.model}>{config.model} (disabled)</option>
+            )}
+          </select>
+          {rec && (
+            <p className="text-xs mt-1" style={{ color: hasMismatch ? '#b45309' : 'var(--color-muted)' }}>
+              {hasMismatch
+                ? `★ Recommended: ${rec.name} — ${rec.reason}`
+                : `★ ${rec.reason}`}
+            </p>
+          )}
         </div>
+
+        {/* Fallback model */}
+        <div className="sm:col-span-2">
+          <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
+            Fallback Model
+            <span className="ml-1 font-normal normal-case" style={{ opacity: 0.7 }}>— used if primary fails</span>
+          </label>
+          <select
+            value={config.fallback_model ?? ''}
+            onChange={(e) => setConfig((c) => ({ ...c, fallback_model: e.target.value || null }))}
+            className={inputCls}
+            style={inputStyle}
+          >
+            <option value="">(none — no fallback)</option>
+            {enabledModels
+              .filter((m) => m.id !== config.model)
+              .map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+          </select>
+          <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+            If the primary model returns an API error on the first call, the platform retries once with this model and alerts you in the run log.
+          </p>
+        </div>
+
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>Max Tokens</label>
           <input
             type="number" value={config.max_tokens ?? ''}
             onChange={(e) => setConfig((c) => ({ ...c, max_tokens: parseInt(e.target.value) }))}
-            className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-            style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+            className={inputCls} style={inputStyle}
           />
         </div>
         <div>
@@ -153,8 +211,7 @@ function AgentCard({ agent, onSave }) {
           <input
             type="number" value={config.max_iterations ?? ''}
             onChange={(e) => setConfig((c) => ({ ...c, max_iterations: parseInt(e.target.value) }))}
-            className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-            style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+            className={inputCls} style={inputStyle}
           />
         </div>
         <div>
@@ -165,8 +222,7 @@ function AgentCard({ agent, onSave }) {
             type="number" step="0.25" min="0" value={config.max_task_budget_aud ?? ''}
             onChange={(e) => setConfig((c) => ({ ...c, max_task_budget_aud: e.target.value === '' ? null : parseFloat(e.target.value) }))}
             placeholder="Leave blank for unlimited"
-            className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-            style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+            className={inputCls} style={inputStyle}
           />
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-end' }}>
@@ -186,13 +242,20 @@ function AgentCard({ agent, onSave }) {
 }
 
 export default function AdminAgentsPage() {
-  const [agents, setAgents] = useState([]);
+  const [agents,  setAgents]  = useState([]);
+  const [models,  setModels]  = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error,   setError]   = useState('');
 
   useEffect(() => {
-    api.get('/admin/agents')
-      .then(setAgents)
+    Promise.all([
+      api.get('/admin/agents'),
+      api.get('/admin/models'),
+    ])
+      .then(([agentData, modelData]) => {
+        setAgents(agentData);
+        setModels(modelData);
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -201,7 +264,9 @@ export default function AdminAgentsPage() {
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Agents</h1>
-        <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>Configure admin guardrails and intelligence profiles for each agent.</p>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>
+          Configure guardrails and intelligence profiles. ★ marks the recommended model for each agent based on task complexity.
+        </p>
       </div>
       {error && <InlineBanner type="error" message={error} />}
       {loading ? (
@@ -209,7 +274,9 @@ export default function AdminAgentsPage() {
       ) : agents.length === 0 ? (
         <EmptyState icon="bot" message="No agents configured yet." hint="Agents appear here once registered in the platform." />
       ) : (
-        agents.map((agent) => <AgentCard key={agent.slug} agent={agent} onSave={() => {}} />)
+        agents.map((agent) => (
+          <AgentCard key={agent.slug} agent={agent} models={models} onSave={() => {}} />
+        ))
       )}
     </div>
   );

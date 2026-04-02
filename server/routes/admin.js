@@ -14,6 +14,7 @@
  */
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const https   = require('https');
 const { pool } = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
 const { requireRole } = require('../middleware/requireRole');
@@ -416,16 +417,63 @@ router.put('/models', async (req, res) => {
 
 // ── Model test ────────────────────────────────────────────────────────────
 // Sends a minimal one-token request to verify the API key and model are active.
-// Uses native fetch — no SDK dependency required.
+// Anthropic: uses native fetch (existing).
+// Google Gemini: uses https.request with explicit Content-Length (Railway-safe).
+
+/** @private https.request wrapper returning { status, body } */
+function httpsPost(hostname, path, reqHeaders, bodyObj) {
+  return new Promise((resolve, reject) => {
+    const bodyStr = JSON.stringify(bodyObj);
+    const req = https.request(
+      { hostname, path, method: 'POST', headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(bodyStr), ...reqHeaders } },
+      (resp) => {
+        let data = '';
+        resp.on('data', (c) => { data += c; });
+        resp.on('end', () => {
+          try { resolve({ status: resp.statusCode, body: JSON.parse(data) }); }
+          catch { resolve({ status: resp.statusCode, body: data }); }
+        });
+      }
+    );
+    req.on('error', reject);
+    req.write(bodyStr);
+    req.end();
+  });
+}
 
 router.post('/models/:modelId/test', async (req, res) => {
   const { modelId } = req.params;
+  const start = Date.now();
+
+  // ── Google Gemini ─────────────────────────────────────────────────────────
+  if (modelId.startsWith('gemini-')) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ ok: false, error: 'GEMINI_API_KEY environment variable is not set.' });
+    }
+    try {
+      const { status, body } = await httpsPost(
+        'generativelanguage.googleapis.com',
+        `/v1beta/models/${encodeURIComponent(modelId)}:generateContent?key=${apiKey}`,
+        {},
+        { contents: [{ role: 'user', parts: [{ text: 'Reply with the single word: ok' }] }] }
+      );
+      const latencyMs = Date.now() - start;
+      if (status !== 200) {
+        const message = body?.error?.message ?? `HTTP ${status}`;
+        return res.json({ ok: false, error: message, latencyMs });
+      }
+      return res.json({ ok: true, latencyMs });
+    } catch (err) {
+      return res.json({ ok: false, error: err.message, latencyMs: Date.now() - start });
+    }
+  }
+
+  // ── Anthropic Claude ──────────────────────────────────────────────────────
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return res.status(500).json({ ok: false, error: 'ANTHROPIC_API_KEY is not set on the server.' });
   }
-
-  const start = Date.now();
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -440,15 +488,12 @@ router.post('/models/:modelId/test', async (req, res) => {
         messages:   [{ role: 'user', content: 'Reply with the single word: ok' }],
       }),
     });
-
     const latencyMs = Date.now() - start;
-
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
       const message = body?.error?.message ?? `HTTP ${response.status}`;
       return res.json({ ok: false, error: message, latencyMs });
     }
-
     res.json({ ok: true, latencyMs });
   } catch (err) {
     res.json({ ok: false, error: err.message, latencyMs: Date.now() - start });
@@ -456,7 +501,10 @@ router.post('/models/:modelId/test', async (req, res) => {
 });
 
 router.get('/model-status', (req, res) => {
-  res.json({ anthropic: !!process.env.ANTHROPIC_API_KEY });
+  res.json({
+    anthropic: !!process.env.ANTHROPIC_API_KEY,
+    google:    !!process.env.GEMINI_API_KEY,
+  });
 });
 
 router.post('/models/reset', async (req, res) => {
@@ -474,13 +522,19 @@ router.post('/models/reset', async (req, res) => {
 // ── Agents (admin guardrails) ──────────────────────────────────────────────
 
 router.get('/agents', async (req, res) => {
-  // Return admin config for all known agent slugs
   const slugs = Object.keys(AgentConfigService.ADMIN_DEFAULTS).filter((s) => s !== '_platform');
   try {
+    const modelsRow = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'ai_models'`,
+      [req.user.orgId]
+    );
+    const allModels = modelsRow.rows[0]?.value ?? MODEL_DEFAULTS;
+
     const configs = await Promise.all(
       slugs.map(async (slug) => ({
         slug,
         ...(await AgentConfigService.getAdminConfig(slug)),
+        recommended_model: AgentConfigService.getRecommendedModel(slug, allModels),
       }))
     );
     res.json(configs);

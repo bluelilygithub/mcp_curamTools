@@ -71,6 +71,8 @@ class AgentOrchestrator {
    * @param {object}   [params.thinking]            — Extended thinking config.
    * @param {boolean}  [params.thinking.enabled=false]
    * @param {number}   [params.thinking.budgetTokens=10000]
+   * @param {string}   [params.fallbackModel]       — Optional. If the primary model fails on
+   *                                                  iteration 1, retry once with this model.
    *
    * @returns {Promise<{ result: { summary: string }, trace: Array, iterations: number, tokensUsed: object }>}
    * @throws  {AgentError}
@@ -86,6 +88,7 @@ class AgentOrchestrator {
     model = DEFAULT_MODEL,
     maxTokens = 8192,
     thinking = { enabled: false, budgetTokens: 10000 },
+    fallbackModel = null,
   }) {
     if (!context?.orgId) {
       throw new AgentError(
@@ -126,13 +129,49 @@ class AgentOrchestrator {
           thinking,
         });
       } catch (err) {
-        console.error('[AgentOrchestrator] provider error', {
-          error: err.message, iteration, model, orgId: context.orgId,
-        });
-        throw new AgentError(
-          `Model API error on iteration ${iteration}: ${err.message}`,
-          { iterations: iteration, trace, cause: err }
-        );
+        if (iteration === 1 && fallbackModel && fallbackModel !== model) {
+          const alertMsg = `⚠ Model "${model}" failed (${err.message}). Switching to fallback: "${fallbackModel}".`;
+          console.warn('[AgentOrchestrator] provider fallback', {
+            primaryModel: model, fallbackModel, error: err.message, orgId: context.orgId,
+          });
+          if (typeof onStep === 'function') onStep(alertMsg, tokensUsed);
+
+          try {
+            response = await getProvider(fallbackModel).chat({
+              model:      fallbackModel,
+              max_tokens: maxTokens,
+              system:     systemPrompt,
+              messages,
+              tools:      providerTools,
+              thinking,
+            });
+            trace.push({
+              iteration: 0,
+              type:      'fallback',
+              from:      model,
+              to:        fallbackModel,
+              reason:    err.message,
+              timestamp: new Date().toISOString(),
+            });
+            model = fallbackModel;
+          } catch (fallbackErr) {
+            console.error('[AgentOrchestrator] fallback also failed', {
+              fallbackModel, error: fallbackErr.message, orgId: context.orgId,
+            });
+            throw new AgentError(
+              `Primary model "${model}" and fallback "${fallbackModel}" both failed. Primary: ${err.message}. Fallback: ${fallbackErr.message}`,
+              { iterations: iteration, trace, cause: fallbackErr }
+            );
+          }
+        } else {
+          console.error('[AgentOrchestrator] provider error', {
+            error: err.message, iteration, model, orgId: context.orgId,
+          });
+          throw new AgentError(
+            `Model API error on iteration ${iteration}: ${err.message}`,
+            { iterations: iteration, trace, cause: err }
+          );
+        }
       }
 
       // Accumulate tokens

@@ -23,7 +23,9 @@
       "Bash(find /c/Users/micha/Local Sites/mcp_curamTools/client/src -type f \\\\\\(-name *.ts -o -name *.tsx -o -name *.js -o -name *.jsx \\\\\\))",
       "Bash(find /c/Users/micha/Local Sites/mcp_curamTools/server -type f \\\\\\(-name *.js -o -name *.ts \\\\\\))",
       "Bash(grep -r \"voice\\\\|tts\\\\|stt\\\\|speech\\\\|audio\" /c/Users/micha/Local Sites/mcp_curamTools/server --include=*.js --include=*.ts)",
-      "Bash(grep -i \"voice\\\\|tts\\\\|stt\\\\|speech\\\\|mic\\\\|audio\\\\|speaker\" /c/Users/micha/Local Sites/mcp_curamTools/*.md)"
+      "Bash(grep -i \"voice\\\\|tts\\\\|stt\\\\|speech\\\\|mic\\\\|audio\\\\|speaker\" /c/Users/micha/Local Sites/mcp_curamTools/*.md)",
+      "Bash(find 'C:/Users/micha/Local Sites/mcp_curamTools/client/src' -name *Model* -o -name *model*)",
+      "Bash(node -e \"require\\(''multer''\\); require\\(''pdf-parse''\\); require\\(''mammoth''\\); console.log\\(''ok''\\)\")"
     ]
   }
 }

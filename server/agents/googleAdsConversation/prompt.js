@@ -153,7 +153,6 @@ Report history:
 
 Knowledge base:
 - **search_knowledge** — semantic search across indexed reports and documents
-- **add_document** — store reference material for future retrieval
 
 ## Device breakdown — always available
 

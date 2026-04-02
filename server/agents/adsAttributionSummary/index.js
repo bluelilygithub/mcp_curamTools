@@ -1,28 +1,29 @@
 'use strict';
 
 /**
- * Ads Attribution Summary agent — runFn entry point.
+ * Ads Attribution Summary agent — pre-fetch architecture.
  *
- * Collates Google Ads, GA4 analytics, and WordPress enquiries into a brief
- * cross-channel attribution summary.
+ * WHY PRE-FETCH: All three data sources (campaign performance, GA4 sessions,
+ * WordPress enquiries) are fetched unconditionally every run. The ReAct loop
+ * added quadratic token cost for a fixed, predictable sequence.
  *
- * req.body may contain:
- *   { startDate, endDate }  — date-picker selection from the parent dashboard
- *   { days }                — fallback lookback period
- *   { customerId }          — optional Google Ads customer account
+ * Pre-fetch pulls all three sources in parallel in Node.js, passes the complete
+ * dataset to Claude in a single message, no tools, no loop.
+ *
+ * Estimated cost: ~$0.05–$0.10 per run (vs $0.20–$0.50 with ReAct).
  */
 
 const { agentOrchestrator }  = require('../../platform/AgentOrchestrator');
 const AgentConfigService     = require('../../platform/AgentConfigService');
-const { adsAttributionSummaryTools, TOOL_SLUG } = require('./tools');
+const { getAdsServer, getAnalyticsServer, getWordPressServer, callMcpTool } = require('../../platform/mcpTools');
 const { buildSystemPrompt }  = require('./prompt');
+const { TOOL_SLUG }          = require('./tools');
 
 async function runAdsAttributionSummary(context) {
   const { orgId, req, emit } = context;
 
   const adminConfig = await AgentConfigService.getAdminConfig(TOOL_SLUG);
 
-  // Date range: explicit dates > days param > 30d default
   let startDate = req?.body?.startDate ?? null;
   let endDate   = req?.body?.endDate   ?? null;
 
@@ -36,19 +37,56 @@ async function runAdsAttributionSummary(context) {
   }
 
   const customerId = req?.body?.customerId ?? null;
+  const rangeArgs  = { start_date: startDate, end_date: endDate };
+
+  // ── Pre-fetch: all three sources in parallel ──────────────────────────────────
+
+  emit('Fetching campaign performance, GA4 sessions, and CRM enquiries…');
+
+  const [adsServer, gaServer, wpServer] = await Promise.all([
+    getAdsServer(orgId),
+    getAnalyticsServer(orgId),
+    getWordPressServer(orgId),
+  ]);
+
+  const [campaignPerformance, sessionsOverview, enquiries] = await Promise.all([
+    callMcpTool(orgId, adsServer, 'ads_get_campaign_performance', {
+      ...rangeArgs,
+      customer_id: customerId ?? null,
+    }).catch((e) => ({ error: e.message })),
+    callMcpTool(orgId, gaServer, 'ga4_get_sessions_overview', rangeArgs)
+      .catch((e) => ({ error: e.message })),
+    callMcpTool(orgId, wpServer, 'wp_get_enquiries', {
+      per_page:   200,
+      start_date: startDate,
+      end_date:   endDate,
+    }).catch((e) => ({ error: e.message })),
+  ]);
+
+  // ── Single Claude call — no tools, no loop ────────────────────────────────────
+
+  emit('Building attribution summary…');
+
+  const payload = {
+    period: `${startDate} to ${endDate}`,
+    campaignPerformance,
+    sessionsOverview,
+    enquiries,
+  };
 
   const userMessage =
     `Produce an attribution summary for the period ${startDate} to ${endDate}. ` +
-    'Gather Google Ads spend and conversions, GA4 session data, and WordPress enquiries, ' +
-    'then write a brief cross-channel summary as instructed.';
+    `All data has been pre-fetched below. Write the cross-channel summary as instructed.\n\n` +
+    `\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``;
 
   const { result, trace, tokensUsed } = await agentOrchestrator.run({
     systemPrompt:  buildSystemPrompt(),
     userMessage,
-    tools:         adsAttributionSummaryTools,
-    model:         adminConfig.model          ?? 'claude-sonnet-4-6',
-    maxTokens:     adminConfig.max_tokens     ?? 4096,
-    maxIterations: adminConfig.max_iterations ?? 8,
+    tools:         [],
+    maxIterations: 1,
+    model:         adminConfig.model      ?? 'claude-sonnet-4-6',
+    maxTokens:     adminConfig.max_tokens ?? 4096,
+    fallbackModel: adminConfig.fallback_model ?? null,
     onStep:        emit,
     context:       { ...context, startDate, endDate, toolSlug: TOOL_SLUG, customerId },
   });

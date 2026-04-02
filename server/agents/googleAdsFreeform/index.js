@@ -61,6 +61,7 @@ async function runGoogleAdsFreeform(context) {
     model:         adminConfig.model          ?? 'claude-sonnet-4-6',
     maxTokens:     adminConfig.max_tokens     ?? 8192,
     maxIterations: adminConfig.max_iterations ?? 12,
+    fallbackModel: adminConfig.fallback_model ?? null,
     onStep:        emit,
     context:       { ...context, startDate, endDate, toolSlug: TOOL_SLUG, customerId },
   });

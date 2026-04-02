@@ -1,7 +1,16 @@
 'use strict';
 
 /**
- * Google Ads Monitor agent — runFn entry point.
+ * Google Ads Monitor agent — pre-fetch architecture.
+ *
+ * WHY PRE-FETCH: All four data sources (campaign performance, daily performance,
+ * search terms, GA4 sessions) are fetched unconditionally every run. The ReAct
+ * loop added quadratic token cost for a fixed, predictable sequence.
+ *
+ * Pre-fetch pulls all four sources in parallel in Node.js, passes the complete
+ * dataset to Claude in a single message, no tools, no loop.
+ *
+ * Estimated cost: ~$0.05–$0.15 per run (vs $0.30–$0.70 with ReAct).
  *
  * context shape (from createAgentRoute for HTTP runs):
  *   { orgId, userId, config, adminConfig, req, emit }
@@ -20,28 +29,68 @@
 const { agentOrchestrator }  = require('../../platform/AgentOrchestrator');
 const AgentConfigService     = require('../../platform/AgentConfigService');
 const { pool }               = require('../../db');
-const { googleAdsMonitorTools, TOOL_SLUG } = require('./tools');
+const { getAdsServer, getAnalyticsServer, callMcpTool } = require('../../platform/mcpTools');
 const { buildSystemPrompt }  = require('./prompt');
-
-function buildUserMessage(startDate, endDate) {
-  return (
-    `Analyse campaign performance from ${startDate} to ${endDate} ` +
-    'and provide optimisation recommendations focused on high-intent traffic within current budget.'
-  );
-}
+const { TOOL_SLUG }          = require('./tools');
 
 async function runSingleCustomer(orgId, config, adminConfig, startDate, endDate, customerId, emit, context) {
   const customerVars = customerId
     ? { customer_id: customerId, customer_name: config.customer_name ?? customerId }
     : {};
 
+  const rangeArgs = { start_date: startDate, end_date: endDate };
+
+  // ── Pre-fetch: all four sources in parallel ─────────────────────────────────
+
+  emit('Fetching campaign performance, daily trends, search terms, and GA4 data…');
+
+  const [adsServer, gaServer] = await Promise.all([
+    getAdsServer(orgId),
+    getAnalyticsServer(orgId),
+  ]);
+
+  const [campaignPerformance, dailyPerformance, searchTerms, sessionsOverview] = await Promise.all([
+    callMcpTool(orgId, adsServer, 'ads_get_campaign_performance', {
+      ...rangeArgs,
+      customer_id: customerId ?? null,
+    }).catch((e) => ({ error: e.message })),
+    callMcpTool(orgId, adsServer, 'ads_get_daily_performance', {
+      ...rangeArgs,
+      customer_id: customerId ?? null,
+    }).catch((e) => ({ error: e.message })),
+    callMcpTool(orgId, adsServer, 'ads_get_search_terms', {
+      ...rangeArgs,
+      customer_id: customerId ?? null,
+    }).catch((e) => ({ error: e.message })),
+    callMcpTool(orgId, gaServer, 'ga4_get_sessions_overview', rangeArgs)
+      .catch((e) => ({ error: e.message })),
+  ]);
+
+  // ── Single Claude call — no tools, no loop ────────────────────────────────────
+
+  emit('Analysing campaign performance…');
+
+  const payload = {
+    period: `${startDate} to ${endDate}`,
+    campaignPerformance,
+    dailyPerformance,
+    searchTerms,
+    sessionsOverview,
+  };
+
+  const userMessage =
+    `Analyse campaign performance from ${startDate} to ${endDate}. ` +
+    `All data has been pre-fetched below. Produce the full performance report with optimisation recommendations.\n\n` +
+    `\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``;
+
   const { result, trace, tokensUsed } = await agentOrchestrator.run({
     systemPrompt:  buildSystemPrompt(config, customerVars),
-    userMessage:   buildUserMessage(startDate, endDate),
-    tools:         googleAdsMonitorTools,
-    model:         adminConfig.model          ?? 'claude-sonnet-4-6',
-    maxTokens:     adminConfig.max_tokens     ?? 8192,
-    maxIterations: adminConfig.max_iterations ?? 10,
+    userMessage,
+    tools:         [],
+    maxIterations: 1,
+    model:         adminConfig.model      ?? 'claude-sonnet-4-6',
+    maxTokens:     adminConfig.max_tokens ?? 8192,
+    fallbackModel: adminConfig.fallback_model ?? null,
     onStep:        emit,
     context:       { ...context, startDate, endDate, toolSlug: TOOL_SLUG, customerId },
   });
@@ -54,7 +103,6 @@ async function runGoogleAdsMonitor(context) {
 
   const isScheduled = Object.keys(context.config ?? {}).length === 0;
 
-  // Load org-level config (always used as base)
   const config = !isScheduled
     ? context.config
     : await AgentConfigService.getAgentConfig(orgId, TOOL_SLUG);
@@ -63,7 +111,6 @@ async function runGoogleAdsMonitor(context) {
     ? context.adminConfig
     : await AgentConfigService.getAdminConfig(TOOL_SLUG);
 
-  // Date range resolution: explicit dates > days param > config default > 30 days
   let startDate = req?.body?.startDate ?? null;
   let endDate   = req?.body?.endDate   ?? null;
 
@@ -99,11 +146,9 @@ async function runGoogleAdsMonitor(context) {
   }
 
   if (customers.length === 0) {
-    // No multi-customer rows — single default run
     return runSingleCustomer(orgId, config, adminConfig, startDate, endDate, null, emit, context);
   }
 
-  // Multi-customer: return array so AgentScheduler persists one row per customer
   const results = [];
   for (const customer of customers) {
     const customerConfig = await AgentConfigService.getAgentConfigForCustomer(orgId, TOOL_SLUG, customer.customer_id);
@@ -115,7 +160,7 @@ async function runGoogleAdsMonitor(context) {
         startDate,
         endDate,
         customer.customer_id,
-        () => {},  // no SSE emit for scheduled runs
+        () => {},
         context,
       );
       results.push({ customerId: customer.customer_id, status: 'complete', result: outcome.result });

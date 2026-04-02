@@ -42,7 +42,7 @@ function Field({ label, hint, children }) {
 export default function AdminModelsPage() {
   const [models,      setModels]      = useState([]);
   const [loading,     setLoading]     = useState(true);
-  const [apiKeyOk,    setApiKeyOk]    = useState(null);
+  const [apiKeyOk,    setApiKeyOk]    = useState({});
   const [saving,      setSaving]      = useState(false);
   const [error,       setError]       = useState('');
   const [success,     setSuccess]     = useState('');
@@ -57,7 +57,7 @@ export default function AdminModelsPage() {
       api.get('/admin/model-status'),
     ]).then(([modelData, statusData]) => {
       setModels(modelData);
-      setApiKeyOk(statusData.anthropic);
+      setApiKeyOk(statusData);
     }).catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -181,7 +181,7 @@ export default function AdminModelsPage() {
         <div>
           <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>AI Models</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>
-            Add, edit, or remove models. The model ID must match the exact Anthropic API identifier.
+            Add, edit, or remove models. The model ID must match the exact API identifier for the selected provider.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-4">
@@ -198,21 +198,27 @@ export default function AdminModelsPage() {
       {success && <InlineBanner type="neutral" message={success} onDismiss={() => setSuccess('')} className="mb-4" />}
 
       {/* API key status */}
-      {apiKeyOk !== null && (
+      {Object.keys(apiKeyOk).length > 0 && (
         <div
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl border mb-5 text-sm"
+          className="flex items-center gap-4 px-4 py-2.5 rounded-xl border mb-5 text-sm flex-wrap"
           style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
         >
-          <span style={{ color: 'var(--color-muted)' }}>Anthropic API key:</span>
-          {apiKeyOk ? (
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#16a34a' }}>
-              ✓ Configured
-            </span>
-          ) : (
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309' }}>
-              ⚠ ANTHROPIC_API_KEY not set
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            <span style={{ color: 'var(--color-muted)' }}>Anthropic API key:</span>
+            {apiKeyOk.anthropic ? (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#16a34a' }}>✓ Configured</span>
+            ) : (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309' }}>⚠ Not set</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span style={{ color: 'var(--color-muted)' }}>Google API key:</span>
+            {apiKeyOk.google ? (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#16a34a' }}>✓ Configured</span>
+            ) : (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309' }}>⚠ GEMINI_API_KEY not set</span>
+            )}
+          </div>
         </div>
       )}
 
@@ -227,10 +233,10 @@ export default function AdminModelsPage() {
           </p>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Model API ID *" hint="e.g. claude-sonnet-4-6">
+            <Field label="Model API ID *" hint="e.g. claude-sonnet-4-6 or gemini-2.5-flash-preview-04-17">
               <input
                 style={{ ...fi, fontFamily: 'monospace' }}
-                placeholder="claude-sonnet-4-6"
+                placeholder={form.provider === 'google' ? 'gemini-2.5-flash-preview-04-17' : 'claude-sonnet-4-6'}
                 value={form.id}
                 disabled={editingId !== 'new'}
                 onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
@@ -250,6 +256,7 @@ export default function AdminModelsPage() {
               <select style={fi} value={form.provider}
                 onChange={(e) => setForm((f) => ({ ...f, provider: e.target.value }))}>
                 <option value="anthropic">Anthropic</option>
+                <option value="google">Google</option>
               </select>
             </Field>
             <Field label="Emoji">

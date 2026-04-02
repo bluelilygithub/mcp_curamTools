@@ -54,11 +54,101 @@ Check all three before editing:
 
 ---
 
+## Prompt caching — how and why
+
+**What it is:**
+Anthropic's API can cache a static prefix of the input (typically the system prompt) so it
+doesn't need to be re-processed on every API call. After the first call, cached tokens are
+served at 10% of the normal input price for up to 5 minutes (TTL resets on each hit).
+
+**Where it's implemented:**
+`platform/providers/anthropic.js` — the `system` parameter is wrapped in a content block:
+```js
+system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }]
+```
+This is applied automatically to every agent on every call. No per-agent configuration needed.
+
+**Why it matters for ReAct agents:**
+In a ReAct loop, the same system prompt is re-sent to the API on every iteration.
+A 3,500-token system prompt across 5 iterations without caching:
+  - 5 × 3,500 = 17,500 input tokens = ~$0.052 (just for the system prompt)
+With caching (after iteration 1 writes the cache):
+  - Write: 3,500 × $3.75/1M = $0.013
+  - 4 reads: 4 × 3,500 × $0.30/1M = $0.004
+  - Total: ~$0.017 — 67% reduction on the system prompt portion
+
+**Why the 5-minute TTL matters in practice:**
+For the conversation agent, if a user sends messages within 5 minutes of each other, every
+iteration of every turn reads the system prompt from cache. Active conversations are almost
+entirely served from cache on the system prompt. The cache is keyed on the exact token
+sequence, so any change to the system prompt invalidates it.
+
+**What IS cached (both implemented):**
+- System prompt — wrapped in a content block with `cache_control`
+- Tool schemas — `cache_control` added to the last entry in the tools array, which caches
+  the entire tools block as a unit. Tool arrays are static (same order every call), so the
+  cache key is stable. Each unique tool count produces its own cache entry.
+
+Combined, the conversation agent caches ~6,800 tokens of static input per call
+(~3,500 system prompt + ~3,300 tool schemas), saving ~80% on those tokens across iterations.
+
+**What is NOT cached:**
+- The messages array (conversation history + tool results) — changes every call by design
+- Tool result content from prior iterations — would require `cache_control` markers on
+  individual message content blocks. Feasible but complex; not currently implemented.
+  The correct fix for tool result accumulation is the pre-fetch pattern, not caching.
+
+**Pricing reference (Claude Sonnet at time of writing):**
+| Token type                | Price / 1M tokens |
+|---------------------------|-------------------|
+| Normal input              | $3.00             |
+| Cache write (first call)  | $3.75             |
+| Cache read (subsequent)   | $0.30             |
+| Output                    | $15.00            |
+
+**Minimum cacheable size:** 1,024 tokens (all platform system prompts exceed this).
+
+**How to verify it's working:**
+The `usage` object returned by the provider includes `cache_read_input_tokens` and
+`cache_creation_input_tokens`. These are stored in `tokensUsed` and logged via `UsageLogger`.
+Query `usage_logs` to see cache hits per run.
+
+---
+
+## Pre-fetch pattern — use for report agents with fixed data requirements
+
+Report agents that always fetch the same data sequence do NOT need a ReAct loop.
+Use the pre-fetch pattern instead: fetch all required data in Node.js, pass to Claude in
+one message, call Claude once (`maxIterations: 1`, `tools: []`).
+
+**google-ads-change-audit** was refactored to this pattern after a 16-day run cost $2.50.
+Pre-fetch reduced it to ~$0.20–0.35 (10× cheaper).
+
+**Rule:** if you can enumerate all required tool calls before Claude runs, use pre-fetch.
+The ReAct loop is only justified when data requirements are genuinely dynamic (e.g. conversation agent).
+
+All fixed-sequence report agents have been converted to pre-fetch. The ReAct loop is
+only used by `googleAdsConversation` (genuinely dynamic) and any new agents with
+dynamic data requirements.
+
+Converted agents:
+- `google-ads-change-audit` — change history + per-change-date before/after performance
+- `google-ads-monitor` — campaign performance + daily performance + search terms + GA4 sessions
+- `google-ads-change-impact` — change history + campaign performance + daily performance + GA4 sessions
+- `ads-attribution-summary` — campaign performance + GA4 sessions + WordPress enquiries
+- `ads-bounce-analysis` — search terms + GA4 paid bounced sessions
+
+---
+
 ## Conversation agent — current tool count: 22
 
 If you cut tools to reduce cost, you are solving the wrong problem.
 The correct lever is the prompt discipline instruction: *don't re-fetch data already in the conversation.*
 Tool schema overhead is fixed per turn. Re-fetching compounds across every turn.
+
+`add_document` is intentionally excluded from the exported tool array (RAG poisoning vector).
+It is also removed from the system prompt tool list. Do not re-add it without a security review.
+The tool definition remains in tools.js as reference; it is not wired.
 
 ---
 
@@ -71,12 +161,45 @@ Device is available in all three systems:
 
 ---
 
-## Model layer — Gemini support planned
+## Model layer — multi-provider with intelligent routing
 
-The platform will support multiple AI providers (Anthropic Claude + Google Gemini).
+The platform supports Anthropic Claude and Google Gemini (stub — `providers/gemini.js` throws until implemented).
+Provider is selected by model ID prefix in `AgentOrchestrator.getProvider(model)`:
+- `gemini-*` → `platform/providers/gemini.js`
+- anything else → `platform/providers/anthropic.js`
+
 Do not hardcode Anthropic-specific assumptions into shared platform code.
-When adding model-dependent logic, abstract it behind the existing `adminConfig.model` pattern.
-Agent orchestration (`AgentOrchestrator`) must remain provider-agnostic.
+
+### Model recommendations — `AgentConfigService.getRecommendedModel(slug, allModels)`
+
+Each agent has a declared requirement in `AGENT_MODEL_REQUIREMENTS` (slug → `{ tier, reason }`):
+- `standard` tier: brief/structured output from pre-fetched data (attribution summary, bounce analysis, auction insights)
+- `advanced` tier: multi-section analysis, cross-source reasoning, ReAct loops (all others)
+
+`getRecommendedModel` picks the best enabled model: closest tier to requirement first, then
+highest `outputPricePer1M` as a capability proxy within the same tier.
+
+The `GET /admin/agents` endpoint attaches `recommended_model: { id, name, tier, reason }` to each
+agent config. The Admin > Agents UI shows a ★ on the recommended option in the model dropdown,
+amber border + badge when the configured model differs, and the reason for the recommendation.
+
+### Fallback model — `AgentOrchestrator` `fallbackModel` param
+
+All agent `index.js` files and `routes/conversation.js` pass `fallbackModel: adminConfig.fallback_model ?? null`
+to `agentOrchestrator.run()`. Set via Admin > Agents "Fallback Model" dropdown.
+
+**Behaviour on failure:**
+- If primary model throws on **iteration 1** and `fallbackModel` is set, retries once with the fallback provider
+- Calls `onStep` with `⚠ Model "X" failed (...). Switching to fallback: "Y".` — visible in run log
+- Pushes `{ type: 'fallback', from, to, reason, timestamp }` into the trace (persisted to run record)
+- If fallback also fails: throws a combined error naming both models
+- Errors on iteration 2+ do not trigger fallback (messages array is provider-specific at that point)
+
+### Google models — env var
+
+`GEMINI_API_KEY` — required for Gemini model tests in Admin > Models.
+The model test endpoint (`POST /admin/models/:modelId/test`) detects `gemini-*` prefix and calls
+`generativelanguage.googleapis.com` via `https.request` (not fetch — Railway-safe).
 
 ---
 
@@ -174,6 +297,11 @@ Applied in `platform/createAgentRoute.js` via `runRateLimiter`. No restart neede
 `conversation.js` runs stored history through `trimHistory()` before passing to the orchestrator.
 Over 40 messages → trimmed to last 36, starting on a user turn.
 
+**Image paste in conversation input**
+`ConversationView.jsx` handles `paste` events: detects image in `clipboardData.items`, resizes to ≤1024px longest side via canvas (JPEG 0.82 quality), stores as base64 preview state. On send, builds `messageContent` array: `[{ type: 'image', source: { type: 'base64', media_type, data } }, { type: 'text', text }]`.
+`conversation.js` accepts either `message` (plain string) or `messageContent` (content array) in request body.
+`storableContent()` strips base64 image blocks before writing to JSONB history — replaced with `[Image: screenshot attached]`. Model sees the image on the turn it's sent; subsequent turns have text context only.
+
 **Provider abstraction — Gemini ready**
 `AgentOrchestrator` no longer imports Anthropic directly. Provider is selected by model prefix:
 - `claude-*` → `platform/providers/anthropic.js`
@@ -184,6 +312,14 @@ History messages are stripped of non-standard fields (e.g. `toolCalls`) before p
 `adminMcp.js` has `router.use(requireAuth, requireRole(['org_admin']))` at line 36.
 The only HTTP path to call `add_document` on the KB MCP server is
 `POST /api/admin/mcp-servers/:id/call` which is org_admin only. No change needed.
+
+**Knowledge base HTTP upload route — `routes/adminKnowledge.js`**
+Mounted at `/api/admin/knowledge`, also `requireRole(['org_admin'])`.
+`POST /upload` — multer memory storage (15 MB), PDF/DOCX/TXT/MD only; extracts text via pdf-parse / mammoth / UTF-8; embeds via EmbeddingService.
+`POST /text` — manual text entry.
+`GET /` — list documents (`source_type = 'document'`).
+`DELETE /:id` — delete by embeddings row id (checks `org_id` to prevent cross-org delete).
+Text extraction packages: `multer`, `pdf-parse`, `mammoth` — all installed.
 
 **MCP server failure — structured errors**
 `platform/mcpTools.js` now exports `callMcpToolSafe`. When used in a tool's `execute()`,

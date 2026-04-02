@@ -23,7 +23,8 @@ const fmtDate = (s) => {
 };
 
 const fmtAud    = (n) => `$${Number(n ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmtCost   = (n) => n != null ? `$${Number(n).toFixed(3)}` : null;
+const fmtCost   = (n) => n != null ? `A$${Number(n).toFixed(4)}` : null;
+const fmtTokens = (n) => n != null ? Number(n).toLocaleString() : null;
 
 const SUGGESTED_QUESTIONS = [
   'Which campaigns are wasting budget right now?',
@@ -59,10 +60,53 @@ const inputBarStyle = {
   background: 'var(--color-surface)',
 };
 
+// ── Image resize helper ───────────────────────────────────────────────────────
+
+const MAX_IMAGE_PX   = 1024; // longest side cap before sending to API
+const JPEG_QUALITY   = 0.82;
+
+function resizeImageFile(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, MAX_IMAGE_PX / Math.max(img.width, img.height));
+      const w = Math.round(img.width  * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width  = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', JPEG_QUALITY));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
 // ── Bubble ────────────────────────────────────────────────────────────────────
 
-function Bubble({ role, content, costAud }) {
+function Bubble({ role, content, costAud, tokensUsed }) {
   const isUser = role === 'user';
+
+  // content may be a string or an array (image + text blocks)
+  const textContent = Array.isArray(content)
+    ? content.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
+    : content;
+  const imageDataUrl = Array.isArray(content)
+    ? content.find((b) => b.type === 'image_preview')?.dataUrl ?? null
+    : null;
+
+  let costLine = null;
+  if (!isUser && costAud != null) {
+    const parts = [];
+    if (tokensUsed?.input  != null) parts.push(`↑ ${fmtTokens(tokensUsed.input)} in`);
+    if (tokensUsed?.output != null) parts.push(`↓ ${fmtTokens(tokensUsed.output)} out`);
+    parts.push(fmtCost(costAud));
+    costLine = parts.join('  ·  ');
+  }
+
   return (
     <div style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
       <div style={{ maxWidth: '82%' }}>
@@ -74,14 +118,21 @@ function Bubble({ role, content, costAud }) {
           color: isUser ? '#fff' : 'var(--color-text)',
           fontSize: 14, lineHeight: 1.6, fontFamily: 'inherit',
         }}>
-          {isUser
-            ? <span style={{ whiteSpace: 'pre-wrap' }}>{content}</span>
-            : <MarkdownRenderer text={content} />
-          }
+          {imageDataUrl && (
+            <img
+              src={imageDataUrl}
+              alt="attached screenshot"
+              style={{ display: 'block', maxWidth: '100%', borderRadius: 6, marginBottom: textContent ? 8 : 0 }}
+            />
+          )}
+          {textContent && (isUser
+            ? <span style={{ whiteSpace: 'pre-wrap' }}>{textContent}</span>
+            : <MarkdownRenderer text={textContent} />
+          )}
         </div>
-        {!isUser && costAud != null && (
-          <p style={{ fontSize: 10, color: 'var(--color-muted)', margin: '3px 4px 0', fontFamily: 'inherit' }}>
-            {fmtCost(costAud)}
+        {costLine && (
+          <p style={{ fontSize: 10, color: 'var(--color-muted)', margin: '3px 4px 0', fontFamily: 'monospace' }}>
+            {costLine}
           </p>
         )}
       </div>
@@ -121,6 +172,7 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
   const [activeId,      setActiveId]      = useState(null);
   const [messages,      setMessages]      = useState([]);
   const [draft,         setDraft]         = useState('');
+  const [pastedImage,   setPastedImage]   = useState(null); // { dataUrl } | null
   const [sending,       setSending]       = useState(false);
   const [progressText,  setProgressText]  = useState('');
   const [error,         setError]         = useState('');
@@ -189,22 +241,51 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
     }
   }
 
-  async function handleSend() {
-    if (!draft.trim() || !activeId || sending) return;
+  async function handlePaste(e) {
+    const items = Array.from(e.clipboardData?.items ?? []);
+    const imageItem = items.find((item) => item.type.startsWith('image/'));
+    if (!imageItem) return;
+    e.preventDefault();
+    const file = imageItem.getAsFile();
+    if (!file) return;
+    const dataUrl = await resizeImageFile(file);
+    if (dataUrl) setPastedImage({ dataUrl });
+  }
 
-    const userText = draft.trim();
+  async function handleSend() {
+    if ((!draft.trim() && !pastedImage) || !activeId || sending) return;
+
+    const userText  = draft.trim();
+    const snapshot  = pastedImage;
     setDraft('');
+    setPastedImage(null);
     setSending(true);
     setProgressText('');
     setError('');
 
-    // Optimistically add user bubble
-    setMessages((prev) => [...prev, { role: 'user', content: userText }]);
+    // Optimistic bubble — include image preview if present
+    const optimisticContent = snapshot
+      ? [
+          { type: 'image_preview', dataUrl: snapshot.dataUrl },
+          ...(userText ? [{ type: 'text', text: userText }] : []),
+        ]
+      : userText;
+    setMessages((prev) => [...prev, { role: 'user', content: optimisticContent }]);
+
+    // Build request body — plain message string OR messageContent array with image
+    const body = snapshot
+      ? {
+          messageContent: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: snapshot.dataUrl.split(',')[1] } },
+            ...(userText ? [{ type: 'text', text: userText }] : []),
+          ],
+          startDate,
+          endDate,
+        }
+      : { message: userText, startDate, endDate };
 
     try {
-      const res = await api.stream(`/conversation/${activeId}/message`, {
-        message: userText, startDate, endDate,
-      });
+      const res = await api.stream(`/conversation/${activeId}/message`, body);
       const reader  = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -225,7 +306,11 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
             if (msg.type === 'progress') {
               setProgressText(msg.text);
             } else if (msg.type === 'result') {
-              setMessages((prev) => [...prev, { role: 'assistant', content: msg.message, costAud: msg.costAud ?? null }]);
+              setMessages((prev) => [...prev, {
+                role: 'assistant', content: msg.message,
+                costAud: msg.costAud ?? null,
+                tokensUsed: msg.tokensUsed ?? null,
+              }]);
               setProgressText('');
               // Update conversation title in sidebar if auto-titled
               if (msg.title) {
@@ -414,15 +499,51 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
                 </div>
               )}
               {messages.map((m, i) => (
-                <Bubble key={i} role={m.role} content={m.content} costAud={m.costAud} />
+                <Bubble key={i} role={m.role} content={m.content} costAud={m.costAud} tokensUsed={m.tokensUsed} />
               ))}
               {sending && <TypingIndicator text={progressText} />}
+              {/* Thread cost total */}
+              {(() => {
+                const turns = messages.filter((m) => m.role === 'assistant' && m.costAud != null);
+                if (turns.length === 0) return null;
+                const total = turns.reduce((sum, m) => sum + (m.costAud ?? 0), 0);
+                return (
+                  <p style={{ fontSize: 10, color: 'var(--color-muted)', textAlign: 'center', fontFamily: 'monospace', paddingTop: 4 }}>
+                    Thread total: {fmtCost(total)} ({turns.length} turn{turns.length !== 1 ? 's' : ''})
+                  </p>
+                );
+              })()}
             </div>
 
             {/* Error */}
             {error && (
               <div style={{ padding: '6px 16px', background: '#fef2f2', borderTop: '1px solid #fecaca' }}>
                 <p style={{ fontSize: 12, color: '#dc2626', fontFamily: 'inherit', margin: 0 }}>{error}</p>
+              </div>
+            )}
+
+            {/* Image preview */}
+            {pastedImage && (
+              <div style={{ padding: '6px 16px 0', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <img
+                    src={pastedImage.dataUrl}
+                    alt="pasted screenshot"
+                    style={{ maxHeight: 80, maxWidth: 160, borderRadius: 6, border: '1px solid var(--color-border)', display: 'block' }}
+                  />
+                  <button
+                    onClick={() => setPastedImage(null)}
+                    style={{
+                      position: 'absolute', top: -6, right: -6,
+                      width: 18, height: 18, borderRadius: '50%',
+                      background: '#ef4444', color: '#fff', border: 'none',
+                      cursor: 'pointer', fontSize: 10, lineHeight: '18px', textAlign: 'center', padding: 0,
+                    }}
+                  >✕</button>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--color-muted)', alignSelf: 'center' }}>
+                  Screenshot attached · resized to ≤{MAX_IMAGE_PX}px
+                </span>
               </div>
             )}
 
@@ -434,7 +555,8 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask a question or enter observations to validate…"
+                onPaste={handlePaste}
+                placeholder="Ask a question or paste a screenshot…"
                 disabled={sending}
                 style={{
                   ...inputStyle,
@@ -444,7 +566,7 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
               <Button
                 variant="primary"
                 onClick={handleSend}
-                disabled={sending || !draft.trim()}
+                disabled={sending || (!draft.trim() && !pastedImage)}
                 style={{ flexShrink: 0, padding: '8px 18px', fontSize: 13 }}
               >
                 {sending ? '…' : 'Send'}

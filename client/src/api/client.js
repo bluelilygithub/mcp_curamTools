@@ -58,6 +58,28 @@ const api = {
   delete: (path, options = {}) => request(path, { ...options, method: 'DELETE' }),
 
   /**
+   * Upload a file via multipart/form-data POST.
+   * Omits Content-Type so the browser sets the correct boundary.
+   */
+  upload: async (path, formData) => {
+    const token = useAuthStore.getState().token;
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${BASE}${path}`, { method: 'POST', headers, body: formData });
+    if (res.status === 401) {
+      useAuthStore.getState().clearAuth();
+      window.location.href = '/login';
+      throw new Error('Session expired.');
+    }
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      try { const body = await res.json(); message = body.error || body.message || message; } catch {}
+      throw new Error(message);
+    }
+    return res.json();
+  },
+
+  /**
    * Open a streaming SSE connection via POST.
    * Returns the raw fetch Response — caller reads the ReadableStream.
    */

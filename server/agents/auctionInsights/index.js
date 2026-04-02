@@ -35,6 +35,7 @@ async function runAuctionInsights(context) {
     model:         adminConfig.model          ?? 'claude-sonnet-4-6',
     maxTokens:     adminConfig.max_tokens     ?? 4096,
     maxIterations: adminConfig.max_iterations ?? 6,
+    fallbackModel: adminConfig.fallback_model ?? null,
     onStep:        emit,
     context:       { ...context, startDate, endDate, toolSlug: TOOL_SLUG, customerId },
   });

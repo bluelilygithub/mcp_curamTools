@@ -31,6 +31,7 @@ async function runCompetitorKeywordIntel(context) {
     model:         adminConfig.model          ?? 'claude-sonnet-4-6',
     maxTokens:     adminConfig.max_tokens     ?? 6144,
     maxIterations: adminConfig.max_iterations ?? 10,
+    fallbackModel: adminConfig.fallback_model ?? null,
     onStep:        emit,
     context:       { ...context, toolSlug: TOOL_SLUG, customerId },
   });

@@ -158,11 +158,25 @@ router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) =>
   const done = () => { res.write('data: [DONE]\n\n'); res.end(); };
 
   const { orgId, id: userId } = req.user;
-  const { message, startDate, endDate } = req.body;
+  const { message, messageContent, startDate, endDate } = req.body;
 
-  if (!message?.trim()) {
+  // Accept either a plain string message or a content array (text + image blocks)
+  const userMessage = messageContent ?? (message?.trim() ? message.trim() : null);
+  if (!userMessage || (typeof userMessage === 'string' && !userMessage.trim()) || (Array.isArray(userMessage) && userMessage.length === 0)) {
     emit('error', { error: 'Message is required.' });
     return done();
+  }
+
+  // Strip image byte data from content arrays before storing in conversation history.
+  // Base64 images are large — storing them would bloat the JSONB indefinitely.
+  // The model has already seen the image; subsequent turns only need the text context.
+  function storableContent(content) {
+    if (!Array.isArray(content)) return content;
+    return content.map((block) =>
+      block.type === 'image'
+        ? { type: 'text', text: '[Image: screenshot attached]' }
+        : block
+    );
   }
 
   try {
@@ -226,12 +240,13 @@ router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) =>
 
     const { result, trace, iterations, tokensUsed } = await agentOrchestrator.run({
       systemPrompt:        buildSystemPrompt(await AgentConfigService.getAgentConfig(orgId, TOOL_SLUG).catch(() => ({}))),
-      userMessage:         message.trim(),
+      userMessage,
       conversationHistory: history,
       tools:               googleAdsConversationTools,
       model:               adminConfig.model          ?? 'claude-sonnet-4-6',
       maxTokens:           adminConfig.max_tokens     ?? 8192,
       maxIterations:       adminConfig.max_iterations ?? 10,
+      fallbackModel:       adminConfig?.fallback_model ?? null,
       context,
       onStep: (text, partialTokens) => {
         emit('progress', { text });
@@ -259,19 +274,23 @@ router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) =>
     }
 
     // Append user message + assistant response to stored history
-    const assistantEntry = { role: 'assistant', content: assistantText };
+    const assistantEntry = { role: 'assistant', content: assistantText, costAud: taskCostAud };
     if (toolCallNames.length > 0) assistantEntry.toolCalls = toolCallNames;
+    if (tokensUsed)               assistantEntry.tokensUsed = tokensUsed;
 
     const updatedMessages = [
       ...history,
-      { role: 'user', content: message.trim() },
+      { role: 'user', content: storableContent(userMessage) },
       assistantEntry,
     ];
 
-    // Auto-title from first user message if still default
+    // Auto-title: use text portion of message (strip image blocks)
+    const titleText = typeof userMessage === 'string'
+      ? userMessage
+      : (userMessage.find((b) => b.type === 'text')?.text ?? 'Screenshot');
     const isDefaultTitle = conversation.title == null || conversation.title === 'New conversation';
     const newTitle = isDefaultTitle
-      ? message.trim().slice(0, 60) + (message.trim().length > 60 ? '…' : '')
+      ? titleText.slice(0, 60) + (titleText.length > 60 ? '…' : '')
       : undefined;
 
     await pool.query(

@@ -89,6 +89,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
           <NavItem to="/admin/departments" icon="bookmark" label="Departments" collapsed={collapsed} onClick={onLinkClick} />
           <NavItem to="/admin/org-roles" icon="tag" label="Org Roles" collapsed={collapsed} onClick={onLinkClick} />
           <NavItem to="/admin/crm-privacy" icon="eye-off" label="CRM Privacy" collapsed={collapsed} onClick={onLinkClick} />
+          <NavItem to="/admin/knowledge" icon="book-open" label="Knowledge Base" collapsed={collapsed} onClick={onLinkClick} />
         </div>
       )}
 

@@ -1,23 +1,23 @@
 'use strict';
 
 /**
- * Google Ads Change Impact agent — runFn entry point.
+ * Google Ads Change Impact agent — pre-fetch architecture.
  *
- * Analyses what changed in the account and measures the performance impact.
+ * WHY PRE-FETCH: All four data sources (change history, campaign performance,
+ * daily performance, GA4 sessions) are fetched unconditionally every run.
+ * The ReAct loop added quadratic token cost for a fixed, predictable sequence.
  *
- * context shape (from createAgentRoute):
- *   { orgId, userId, config, adminConfig, req, emit }
+ * Pre-fetch pulls all four sources in parallel in Node.js, passes the complete
+ * dataset to Claude in a single message, no tools, no loop.
  *
- * req.body may contain:
- *   { customerId }           — optional: target a specific customer account
- *   { startDate, endDate }   — optional date range override
- *   { days }                 — optional lookback days
+ * Estimated cost: ~$0.05–$0.15 per run (vs $0.30–$0.60 with ReAct).
  */
 
 const { agentOrchestrator } = require('../../platform/AgentOrchestrator');
 const AgentConfigService    = require('../../platform/AgentConfigService');
-const { googleAdsChangeImpactTools, TOOL_SLUG } = require('./tools');
+const { getAdsServer, getAnalyticsServer, callMcpTool } = require('../../platform/mcpTools');
 const { buildSystemPrompt } = require('./prompt');
+const { TOOL_SLUG }         = require('./tools');
 
 async function runGoogleAdsChangeImpact(context) {
   const { orgId, req, emit } = context;
@@ -51,17 +51,59 @@ async function runGoogleAdsChangeImpact(context) {
     ? { customer_id: customerId, customer_name: customerConfig.customer_name ?? customerId }
     : {};
 
+  const rangeArgs = { start_date: startDate, end_date: endDate };
+
+  // ── Pre-fetch: all four sources in parallel ───────────────────────────────────
+
+  emit('Fetching change history, campaign performance, daily trends, and GA4 data…');
+
+  const [adsServer, gaServer] = await Promise.all([
+    getAdsServer(orgId),
+    getAnalyticsServer(orgId),
+  ]);
+
+  const [changeHistory, campaignPerformance, dailyPerformance, sessionsOverview] = await Promise.all([
+    callMcpTool(orgId, adsServer, 'ads_get_change_history', {
+      ...rangeArgs,
+      customer_id: customerId ?? null,
+    }).catch((e) => ({ error: e.message })),
+    callMcpTool(orgId, adsServer, 'ads_get_campaign_performance', {
+      ...rangeArgs,
+      customer_id: customerId ?? null,
+    }).catch((e) => ({ error: e.message })),
+    callMcpTool(orgId, adsServer, 'ads_get_daily_performance', {
+      ...rangeArgs,
+      customer_id: customerId ?? null,
+    }).catch((e) => ({ error: e.message })),
+    callMcpTool(orgId, gaServer, 'ga4_get_sessions_overview', rangeArgs)
+      .catch((e) => ({ error: e.message })),
+  ]);
+
+  // ── Single Claude call — no tools, no loop ────────────────────────────────────
+
+  emit('Analysing change impact…');
+
+  const payload = {
+    period: `${startDate} to ${endDate}`,
+    changeHistory,
+    campaignPerformance,
+    dailyPerformance,
+    sessionsOverview,
+  };
+
   const userMessage =
     `Analyse changes made to the Google Ads account between ${startDate} and ${endDate}. ` +
-    'Identify what changed, when, and what impact each change had on performance.';
+    `All data has been pre-fetched below. Identify what changed, when, and what impact each change had.\n\n` +
+    `\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``;
 
   const { result, trace, tokensUsed } = await agentOrchestrator.run({
     systemPrompt:  buildSystemPrompt(customerConfig, customerVars),
     userMessage,
-    tools:         googleAdsChangeImpactTools,
-    model:         adminConfig.model          ?? 'claude-sonnet-4-6',
-    maxTokens:     adminConfig.max_tokens     ?? 8192,
-    maxIterations: adminConfig.max_iterations ?? 10,
+    tools:         [],
+    maxIterations: 1,
+    model:         adminConfig.model      ?? 'claude-sonnet-4-6',
+    maxTokens:     adminConfig.max_tokens ?? 8192,
+    fallbackModel: adminConfig.fallback_model ?? null,
     onStep:        emit,
     context:       { ...context, startDate, endDate, toolSlug: TOOL_SLUG, customerId },
   });
