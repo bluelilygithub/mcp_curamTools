@@ -37,11 +37,20 @@ export default function DocExtractorPage() {
   const { user } = useAuthStore();
   const isAdmin = user?.roles?.find((r) => r.scope_type === 'global')?.name === 'org_admin';
 
+  // ── Available models (fetched once on mount) ──────────────────────────────
+  const [availableModels, setAvailableModels] = useState([]);
+  useEffect(() => {
+    api.get('/admin/models')
+      .then((data) => setAvailableModels((data ?? []).filter((m) => m.enabled !== false)))
+      .catch(() => {});
+  }, []);
+
   // ── Upload state ──────────────────────────────────────────────────────────
   const [files, setFiles]              = useState([]);   // File[]
   const [label, setLabel]              = useState('');
   const [purpose, setPurpose]          = useState('');
   const [instructions, setInstructions]= useState('');
+  const [modelOverride, setModelOverride] = useState('');  // '' = use admin default
   const [uploading, setUploading]      = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null); // "Processing 2 of 3…"
   const [uploadError, setUploadError]  = useState(null);
@@ -112,9 +121,10 @@ export default function DocExtractorPage() {
         }
         const fd = new FormData();
         fd.append('file', files[i]);
-        if (label)        fd.append('label',        label);
-        if (purpose)      fd.append('purpose',      purpose);
-        if (instructions) fd.append('instructions', instructions);
+        if (label)         fd.append('label',        label);
+        if (purpose)       fd.append('purpose',      purpose);
+        if (instructions)  fd.append('instructions', instructions);
+        if (modelOverride) fd.append('model',        modelOverride);
 
         const data = await api.upload('/doc-extractor/extract', fd);
         results.push(data);
@@ -128,6 +138,7 @@ export default function DocExtractorPage() {
       setLabel('');
       setPurpose('');
       setInstructions('');
+      setModelOverride('');
       if (fileInputRef.current) fileInputRef.current.value = '';
       setPage(1);
       loadRuns(1, search, showDeleted);
@@ -380,6 +391,26 @@ export default function DocExtractorPage() {
             style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
           />
         </div>
+
+        {/* Model override */}
+        {availableModels.length > 0 && (
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
+              Model <span className="font-normal normal-case" style={{ opacity: 0.7 }}>— override admin default</span>
+            </label>
+            <select
+              value={modelOverride}
+              onChange={(e) => setModelOverride(e.target.value)}
+              className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+              style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+            >
+              <option value="">Use admin default</option>
+              {availableModels.map((m) => (
+                <option key={m.id} value={m.id}>{m.name ?? m.id}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Submit */}
         <div className="flex items-center gap-3">
