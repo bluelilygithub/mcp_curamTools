@@ -248,6 +248,40 @@ router.post(
   }
 );
 
+// ── GET /config — returns the resolved default model for the UI ───────────────
+// All authenticated users need this so the model dropdown can pre-select the default.
+
+router.get('/config', requireAuth, async (req, res) => {
+  try {
+    const adminConfig = await AgentConfigService.getAdminConfig('doc-extractor');
+    let model = adminConfig.model || null;
+    let modelName = model;
+
+    if (!model) {
+      const modelsRow = await pool.query(
+        `SELECT value FROM system_settings WHERE key = 'ai_models' LIMIT 1`
+      );
+      const allModels = modelsRow.rows[0]?.value ?? [];
+      const rec = AgentConfigService.getRecommendedModel('doc-extractor', allModels);
+      model     = rec?.id   ?? 'claude-sonnet-4-6';
+      modelName = rec?.name ?? model;
+    } else {
+      // Look up name from catalogue
+      const modelsRow = await pool.query(
+        `SELECT value FROM system_settings WHERE key = 'ai_models' LIMIT 1`
+      );
+      const allModels = modelsRow.rows[0]?.value ?? [];
+      const found     = allModels.find((m) => m.id === model);
+      modelName       = found?.name ?? model;
+    }
+
+    res.json({ default_model: { id: model, name: modelName } });
+  } catch (err) {
+    console.error('[doc-extractor] GET /config error:', err.message);
+    res.status(500).json({ error: 'Failed to load config' });
+  }
+});
+
 // ── GET /runs — paginated, searchable list (no full JSONB result) ──────────────
 // Returns field_count instead of full result JSONB — callers use GET /runs/:runId
 // to fetch the full payload for the view panel. Keeps list payloads small.

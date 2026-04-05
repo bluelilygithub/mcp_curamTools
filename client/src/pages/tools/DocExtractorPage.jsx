@@ -37,12 +37,18 @@ export default function DocExtractorPage() {
   const { user } = useAuthStore();
   const isAdmin = user?.roles?.find((r) => r.scope_type === 'global')?.name === 'org_admin';
 
-  // ── Available models (fetched once on mount) ──────────────────────────────
+  // ── Available models + resolved default (fetched once on mount) ─────────
   const [availableModels, setAvailableModels] = useState([]);
+  const [defaultModelId, setDefaultModelId]   = useState('');
   useEffect(() => {
-    api.get('/admin/models')
-      .then((data) => setAvailableModels((data ?? []).filter((m) => m.enabled !== false)))
-      .catch(() => {});
+    Promise.all([
+      api.get('/admin/models').catch(() => []),
+      api.get('/doc-extractor/config').catch(() => null),
+    ]).then(([models, config]) => {
+      const enabled = (models ?? []).filter((m) => m.enabled !== false);
+      setAvailableModels(enabled);
+      if (config?.default_model?.id) setDefaultModelId(config.default_model.id);
+    });
   }, []);
 
   // ── Upload state ──────────────────────────────────────────────────────────
@@ -50,8 +56,12 @@ export default function DocExtractorPage() {
   const [label, setLabel]              = useState('');
   const [purpose, setPurpose]          = useState('');
   const [instructions, setInstructions]= useState('');
-  const [modelOverride, setModelOverride] = useState('');  // '' = use admin default
+  const [modelOverride, setModelOverride] = useState('');  // '' → will be set to defaultModelId once loaded
   const [uploading, setUploading]      = useState(false);
+
+  // ── Extraction progress ───────────────────────────────────────────────────
+  // { file, index, total, phase: 'uploading'|'processing'|'complete', uploadPct }
+  const [extractProgress, setExtractProgress] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null); // "Processing 2 of 3…"
   const [uploadError, setUploadError]  = useState(null);
   const fileInputRef = useRef(null);
@@ -92,6 +102,11 @@ export default function DocExtractorPage() {
     }
   }, []);
 
+  // Pre-select default model once it's loaded (only if user hasn't already chosen one)
+  useEffect(() => {
+    if (defaultModelId && modelOverride === '') setModelOverride(defaultModelId);
+  }, [defaultModelId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => { loadRuns(page, search, showDeleted); }, [page, search, showDeleted, loadRuns]);
 
   // Debounce search input → search state
@@ -116,9 +131,8 @@ export default function DocExtractorPage() {
 
     try {
       for (let i = 0; i < files.length; i++) {
-        if (files.length > 1) {
-          setUploadProgress(`Processing ${i + 1} of ${files.length}…`);
-        }
+        setExtractProgress({ file: files[i].name, index: i + 1, total: files.length, phase: 'uploading', uploadPct: 0 });
+
         const fd = new FormData();
         fd.append('file', files[i]);
         if (label)         fd.append('label',        label);
@@ -126,7 +140,14 @@ export default function DocExtractorPage() {
         if (instructions)  fd.append('instructions', instructions);
         if (modelOverride) fd.append('model',        modelOverride);
 
-        const data = await api.upload('/doc-extractor/extract', fd);
+        const data = await api.uploadWithProgress('/doc-extractor/extract', fd, (fraction) => {
+          if (fraction < 1) {
+            setExtractProgress({ file: files[i].name, index: i + 1, total: files.length, phase: 'uploading', uploadPct: Math.round(fraction * 100) });
+          } else {
+            setExtractProgress({ file: files[i].name, index: i + 1, total: files.length, phase: 'processing', uploadPct: 100 });
+          }
+        });
+
         results.push(data);
       }
 
@@ -138,7 +159,7 @@ export default function DocExtractorPage() {
       setLabel('');
       setPurpose('');
       setInstructions('');
-      setModelOverride('');
+      setModelOverride(defaultModelId || '');
       if (fileInputRef.current) fileInputRef.current.value = '';
       setPage(1);
       loadRuns(1, search, showDeleted);
@@ -147,6 +168,7 @@ export default function DocExtractorPage() {
     } finally {
       setUploading(false);
       setUploadProgress(null);
+      setExtractProgress(null);
     }
   }
 
@@ -426,18 +448,20 @@ export default function DocExtractorPage() {
               opacity: files.length === 0 || uploading ? 0.6 : 1,
             }}
           >
-            {uploading
-              ? (uploadProgress ?? 'Extracting…')
-              : files.length > 1
-                ? `Extract ${files.length} files`
-                : 'Extract'}
+            {files.length > 1 ? `Extract ${files.length} files` : 'Extract'}
           </button>
-          {uploading && (
-            <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
-              This may take a moment for large files
-            </span>
-          )}
         </div>
+
+        {/* Extraction progress */}
+        {extractProgress && (
+          <ExtractionProgress
+            file={extractProgress.file}
+            index={extractProgress.index}
+            total={extractProgress.total}
+            phase={extractProgress.phase}
+            uploadPct={extractProgress.uploadPct}
+          />
+        )}
 
         {uploadError && (
           <p className="text-sm" style={{ color: 'var(--color-error, #dc2626)' }}>
@@ -644,6 +668,108 @@ export default function DocExtractorPage() {
       </div>
     </div>
   );
+}
+
+// ── Extraction progress ───────────────────────────────────────────────────────
+
+function ExtractionProgress({ file, index, total, phase, uploadPct }) {
+  const [animPct, setAnimPct] = useState(phase === 'uploading' ? (uploadPct ?? 0) : 0);
+
+  // Sync upload percentage in real-time
+  useEffect(() => {
+    if (phase === 'uploading') setAnimPct(uploadPct ?? 0);
+  }, [phase, uploadPct]);
+
+  // Animate progress bar during AI processing phase
+  useEffect(() => {
+    if (phase !== 'processing') return;
+    setAnimPct(0);
+    const start = Date.now();
+    const id = setInterval(() => {
+      const ms = Date.now() - start;
+      // Fast ramp to 70% in 5 s, then slow crawl toward 89%
+      const target = ms < 5000
+        ? (ms / 5000) * 70
+        : 70 + ((ms - 5000) / 40000) * 19;
+      setAnimPct(Math.min(target, 89));
+    }, 150);
+    return () => clearInterval(id);
+  }, [phase]);
+
+  const phaseLabel =
+    phase === 'uploading'  ? `Uploading… ${uploadPct ?? 0}%` :
+    phase === 'processing' ? 'AI extracting fields…' : 'Complete';
+
+  const barColor = phase === 'complete' ? '#16a34a' : 'var(--color-primary)';
+
+  return (
+    <div
+      className="rounded-xl px-5 py-4 mt-2"
+      style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+    >
+      {total > 1 && (
+        <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>
+          File {index} of {total}
+        </p>
+      )}
+      <p className="text-sm font-medium mb-3 truncate" style={{ color: 'var(--color-text)' }} title={file}>
+        {file}
+      </p>
+
+      {/* Progress bar */}
+      <div
+        className="rounded-full overflow-hidden mb-2"
+        style={{ height: 8, background: 'var(--color-border)' }}
+      >
+        <div
+          style={{
+            height: '100%',
+            width: `${animPct}%`,
+            background: barColor,
+            transition: phase === 'uploading' ? 'width 200ms linear' : 'width 150ms ease-out',
+            borderRadius: 9999,
+          }}
+        />
+      </div>
+
+      {/* Steps */}
+      <div className="flex items-center gap-4 mt-2">
+        <Step done={phase !== 'uploading'} active={phase === 'uploading'} label="Upload" />
+        <StepArrow />
+        <Step done={phase === 'complete'} active={phase === 'processing'} label="AI extraction" />
+        <StepArrow />
+        <Step done={false} active={phase === 'complete'} label="Done" />
+      </div>
+
+      <p className="text-xs mt-3" style={{ color: 'var(--color-muted)' }}>{phaseLabel}</p>
+    </div>
+  );
+}
+
+function Step({ done, active, label }) {
+  const color = done || active ? 'var(--color-primary)' : 'var(--color-muted)';
+  return (
+    <div className="flex items-center gap-1.5">
+      <span
+        style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 18, height: 18, borderRadius: '50%',
+          background: done ? 'var(--color-primary)' : active ? 'transparent' : 'transparent',
+          border: done ? 'none' : `2px solid ${color}`,
+          fontSize: 10, color: done ? '#fff' : color,
+          fontWeight: 700,
+          flexShrink: 0,
+        }}
+      >
+        {done ? '✓' : ''}
+      </span>
+      <span className="text-xs" style={{ color, fontWeight: active ? 600 : 400 }}>{label}</span>
+    </div>
+  );
+}
+
+function StepArrow() {
+  return <span style={{ color: 'var(--color-border)', fontSize: 12, flexShrink: 0 }}>→</span>;
 }
 
 // ── Export helpers ────────────────────────────────────────────────────────────
@@ -1083,15 +1209,28 @@ function ResultPanel({ runId, result, filename, purpose, instructions, onClose }
           >
             <span className="shrink-0 text-base leading-snug">⚠</span>
             <div>
-              <span className="font-semibold">A more capable model may improve results. </span>
-              {result.quality_advisory.reason}
+              <span className="font-semibold">Results may be limited — a more capable model could help.</span>
+              {result.quality_advisory.reason && (
+                <ul className="mt-2 mb-1 space-y-1 list-none pl-0">
+                  {result.quality_advisory.reason
+                    .split(/;\s*/)
+                    .map((s) => s.trim())
+                    .filter(Boolean)
+                    .map((sentence, i) => (
+                      <li key={i} className="flex gap-2">
+                        <span style={{ opacity: 0.5, flexShrink: 0 }}>·</span>
+                        <span>{sentence.replace(/\.$/, '')}.</span>
+                      </li>
+                    ))}
+                </ul>
+              )}
               {result.quality_advisory.avg_confidence != null && (
-                <span className="ml-1 opacity-75">
-                  (avg confidence: {(result.quality_advisory.avg_confidence * 100).toFixed(0)}%)
+                <span className="block opacity-75 text-xs">
+                  Avg confidence: {(result.quality_advisory.avg_confidence * 100).toFixed(0)}%
                 </span>
               )}
-              <span className="block mt-1 opacity-75">
-                Switch to a higher-tier model in Admin › Agents and re-run for better accuracy.
+              <span className="block mt-1 opacity-75 text-xs">
+                Select a higher-tier model in the upload form above and re-run for better accuracy.
               </span>
             </div>
           </div>
