@@ -431,6 +431,62 @@ async function getAgentConfigMeta(orgId, slug) {
   }
 }
 
+// ── Data Privacy settings ─────────────────────────────────────────────────────
+//
+// Two independent stores, both under system_settings:
+//
+//   'extraction_privacy'  — field names stripped from AI extraction results
+//                           BEFORE they are saved to the database.
+//                           Applies to doc-extractor and any future tool that
+//                           returns fields: [{ name, value, confidence }].
+//                           Enforced at the route layer (post-extraction).
+//
+//   'crm_privacy'         — ACF meta_key names stripped from CRM data
+//                           BEFORE it reaches the LLM (pre-AI).
+//                           Enforced at the tool execute layer in
+//                           agents/googleAdsConversation/tools.js.
+//
+// Both are managed from the unified Admin › Data Privacy page.
+
+const EXTRACTION_PRIVACY_DEFAULTS = {
+  excluded_field_names: [], // snake_case names — matched against extracted field.name
+};
+
+/**
+ * Returns org-level extraction privacy settings.
+ * excluded_field_names: snake_case field names to strip from extraction results before DB save.
+ * Applied universally to any tool that produces fields: [{ name, value, ... }].
+ */
+async function getExtractionPrivacySettings(orgId) {
+  try {
+    const res = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'extraction_privacy' LIMIT 1`,
+      [orgId]
+    );
+    if (res.rows.length === 0) return { ...EXTRACTION_PRIVACY_DEFAULTS };
+    return { ...EXTRACTION_PRIVACY_DEFAULTS, ...(res.rows[0].value || {}) };
+  } catch (err) {
+    console.error('[AgentConfigService] getExtractionPrivacySettings error:', err.message);
+    return { ...EXTRACTION_PRIVACY_DEFAULTS };
+  }
+}
+
+/**
+ * Saves org-level extraction privacy settings.
+ */
+async function updateExtractionPrivacySettings(orgId, patch, updatedBy) {
+  const current = await getExtractionPrivacySettings(orgId);
+  const merged  = { ...current, ...patch };
+  await pool.query(
+    `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+     VALUES ($1, 'extraction_privacy', $2, $3, NOW())
+     ON CONFLICT (org_id, key)
+     DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+    [orgId, JSON.stringify(merged), updatedBy]
+  );
+  return merged;
+}
+
 // ── CRM Privacy settings (system_settings key: 'crm_privacy') ───────────────
 
 const CRM_PRIVACY_DEFAULTS = {
@@ -482,6 +538,8 @@ module.exports = {
   updateAdminConfig,
   getOrgBudgetSettings,
   updateOrgBudgetSettings,
+  getExtractionPrivacySettings,
+  updateExtractionPrivacySettings,
   getCrmPrivacySettings,
   updateCrmPrivacySettings,
   AGENT_DEFAULTS,

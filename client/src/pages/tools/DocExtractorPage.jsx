@@ -24,6 +24,15 @@ const PURPOSE_OPTIONS = [
   { value: 'other',     label: 'Other' },
 ];
 
+const TRANSFORM_OPTIONS = [
+  { value: 'none',           label: 'No transform' },
+  { value: 'strip_currency', label: 'Strip currency symbols' },
+  { value: 'numeric',        label: 'Numeric only' },
+  { value: 'iso_date',       label: 'ISO date (YYYY-MM-DD)' },
+  { value: 'uppercase',      label: 'Uppercase' },
+  { value: 'lowercase',      label: 'Lowercase' },
+];
+
 export default function DocExtractorPage() {
   const { user } = useAuthStore();
   const isAdmin = user?.roles?.find((r) => r.scope_type === 'global')?.name === 'org_admin';
@@ -52,6 +61,10 @@ export default function DocExtractorPage() {
   const [runsError, setRunsError]         = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
 
+  // ── Multi-select export ───────────────────────────────────────────────────
+  const [selectedRuns, setSelectedRuns]   = useState(new Set());
+  const [multiExporting, setMultiExporting] = useState(false);
+
   // ── Load runs ─────────────────────────────────────────────────────────────
   const loadRuns = useCallback(async (p, q, deleted) => {
     setRunsLoading(true);
@@ -77,6 +90,9 @@ export default function DocExtractorPage() {
     const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 350);
     return () => clearTimeout(t);
   }, [searchInput]);
+
+  // Clear selections when page/search changes
+  useEffect(() => { setSelectedRuns(new Set()); }, [page, search, showDeleted]);
 
   // ── Upload ────────────────────────────────────────────────────────────────
   async function handleSubmit(e) {
@@ -176,7 +192,67 @@ export default function DocExtractorPage() {
     }
   }
 
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  function toggleSelect(id) {
+    setSelectedRuns((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    const completedIds = runs.filter((r) => r.status === 'completed' && !r.deleted_at).map((r) => r.id);
+    const allSelected  = completedIds.every((id) => selectedRuns.has(id));
+    if (allSelected) {
+      setSelectedRuns(new Set());
+    } else {
+      setSelectedRuns(new Set(completedIds));
+    }
+  }
+
+  async function handleMultiExport() {
+    setMultiExporting(true);
+    setRunsError(null);
+    try {
+      const ids     = [...selectedRuns];
+      const results = await Promise.all(ids.map((id) => api.get(`/doc-extractor/runs/${id}`)));
+
+      const rows = [['source', 'field', 'value', 'confidence'].map(escapeCell).join(',')];
+      for (const run of results) {
+        const source = run.label || run.filename;
+        for (const f of run.result?.fields ?? []) {
+          rows.push(
+            [source, f.name, f.value, f.confidence != null ? f.confidence.toFixed(2) : '']
+              .map(escapeCell).join(',')
+          );
+        }
+      }
+
+      const bom  = '\uFEFF';
+      const blob = new Blob([bom + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      const url  = URL.createObjectURL(blob);
+      const a    = Object.assign(document.createElement('a'), {
+        href:     url,
+        download: `extraction_export_${ids.length}_runs.csv`,
+      });
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      logExport(ids, 'csv', rows.length - 1);
+      setSelectedRuns(new Set());
+    } catch (err) {
+      setRunsError(`Export failed: ${err.message}`);
+    } finally {
+      setMultiExporting(false);
+    }
+  }
+
+  const completedIds   = runs.filter((r) => r.status === 'completed' && !r.deleted_at).map((r) => r.id);
+  const allSelected    = completedIds.length > 0 && completedIds.every((id) => selectedRuns.has(id));
+  const someSelected   = selectedRuns.size > 0;
+  const totalPages     = Math.ceil(total / PAGE_SIZE);
 
   return (
     <div className="p-8" style={{ maxWidth: 960, margin: '0 auto' }}>
@@ -389,6 +465,39 @@ export default function DocExtractorPage() {
           )}
         </div>
 
+        {/* Multi-select export bar */}
+        {someSelected && (
+          <div
+            className="flex items-center gap-3 rounded-lg px-4 py-2.5 mb-4 text-sm"
+            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+          >
+            <span style={{ color: 'var(--color-muted)' }}>
+              {selectedRuns.size} run{selectedRuns.size !== 1 ? 's' : ''} selected
+            </span>
+            <button
+              onClick={handleMultiExport}
+              disabled={multiExporting}
+              className="font-semibold text-xs rounded px-3 py-1.5"
+              style={{
+                background: 'var(--color-primary)',
+                color: '#fff',
+                border: 'none',
+                cursor: multiExporting ? 'not-allowed' : 'pointer',
+                opacity: multiExporting ? 0.6 : 1,
+              }}
+            >
+              {multiExporting ? 'Exporting…' : 'Export CSV'}
+            </button>
+            <button
+              onClick={() => setSelectedRuns(new Set())}
+              className="text-xs"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted)' }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
         {runsError && (
           <p className="text-sm mb-3" style={{ color: 'var(--color-error, #dc2626)' }}>{runsError}</p>
         )}
@@ -407,6 +516,14 @@ export default function DocExtractorPage() {
           <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-surface)' }}>
+                <Th style={{ width: 32, paddingRight: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    title="Select all completed runs on this page"
+                  />
+                </Th>
                 <Th>Label / File</Th>
                 <Th>Purpose</Th>
                 <Th>Status</Th>
@@ -425,6 +542,15 @@ export default function DocExtractorPage() {
                     opacity: row.deleted_at ? 0.5 : 1,
                   }}
                 >
+                  <Td style={{ paddingRight: 4, width: 32 }}>
+                    {row.status === 'completed' && !row.deleted_at && (
+                      <input
+                        type="checkbox"
+                        checked={selectedRuns.has(row.id)}
+                        onChange={() => toggleSelect(row.id)}
+                      />
+                    )}
+                  </Td>
                   <Td className="max-w-xs">
                     <div className="truncate font-medium" title={row.label || row.filename}>
                       {row.label || row.filename}
@@ -489,133 +615,518 @@ export default function DocExtractorPage() {
   );
 }
 
+// ── Export helpers ────────────────────────────────────────────────────────────
+
+function humanize(name) {
+  return String(name ?? '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function applyTransform(value, transform) {
+  if (value == null) return value;
+  const str = String(value);
+  switch (transform) {
+    case 'strip_currency': return str.replace(/[$£€,]/g, '').trim();
+    case 'numeric':        return str.replace(/[^0-9.]/g, '');
+    case 'iso_date': {
+      const d = new Date(str);
+      return isNaN(d.getTime()) ? str : d.toISOString().slice(0, 10);
+    }
+    case 'uppercase': return str.toUpperCase();
+    case 'lowercase': return str.toLowerCase();
+    default:          return str;
+  }
+}
+
+function escapeCell(value) {
+  const str = value == null ? '' : String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function exportCsv(fields, filename) {
+  // UTF-8 BOM so Excel renders accented characters correctly on Windows
+  const bom  = '\uFEFF';
+  const rows = [
+    ['field', 'value', 'confidence'].map(escapeCell).join(','),
+    ...fields.map((f) =>
+      [f.name, f.value, f.confidence != null ? f.confidence.toFixed(2) : ''].map(escapeCell).join(',')
+    ),
+  ];
+  const blob = new Blob([bom + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: `${filename}.csv` });
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportPdf(fields, meta) {
+  const rows = fields.map((f) => `
+    <tr>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;font-family:monospace;font-size:12px;color:#6b7280">${escapeHtml(f.name)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;font-size:13px">${escapeHtml(f.value ?? '')}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;text-align:right;color:#6b7280">${f.confidence != null ? (f.confidence * 100).toFixed(0) + '%' : '—'}</td>
+    </tr>`).join('');
+
+  const win = window.open('', '_blank', 'width=800,height=600');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <title>${escapeHtml(meta.filename)}</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 32px; color: #111; }
+      h1   { font-size: 16px; margin: 0 0 4px; }
+      .meta{ font-size: 12px; color: #6b7280; margin-bottom: 20px; }
+      table{ width: 100%; border-collapse: collapse; }
+      th   { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+             color: #6b7280; padding: 6px 10px; border-bottom: 2px solid #e5e7eb; }
+      @media print { body { margin: 16px; } }
+    </style>
+  </head><body>
+    <h1>${escapeHtml(meta.filename)}</h1>
+    <p class="meta">Extracted fields — ${escapeHtml(meta.filename)}${meta.documentType ? ' &nbsp;·&nbsp; Type: ' + escapeHtml(meta.documentType) : ''}${meta.purpose ? ' &nbsp;·&nbsp; Purpose: ' + escapeHtml(meta.purpose) : ''} &nbsp;·&nbsp; Fields: ${fields.length}${meta.date ? ' &nbsp;·&nbsp; ' + escapeHtml(meta.date) : ''}</p>
+    <table>
+      <thead><tr>
+        <th style="width:200px">Field</th><th>Value</th><th style="width:90px;text-align:right">Confidence</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+async function logExport(runIds, format, fieldCount) {
+  try {
+    await api.post('/export-log', {
+      tool_slug:   'doc-extractor',
+      run_ids:     runIds,
+      format,
+      field_count: fieldCount,
+    });
+  } catch {
+    // fire-and-forget — never block the user on log failure
+  }
+}
+
+// ── Export button ─────────────────────────────────────────────────────────────
+
+function ExportBtn({ onClick, title, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className="flex items-center justify-center rounded-lg text-xs px-2.5 py-1.5 gap-1.5"
+      style={{
+        background: 'var(--color-bg)',
+        border: '1px solid var(--color-border)',
+        color: 'var(--color-muted)',
+        cursor: 'pointer',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ── Field Customization Modal ─────────────────────────────────────────────────
+
+function FieldCustomizationModal({ fields, baseName, format, runId, onClose }) {
+  const [configs, setConfigs] = useState(() =>
+    fields.map((f) => ({
+      name:        f.name,
+      label:       humanize(f.name),
+      include:     true,
+      transform:   'none',
+      _value:      f.value,
+      _confidence: f.confidence,
+    }))
+  );
+
+  function moveUp(i) {
+    if (i === 0) return;
+    setConfigs((prev) => {
+      const next = [...prev];
+      [next[i - 1], next[i]] = [next[i], next[i - 1]];
+      return next;
+    });
+  }
+
+  function moveDown(i) {
+    setConfigs((prev) => {
+      if (i === prev.length - 1) return prev;
+      const next = [...prev];
+      [next[i], next[i + 1]] = [next[i + 1], next[i]];
+      return next;
+    });
+  }
+
+  function update(i, key, val) {
+    setConfigs((prev) => prev.map((c, idx) => idx === i ? { ...c, [key]: val } : c));
+  }
+
+  function handleExport() {
+    const included = configs
+      .filter((c) => c.include)
+      .map((c) => ({
+        name:        c.label,
+        value:       applyTransform(c._value, c.transform),
+        confidence:  c._confidence,
+      }));
+
+    if (format === 'csv') {
+      exportCsv(included, baseName);
+    } else {
+      exportPdf(included, { filename: baseName, date: new Date().toLocaleDateString() });
+    }
+
+    logExport([runId], format, included.length);
+    onClose();
+  }
+
+  const includedCount = configs.filter((c) => c.include).length;
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(0,0,0,0.5)',
+        zIndex: 200,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px',
+      }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        style={{
+          background: 'var(--color-surface)',
+          borderRadius: 12,
+          border: '1px solid var(--color-border)',
+          width: '100%',
+          maxWidth: 760,
+          maxHeight: '85vh',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-6 py-4"
+          style={{ borderBottom: '1px solid var(--color-border)' }}
+        >
+          <div>
+            <h3 className="text-base font-semibold m-0" style={{ color: 'var(--color-text)' }}>
+              Configure {format === 'pdf' ? 'PDF' : 'CSV'} export
+            </h3>
+            <p className="text-xs mt-0.5 m-0" style={{ color: 'var(--color-muted)' }}>
+              Reorder, rename, and transform fields before exporting
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted)', fontSize: '1.25rem', lineHeight: 1 }}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Table */}
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+            <thead style={{ position: 'sticky', top: 0, background: 'var(--color-surface)', zIndex: 1 }}>
+              <tr>
+                <Th style={{ width: 52 }} />
+                <Th style={{ width: 160 }}>Field</Th>
+                <Th>Export label</Th>
+                <Th style={{ width: 180 }}>Transform</Th>
+                <Th style={{ width: 60 }}>Include</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {configs.map((c, i) => (
+                <tr
+                  key={c.name + i}
+                  style={{
+                    borderTop: '1px solid var(--color-border)',
+                    opacity: c.include ? 1 : 0.45,
+                  }}
+                >
+                  {/* Reorder arrows */}
+                  <Td style={{ paddingRight: 4 }}>
+                    <div className="flex flex-col gap-0.5 items-center">
+                      <button
+                        type="button"
+                        onClick={() => moveUp(i)}
+                        disabled={i === 0}
+                        title="Move up"
+                        style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: 'var(--color-muted)', opacity: i === 0 ? 0.25 : 1, padding: '1px 4px', fontSize: 11, lineHeight: 1 }}
+                      >
+                        ▲
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveDown(i)}
+                        disabled={i === configs.length - 1}
+                        title="Move down"
+                        style={{ background: 'none', border: 'none', cursor: i === configs.length - 1 ? 'default' : 'pointer', color: 'var(--color-muted)', opacity: i === configs.length - 1 ? 0.25 : 1, padding: '1px 4px', fontSize: 11, lineHeight: 1 }}
+                      >
+                        ▼
+                      </button>
+                    </div>
+                  </Td>
+                  {/* Original field name */}
+                  <Td>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-muted)' }}>
+                      {c.name}
+                    </span>
+                  </Td>
+                  {/* Custom label */}
+                  <Td>
+                    <input
+                      type="text"
+                      value={c.label}
+                      onChange={(e) => update(i, 'label', e.target.value)}
+                      className="w-full px-2 py-1 text-xs rounded outline-none"
+                      style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}
+                    />
+                  </Td>
+                  {/* Transform */}
+                  <Td>
+                    <select
+                      value={c.transform}
+                      onChange={(e) => update(i, 'transform', e.target.value)}
+                      className="w-full px-2 py-1 text-xs rounded outline-none"
+                      style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}
+                    >
+                      {TRANSFORM_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </Td>
+                  {/* Include toggle */}
+                  <Td className="text-center">
+                    <input
+                      type="checkbox"
+                      checked={c.include}
+                      onChange={(e) => update(i, 'include', e.target.checked)}
+                    />
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer */}
+        <div
+          className="flex items-center justify-between px-6 py-4"
+          style={{ borderTop: '1px solid var(--color-border)' }}
+        >
+          <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
+            {includedCount} of {configs.length} field{configs.length !== 1 ? 's' : ''} included
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-sm rounded-lg px-4 py-2"
+              style={{
+                background: 'none',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-muted)',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={includedCount === 0}
+              className="font-semibold text-sm rounded-lg px-4 py-2"
+              style={{
+                background: 'var(--color-primary)',
+                color: '#fff',
+                border: 'none',
+                cursor: includedCount === 0 ? 'not-allowed' : 'pointer',
+                opacity: includedCount === 0 ? 0.5 : 1,
+              }}
+            >
+              Export {format === 'pdf' ? 'PDF' : 'CSV'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Result panel ──────────────────────────────────────────────────────────────
 
 function ResultPanel({ runId, result, filename, purpose, instructions, onClose }) {
-  return (
-    <div
-      className="rounded-xl p-6 mb-1"
-      style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
-    >
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h2 className="text-base font-semibold m-0" style={{ color: 'var(--color-text)' }}>
-            {filename ?? 'Extraction result'}
-          </h2>
-          <p className="text-xs mt-0.5 m-0" style={{ color: 'var(--color-muted)', fontFamily: 'var(--font-mono)' }}>
-            {runId}
-          </p>
-        </div>
-        <button
-          onClick={onClose}
-          className="text-xl leading-none"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted)' }}
-          aria-label="Close"
-        >
-          ×
-        </button>
-      </div>
+  const [customizeFor, setCustomizeFor] = useState(null); // 'pdf' | 'csv' | null
 
-      {/* Purpose + Instructions metadata */}
-      {(purpose || instructions) && (
-        <div className="flex flex-col gap-2 mb-4 text-sm">
-          {purpose && (
-            <div className="flex gap-2">
-              <span className="font-semibold shrink-0" style={{ color: 'var(--color-muted)', minWidth: 90 }}>Purpose</span>
-              <span style={{ color: 'var(--color-text)' }}>{purpose}</span>
-            </div>
-          )}
-          {instructions && (
-            <div className="flex gap-2">
-              <span className="font-semibold shrink-0" style={{ color: 'var(--color-muted)', minWidth: 90 }}>Instructions</span>
-              <span style={{ color: 'var(--color-text)', whiteSpace: 'pre-wrap' }}>{instructions}</span>
-            </div>
-          )}
-        </div>
+  const fields   = result?.fields ?? [];
+  const baseName = (filename ?? 'extraction').replace(/\.[^.]+$/, '');
+
+  return (
+    <>
+      {customizeFor && (
+        <FieldCustomizationModal
+          fields={fields}
+          baseName={baseName}
+          format={customizeFor}
+          runId={runId}
+          onClose={() => setCustomizeFor(null)}
+        />
       )}
 
-      {/* Quality advisory banner */}
-      {result?.quality_advisory?.flag && (
-        <div
-          className="flex gap-3 rounded-lg px-4 py-3 mb-4 text-sm"
-          style={{ background: '#fffbeb', border: '1px solid #f59e0b', color: '#92400e' }}
-        >
-          <span className="shrink-0 text-base leading-snug">⚠</span>
+      <div
+        className="rounded-xl p-6 mb-1"
+        style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+      >
+        <div className="flex items-start justify-between mb-4">
           <div>
-            <span className="font-semibold">A more capable model may improve results. </span>
-            {result.quality_advisory.reason}
-            {result.quality_advisory.avg_confidence != null && (
-              <span className="ml-1 opacity-75">
-                (avg confidence: {(result.quality_advisory.avg_confidence * 100).toFixed(0)}%)
-              </span>
+            <h2 className="text-base font-semibold m-0" style={{ color: 'var(--color-text)' }}>
+              {filename ?? 'Extraction result'}
+            </h2>
+            <p className="text-xs mt-0.5 m-0" style={{ color: 'var(--color-muted)', fontFamily: 'var(--font-mono)' }}>
+              {runId}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {fields.length > 0 && (
+              <>
+                <ExportBtn title="Export as PDF" onClick={() => setCustomizeFor('pdf')}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                  PDF
+                </ExportBtn>
+                <ExportBtn title="Export as CSV" onClick={() => setCustomizeFor('csv')}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+                  CSV
+                </ExportBtn>
+              </>
             )}
-            <span className="block mt-1 opacity-75">
-              Switch to a higher-tier model in Admin › Agents and re-run for better accuracy.
-            </span>
+            <button
+              onClick={onClose}
+              className="text-xl leading-none ml-1"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted)' }}
+              aria-label="Close"
+            >
+              ×
+            </button>
           </div>
         </div>
-      )}
 
-      {/* Summary cards */}
-      <div className="flex gap-3 mb-4 flex-wrap">
-        <StatCard label="Document type"    value={result?.document_type ?? '—'} />
-        <StatCard label="Fields extracted" value={result?.fields?.length ?? 0} />
-        {result?.page_count > 1 && (
-          <StatCard label="Pages" value={result.page_count} />
+        {/* Purpose + Instructions metadata */}
+        {(purpose || instructions) && (
+          <div className="flex flex-col gap-2 mb-4 text-sm">
+            {purpose && (
+              <div className="flex gap-2">
+                <span className="font-semibold shrink-0" style={{ color: 'var(--color-muted)', minWidth: 90 }}>Purpose</span>
+                <span style={{ color: 'var(--color-text)' }}>{purpose}</span>
+              </div>
+            )}
+            {instructions && (
+              <div className="flex gap-2">
+                <span className="font-semibold shrink-0" style={{ color: 'var(--color-muted)', minWidth: 90 }}>Instructions</span>
+                <span style={{ color: 'var(--color-text)', whiteSpace: 'pre-wrap' }}>{instructions}</span>
+              </div>
+            )}
+          </div>
         )}
-        <StatCard label="Model" value={result?.model ?? '—'} />
-        <StatCard
-          label="Tokens"
-          value={result?.tokensUsed
-            ? (result.tokensUsed.input_tokens ?? 0) + (result.tokensUsed.output_tokens ?? 0)
-            : '—'}
-        />
-      </div>
 
-      {/* Fields table */}
-      {result?.fields?.length > 0 && (
-        <table className="w-full text-sm mb-4" style={{ borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: 'var(--color-bg)' }}>
-              <Th style={{ width: 200 }}>Field</Th>
-              <Th>Value</Th>
-              <Th className="text-right" style={{ width: 90 }}>Confidence</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {result.fields.map((f, i) => (
-              <tr key={i} style={{ borderTop: '1px solid var(--color-border)' }}>
-                <Td>
-                  <span className="text-xs" style={{ color: 'var(--color-muted)', fontFamily: 'var(--font-mono)' }}>
-                    {f.name}
-                  </span>
-                </Td>
-                <Td className="font-medium">{f.value}</Td>
-                <Td className="text-right"><ConfidenceBadge value={f.confidence} /></Td>
+        {/* Quality advisory banner */}
+        {result?.quality_advisory?.flag && (
+          <div
+            className="flex gap-3 rounded-lg px-4 py-3 mb-4 text-sm"
+            style={{ background: '#fffbeb', border: '1px solid #f59e0b', color: '#92400e' }}
+          >
+            <span className="shrink-0 text-base leading-snug">⚠</span>
+            <div>
+              <span className="font-semibold">A more capable model may improve results. </span>
+              {result.quality_advisory.reason}
+              {result.quality_advisory.avg_confidence != null && (
+                <span className="ml-1 opacity-75">
+                  (avg confidence: {(result.quality_advisory.avg_confidence * 100).toFixed(0)}%)
+                </span>
+              )}
+              <span className="block mt-1 opacity-75">
+                Switch to a higher-tier model in Admin › Agents and re-run for better accuracy.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Summary cards */}
+        <div className="flex gap-3 mb-4 flex-wrap">
+          <StatCard label="Document type"    value={result?.document_type ?? '—'} />
+          <StatCard label="Fields extracted" value={result?.fields?.length ?? 0} />
+          {result?.page_count > 1 && (
+            <StatCard label="Pages" value={result.page_count} />
+          )}
+          <StatCard label="Model" value={result?.model ?? '—'} />
+          <StatCard
+            label="Tokens"
+            value={result?.tokensUsed
+              ? (result.tokensUsed.input_tokens ?? 0) + (result.tokensUsed.output_tokens ?? 0)
+              : '—'}
+          />
+        </div>
+
+        {/* Fields table */}
+        {result?.fields?.length > 0 && (
+          <table className="w-full text-sm mb-4" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'var(--color-bg)' }}>
+                <Th style={{ width: 200 }}>Field</Th>
+                <Th>Value</Th>
+                <Th className="text-right" style={{ width: 90 }}>Confidence</Th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+            </thead>
+            <tbody>
+              {result.fields.map((f, i) => (
+                <tr key={i} style={{ borderTop: '1px solid var(--color-border)' }}>
+                  <Td>
+                    <span className="text-xs" style={{ color: 'var(--color-muted)', fontFamily: 'var(--font-mono)' }}>
+                      {f.name}
+                    </span>
+                  </Td>
+                  <Td className="font-medium">{f.value}</Td>
+                  <Td className="text-right"><ConfidenceBadge value={f.confidence} /></Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
 
-      {/* Raw JSON */}
-      <details>
-        <summary className="text-xs cursor-pointer select-none" style={{ color: 'var(--color-muted)' }}>
-          Raw JSON
-        </summary>
-        <pre
-          className="text-xs rounded-lg p-3 mt-2 overflow-x-auto"
-          style={{
-            background: 'var(--color-bg)',
-            border: '1px solid var(--color-border)',
-            color: 'var(--color-text)',
-            fontFamily: 'var(--font-mono)',
-          }}
-        >
-          {JSON.stringify(result, null, 2)}
-        </pre>
-      </details>
-    </div>
+        {/* Raw JSON */}
+        <details>
+          <summary className="text-xs cursor-pointer select-none" style={{ color: 'var(--color-muted)' }}>
+            Raw JSON
+          </summary>
+          <pre
+            className="text-xs rounded-lg p-3 mt-2 overflow-x-auto"
+            style={{
+              background: 'var(--color-bg)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text)',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            {JSON.stringify(result, null, 2)}
+          </pre>
+        </details>
+      </div>
+    </>
   );
 }
 

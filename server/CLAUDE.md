@@ -4,6 +4,51 @@ Read this before making any change to the conversation agent, MCP servers, or ag
 
 ---
 
+## ⚠ PII and data privacy — mandatory for any tool that handles user data
+
+**This platform has a built-in Data Privacy system. It must be used. It is not optional.**
+
+Any tool that:
+- extracts structured fields from documents
+- reads, stores, or returns user-supplied personal data
+- produces output that includes names, contact details, financial values, identity numbers, or any other potentially sensitive information
+
+**must apply the platform's field exclusion pattern** so that org admins can declare which fields are never stored or surfaced to the AI.
+
+### Where it's configured
+
+Admin > Data Privacy (`/admin/data-privacy`) — the single place for all field-level privacy controls:
+
+| Store | Key in system_settings | When applied | Tool layer |
+|---|---|---|---|
+| `extraction_privacy` | `excluded_field_names` | Post-AI, pre-DB-save | Route layer |
+| `crm_privacy` | `excluded_fields` | Pre-AI | Tool execute layer |
+
+### How to apply it to a new extraction tool (3 lines)
+
+Load once per request, before any batch loop:
+```js
+const { excluded_field_names: excludedFields = [] } =
+  await AgentConfigService.getExtractionPrivacySettings(orgId);
+```
+
+Apply after extraction, before any DB write:
+```js
+if (excludedFields.length > 0) {
+  const excludedSet = new Set(excludedFields);
+  result.fields = result.fields.filter((f) => !excludedSet.has(f.name));
+}
+```
+
+**Never save first and strip later.** Excluded values must never reach the database.
+
+### Reference implementations
+
+- `routes/docExtractor.js` — extraction privacy applied post-AI, pre-DB-save
+- `agents/googleAdsConversation/tools.js` → `applyFieldExclusions()` — CRM privacy applied pre-AI
+
+---
+
 ## Before touching googleAdsConversation
 
 Check all three before editing:
@@ -256,6 +301,54 @@ Use double quotes instead: `` `error` `` → `"error"` in prompt text.
 **Always state whether a server restart is required after changes.**
 Environment variable changes and new MCP server registrations require a restart.
 Code-only changes in Railway auto-deploy and do not require manual restart.
+
+---
+
+## Data Privacy — universal field exclusion pattern
+
+Admin > Data Privacy (`/admin/data-privacy`) — unified page for all field-level privacy controls.
+
+### Two independent stores
+
+**`extraction_privacy`** (key in `system_settings`)
+- Strips declared field names from AI extraction results **after** the AI runs, **before** saving to DB
+- Sensitive values are never persisted — the exclusion is permanent for that run
+- Applied universally in the route layer: any tool returning `fields: [{ name, value }]` applies this
+- Field names are snake_case as returned by the AI (e.g. `tax_file_number`, `bank_account_number`)
+- Service: `AgentConfigService.getExtractionPrivacySettings(orgId)` / `updateExtractionPrivacySettings`
+- Route enforcement: `routes/docExtractor.js` — after `runDocExtraction`, before the DB INSERT
+
+**`crm_privacy`** (key in `system_settings`)
+- Strips declared field names from CRM data **before** it reaches the LLM (pre-AI)
+- WordPress data is not modified — only what the AI sees is filtered
+- Applied at the tool execute layer: `agents/googleAdsConversation/tools.js` → `applyFieldExclusions()`
+- Field names are WordPress ACF `meta_key` names (e.g. `email`, `phone`)
+- Service: `AgentConfigService.getCrmPrivacySettings(orgId)` / `updateCrmPrivacySettings`
+
+### API
+
+- `GET /admin/data-privacy` — returns `{ extraction: { excluded_field_names }, crm: { excluded_fields } }`
+- `PUT /admin/data-privacy` — accepts either or both sections in one call
+- `GET/PUT /admin/crm-privacy` — legacy endpoints kept for backwards compatibility
+
+### Extending to a new tool
+
+Any new tool that returns structured field data should apply extraction privacy at the route layer:
+```js
+const { excluded_field_names: excludedFields = [] } =
+  await AgentConfigService.getExtractionPrivacySettings(orgId);
+if (excludedFields.length > 0) {
+  const excludedSet = new Set(excludedFields);
+  result.fields = result.fields.filter((f) => !excludedSet.has(f.name));
+}
+```
+Load the settings once per request (before any batch loop), not per-item.
+
+### Do not
+
+- Apply extraction privacy AFTER saving to DB — the point is that excluded values are never stored
+- Apply CRM privacy in the MCP server — it must stay in the tool layer so the admin can still use discovery tools
+- Hardcode field names — that's what the admin UI is for
 
 ---
 

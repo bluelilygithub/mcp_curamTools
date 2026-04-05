@@ -126,8 +126,10 @@ router.post(
       model = requested;
     }
 
-    // ── Budget check — load today's org spend once before the batch ────────
+    // ── Budget check + privacy settings — load once before the batch ─────
     const dailyOrgSpendAud = await getDailyOrgSpendAud(orgId);
+    const { excluded_field_names: excludedFields = [] } =
+      await AgentConfigService.getExtractionPrivacySettings(orgId);
 
     // ── Sanitise and cap input fields at the platform boundary ────────────
     const batchLabel   = (req.body.label        || '').trim().slice(0, MAX_LABEL_LEN)        || null;
@@ -173,6 +175,14 @@ router.post(
           maxPdfPages:  adminConfig.max_pdf_pages ?? 10,
           pdfDpi:       adminConfig.pdf_dpi       ?? 150,
         });
+
+        // ── Privacy exclusions — strip declared fields before DB save ──────
+        // Excluded fields are never persisted. Applied universally to any tool
+        // that returns fields: [{ name, value, ... }].
+        if (excludedFields.length > 0) {
+          const excludedSet = new Set(excludedFields);
+          result.fields = result.fields.filter((f) => !excludedSet.has(f.name));
+        }
 
         const costAud = computeCostAud({
           input:      result.tokensUsed?.input_tokens                ?? 0,

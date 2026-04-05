@@ -454,6 +454,27 @@ async function initSchema() {
         USING GIN ((COALESCE(label, '') || ' ' || filename) gin_trgm_ops)
     `);
 
+    // ── Export Logs ────────────────────────────────────────────────────────────
+    // Generic reusable log — any tool that exports data writes here.
+    // tool_slug identifies the source tool; run_ids is an array of source record IDs.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS export_logs (
+        id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id      INTEGER     NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        user_id     INTEGER     REFERENCES users(id) ON DELETE SET NULL,
+        tool_slug   TEXT        NOT NULL,
+        run_ids     TEXT[]      NOT NULL DEFAULT '{}',
+        format      TEXT        NOT NULL,
+        field_count INTEGER,
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_export_logs_org
+        ON export_logs(org_id, created_at DESC)
+    `);
+
     await client.query('COMMIT');
 
     // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)

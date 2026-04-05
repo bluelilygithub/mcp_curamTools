@@ -895,7 +895,59 @@ ${question}`,
   }
 });
 
-// ── CRM Privacy ───────────────────────────────────────────────────────────
+// ── Data Privacy (unified) ────────────────────────────────────────────────
+//
+// GET  /admin/data-privacy  — returns both extraction_privacy and crm_privacy
+// PUT  /admin/data-privacy  — updates either or both in one call
+//
+// Legacy /admin/crm-privacy routes kept for backwards compatibility.
+
+router.get('/data-privacy', async (req, res) => {
+  try {
+    const [extraction, crm] = await Promise.all([
+      AgentConfigService.getExtractionPrivacySettings(req.user.orgId),
+      AgentConfigService.getCrmPrivacySettings(req.user.orgId),
+    ]);
+    res.json({ extraction, crm });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load data privacy settings.' });
+  }
+});
+
+router.put('/data-privacy', async (req, res) => {
+  try {
+    const { extraction, crm } = req.body;
+    const results = {};
+
+    if (extraction !== undefined) {
+      const { excluded_field_names } = extraction;
+      if (!Array.isArray(excluded_field_names)) {
+        return res.status(400).json({ error: 'extraction.excluded_field_names must be an array.' });
+      }
+      const clean = excluded_field_names.map((f) => String(f).trim().toLowerCase()).filter(Boolean);
+      results.extraction = await AgentConfigService.updateExtractionPrivacySettings(
+        req.user.orgId, { excluded_field_names: clean }, req.user.id
+      );
+    }
+
+    if (crm !== undefined) {
+      const { excluded_fields } = crm;
+      if (!Array.isArray(excluded_fields)) {
+        return res.status(400).json({ error: 'crm.excluded_fields must be an array.' });
+      }
+      const clean = excluded_fields.map((f) => String(f).trim().toLowerCase()).filter(Boolean);
+      results.crm = await AgentConfigService.updateCrmPrivacySettings(
+        req.user.orgId, { excluded_fields: clean }, req.user.id
+      );
+    }
+
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update data privacy settings.' });
+  }
+});
+
+// ── CRM Privacy (legacy — kept for backwards compatibility) ───────────────
 
 router.get('/crm-privacy', async (req, res) => {
   try {

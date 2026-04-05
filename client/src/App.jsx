@@ -23,6 +23,7 @@ import AdminPromptsPage from './pages/admin/AdminPromptsPage';
 import AdminDepartmentsPage from './pages/admin/AdminDepartmentsPage';
 import AdminOrgRolesPage from './pages/admin/AdminOrgRolesPage';
 import AdminCrmPrivacyPage from './pages/admin/AdminCrmPrivacyPage';
+import AdminDataPrivacyPage from './pages/admin/AdminDataPrivacyPage';
 import AdminKnowledgePage from './pages/admin/AdminKnowledgePage';
 import GoogleAdsMonitorPage from './pages/tools/GoogleAdsMonitorPage';
 import DocExtractorPage from './pages/tools/DocExtractorPage';
@@ -65,6 +66,7 @@ export default function App() {
                   <Route path="/admin/departments" element={<AdminDepartmentsPage />} />
                   <Route path="/admin/org-roles" element={<AdminOrgRolesPage />} />
                   <Route path="/admin/crm-privacy" element={<AdminCrmPrivacyPage />} />
+                  <Route path="/admin/data-privacy" element={<AdminDataPrivacyPage />} />
                   <Route path="/admin/knowledge" element={<AdminKnowledgePage />} />
                 </Route>
               </Route>
