@@ -25,6 +25,7 @@ import AdminOrgRolesPage from './pages/admin/AdminOrgRolesPage';
 import AdminCrmPrivacyPage from './pages/admin/AdminCrmPrivacyPage';
 import AdminKnowledgePage from './pages/admin/AdminKnowledgePage';
 import GoogleAdsMonitorPage from './pages/tools/GoogleAdsMonitorPage';
+import DocExtractorPage from './pages/tools/DocExtractorPage';
 
 export default function App() {
   return (
@@ -45,6 +46,7 @@ export default function App() {
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/tools/google-ads-monitor" element={<GoogleAdsMonitorPage />} />
+                <Route path="/tools/doc-extractor" element={<DocExtractorPage />} />
 
                 {/* Admin-only */}
                 <Route element={<RequireRole allowedRoles={['org_admin']} />}>

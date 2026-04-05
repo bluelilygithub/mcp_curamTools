@@ -14,6 +14,9 @@ async function initSchema() {
     // Enable pgvector extension (idempotent)
     await client.query('CREATE EXTENSION IF NOT EXISTS vector');
 
+    // Enable pg_trgm for efficient ILIKE searches with leading wildcards
+    await client.query('CREATE EXTENSION IF NOT EXISTS pg_trgm');
+
     // ── Platform tables ────────────────────────────────────────────────────
 
     await client.query(`
@@ -409,6 +412,48 @@ async function initSchema() {
         WHERE resolved_at IS NULL
     `);
 
+    // ── Document Extractor ─────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS doc_extraction_runs (
+        id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id       INTEGER     NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        user_id      INTEGER     REFERENCES users(id) ON DELETE SET NULL,
+        filename     TEXT        NOT NULL,
+        mime_type    TEXT        NOT NULL,
+        model        TEXT        NOT NULL,
+        status       TEXT        NOT NULL DEFAULT 'pending',
+        result       JSONB,
+        error        TEXT,
+        created_at   TIMESTAMPTZ DEFAULT NOW(),
+        completed_at TIMESTAMPTZ
+      )
+    `);
+
+    await client.query(`
+      ALTER TABLE doc_extraction_runs
+        ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ
+    `);
+
+    await client.query(`
+      ALTER TABLE doc_extraction_runs
+        ADD COLUMN IF NOT EXISTS label        TEXT,
+        ADD COLUMN IF NOT EXISTS purpose      TEXT,
+        ADD COLUMN IF NOT EXISTS instructions TEXT
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_doc_extraction_runs_org
+        ON doc_extraction_runs(org_id, created_at DESC)
+    `);
+
+    // GIN trgm index — supports leading-wildcard ILIKE on label and filename without full scans.
+    // Concats both columns so a single index covers the OR predicate in the search query.
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_doc_extraction_runs_search
+        ON doc_extraction_runs
+        USING GIN ((COALESCE(label, '') || ' ' || filename) gin_trgm_ops)
+    `);
+
     await client.query('COMMIT');
 
     // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)
@@ -461,14 +506,17 @@ async function seedAdminUser() {
   }
   const orgId = orgRes.rows[0].id;
 
-  // Upsert admin user
-  const userRes = await pool.query(
+  // Insert admin user on first run only — never overwrite an existing password
+  let userRes = await pool.query(
     `INSERT INTO users (org_id, email, password_hash, first_name, is_active)
      VALUES ($1, $2, $3, 'Admin', TRUE)
-     ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash
+     ON CONFLICT (email) DO NOTHING
      RETURNING id`,
     [orgId, email, hash]
   );
+  if (userRes.rows.length === 0) {
+    userRes = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+  }
   const userId = userRes.rows[0].id;
 
   // Grant org_admin role if not already granted

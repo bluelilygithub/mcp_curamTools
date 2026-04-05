@@ -74,6 +74,141 @@ function IntelligenceProfileSection({ slug, profile, onChange }) {
 const inputCls = "w-full px-3 py-2.5 rounded-xl border text-sm outline-none";
 const inputStyle = { background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' };
 
+// ── Doc Extractor — file upload settings ─────────────────────────────────────
+
+const ALL_MIME_TYPES = [
+  { value: 'image/jpeg',    label: 'JPEG' },
+  { value: 'image/png',     label: 'PNG'  },
+  { value: 'image/gif',     label: 'GIF'  },
+  { value: 'image/webp',    label: 'WEBP' },
+  { value: 'application/pdf', label: 'PDF'  },
+];
+
+const DEFAULT_MIME_TYPES = ALL_MIME_TYPES.map((t) => t.value);
+const DEFAULT_MAX_MB = 20;
+
+const PDF_DPI_OPTIONS = [
+  { value: 100, label: '100 DPI — faster, lower quality' },
+  { value: 150, label: '150 DPI — balanced (default)' },
+  { value: 200, label: '200 DPI — slower, higher quality' },
+];
+
+function DocExtractorSettingsSection({ config, onChange }) {
+  const allowed        = config.allowed_mime_types  ?? DEFAULT_MIME_TYPES;
+  const maxMb          = config.max_file_bytes != null
+    ? Math.round(config.max_file_bytes / (1024 * 1024))
+    : DEFAULT_MAX_MB;
+  const maxFilesPerBatch = config.max_files_per_batch ?? 20;
+  const maxPdfPages      = config.max_pdf_pages       ?? 10;
+  const pdfDpi           = config.pdf_dpi             ?? 150;
+
+  function toggleMime(value) {
+    const next = allowed.includes(value)
+      ? allowed.filter((v) => v !== value)
+      : [...allowed, value];
+    if (next.length === 0) return; // always keep at least one
+    onChange({ ...config, allowed_mime_types: next });
+  }
+
+  function setMaxMb(mb) {
+    const n = Math.max(1, Math.min(50, parseInt(mb) || DEFAULT_MAX_MB));
+    onChange({ ...config, max_file_bytes: n * 1024 * 1024 });
+  }
+
+  function setMaxFilesPerBatch(v) {
+    const n = Math.max(1, Math.min(20, parseInt(v) || 20));
+    onChange({ ...config, max_files_per_batch: n });
+  }
+
+  function setMaxPdfPages(v) {
+    const n = Math.max(1, Math.min(50, parseInt(v) || 10));
+    onChange({ ...config, max_pdf_pages: n });
+  }
+
+  return (
+    <div className="space-y-4 pt-4" style={{ borderTop: '1px solid var(--color-border)' }}>
+      <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>File Upload Settings</h3>
+
+      <div>
+        <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>
+          Allowed file types
+        </label>
+        <div className="flex flex-wrap gap-3">
+          {ALL_MIME_TYPES.map((t) => (
+            <label key={t.value} className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--color-text)' }}>
+              <input
+                type="checkbox"
+                checked={allowed.includes(t.value)}
+                onChange={() => toggleMime(t.value)}
+              />
+              {t.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
+            Max file size (MB)
+          </label>
+          <input
+            type="number" min={1} max={50}
+            value={maxMb}
+            onChange={(e) => setMaxMb(e.target.value)}
+            className={inputCls} style={inputStyle}
+          />
+          <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>1–50 MB</p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
+            Max files per upload
+          </label>
+          <input
+            type="number" min={1} max={20}
+            value={maxFilesPerBatch}
+            onChange={(e) => setMaxFilesPerBatch(e.target.value)}
+            className={inputCls} style={inputStyle}
+          />
+          <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>1–20 files per request</p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
+            Max PDF pages
+          </label>
+          <input
+            type="number" min={1} max={50}
+            value={maxPdfPages}
+            onChange={(e) => setMaxPdfPages(e.target.value)}
+            className={inputCls} style={inputStyle}
+          />
+          <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>Pages processed per PDF (cost control)</p>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 320 }}>
+        <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
+          PDF rasterisation quality
+        </label>
+        <select
+          value={pdfDpi}
+          onChange={(e) => onChange({ ...config, pdf_dpi: parseInt(e.target.value) })}
+          className={inputCls} style={inputStyle}
+        >
+          {PDF_DPI_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+          Higher DPI improves accuracy on handwritten forms and low-quality scans.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function AgentCard({ agent, models, onSave }) {
   const [config,         setConfig]         = useState(agent);
   const [profile,        setProfile]        = useState(null);
@@ -233,6 +368,10 @@ function AgentCard({ agent, models, onSave }) {
       </div>
 
       <IntelligenceProfileSection slug={agent.slug} profile={profile} onChange={setProfile} />
+
+      {agent.slug === 'doc-extractor' && (
+        <DocExtractorSettingsSection config={config} onChange={setConfig} />
+      )}
 
       <div className="flex justify-end pt-2">
         <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>

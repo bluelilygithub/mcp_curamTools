@@ -9,6 +9,8 @@ RUN npm run build
 # Stage 2 — run the Express server
 FROM node:22-alpine
 WORKDIR /app/server
+# Ghostscript — required by pdf2pic for PDF-to-image rasterisation
+RUN apk add --no-cache ghostscript
 COPY server/package*.json ./
 RUN npm install --omit=dev
 COPY server/ ./

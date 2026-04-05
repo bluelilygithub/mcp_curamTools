@@ -77,6 +77,20 @@ const ADMIN_DEFAULTS = {
     max_task_budget_aud: 3.00, // higher budget — multiple before/after query pairs per change
     fallback_model:      null,
   },
+  'doc-extractor': {
+    enabled:             true,
+    model:               'claude-sonnet-4-6',
+    max_tokens:          2048,
+    max_task_budget_aud: 0.50, // single image, single call — low ceiling
+    fallback_model:      null,
+    // File upload constraints — configurable per-org
+    allowed_mime_types:   ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'],
+    max_file_bytes:       20 * 1024 * 1024, // 20 MB
+    max_files_per_batch:  20,               // max files accepted in a single request
+    // PDF processing
+    max_pdf_pages:        10,               // pages processed per PDF (cost control)
+    pdf_dpi:              150,              // rasterisation quality: 100 | 150 | 200
+  },
   _platform: {
     enabled: true,
     model: 'claude-sonnet-4-6',
@@ -105,6 +119,7 @@ const AGENT_MODEL_REQUIREMENTS = {
   'ads-attribution-summary':     { tier: 'standard', reason: 'Brief structured summary from pre-fetched data' },
   'ads-bounce-analysis':         { tier: 'standard', reason: 'Structured bounce report from pre-fetched data' },
   'auction-insights':            { tier: 'standard', reason: 'Structured competitive metrics report' },
+  'doc-extractor':               { tier: 'standard', reason: 'Single-call vision extraction from a pre-loaded image' },
   _platform:                     { tier: 'advanced', reason: 'Default for unrecognised agents' },
 };
 

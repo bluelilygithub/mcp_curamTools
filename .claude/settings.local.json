@@ -25,7 +25,19 @@
       "Bash(grep -r \"voice\\\\|tts\\\\|stt\\\\|speech\\\\|audio\" /c/Users/micha/Local Sites/mcp_curamTools/server --include=*.js --include=*.ts)",
       "Bash(grep -i \"voice\\\\|tts\\\\|stt\\\\|speech\\\\|mic\\\\|audio\\\\|speaker\" /c/Users/micha/Local Sites/mcp_curamTools/*.md)",
       "Bash(find 'C:/Users/micha/Local Sites/mcp_curamTools/client/src' -name *Model* -o -name *model*)",
-      "Bash(node -e \"require\\(''multer''\\); require\\(''pdf-parse''\\); require\\(''mammoth''\\); console.log\\(''ok''\\)\")"
+      "Bash(node -e \"require\\(''multer''\\); require\\(''pdf-parse''\\); require\\(''mammoth''\\); console.log\\(''ok''\\)\")",
+      "Bash(netstat -ano)",
+      "Bash(node -e \"const m = require\\('multer'\\); console.log\\(Object.keys\\(m\\(\\)\\)\\)\")",
+      "Bash(node -e \"const m = require\\('C:/Users/micha/Local Sites/mcp_curamTools/server/node_modules/multer'\\); console.log\\(typeof m, typeof m\\(\\).single\\)\")",
+      "Bash(node -e \"const m = require\\('multer'\\); const u = m\\({ storage: m.memoryStorage\\(\\) }\\); console.log\\('single:', typeof u.single, 'fields:', typeof u.fields\\)\")",
+      "Bash(node -e \"require\\('./routes/docExtractor'\\); console.log\\('OK'\\)\")",
+      "Bash(node -e \"require\\('./index'\\); \")",
+      "Bash(node --check routes/docExtractor.js)",
+      "Bash(node --check agents/docExtractor/index.js)",
+      "Bash(node -e \"require\\('./platform/AgentConfigService'\\)\")",
+      "Bash(node -e \"require\\('./routes/admin'\\)\")",
+      "Bash(node -e \"require\\('./routes/docExtractor'\\)\")",
+      "Bash(node -e ':*)"
     ]
   }
 }

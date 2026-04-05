@@ -260,4 +260,4 @@ class AgentOrchestrator {
 
 const agentOrchestrator = new AgentOrchestrator();
 
-module.exports = { AgentOrchestrator, AgentError, agentOrchestrator };
+module.exports = { AgentOrchestrator, AgentError, agentOrchestrator, getProvider };

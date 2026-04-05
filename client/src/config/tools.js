@@ -22,6 +22,14 @@ const TOOLS = [
     path:        '/tools/google-ads-monitor',
     roles:       ['ads_operator', 'org_admin'],
   },
+  {
+    id:          'doc-extractor',
+    name:        'Document Extractor',
+    description: 'Upload any image document and extract structured fields using Claude Vision. Compare accuracy across AI providers.',
+    icon:        'file-text',
+    path:        '/tools/doc-extractor',
+    roles:       ['org_member', 'org_admin'],
+  },
 ];
 
 /**
