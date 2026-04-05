@@ -534,6 +534,28 @@ function ResultPanel({ runId, result, filename, purpose, instructions, onClose }
         </div>
       )}
 
+      {/* Quality advisory banner */}
+      {result?.quality_advisory?.flag && (
+        <div
+          className="flex gap-3 rounded-lg px-4 py-3 mb-4 text-sm"
+          style={{ background: '#fffbeb', border: '1px solid #f59e0b', color: '#92400e' }}
+        >
+          <span className="shrink-0 text-base leading-snug">⚠</span>
+          <div>
+            <span className="font-semibold">A more capable model may improve results. </span>
+            {result.quality_advisory.reason}
+            {result.quality_advisory.avg_confidence != null && (
+              <span className="ml-1 opacity-75">
+                (avg confidence: {(result.quality_advisory.avg_confidence * 100).toFixed(0)}%)
+              </span>
+            )}
+            <span className="block mt-1 opacity-75">
+              Switch to a higher-tier model in Admin › Agents and re-run for better accuracy.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Summary cards */}
       <div className="flex gap-3 mb-4 flex-wrap">
         <StatCard label="Document type"    value={result?.document_type ?? '—'} />

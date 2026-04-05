@@ -217,6 +217,35 @@ The `user_roles` migration crashed in production because of pre-existing duplica
 **Do not use `fetch()` for outbound HTTP on Railway.**
 Use `https.request` with explicit `Content-Length`. `fetch` silently fails in that environment.
 
+**Do not use pdf2pic to rasterise PDFs — call Ghostscript directly.**
+pdf2pic v3's `responseType: 'buffer'` is unreliable across environments (returns empty buffers in Docker/Alpine).
+The fix: write the PDF to a temp file, call `gs` directly via `execFileAsync`, read the output PNGs from disk.
+Ghostscript is installed via `apk add ghostscript` in the Dockerfile.
+Output pattern: `page_%04d.png` → `page_0001.png`, `page_0002.png`, etc.
+
+**Always cap image dimensions before sending to Anthropic — hard limit is 8000px on any dimension.**
+Some PDFs have unusually large MediaBox values that produce oversized rasterised images.
+Fix: read the PNG header to get dimensions (bytes 16–23, no image library needed), then re-render
+the page at a scaled-down DPI if either dimension exceeds 7900px:
+```js
+function readPngDimensions(buf) {
+  if (buf.length < 24) return null;
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+const scale   = Math.min(7900 / dims.width, 7900 / dims.height);
+const safeDpi = Math.max(72, Math.floor(dpi * scale));
+// Re-run gs for this page only with -dFirstPage=N -dLastPage=N -r${safeDpi}
+```
+
+**Strip markdown fences AND surrounding text when parsing model JSON output.**
+Models sometimes wrap JSON in code fences AND append an explanation after the closing fence.
+Stripping fences with replace() is not enough — the trailing text breaks JSON.parse.
+Fix: after stripping fences, find the first `{` and last `}` and parse only that slice:
+```js
+const stripped = text.replace(/```(?:json)?\s*/gi, '').trim();
+const parsed   = JSON.parse(stripped.slice(stripped.indexOf('{'), stripped.lastIndexOf('}') + 1));
+```
+
 **Do not use regex syntax inside JSDoc block comments.**
 `*/` inside a `/** ... */` comment closes the block early and breaks the Vite build.
 
@@ -443,6 +472,32 @@ if (!model) {
   model = rec?.id ?? 'claude-sonnet-4-6'; // absolute last resort
 }
 ```
+
+### Quality advisory — two-signal model upgrade hint
+
+The extraction result includes a `quality_advisory` object surfaced in the view panel as an amber banner when either signal fires:
+
+**Signal 1 — Model self-assessment (no extra API call)**
+Added to the JSON schema in `EXTRACTION_PROMPT`. The model sets `quality_advisory.flag = true` and provides a `reason` when it encounters handwritten content, poor scan quality, complex/dense layouts, or mixed languages. The model fills this in during the same extraction call — zero extra cost or latency.
+
+**Signal 2 — Mechanical confidence average**
+`buildQualityAdvisory(fields, pageResults)` computes the average `confidence` across all extracted fields. If `avg < LOW_CONFIDENCE_THRESHOLD (0.65)`, the advisory fires regardless of the model's self-report. This catches cases where the model was confidently wrong (high self-confidence but low field scores).
+
+**Multi-page merge**: `buildQualityAdvisory` collects model reasons from all pages that flagged and combines them. Both signals are evaluated over the merged field set.
+
+**Result shape:**
+```js
+quality_advisory: {
+  flag:            boolean,
+  reason:          string | null,   // combined reasons from model + confidence signal
+  avg_confidence:  number | null,   // average across all fields with numeric confidence
+  source:          'model' | 'confidence' | 'both' | null
+}
+```
+
+**UI**: amber banner in `ResultPanel` when `flag: true`. Shows reason, avg confidence %, and a note to switch models in Admin › Agents.
+
+**Limitation**: Haiku may self-report confidently on a poor extraction. The confidence average is the more reliable signal. Neither is a guarantee — they are hints.
 
 ### Known gap — purpose is not injected into the extraction prompt
 

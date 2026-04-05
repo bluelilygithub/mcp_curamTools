@@ -119,7 +119,7 @@ const AGENT_MODEL_REQUIREMENTS = {
   'ads-attribution-summary':     { tier: 'standard', reason: 'Brief structured summary from pre-fetched data' },
   'ads-bounce-analysis':         { tier: 'standard', reason: 'Structured bounce report from pre-fetched data' },
   'auction-insights':            { tier: 'standard', reason: 'Structured competitive metrics report' },
-  'doc-extractor':               { tier: 'standard', reason: 'Single-call vision extraction from a pre-loaded image' },
+  'doc-extractor':               { tier: 'advanced', reason: 'Vision extraction quality scales with model capability — Sonnet handles complex layouts, poor scans, and dense forms significantly better than Haiku' },
   _platform:                     { tier: 'advanced', reason: 'Default for unrecognised agents' },
 };
 
