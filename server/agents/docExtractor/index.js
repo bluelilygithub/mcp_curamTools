@@ -105,9 +105,13 @@ async function convertPdfToImages(pdfBuffer, maxPages = DEFAULT_MAX_PDF_PAGES, d
     const pageBuffers = [];
     for (let i = 1; i <= maxPages; i++) {
       try {
-        const result = await converter(i, { responseType: 'buffer' });
-        if (!result?.buffer) break;
-        pageBuffers.push(result.buffer);
+        // Use default file-based output (more reliable than responseType:'buffer'
+        // across pdf2pic v3 environments). Read the saved PNG from disk.
+        const result = await converter(i);
+        if (!result?.path) break;
+        const fileBuffer = fs.readFileSync(result.path);
+        if (fileBuffer.length === 0) break;
+        pageBuffers.push(fileBuffer);
       } catch {
         break; // page doesn't exist — end of document
       }
@@ -177,10 +181,16 @@ async function extractFromImage({ imageBuffer, mimeType, model, maxTokens, pageC
 
   let parsed;
   try {
-    const raw = textBlock.text
-      .replace(/```(?:json)?\s*/gi, '')
-      .trim();
-    parsed = JSON.parse(raw);
+    // Strip markdown fences then extract the outermost {...} object.
+    // Models sometimes append an explanation after the closing fence — slicing
+    // to the last } ensures that trailing text doesn't break JSON.parse.
+    const stripped = textBlock.text.replace(/```(?:json)?\s*/gi, '').trim();
+    const first = stripped.indexOf('{');
+    const last  = stripped.lastIndexOf('}');
+    if (first === -1 || last === -1 || last <= first) {
+      throw new SyntaxError('No JSON object found in response');
+    }
+    parsed = JSON.parse(stripped.slice(first, last + 1));
   } catch {
     throw new Error(
       `Model returned non-JSON output: ${textBlock.text.slice(0, 300)}`
