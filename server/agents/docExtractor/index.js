@@ -9,9 +9,10 @@
  * implements vision support (inlineData format translation).
  *
  * Supports image files (JPEG, PNG, GIF, WEBP) and PDFs.
- * PDFs are rasterised page-by-page using pdf2pic + Ghostscript before being
- * sent to the vision model. Pages are processed in parallel (up to
- * PDF_PAGE_CONCURRENCY at a time) to reduce wall-clock time.
+ * PDFs are rasterised page-by-page by calling Ghostscript directly (gs).
+ * pdf2pic was removed — it wraps gs but its v3 output format is unreliable
+ * across environments. Direct gs invocation is simpler and predictable.
+ * Pages are processed in parallel (up to PDF_PAGE_CONCURRENCY at a time).
  *
  * Multi-page handling:
  *   - Up to MAX_PDF_PAGES pages are processed (default 10)
@@ -20,9 +21,13 @@
  *   - page_count is returned so the caller can surface it in the UI
  */
 
-const os   = require('os');
-const path = require('path');
-const fs   = require('fs');
+const os             = require('os');
+const path           = require('path');
+const fs             = require('fs');
+const { execFile }   = require('child_process');
+const { promisify }  = require('util');
+
+const execFileAsync = promisify(execFile);
 
 // Use platform provider routing — never import a provider directly.
 // getProvider('claude-*') → anthropic, getProvider('gemini-*') → gemini.
@@ -70,8 +75,8 @@ Your output format is always the JSON structure above — nothing else.`;
 
 /**
  * Convert a PDF buffer to an array of PNG image buffers, one per page.
- * Uses a unique temp directory per call so concurrent requests don't collide.
- * Temp directory is always cleaned up, even on failure.
+ * Calls Ghostscript (gs) directly — no pdf2pic wrapper.
+ * Uses a unique temp directory per call; always cleaned up even on failure.
  *
  * @param {Buffer} pdfBuffer
  * @param {number} maxPages  — max pages to process (admin-configurable)
@@ -79,42 +84,39 @@ Your output format is always the JSON structure above — nothing else.`;
  * @returns {Promise<Buffer[]>}
  */
 async function convertPdfToImages(pdfBuffer, maxPages = DEFAULT_MAX_PDF_PAGES, dpi = DEFAULT_PDF_DPI) {
-  const { fromBuffer } = require('pdf2pic');
-
-  // Page dimensions scale with DPI. Base: A4 at 150 DPI = 1240×1754 px.
-  const scale  = dpi / 150;
-  const width  = Math.round(1240 * scale);
-  const height = Math.round(1754 * scale);
-
   const tmpDir = path.join(
     os.tmpdir(),
     `doc-extractor-${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
   fs.mkdirSync(tmpDir, { recursive: true });
 
-  try {
-    const converter = fromBuffer(pdfBuffer, {
-      density:      dpi,
-      format:       'png',
-      width,
-      height,
-      saveFilename: 'page',
-      savePath:     tmpDir,
-    });
+  const pdfPath       = path.join(tmpDir, 'input.pdf');
+  const outputPattern = path.join(tmpDir, 'page_%04d.png');
 
+  try {
+    fs.writeFileSync(pdfPath, pdfBuffer);
+
+    // Rasterise all pages up to maxPages in a single gs call.
+    // -dLastPage caps page count; -sDEVICE=png16m produces 24-bit PNG.
+    await execFileAsync('gs', [
+      '-dNOPAUSE',
+      '-dBATCH',
+      '-dSAFER',
+      `-dLastPage=${maxPages}`,
+      '-sDEVICE=png16m',
+      `-r${dpi}`,
+      `-sOutputFile=${outputPattern}`,
+      pdfPath,
+    ]);
+
+    // Collect the produced page files in order.
     const pageBuffers = [];
     for (let i = 1; i <= maxPages; i++) {
-      try {
-        // Use default file-based output (more reliable than responseType:'buffer'
-        // across pdf2pic v3 environments). Read the saved PNG from disk.
-        const result = await converter(i);
-        if (!result?.path) break;
-        const fileBuffer = fs.readFileSync(result.path);
-        if (fileBuffer.length === 0) break;
-        pageBuffers.push(fileBuffer);
-      } catch {
-        break; // page doesn't exist — end of document
-      }
+      const pagePath = path.join(tmpDir, `page_${String(i).padStart(4, '0')}.png`);
+      if (!fs.existsSync(pagePath)) break;
+      const buf = fs.readFileSync(pagePath);
+      if (buf.length === 0) break;
+      pageBuffers.push(buf);
     }
 
     if (pageBuffers.length === 0) {
