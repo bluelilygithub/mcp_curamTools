@@ -424,7 +424,7 @@ export default function DiamondPlateDataPage() {
             </p>
           )}
           {summary && (
-            <MarkdownRenderer content={summary} />
+            <MarkdownRenderer text={summary} />
           )}
         </div>
       )}
