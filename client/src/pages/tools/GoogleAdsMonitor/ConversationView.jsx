@@ -11,6 +11,9 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../../../api/client';
 import MarkdownRenderer from '../../../components/ui/MarkdownRenderer';
 import Button from '../../../components/ui/Button';
+import MicButton from '../../../components/ui/MicButton';
+import ReadAloudButton from '../../../components/ui/ReadAloudButton';
+import { stripForSpeech } from '../../../utils/stripForSpeech';
 
 const fmtDate = (s) => {
   if (!s) return '';
@@ -130,6 +133,11 @@ function Bubble({ role, content, costAud, tokensUsed }) {
             : <MarkdownRenderer text={textContent} />
           )}
         </div>
+        {!isUser && (
+          <div style={{ marginTop: 4, marginLeft: 4 }}>
+            <ReadAloudButton text={stripForSpeech(textContent)} size={14} />
+          </div>
+        )}
         {costLine && (
           <p style={{ fontSize: 10, color: 'var(--color-muted)', margin: '3px 4px 0', fontFamily: 'monospace' }}>
             {costLine}
@@ -562,6 +570,16 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
                   ...inputStyle,
                   opacity: sending ? 0.6 : 1,
                 }}
+              />
+              <MicButton
+                onResult={(t) => setDraft((q) => {
+                  const base = q.replace(/\s*\[.*?\]$/, '').trim();
+                  return base ? base + ' ' + t : t;
+                })}
+                onPartial={(t) => setDraft((q) => {
+                  const base = q.replace(/\s*\[.*?\]$/, '').trim();
+                  return base ? base + ' [' + t + ']' : '[' + t + ']';
+                })}
               />
               <Button
                 variant="primary"

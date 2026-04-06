@@ -11,6 +11,7 @@ import { useState, useEffect } from 'react';
 import api from '../../api/client';
 import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
 import InlineBanner from '../../components/ui/InlineBanner';
+import ConversationView from './GoogleAdsMonitor/ConversationView';
 import { fmtDate } from '../../utils/date';
 
 const AGENT_SLUG = 'diamondplate-data';
@@ -181,12 +182,13 @@ export default function DiamondPlateDataPage() {
   const [startDate,    setStartDate]    = useState(initialRange.start);
   const [endDate,      setEndDate]      = useState(initialRange.end);
   const [activePreset, setActivePreset] = useState(DEFAULT_PRESET.key);
-  const [running,      setRunning]      = useState(false);
-  const [progress,     setProgress]     = useState([]);
-  const [error,        setError]        = useState('');
-  const [runError,     setRunError]     = useState(''); // persists inside report panel after run
-  const [result,       setResult]       = useState(null);
-  const [activeTab,    setActiveTab]    = useState('report');
+  const [running,          setRunning]          = useState(false);
+  const [progress,         setProgress]         = useState([]);
+  const [error,            setError]            = useState('');
+  const [runError,         setRunError]         = useState('');
+  const [result,           setResult]           = useState(null);
+  const [activeTab,        setActiveTab]        = useState('report');
+  const [conversationSeed, setConversationSeed] = useState('');
 
   // Warn before leaving mid-run
   useEffect(() => {
@@ -397,8 +399,9 @@ export default function DiamondPlateDataPage() {
 
       {/* ── Tabs ───────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1 mb-4">
-        {tabBtn('report',  'Report')}
-        {tabBtn('history', 'History')}
+        {tabBtn('report',       'Report')}
+        {tabBtn('conversation', 'Conversation')}
+        {tabBtn('history',      'History')}
       </div>
 
       {/* ── Report ─────────────────────────────────────────────────────── */}
@@ -424,9 +427,37 @@ export default function DiamondPlateDataPage() {
             </p>
           )}
           {summary && (
-            <MarkdownRenderer text={summary} />
+            <>
+              <MarkdownRenderer text={summary} />
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => {
+                    setConversationSeed(`Here is the DiamondPlate Data report for ${result?.startDate ?? startDate} to ${result?.endDate ?? endDate}:\n\n${summary}`);
+                    setActiveTab('conversation');
+                  }}
+                  style={{
+                    padding: '0.35rem 0.9rem', fontSize: '0.8rem', fontWeight: 500,
+                    fontFamily: 'inherit', borderRadius: '0.5rem', cursor: 'pointer',
+                    border: '1px solid var(--color-border)',
+                    background: 'transparent', color: 'var(--color-muted)',
+                  }}
+                >
+                  Discuss this report
+                </button>
+              </div>
+            </>
           )}
         </div>
+      )}
+
+      {/* ── Conversation ───────────────────────────────────────────────── */}
+      {activeTab === 'conversation' && (
+        <ConversationView
+          startDate={startDate}
+          endDate={endDate}
+          seedText={conversationSeed}
+          onSeedConsumed={() => setConversationSeed('')}
+        />
       )}
 
       {/* ── History ────────────────────────────────────────────────────── */}
