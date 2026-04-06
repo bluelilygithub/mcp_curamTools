@@ -3,6 +3,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api/client';
+import { fmtDateTime } from '../../utils/date';
 import InlineBanner from '../../components/ui/InlineBanner';
 import EmptyState from '../../components/ui/EmptyState';
 import Button from '../../components/ui/Button';
@@ -22,7 +23,7 @@ const SERVER_LEVELS = ['all', 'error', 'warn', 'info'];
 
 function formatDate(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' });
+  return fmtDateTime(iso);
 }
 
 function formatCost(usd) {

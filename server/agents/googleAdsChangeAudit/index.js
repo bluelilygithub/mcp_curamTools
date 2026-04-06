@@ -64,15 +64,38 @@ async function runGoogleAdsChangeAudit(context) {
     : {};
 
   // ── Step 1: Change history ────────────────────────────────────────────────
+  // Google Ads Change History retains only 30 days. If the requested start date
+  // falls outside that window, automatically clamp to 28 days ago and retry.
 
   emit('Fetching change history…');
   const adsServer = await getAdsServer(orgId);
 
-  const changeHistory = await callMcpTool(orgId, adsServer, 'ads_get_change_history', {
-    start_date:  startDate,
-    end_date:    endDate,
-    customer_id: customerId ?? null,
-  });
+  let changeHistory;
+  let windowCapped       = false;
+  let effectiveStartDate = startDate;
+
+  try {
+    changeHistory = await callMcpTool(orgId, adsServer, 'ads_get_change_history', {
+      start_date:  startDate,
+      end_date:    endDate,
+      customer_id: customerId ?? null,
+    });
+  } catch (err) {
+    if (String(err.message ?? '').includes('START_DATE_TOO_OLD')) {
+      const safeStart = new Date();
+      safeStart.setDate(safeStart.getDate() - 28);
+      effectiveStartDate = safeStart.toISOString().slice(0, 10);
+      windowCapped = true;
+      emit(`⚠ Requested window starts ${startDate} — beyond Google Ads' 30-day Change History retention. Retrying from ${effectiveStartDate}.`);
+      changeHistory = await callMcpTool(orgId, adsServer, 'ads_get_change_history', {
+        start_date:  effectiveStartDate,
+        end_date:    endDate,
+        customer_id: customerId ?? null,
+      });
+    } else {
+      throw err;
+    }
+  }
 
   if (!Array.isArray(changeHistory) || changeHistory.length === 0) {
     const { result, tokensUsed } = await agentOrchestrator.run({
@@ -128,14 +151,17 @@ async function runGoogleAdsChangeAudit(context) {
   emit('Analysing changes…');
 
   const auditPayload = {
-    auditPeriod:          `${startDate} to ${endDate}`,
+    auditPeriod:          `${effectiveStartDate} to ${endDate}`,
     comparisonWindowDays: windowDays,
+    ...(windowCapped && {
+      dataNote: `Change History was only available from ${effectiveStartDate} (requested ${startDate} was beyond Google Ads' 30-day retention limit). The audit covers the available window only.`,
+    }),
     changeHistory,
     performanceByChangeDate: performanceByDate,
   };
 
   const userMessage =
-    `Audit period: ${startDate} to ${endDate}. ` +
+    `Audit period: ${effectiveStartDate} to ${endDate}. ` +
     `All change history and before/after performance data has been pre-fetched below. ` +
     `Analyse the data and produce the full audit report.\n\n` +
     `\`\`\`json\n${JSON.stringify(auditPayload, null, 2)}\n\`\`\``;

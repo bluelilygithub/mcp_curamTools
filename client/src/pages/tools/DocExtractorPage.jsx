@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../../api/client';
 import useAuthStore from '../../stores/authStore';
+import { fmtDate } from '../../utils/date';
 
 const PAGE_SIZE = 20;
 
@@ -624,7 +625,7 @@ export default function DocExtractorPage() {
                   </Td>
                   <Td>
                     <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
-                      {new Date(row.created_at).toLocaleDateString()}
+                      {fmtDate(row.created_at)}
                     </span>
                   </Td>
                   <Td className="text-right">
@@ -941,7 +942,7 @@ function FieldCustomizationModal({ fields, baseName, format, runId, onClose }) {
     if (format === 'csv') {
       exportCsv(included, baseName);
     } else {
-      exportPdf(included, { filename: baseName, date: new Date().toLocaleDateString() });
+      exportPdf(included, { filename: baseName, date: fmtDate(new Date()) });
     }
 
     logExport([runId], format, included.length);

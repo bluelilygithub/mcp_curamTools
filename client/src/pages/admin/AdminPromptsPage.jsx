@@ -11,6 +11,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../api/client';
 import InlineBanner from '../../components/ui/InlineBanner';
+import { fmtDate, fmtDateTime } from '../../utils/date';
 
 // ── Agent metadata ────────────────────────────────────────────────────────────
 
@@ -282,7 +283,7 @@ function PromptRow({ agent, initialCustomPrompt, initialFlags, initialMeta, curr
                 }}>
                   <span style={{ flex: 1, fontSize: 12, color: 'var(--color-text)' }}>{flag.reason}</span>
                   <span style={{ fontSize: 11, color: 'var(--color-muted)', whiteSpace: 'nowrap' }}>
-                    {new Date(flag.flagged_at).toLocaleDateString()}
+                    {fmtDate(flag.flagged_at)}
                   </span>
                   <button
                     onClick={() => handleResolveFlag(flag.id)}
@@ -303,7 +304,7 @@ function PromptRow({ agent, initialCustomPrompt, initialFlags, initialMeta, curr
           {/* Last saved meta */}
           {meta?.updated_at && (
             <p style={{ fontSize: 11, color: 'var(--color-muted)', marginBottom: 12 }}>
-              Last saved {new Date(meta.updated_at).toLocaleString()}{meta.updated_by_email ? ` by ${meta.updated_by_email}` : ''}{meta.model_at_last_edit ? ` · model: ${meta.model_at_last_edit}` : ''}
+              Last saved {fmtDateTime(meta.updated_at)}{meta.updated_by_email ? ` by ${meta.updated_by_email}` : ''}{meta.model_at_last_edit ? ` · model: ${meta.model_at_last_edit}` : ''}
             </p>
           )}
 

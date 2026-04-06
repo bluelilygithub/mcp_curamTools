@@ -8,6 +8,7 @@
  */
 import { useState, useEffect } from 'react';
 import api from '../../api/client';
+import { fmtDate, fmtDateTime } from '../../utils/date';
 import { useIcon } from '../../providers/IconProvider';
 import { useToast } from '../../components/ui/Toast';
 import useAuthStore from '../../stores/authStore';
@@ -158,7 +159,7 @@ function InviteModal({ onClose, onInvited }) {
               <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Invitation sent</p>
               <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>
                 Activation email delivered to <strong>{result.email}</strong>.{' '}
-                Link expires {new Date(result.expiresAt).toLocaleString()}.
+                Link expires {fmtDateTime(result.expiresAt)}.
               </p>
             </div>
           </div>
@@ -251,7 +252,7 @@ function ResendModal({ user, onClose }) {
               <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Invitation resent</p>
               <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>
                 New activation email delivered to <strong>{result.email}</strong>.{' '}
-                Link expires {new Date(result.expiresAt).toLocaleString()}.
+                Link expires {fmtDateTime(result.expiresAt)}.
               </p>
             </div>
           </div>
@@ -767,7 +768,7 @@ export default function AdminUsersPage() {
                       <td className="px-4 py-3"><RoleBadge isAdmin={isAdmin} /></td>
                       <td className="px-4 py-3"><StatusBadge isActive={u.is_active} /></td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted)' }}>
-                        {new Date(u.created_at).toLocaleDateString('en-AU')}
+                        {fmtDate(u.created_at)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">

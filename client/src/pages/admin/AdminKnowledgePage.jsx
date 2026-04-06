@@ -1,6 +1,7 @@
 'use strict';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../../api/client';
+import { fmtDate } from '../../utils/date';
 import { useToast } from '../../components/ui/Toast';
 
 const ACCEPTED = '.pdf,.docx,.txt,.md';
@@ -36,7 +37,7 @@ function DocRow({ doc, onDelete }) {
       </td>
       <td className="py-2 px-3 text-xs text-zinc-500 uppercase">{m.file_type ?? '—'}</td>
       <td className="py-2 px-3 text-xs text-zinc-500">{m.char_count != null ? formatBytes(m.char_count) + ' chars' : '—'}</td>
-      <td className="py-2 px-3 text-xs text-zinc-500">{new Date(created_at).toLocaleDateString()}</td>
+      <td className="py-2 px-3 text-xs text-zinc-500">{fmtDate(created_at)}</td>
       <td className="py-2 px-3 text-right">
         <button
           onClick={handleDelete}

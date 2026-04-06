@@ -53,7 +53,11 @@ async function runGoogleAdsChangeImpact(context) {
 
   const rangeArgs = { start_date: startDate, end_date: endDate };
 
-  // ── Pre-fetch: all four sources in parallel ───────────────────────────────────
+  // ── Pre-fetch: all four sources ───────────────────────────────────────────────
+  // Change History is fetched first — separately — so START_DATE_TOO_OLD can be
+  // caught and retried with a capped start date before the parallel fetches run.
+  // Campaign/daily/GA4 sources don't have a 30-day retention limit so they always
+  // use the full requested window.
 
   emit('Fetching change history, campaign performance, daily trends, and GA4 data…');
 
@@ -62,11 +66,33 @@ async function runGoogleAdsChangeImpact(context) {
     getAnalyticsServer(orgId),
   ]);
 
-  const [changeHistory, campaignPerformance, dailyPerformance, sessionsOverview] = await Promise.all([
-    callMcpTool(orgId, adsServer, 'ads_get_change_history', {
+  let changeHistory;
+  let windowCapped       = false;
+  let effectiveStartDate = startDate;
+
+  try {
+    changeHistory = await callMcpTool(orgId, adsServer, 'ads_get_change_history', {
       ...rangeArgs,
       customer_id: customerId ?? null,
-    }).catch((e) => ({ error: e.message })),
+    });
+  } catch (err) {
+    if (String(err.message ?? '').includes('START_DATE_TOO_OLD')) {
+      const safeStart = new Date();
+      safeStart.setDate(safeStart.getDate() - 28);
+      effectiveStartDate = safeStart.toISOString().slice(0, 10);
+      windowCapped = true;
+      emit(`⚠ Requested window starts ${startDate} — beyond Google Ads' 30-day Change History retention. Retrying from ${effectiveStartDate}.`);
+      changeHistory = await callMcpTool(orgId, adsServer, 'ads_get_change_history', {
+        start_date:  effectiveStartDate,
+        end_date:    endDate,
+        customer_id: customerId ?? null,
+      }).catch((e) => ({ error: e.message }));
+    } else {
+      changeHistory = { error: err.message };
+    }
+  }
+
+  const [campaignPerformance, dailyPerformance, sessionsOverview] = await Promise.all([
     callMcpTool(orgId, adsServer, 'ads_get_campaign_performance', {
       ...rangeArgs,
       customer_id: customerId ?? null,
@@ -85,6 +111,9 @@ async function runGoogleAdsChangeImpact(context) {
 
   const payload = {
     period: `${startDate} to ${endDate}`,
+    ...(windowCapped && {
+      dataNote: `Change History was only available from ${effectiveStartDate} (requested ${startDate} was beyond Google Ads' 30-day retention limit). Campaign, daily, and GA4 data cover the full requested period.`,
+    }),
     changeHistory,
     campaignPerformance,
     dailyPerformance,
