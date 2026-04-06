@@ -74,6 +74,8 @@ import {
   Layers,
   Package,
   Hash,
+  TrendingUp,
+  BookOpen,
 } from 'lucide-react';
 
 const semanticMap = {
@@ -129,6 +131,7 @@ const semanticMap = {
   activity: Activity,
   'bar-chart': BarChart2,
   'line-chart': LineChart,
+  'trending-up': TrendingUp,
   database: Database,
 
   // AI & platform
@@ -143,6 +146,7 @@ const semanticMap = {
 
   // Content
   'file-text': FileText,
+  'book-open': BookOpen,
   'message-square': MessageSquare,
   send: Send,
   mic: Mic,

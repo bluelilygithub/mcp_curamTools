@@ -62,7 +62,7 @@ async function runDiamondplateData(context) {
   const NOT_CONFIGURED = (source) =>
     ({ error: `${source} MCP server is not configured for this organisation. Contact your admin to set it up under Admin › MCP Servers.` });
 
-  const [enquiries, notInterestedReasons, trafficSources, landingPages] = await Promise.all([
+  const [rawEnquiries, rawNotInterested, trafficSources, landingPages] = await Promise.all([
     wpServer
       ? callMcpTool(orgId, wpServer, 'wp_get_enquiries', {
           per_page:   2000,
@@ -87,13 +87,22 @@ async function runDiamondplateData(context) {
       : Promise.resolve(NOT_CONFIGURED('Google Analytics')),
   ]);
 
+  // ── Aggregate CRM data in Node.js before passing to Claude ───────────────
+  // Raw records can number in the thousands. Sending them verbatim blows the
+  // context window. Aggregate here and pass compact summaries instead.
+
+  emit('Aggregating lead data…');
+
+  const enquiries        = aggregateEnquiries(rawEnquiries, startDate, endDate);
+  const notInterestedReasons = aggregateNotInterested(rawNotInterested, startDate, endDate);
+
   // ── Single Claude call ────────────────────────────────────────────────────
 
   emit('Analysing lead intelligence…');
 
   const payload = {
     period:              `${startDate} to ${endDate}`,
-    enquiries,
+    enquirySummary:      enquiries,
     notInterestedReasons,
     ga4TrafficSources:   trafficSources,
     ga4LandingPages:     landingPages,
@@ -121,3 +130,64 @@ async function runDiamondplateData(context) {
 }
 
 module.exports = { runDiamondplateData };
+
+// ── Aggregation helpers ───────────────────────────────────────────────────────
+
+function countBy(arr, key) {
+  const out = {};
+  for (const item of arr) {
+    const val = item[key] ?? '(none)';
+    out[val] = (out[val] ?? 0) + 1;
+  }
+  return out;
+}
+
+function topN(counts, n) {
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .reduce((acc, [k, v]) => { acc[k] = v; return acc; }, {});
+}
+
+/**
+ * Reduce raw enquiry records to a compact summary object.
+ * Raw records can number in the thousands — sending them verbatim overflows the
+ * context window. This produces a token-efficient summary instead.
+ */
+function aggregateEnquiries(raw, startDate, endDate) {
+  if (!raw || !Array.isArray(raw)) return raw; // pass through error objects
+
+  const total         = raw.length;
+  const byStatus      = countBy(raw, 'enquiry_status');
+  const byDevice      = countBy(raw, 'device_type');
+  const bySource      = topN(countBy(raw, 'utm_source'),   10);
+  const byMedium      = topN(countBy(raw, 'utm_medium'),   10);
+  const byCampaign    = topN(countBy(raw, 'utm_campaign'), 10);
+  const topSearchTerms  = topN(countBy(raw, 'search_term'),   20);
+  const topLandingPages = topN(countBy(raw, 'landing_page'),  15);
+
+  return {
+    total,
+    period: `${startDate} to ${endDate}`,
+    byStatus,
+    byDevice,
+    bySource,
+    byMedium,
+    byCampaign,
+    topSearchTerms,
+    topLandingPages,
+  };
+}
+
+/**
+ * Reduce raw not-interested reason records to a compact summary.
+ * The full history can be large; we only pass aggregated counts to Claude.
+ */
+function aggregateNotInterested(raw, startDate, endDate) {
+  if (!raw || !Array.isArray(raw)) return raw; // pass through error objects
+
+  const total     = raw.length;
+  const byReason  = topN(countBy(raw, 'reason'), 20);
+
+  return { total, period: `${startDate} to ${endDate}`, byReason };
+}
