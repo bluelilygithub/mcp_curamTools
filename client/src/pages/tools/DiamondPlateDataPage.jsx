@@ -104,15 +104,17 @@ function ProgressBar({ lines }) {
 function RunHistory({ onLoad }) {
   const [rows,    setRows]    = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetchErr, setFetchErr] = useState('');
 
   useEffect(() => {
     api.get(`/agents/${AGENT_SLUG}/history`)
       .then(setRows)
-      .catch(() => {})
+      .catch((e) => setFetchErr(e.message || 'Failed to load history'))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <p className="text-sm py-4" style={{ color: 'var(--color-muted)' }}>Loading history…</p>;
+  if (fetchErr) return <p className="text-sm py-4" style={{ color: '#b91c1c' }}>Error: {fetchErr}</p>;
   if (!rows.length) return <p className="text-sm py-4" style={{ color: 'var(--color-muted)' }}>No runs yet.</p>;
 
   return (
@@ -233,10 +235,14 @@ export default function DiamondPlateDataPage() {
       const reader  = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let resultReceived = false;
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.warn('[DiamondPlate] stream closed by server. resultReceived:', resultReceived, 'buffer remainder:', buffer);
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop();
@@ -244,16 +250,44 @@ export default function DiamondPlateDataPage() {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const raw = line.slice(6).trim();
-          if (raw === '[DONE]') { setRunning(false); setActiveTab('report'); return; }
+          if (raw === '[DONE]') {
+            console.log('[DiamondPlate] [DONE] received. resultReceived:', resultReceived);
+            setRunning(false);
+            setActiveTab('report');
+            return;
+          }
           try {
             const msg = JSON.parse(raw);
-            if (msg.type === 'progress') setProgress((p) => [...p, msg.text]);
-            else if (msg.type === 'result') { setResult(msg.data); setActiveTab('report'); }
-            else if (msg.type === 'error')  { setError(msg.error); setRunError(msg.error); }
-          } catch { /* ignore malformed */ }
+            console.log('[DiamondPlate] SSE msg type:', msg.type, msg.type === 'result' ? `summary length: ${msg.data?.summary?.length}` : msg.type === 'error' ? msg.error : '');
+            if (msg.type === 'progress') {
+              setProgress((p) => [...p, msg.text]);
+            } else if (msg.type === 'result') {
+              resultReceived = true;
+              if (!msg.data?.summary) {
+                console.error('[DiamondPlate] result received but summary is empty/missing. Full data keys:', Object.keys(msg.data || {}));
+                setRunError('Run completed but the report summary was empty. Check the browser console and server logs.');
+              }
+              setResult(msg.data);
+              setActiveTab('report');
+            } else if (msg.type === 'error') {
+              console.error('[DiamondPlate] server error event:', msg.error);
+              setError(msg.error);
+              setRunError(msg.error);
+            }
+          } catch (parseErr) {
+            console.error('[DiamondPlate] failed to parse SSE line:', parseErr.message, '\nRaw (first 200):', raw.slice(0, 200));
+          }
         }
       }
+
+      // Stream closed without [DONE]
+      if (!resultReceived) {
+        const msg = 'Stream ended without a result. The run may have crashed on the server — check Railway logs.';
+        console.error('[DiamondPlate]', msg);
+        setRunError(msg);
+      }
     } catch (err) {
+      console.error('[DiamondPlate] stream error:', err.message);
       setError(err.message);
     } finally {
       setRunning(false);

@@ -143,6 +143,14 @@ const api = {
       window.location.href = '/login';
       throw new Error('Session expired.');
     }
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      try {
+        const body = await res.json();
+        message = body.error || body.message || message;
+      } catch { /* use default */ }
+      throw new Error(message);
+    }
     return res;
   },
 };
