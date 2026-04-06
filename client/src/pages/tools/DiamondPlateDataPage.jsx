@@ -182,6 +182,7 @@ export default function DiamondPlateDataPage() {
   const [running,      setRunning]      = useState(false);
   const [progress,     setProgress]     = useState([]);
   const [error,        setError]        = useState('');
+  const [runError,     setRunError]     = useState(''); // persists inside report panel after run
   const [result,       setResult]       = useState(null);
   const [activeTab,    setActiveTab]    = useState('report');
 
@@ -225,6 +226,7 @@ export default function DiamondPlateDataPage() {
     setRunning(true);
     setProgress([]);
     setError('');
+    setRunError('');
 
     try {
       const res     = await api.stream(`/agents/${AGENT_SLUG}/run`, { startDate, endDate });
@@ -247,7 +249,7 @@ export default function DiamondPlateDataPage() {
             const msg = JSON.parse(raw);
             if (msg.type === 'progress') setProgress((p) => [...p, msg.text]);
             else if (msg.type === 'result') { setResult(msg.data); setActiveTab('report'); }
-            else if (msg.type === 'error')  setError(msg.error);
+            else if (msg.type === 'error')  { setError(msg.error); setRunError(msg.error); }
           } catch { /* ignore malformed */ }
         }
       }
@@ -371,7 +373,18 @@ export default function DiamondPlateDataPage() {
           className="rounded-2xl border p-5"
           style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
         >
-          {!summary && !running && (
+          {runError && !running && (
+            <div
+              className="rounded-xl p-4 mb-4"
+              style={{ background: '#fee2e2', border: '1px solid #fca5a5' }}
+            >
+              <p className="text-sm font-semibold mb-1" style={{ color: '#b91c1c' }}>Run failed</p>
+              <p className="text-sm" style={{ color: '#7f1d1d', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                {runError}
+              </p>
+            </div>
+          )}
+          {!summary && !runError && !running && (
             <p className="text-sm py-6 text-center" style={{ color: 'var(--color-muted)' }}>
               Select a date range and click <strong>Run</strong> to generate a lead intelligence report.
             </p>
