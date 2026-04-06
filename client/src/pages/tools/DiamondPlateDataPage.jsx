@@ -131,10 +131,12 @@ function RunHistory({ onLoad }) {
         {rows.map((r) => (
           <tr key={r.id} style={{ borderTop: '1px solid var(--color-border)' }}>
             <td className="px-3 py-2 text-xs" style={{ color: 'var(--color-muted)' }}>
-              {fmtDate(r.created_at)}
+              {fmtDate(r.run_at)}
             </td>
             <td className="px-3 py-2 text-xs" style={{ color: 'var(--color-text)' }}>
-              {r.start_date && r.end_date ? `${fmtDate(r.start_date)} – ${fmtDate(r.end_date)}` : '—'}
+              {r.result?.startDate && r.result?.endDate
+                ? `${fmtDate(r.result.startDate)} – ${fmtDate(r.result.endDate)}`
+                : '—'}
             </td>
             <td className="px-3 py-2">
               <span
@@ -277,7 +279,7 @@ export default function DiamondPlateDataPage() {
     <div className="p-5 max-w-4xl mx-auto" style={{ fontFamily: 'inherit' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>
             DiamondPlate Data
@@ -287,11 +289,11 @@ export default function DiamondPlateDataPage() {
           </p>
         </div>
 
-        {/* Date controls */}
-        <div className="flex flex-col gap-2 items-end">
+        {/* Date controls — all on one row */}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {/* Preset pills */}
           <div
-            className="flex gap-1 rounded-lg p-1"
+            className="flex gap-0.5 rounded-lg p-1"
             style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
           >
             {PRESETS.map((p) => (
@@ -299,7 +301,7 @@ export default function DiamondPlateDataPage() {
                 key={p.key}
                 onClick={() => applyPreset(p)}
                 style={{
-                  padding: '3px 10px', fontSize: 12, borderRadius: 6, border: 'none',
+                  padding: '3px 9px', fontSize: 12, borderRadius: 6, border: 'none',
                   cursor: 'pointer', fontFamily: 'inherit',
                   background: activePreset === p.key ? 'var(--color-primary)' : 'transparent',
                   color:      activePreset === p.key ? '#fff' : 'var(--color-muted)',
@@ -311,44 +313,43 @@ export default function DiamondPlateDataPage() {
             ))}
           </div>
 
-          {/* Date pickers — always visible for precision */}
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs" style={{ color: 'var(--color-muted)' }}>From</span>
-              <input
-                key={`start-${startDate}`}
-                type="date"
-                value={startDate}
-                max={endDate}
-                onChange={(e) => onDateChange('start', e.target.value)}
-                style={{ ...inputStyle, fontSize: '0.8rem' }}
-              />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs" style={{ color: 'var(--color-muted)' }}>To</span>
-              <input
-                key={`end-${endDate}`}
-                type="date"
-                value={endDate}
-                min={startDate}
-                max={isoDate(new Date())}
-                onChange={(e) => onDateChange('end', e.target.value)}
-                style={{ ...inputStyle, fontSize: '0.8rem' }}
-              />
-            </div>
-            <button
-              onClick={handleRun}
-              disabled={running}
-              style={{
-                padding: '0.4rem 1rem', fontSize: '0.875rem', fontWeight: 600,
-                fontFamily: 'inherit', borderRadius: '0.5rem', border: 'none',
-                background: running ? 'var(--color-border)' : 'var(--color-primary)',
-                color: '#fff', cursor: running ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {running ? 'Running…' : 'Run'}
-            </button>
+          {/* Date pickers */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs" style={{ color: 'var(--color-muted)' }}>From</span>
+            <input
+              key={`start-${startDate}`}
+              type="date"
+              value={startDate}
+              max={endDate}
+              onChange={(e) => onDateChange('start', e.target.value)}
+              style={{ ...inputStyle, fontSize: '0.8rem' }}
+            />
           </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs" style={{ color: 'var(--color-muted)' }}>To</span>
+            <input
+              key={`end-${endDate}`}
+              type="date"
+              value={endDate}
+              min={startDate}
+              max={isoDate(new Date())}
+              onChange={(e) => onDateChange('end', e.target.value)}
+              style={{ ...inputStyle, fontSize: '0.8rem' }}
+            />
+          </div>
+
+          <button
+            onClick={handleRun}
+            disabled={running}
+            style={{
+              padding: '0.4rem 1rem', fontSize: '0.875rem', fontWeight: 600,
+              fontFamily: 'inherit', borderRadius: '0.5rem', border: 'none',
+              background: running ? 'var(--color-border)' : 'var(--color-primary)',
+              color: '#fff', cursor: running ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {running ? 'Running…' : 'Run'}
+          </button>
         </div>
       </div>
 

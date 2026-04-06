@@ -51,29 +51,40 @@ async function runDiamondplateData(context) {
 
   emit('Fetching CRM enquiries, not-interested reasons, GA4 traffic, and landing page data…');
 
+  // Resolve servers gracefully — if a server isn't registered for this org,
+  // return null and fall back to an informative error message in the payload
+  // rather than aborting the entire run.
   const [gaServer, wpServer] = await Promise.all([
-    getAnalyticsServer(orgId),
-    getWordPressServer(orgId),
+    getAnalyticsServer(orgId).catch(() => null),
+    getWordPressServer(orgId).catch(() => null),
   ]);
 
-  // CRM enquiry limit: up to 2000 records for the date range.
-  // The not-interested reasons fetch has no date filter in the MCP tool —
-  // Claude will be instructed to focus on the period.
+  const NOT_CONFIGURED = (source) =>
+    ({ error: `${source} MCP server is not configured for this organisation. Contact your admin to set it up under Admin › MCP Servers.` });
+
   const [enquiries, notInterestedReasons, trafficSources, landingPages] = await Promise.all([
-    callMcpTool(orgId, wpServer, 'wp_get_enquiries', {
-      per_page:   2000,
-      start_date: startDate,
-      end_date:   endDate,
-    }).catch((e) => ({ error: e.message })),
+    wpServer
+      ? callMcpTool(orgId, wpServer, 'wp_get_enquiries', {
+          per_page:   2000,
+          start_date: startDate,
+          end_date:   endDate,
+        }).catch((e) => ({ error: e.message }))
+      : Promise.resolve(NOT_CONFIGURED('WordPress')),
 
-    callMcpTool(orgId, wpServer, 'wp_get_not_interested_reasons', {})
-      .catch((e) => ({ error: e.message })),
+    wpServer
+      ? callMcpTool(orgId, wpServer, 'wp_get_not_interested_reasons', {})
+          .catch((e) => ({ error: e.message }))
+      : Promise.resolve(NOT_CONFIGURED('WordPress')),
 
-    callMcpTool(orgId, gaServer, 'ga4_get_traffic_sources', rangeArgs)
-      .catch((e) => ({ error: e.message })),
+    gaServer
+      ? callMcpTool(orgId, gaServer, 'ga4_get_traffic_sources', rangeArgs)
+          .catch((e) => ({ error: e.message }))
+      : Promise.resolve(NOT_CONFIGURED('Google Analytics')),
 
-    callMcpTool(orgId, gaServer, 'ga4_get_landing_page_performance', rangeArgs)
-      .catch((e) => ({ error: e.message })),
+    gaServer
+      ? callMcpTool(orgId, gaServer, 'ga4_get_landing_page_performance', rangeArgs)
+          .catch((e) => ({ error: e.message }))
+      : Promise.resolve(NOT_CONFIGURED('Google Analytics')),
   ]);
 
   // ── Single Claude call ────────────────────────────────────────────────────
