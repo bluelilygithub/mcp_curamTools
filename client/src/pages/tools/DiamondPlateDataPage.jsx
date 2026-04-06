@@ -314,7 +314,7 @@ export default function DiamondPlateDataPage() {
   );
 
   return (
-    <div className="p-5 max-w-4xl mx-auto" style={{ fontFamily: 'inherit' }}>
+    <div className="p-5 max-w-7xl mx-auto" style={{ fontFamily: 'inherit' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
