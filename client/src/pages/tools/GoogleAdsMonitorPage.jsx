@@ -13,7 +13,6 @@ import SearchTermsTable from './GoogleAdsMonitor/SearchTermsTable';
 import AISuggestionsPanel from './GoogleAdsMonitor/AISuggestionsPanel';
 import AgentDashboardCard from './GoogleAdsMonitor/AgentDashboardCard';
 import StrategicReviewCard from './GoogleAdsMonitor/StrategicReviewCard';
-import ConversationView    from './GoogleAdsMonitor/ConversationView';
 
 const AGENT_SLUG = 'google-ads-monitor';
 
@@ -319,7 +318,6 @@ export default function GoogleAdsMonitorPage() {
   const [emailModal, setEmailModal] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
   const [monitorCopied, setMonitorCopied] = useState(false);
-  const [conversationSeed, setConversationSeed] = useState('');
 
   // Warn before leaving while a run is in progress
   useEffect(() => {
@@ -553,10 +551,9 @@ export default function GoogleAdsMonitorPage() {
 
       {/* ── Tabs ───────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1 mb-4 flex-wrap">
-        {tabBtn('dashboard',     'Dashboard')}
-        {tabBtn('conversation',  'Conversation')}
-        {tabBtn('history',       'History')}
-        {tabBtn('settings',      'Settings')}
+        {tabBtn('dashboard', 'Dashboard')}
+        {tabBtn('history',   'History')}
+        {tabBtn('settings',  'Settings')}
       </div>
 
       {/* ── Dashboard ──────────────────────────────────────────────────── */}
@@ -687,11 +684,7 @@ export default function GoogleAdsMonitorPage() {
               endDate={endDate}
               expanded={openCard === slug}
               onToggle={() => toggleCard(slug)}
-              onContinueInConversation={(seed) => {
-                setConversationSeed(seed);
-                setActiveTab('conversation');
-              }}
-            />
+              />
           ))}
 
           {/* ── Strategic Review ─────────────────────────────────────────── */}
@@ -700,29 +693,13 @@ export default function GoogleAdsMonitorPage() {
             endDate={endDate}
             expanded={openCard === 'google-ads-strategic-review'}
             onToggle={() => toggleCard('google-ads-strategic-review')}
-            onContinueInConversation={(seed) => {
-              setConversationSeed(seed);
-              setActiveTab('conversation');
-            }}
           />
         </div>
       )}
 
-      {/* ── Conversation ───────────────────────────────────────────────── */}
-      {activeTab === 'conversation' && (
-        <ConversationView
-          startDate={startDate}
-          endDate={endDate}
-          seedText={conversationSeed}
-          onSeedConsumed={() => setConversationSeed('')}
-        />
-      )}
-
       {/* ── History ────────────────────────────────────────────────────── */}
       {activeTab === 'history' && (
-        <AllAgentsHistory
-          onDiscuss={(seed) => { setConversationSeed(seed); setActiveTab('conversation'); }}
-        />
+        <AllAgentsHistory onDiscuss={null} />
       )}
 
       {/* ── Settings ───────────────────────────────────────────────────── */}

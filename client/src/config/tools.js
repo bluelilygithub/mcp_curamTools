@@ -23,6 +23,14 @@ const TOOLS = [
     roles:       ['ads_operator', 'org_admin'],
   },
   {
+    id:          'diamondplate-data',
+    name:        'DiamondPlate Data',
+    description: 'CRM lead intelligence — analyse enquiry volume, conversion patterns, channel attribution, and why leads don\'t convert.',
+    icon:        'trending-up',
+    path:        '/tools/diamondplate-data',
+    roles:       ['org_member', 'org_admin'],
+  },
+  {
     id:          'doc-extractor',
     name:        'Document Extractor',
     description: 'Upload any image document and extract structured fields using Claude Vision. Compare accuracy across AI providers.',

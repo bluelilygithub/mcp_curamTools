@@ -135,6 +135,18 @@ agentsRouter.use(
   })
 );
 
+// ── DiamondPlate Data ─────────────────────────────────────────────────────
+const { runDiamondplateData } = require('../agents/diamondplateData');
+
+agentsRouter.use(
+  '/diamondplate-data',
+  createAgentRoute({
+    slug:               'diamondplate-data',
+    runFn:              runDiamondplateData,
+    requiredPermission: 'org_member',
+  })
+);
+
 // Email report — POST /api/agents/google-ads-monitor/email
 agentsRouter.post('/google-ads-monitor/email', requireAuth, async (req, res) => {
   try {
