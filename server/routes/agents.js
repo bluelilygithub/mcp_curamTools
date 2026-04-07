@@ -147,6 +147,18 @@ agentsRouter.use(
   })
 );
 
+// ── Lead Velocity ─────────────────────────────────────────────────────────────
+const { runLeadVelocity } = require('../agents/leadVelocity');
+
+agentsRouter.use(
+  '/lead-velocity',
+  createAgentRoute({
+    slug:               'lead-velocity',
+    runFn:              runLeadVelocity,
+    requiredPermission: 'org_member',
+  })
+);
+
 // Email report — POST /api/agents/google-ads-monitor/email
 agentsRouter.post('/google-ads-monitor/email', requireAuth, async (req, res) => {
   try {

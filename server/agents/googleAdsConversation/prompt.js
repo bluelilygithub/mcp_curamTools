@@ -56,10 +56,11 @@ The \`enquiry_status\` field tracks where each lead is in the sales pipeline. \
 Common values (confirm with \`get_enquiries\` for the exact set in use): \
 **new** — just submitted, not yet contacted; \
 **contacted** — initial follow-up made; \
-**quoted** — price/scope sent to the enquirer; \
-**booked** — job confirmed; \
-**completed** — job done; \
-**not_interested** — lead declined (check \`reason_not_interested\` for why).
+**emailed** — email follow-up sent; \
+**assigned** — invoiced and job assigned (Invoiced & Assigned); \
+**completed** — job done and warrantied (Completed & Warrantied); \
+**notinterested** — lead declined (check \`reason_not_interested\` for why — options: too_expensive, wrong_products, wrong_location); \
+**cancelled** — lead cancelled.
 
 ### Attribution logic — how to identify paid vs organic leads
 
@@ -164,7 +165,9 @@ GA4:
 - **get_conversion_events** — conversion events by name and date — from March 2026
 
 CRM (WordPress — years of history):
-- **get_enquiries** — all enquiry records with full field set (see CRM section above); use limit 2000+ for complete historical pulls
+- **get_enquiries** — all enquiry records with core attribution fields (UTM, device, status, landing page, gclid); use limit 2000+ for complete historical pulls
+- **get_enquiry_details** — extended enquiry records with full sales pipeline fields: sales_rep, package_type, enquiry_source, contacted_date, invoiced_date, completion_date, appointment_date, final_value, technician, job_number; use for pipeline value, sales rep, or velocity analysis
+- **get_progress_details** — progress_details ACF repeater rows per enquiry: entry_date, next_event, next_action (Phone/Email/Appointment/Invoice/Warranty), event_message, staff_member; row_count=0 for enquiries with no activity; use for follow-up intensity, response time, or stale lead analysis
 - **get_not_interested_reasons** — all records with a reason_not_interested value; for lead quality and objection analysis
 - **enquiry_field_check** — shows every populated meta key on the 5 most recent enquiries; use to verify field names or discover unexpected fields
 - **find_meta_key** — search bqq_postmeta by partial key or value; use when a field name is uncertain

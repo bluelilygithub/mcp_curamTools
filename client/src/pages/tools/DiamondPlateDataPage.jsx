@@ -7,15 +7,17 @@
  *
  * Date filter: D · W · M · Qtr · Year · Custom
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../../api/client';
 import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
 import InlineBanner from '../../components/ui/InlineBanner';
 import ConversationView from './GoogleAdsMonitor/ConversationView';
+import VelocityDashboard from './DiamondPlate/VelocityDashboard';
 import { fmtDate } from '../../utils/date';
 import { exportPdf, exportText } from '../../utils/exportService';
 
-const AGENT_SLUG = 'diamondplate-data';
+const AGENT_SLUG          = 'diamondplate-data';
+const VELOCITY_AGENT_SLUG = 'lead-velocity';
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -224,6 +226,12 @@ export default function DiamondPlateDataPage() {
   const [activeTab,        setActiveTab]        = useState('report');
   const [conversationSeed, setConversationSeed] = useState('');
 
+  // Velocity tab state
+  const [velocityRunning, setVelocityRunning] = useState(false);
+  const [velocityProgress, setVelocityProgress] = useState([]);
+  const [velocityError,   setVelocityError]   = useState('');
+  const [velocityResult,  setVelocityResult]  = useState(null);
+
   // Warn before leaving mid-run
   useEffect(() => {
     const handler = (e) => { if (running) { e.preventDefault(); e.returnValue = ''; } };
@@ -327,6 +335,54 @@ export default function DiamondPlateDataPage() {
       setError(err.message);
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function handleVelocityRun() {
+    if (new Date(startDate) > new Date(endDate)) {
+      setVelocityError('Start date must be before end date.');
+      return;
+    }
+    setVelocityRunning(true);
+    setVelocityProgress([]);
+    setVelocityError('');
+
+    try {
+      const res     = await api.stream(`/agents/${VELOCITY_AGENT_SLUG}/run`, { startDate, endDate });
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let resultReceived = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]') { setVelocityRunning(false); return; }
+          try {
+            const msg = JSON.parse(raw);
+            if (msg.type === 'progress') {
+              setVelocityProgress((p) => [...p, msg.text]);
+            } else if (msg.type === 'result') {
+              resultReceived = true;
+              setVelocityResult(msg.data);
+            } else if (msg.type === 'error') {
+              setVelocityError(msg.error);
+            }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+      if (!resultReceived) setVelocityError('Velocity run ended without a result — check server logs.');
+    } catch (err) {
+      setVelocityError(err.message);
+    } finally {
+      setVelocityRunning(false);
     }
   }
 
@@ -434,6 +490,7 @@ export default function DiamondPlateDataPage() {
       {/* ── Tabs ───────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1 mb-4">
         {tabBtn('report',       'Report')}
+        {tabBtn('velocity',     'Velocity')}
         {tabBtn('conversation', 'Conversation')}
         {tabBtn('history',      'History')}
       </div>
@@ -500,6 +557,57 @@ export default function DiamondPlateDataPage() {
                 </button>
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* ── Velocity ───────────────────────────────────────────────────── */}
+      {activeTab === 'velocity' && (
+        <div>
+          {/* Velocity run button + progress */}
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              onClick={handleVelocityRun}
+              disabled={velocityRunning}
+              style={{
+                padding: '0.4rem 1rem', fontSize: '0.875rem', fontWeight: 600,
+                fontFamily: 'inherit', borderRadius: '0.5rem', border: 'none',
+                background: velocityRunning ? 'var(--color-border)' : 'var(--color-primary)',
+                color: '#fff', cursor: velocityRunning ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {velocityRunning ? 'Analysing…' : 'Run Velocity Analysis'}
+            </button>
+            <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+              Uses date range above · Typically 20–40 seconds
+            </span>
+          </div>
+
+          {velocityError && (
+            <InlineBanner type="error" message={velocityError} onDismiss={() => setVelocityError('')} className="mb-4" />
+          )}
+
+          {velocityRunning && <ProgressBar lines={velocityProgress} />}
+
+          {!velocityResult && !velocityRunning && !velocityError && (
+            <div
+              className="rounded-2xl border p-8 text-center"
+              style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
+            >
+              <p style={{ color: 'var(--color-muted)', fontSize: '0.875rem' }}>
+                Click <strong>Run Velocity Analysis</strong> to analyse follow-up speed, touchpoint intensity, and campaign conversion patterns.
+              </p>
+            </div>
+          )}
+
+          {velocityResult && !velocityRunning && (
+            <VelocityDashboard
+              result={velocityResult}
+              onAskQuestion={(q) => {
+                setConversationSeed(q);
+                setActiveTab('conversation');
+              }}
+            />
           )}
         </div>
       )}

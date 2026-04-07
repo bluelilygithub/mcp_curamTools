@@ -79,8 +79,10 @@ Check all three before editing:
 - `ga4_get_paid_bounced_sessions` ← has device breakdown; use for mobile/desktop questions
 - `ga4_get_conversion_events`
 
-### wordpress.js — 5 tools
-- `wp_get_enquiries` ← returns device_type on every record
+### wordpress.js — 7 tools
+- `wp_get_enquiries` ← core attribution fields; returns device_type on every record
+- `wp_get_enquiry_details` ← extended fields: sales_rep, package_type, enquiry_source, completion_date, final_value, technician, job_number + all core fields
+- `wp_get_progress_details` ← progress_details ACF repeater; entry_date (d/m/Y g:i a), next_event, next_action (Phone/Email/Appointment/Invoice/Warranty), event_message, staff_member; row_count=0 for no-activity leads
 - `wp_get_not_interested_reasons`
 - `wp_enquiry_field_check`
 - `wp_find_meta_key`
@@ -191,7 +193,7 @@ Converted agents:
 
 ---
 
-## Conversation agent — current tool count: 22
+## Conversation agent — current tool count: 23
 
 If you cut tools to reduce cost, you are solving the wrong problem.
 The correct lever is the prompt discipline instruction: *don't re-fetch data already in the conversation.*

@@ -92,6 +92,31 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: 'wp_get_enquiry_details',
+    description: 'Extended clientenquiry records with full CRM fields beyond the basic wp_get_enquiries tool. Adds: sales_rep, package_type, enquiry_source, contacted_date, invoiced_date, completion_date, appointment_date, calculated_value, final_value, technician, job_number. Use for lead velocity, pipeline value, and sales rep analysis. Years of history available.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit:      { type: 'number', description: 'Max records. Default 1000. Use 3000+ for full history.' },
+        start_date: { type: 'string', description: 'Filter enquiries on or after this date (YYYY-MM-DD).' },
+        end_date:   { type: 'string', description: 'Filter enquiries on or before this date (YYYY-MM-DD).' },
+        status:     { type: 'string', description: 'Filter by enquiry_status value.' },
+      },
+    },
+  },
+  {
+    name: 'wp_get_progress_details',
+    description: 'Fetch progress_details ACF repeater rows (Enquiry Related Activities) for clientenquiry records. Each row contains: entry_date (d/m/Y g:i a — when logged), next_event (scheduled follow-up datetime), next_action (Phone/Email/Appointment/Invoice/Warranty), event_message (notes), staff_member. All enquiries in the range are returned — posts with zero activity rows are included with row_count=0. Use for lead velocity, follow-up intensity, response time, and activity heatmap analysis.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit:      { type: 'number', description: 'Max enquiries to scan. Default 1000.' },
+        start_date: { type: 'string', description: 'Filter enquiries submitted on or after this date (YYYY-MM-DD).' },
+        end_date:   { type: 'string', description: 'Filter enquiries submitted on or before this date (YYYY-MM-DD).' },
+      },
+    },
+  },
 ];
 
 // ── Tool handlers ─────────────────────────────────────────────────────────────
@@ -270,6 +295,161 @@ async function callTool(name, args = {}) {
             catch { resolve({ raw: data }); }
           });
         }).on('error', reject);
+      });
+    }
+
+    case 'wp_get_enquiry_details': {
+      const limit  = Math.min(parseInt(args.limit || 1000), 5000);
+      const params = [];
+
+      let sql = `
+        SELECT
+          p.ID                AS id,
+          p.post_date         AS date,
+          pm_es.meta_value    AS enquiry_status,
+          pm_src.meta_value   AS utm_source,
+          pm_med.meta_value   AS utm_medium,
+          pm_cmp.meta_value   AS utm_campaign,
+          pm_ag.meta_value    AS utm_ad_group,
+          pm_trm.meta_value   AS utm_term,
+          pm_dev.meta_value   AS device_type,
+          pm_lp.meta_value    AS landing_page,
+          pm_gc.meta_value    AS gclid,
+          pm_ni.meta_value    AS reason_not_interested,
+          pm_jn.meta_value    AS job_number,
+          pm_sr.meta_value    AS sales_rep,
+          pm_pt.meta_value    AS package_type,
+          pm_eqs.meta_value   AS enquiry_source,
+          pm_cd.meta_value    AS contacted_date,
+          pm_inv.meta_value   AS invoiced_date,
+          pm_cpd.meta_value   AS completion_date,
+          pm_apd.meta_value   AS appointment_date,
+          pm_cv.meta_value    AS calculated_value,
+          pm_fv.meta_value    AS final_value,
+          pm_tech.meta_value  AS technician
+        FROM bqq_posts p
+        LEFT JOIN bqq_postmeta pm_es   ON p.ID = pm_es.post_id   AND pm_es.meta_key   = 'enquiry_status'
+        LEFT JOIN bqq_postmeta pm_src  ON p.ID = pm_src.post_id  AND pm_src.meta_key  = 'utm_source'
+        LEFT JOIN bqq_postmeta pm_med  ON p.ID = pm_med.post_id  AND pm_med.meta_key  = 'utm_medium'
+        LEFT JOIN bqq_postmeta pm_cmp  ON p.ID = pm_cmp.post_id  AND pm_cmp.meta_key  = 'utm_campaign'
+        LEFT JOIN bqq_postmeta pm_ag   ON p.ID = pm_ag.post_id   AND pm_ag.meta_key   = 'utm_ad_group'
+        LEFT JOIN bqq_postmeta pm_trm  ON p.ID = pm_trm.post_id  AND pm_trm.meta_key  = 'utm_term'
+        LEFT JOIN bqq_postmeta pm_dev  ON p.ID = pm_dev.post_id  AND pm_dev.meta_key  = 'device_type'
+        LEFT JOIN bqq_postmeta pm_lp   ON p.ID = pm_lp.post_id   AND pm_lp.meta_key   = 'landing_page'
+        LEFT JOIN bqq_postmeta pm_gc   ON p.ID = pm_gc.post_id   AND pm_gc.meta_key   = 'gclid'
+        LEFT JOIN bqq_postmeta pm_ni   ON p.ID = pm_ni.post_id   AND pm_ni.meta_key   = 'reason_not_interested'
+        LEFT JOIN bqq_postmeta pm_jn   ON p.ID = pm_jn.post_id   AND pm_jn.meta_key   = 'job_number'
+        LEFT JOIN bqq_postmeta pm_sr   ON p.ID = pm_sr.post_id   AND pm_sr.meta_key   = 'sales_rep'
+        LEFT JOIN bqq_postmeta pm_pt   ON p.ID = pm_pt.post_id   AND pm_pt.meta_key   = 'package_type'
+        LEFT JOIN bqq_postmeta pm_eqs  ON p.ID = pm_eqs.post_id  AND pm_eqs.meta_key  = 'enquiry_source'
+        LEFT JOIN bqq_postmeta pm_cd   ON p.ID = pm_cd.post_id   AND pm_cd.meta_key   = 'contacted_date'
+        LEFT JOIN bqq_postmeta pm_inv  ON p.ID = pm_inv.post_id  AND pm_inv.meta_key  = 'invoiced_date'
+        LEFT JOIN bqq_postmeta pm_cpd  ON p.ID = pm_cpd.post_id  AND pm_cpd.meta_key  = 'completion_date'
+        LEFT JOIN bqq_postmeta pm_apd  ON p.ID = pm_apd.post_id  AND pm_apd.meta_key  = 'appointment_date'
+        LEFT JOIN bqq_postmeta pm_cv   ON p.ID = pm_cv.post_id   AND pm_cv.meta_key   = 'calculated_value'
+        LEFT JOIN bqq_postmeta pm_fv   ON p.ID = pm_fv.post_id   AND pm_fv.meta_key   = 'final_value'
+        LEFT JOIN bqq_postmeta pm_tech ON p.ID = pm_tech.post_id AND pm_tech.meta_key = 'technician'
+        WHERE p.post_type = 'clientenquiry'
+          AND p.post_status != 'trash'
+      `;
+
+      if (args.start_date) { sql += ` AND p.post_date >= ?`; params.push(args.start_date + ' 00:00:00'); }
+      if (args.end_date)   { sql += ` AND p.post_date <= ?`; params.push(args.end_date   + ' 23:59:59'); }
+      if (args.status)     { sql += ` AND pm_es.meta_value = ?`; params.push(args.status); }
+
+      sql += ` ORDER BY p.post_date DESC LIMIT ${limit}`;
+
+      const rows = await query(sql, params);
+      const str = (v) => (v != null && String(v).trim() !== '' ? String(v).trim() : null);
+      return rows.map((r) => ({
+        id:               r.id,
+        date:             r.date,
+        enquiry_status:   str(r.enquiry_status),
+        utm_source:       str(r.utm_source),
+        utm_medium:       str(r.utm_medium),
+        utm_campaign:     str(r.utm_campaign),
+        utm_ad_group:     str(r.utm_ad_group),
+        utm_term:         str(r.utm_term),
+        device_type:      str(r.device_type),
+        landing_page:     str(r.landing_page),
+        gclid:            str(r.gclid),
+        reason_not_interested: str(r.reason_not_interested),
+        job_number:       str(r.job_number),
+        sales_rep:        str(r.sales_rep),
+        package_type:     str(r.package_type),
+        enquiry_source:   str(r.enquiry_source),
+        contacted_date:   str(r.contacted_date),
+        invoiced_date:    str(r.invoiced_date),
+        completion_date:  str(r.completion_date),
+        appointment_date: str(r.appointment_date),
+        calculated_value: str(r.calculated_value),
+        final_value:      str(r.final_value),
+        technician:       str(r.technician),
+      }));
+    }
+
+    case 'wp_get_progress_details': {
+      const limit  = Math.min(parseInt(args.limit || 1000), 5000);
+      const params = [];
+
+      // Step 1 — all post IDs + dates in the range
+      let postSql = `
+        SELECT p.ID AS post_id, p.post_date AS enquiry_date
+        FROM bqq_posts p
+        WHERE p.post_type = 'clientenquiry'
+          AND p.post_status != 'trash'
+      `;
+      if (args.start_date) { postSql += ` AND p.post_date >= ?`; params.push(args.start_date + ' 00:00:00'); }
+      if (args.end_date)   { postSql += ` AND p.post_date <= ?`; params.push(args.end_date   + ' 23:59:59'); }
+      postSql += ` ORDER BY p.post_date DESC LIMIT ${limit}`;
+
+      const posts = await query(postSql, params);
+      if (!posts.length) return [];
+
+      const postIds = posts.map((p) => p.post_id);
+
+      // Step 2 — all progress_details meta rows for those IDs
+      const placeholders = postIds.map(() => '?').join(',');
+      const metaRows = await query(
+        `SELECT pm.post_id, pm.meta_key, pm.meta_value
+           FROM bqq_postmeta pm
+          WHERE pm.post_id IN (${placeholders})
+            AND pm.meta_key NOT LIKE '\\_%'
+            AND (
+              pm.meta_key = 'progress_details'
+              OR pm.meta_key REGEXP '^progress_details_[0-9]+_(staff_member|entry_date|next_event|next_action|event_message)$'
+            )
+          ORDER BY pm.post_id, pm.meta_key`,
+        postIds
+      );
+
+      // Step 3 — group into per-post structure; include all posts even with zero rows
+      const byPost = new Map();
+      for (const p of posts) {
+        byPost.set(p.post_id, { post_id: p.post_id, enquiry_date: p.enquiry_date, count: null, rows: {} });
+      }
+      for (const row of metaRows) {
+        const post = byPost.get(row.post_id);
+        if (!post) continue;
+        if (row.meta_key === 'progress_details') {
+          post.count = parseInt(row.meta_value) || 0;
+          continue;
+        }
+        const m = row.meta_key.match(/^progress_details_(\d+)_(.+)$/);
+        if (!m) continue;
+        const [, idx, field] = m;
+        if (!post.rows[idx]) post.rows[idx] = { index: parseInt(idx) };
+        post.rows[idx][field] = row.meta_value || null;
+      }
+
+      return Array.from(byPost.values()).map((p) => {
+        const sortedRows = Object.values(p.rows).sort((a, b) => a.index - b.index);
+        return {
+          post_id:      p.post_id,
+          enquiry_date: p.enquiry_date,
+          row_count:    p.count !== null ? p.count : sortedRows.length,
+          rows:         sortedRows,
+        };
       });
     }
 

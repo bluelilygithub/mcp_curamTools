@@ -261,6 +261,55 @@ const enquiryFieldCheckTool = {
   },
 };
 
+const getEnquiryDetailsTool = {
+  name: 'get_enquiry_details',
+  description: 'Extended CRM enquiry records with full sales pipeline fields: enquiry_status, UTM attribution, device, sales_rep, package_type, enquiry_source, contacted_date, invoiced_date, completion_date, appointment_date, final_value, technician, job_number. Use for lead velocity, pipeline analysis, sales rep performance, or any question needing financial or assignment data not in get_enquiries.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      limit:      { type: 'integer', description: 'Max records. Default 1000. Use 3000+ for full history.' },
+      start_date: { type: 'string',  description: 'Fetch enquiries on or after this date (YYYY-MM-DD).' },
+      end_date:   { type: 'string',  description: 'Fetch enquiries on or before this date (YYYY-MM-DD).' },
+      status:     { type: 'string',  description: 'Filter by enquiry_status value.' },
+    },
+    required: [],
+  },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(input, context) {
+    const wp = await getWordPressServer(context.orgId);
+    const result = await callMcpTool(context.orgId, wp, 'wp_get_enquiry_details', {
+      limit:      input.limit      ?? 1000,
+      start_date: input.start_date ?? undefined,
+      end_date:   input.end_date   ?? undefined,
+      status:     input.status     ?? undefined,
+    });
+    return applyFieldExclusions(result, context.orgId);
+  },
+};
+
+const getProgressDetailsTool = {
+  name: 'get_progress_details',
+  description: 'Fetch progress_details ACF repeater rows (Enquiry Related Activities) for clientenquiry records. Each row has: entry_date (d/m/Y g:i a timestamp), next_event (scheduled follow-up datetime), next_action (Phone/Email/Appointment/Invoice/Warranty), event_message (notes), staff_member. All enquiries in the date range are returned — posts with zero rows have row_count=0. Use for follow-up intensity, response time analysis, stale lead detection, or any question about what actions were taken on a lead.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      limit:      { type: 'integer', description: 'Max enquiries to scan. Default 1000.' },
+      start_date: { type: 'string',  description: 'Fetch enquiries submitted on or after this date (YYYY-MM-DD).' },
+      end_date:   { type: 'string',  description: 'Fetch enquiries submitted on or before this date (YYYY-MM-DD).' },
+    },
+    required: [],
+  },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(input, context) {
+    const wp = await getWordPressServer(context.orgId);
+    return callMcpTool(context.orgId, wp, 'wp_get_progress_details', {
+      limit:      input.limit      ?? 1000,
+      start_date: input.start_date ?? undefined,
+      end_date:   input.end_date   ?? undefined,
+    });
+  },
+};
+
 const findMetaKeyTool = {
   name: 'find_meta_key',
   description: 'Search bqq_postmeta for rows matching a partial key or value pattern. Use to locate the exact meta_key a field is stored under — useful when a field name is uncertain or when looking for ACF fields. Note: ACF stores each field twice — the real value under the plain key (e.g. reason_not_interested) and an internal pointer under an underscore-prefixed key (e.g. _reason_not_interested). Always use the plain key.',
@@ -435,7 +484,9 @@ const googleAdsConversationTools = [
   getConversionEventsTool,
   // CRM — full set
   getEnquiriesTool,
+  getEnquiryDetailsTool,
   getNotInterestedReasonsTool,
+  getProgressDetailsTool,
   enquiryFieldCheckTool,
   findMetaKeyTool,
   // Platform history — full set

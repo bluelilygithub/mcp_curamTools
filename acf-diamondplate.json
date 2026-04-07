@@ -1,0 +1,1780 @@
+[
+    {
+        "key": "group_65dad4fde7458",
+        "title": "Client Enquiries",
+        "fields": [
+            {
+                "key": "column_row_0___job_details",
+                "label": "(Column 12\/12)",
+                "name": "",
+                "aria-label": "",
+                "type": "acfe_column",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": ""
+                },
+                "columns": "12\/12",
+                "endpoint": 0,
+                "border": [
+                    "column"
+                ],
+                "border_endpoint": []
+            },
+            {
+                "key": "field_66ba31bce6e25",
+                "label": "Job Number",
+                "name": "job_number",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "13.33",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_65fe63ac39340",
+                "label": "Sales Rep",
+                "name": "sales_rep",
+                "aria-label": "",
+                "type": "user",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "20",
+                    "class": "",
+                    "id": ""
+                },
+                "role": [
+                    "salesrep"
+                ],
+                "return_format": "array",
+                "multiple": 0,
+                "max": "",
+                "acfe_bidirectional": {
+                    "acfe_bidirectional_enabled": "0"
+                },
+                "allow_null": 0,
+                "bidirectional": 0,
+                "bidirectional_target": [],
+                "min": ""
+            },
+            {
+                "key": "field_65dae08077cc7",
+                "label": "Package Type",
+                "name": "package_type",
+                "aria-label": "",
+                "type": "select",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "13.33",
+                    "class": "",
+                    "id": ""
+                },
+                "choices": {
+                    "Premium Package": "Premium Package",
+                    "Premium Package Plus": "Premium Package Plus",
+                    "Diamond Package": "Diamond Package",
+                    "Diamond Package Plus": "Diamond Package Plus",
+                    "Unsure - Need Advice": "Unsure - Need Advice"
+                },
+                "default_value": "Unsure - Need Advice",
+                "return_format": "value",
+                "multiple": 0,
+                "max": "",
+                "prepend": "",
+                "append": "",
+                "allow_null": 0,
+                "ui": 0,
+                "ajax": 0,
+                "placeholder": "",
+                "allow_custom": 0,
+                "search_placeholder": "",
+                "min": "",
+                "create_options": 0,
+                "save_options": 0
+            },
+            {
+                "key": "field_6635abe5f15b4",
+                "label": "Enquiry Source",
+                "name": "enquiry_source",
+                "aria-label": "",
+                "type": "select",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": [
+                    [
+                        {
+                            "field": "field_65dad5b4b3322",
+                            "operator": "!=empty"
+                        }
+                    ]
+                ],
+                "wrapper": {
+                    "width": "13.33",
+                    "class": "",
+                    "id": ""
+                },
+                "choices": {
+                    "chatbot": "Chatbot",
+                    "web": "Website",
+                    "phone": "Phone",
+                    "email": "Email",
+                    "facebook": "Facebook"
+                },
+                "default_value": "web",
+                "return_format": "value",
+                "multiple": 0,
+                "max": "",
+                "prepend": "",
+                "append": "",
+                "allow_null": 0,
+                "allow_in_bindings": 1,
+                "ui": 0,
+                "ajax": 0,
+                "placeholder": "",
+                "create_options": 0,
+                "save_options": 0,
+                "allow_custom": 0,
+                "search_placeholder": "",
+                "min": ""
+            },
+            {
+                "key": "field_65dbc4f8f532f",
+                "label": "Enquiry Status",
+                "name": "enquiry_status",
+                "aria-label": "",
+                "type": "select",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "13.33",
+                    "class": "",
+                    "id": ""
+                },
+                "choices": {
+                    "new": "New Enquiry",
+                    "contacted": "Contacted",
+                    "emailed": "Emailed",
+                    "assigned": "Invoiced & Assigned",
+                    "completed": "Completed & Warrantied",
+                    "notinterested": "Not Interested",
+                    "cancelled": "Cancelled"
+                },
+                "default_value": "New",
+                "return_format": "value",
+                "multiple": 0,
+                "max": "",
+                "prepend": "",
+                "append": "",
+                "allow_null": 0,
+                "ui": 0,
+                "ajax": 0,
+                "placeholder": "",
+                "allow_custom": 0,
+                "search_placeholder": "",
+                "min": "",
+                "create_options": 0,
+                "save_options": 0
+            },
+            {
+                "key": "field_reason_not_interested",
+                "label": "Reason Not Interested",
+                "name": "reason_not_interested",
+                "aria-label": "",
+                "type": "select",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": [
+                    [
+                        {
+                            "field": "field_65dbc4f8f532f",
+                            "operator": "==",
+                            "value": "notinterested"
+                        }
+                    ]
+                ],
+                "wrapper": {
+                    "width": "13.33",
+                    "class": "",
+                    "id": ""
+                },
+                "choices": {
+                    "too_expensive": "Too Expensive",
+                    "wrong_products": "Wrong Products",
+                    "wrong_location": "Wrong Location"
+                },
+                "default_value": false,
+                "return_format": "value",
+                "multiple": 0,
+                "allow_null": 1,
+                "ui": 0,
+                "ajax": 0,
+                "placeholder": "Select reason",
+                "allow_custom": 0,
+                "search_placeholder": "",
+                "create_options": 0,
+                "save_options": 0,
+                "prepend": "",
+                "append": "",
+                "min": "",
+                "max": ""
+            },
+            {
+                "key": "endpoint_0",
+                "label": "(Column Endpoint)",
+                "name": "",
+                "aria-label": "",
+                "type": "acfe_column",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": ""
+                },
+                "columns": "12\/12",
+                "endpoint": 1,
+                "border": [],
+                "border_endpoint": [
+                    "endpoint"
+                ]
+            },
+            {
+                "key": "column_row_1___client_and_admin",
+                "label": "(Column 12\/12)",
+                "name": "",
+                "aria-label": "",
+                "type": "acfe_column",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": ""
+                },
+                "columns": "12\/12",
+                "endpoint": 0,
+                "border": [
+                    "column"
+                ],
+                "border_endpoint": []
+            },
+            {
+                "key": "field_65dad5b4b3322",
+                "label": "First Name",
+                "name": "firstname",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "16.66",
+                    "class": "michaelClass",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_65dad5ddb3323",
+                "label": "Last Name",
+                "name": "lastname",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "16.66",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_65dadf536b38f",
+                "label": "Email",
+                "name": "email",
+                "aria-label": "",
+                "type": "email",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "16.66",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "allow_in_bindings": 0,
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_65dadf656b390",
+                "label": "Phone",
+                "name": "phone",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "16.66",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_66935c2f2b69c",
+                "label": "Company Name",
+                "name": "company_name",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "16.66",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_65fe62f33933f",
+                "label": "Address",
+                "name": "address",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "30",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_65dadee86fd57",
+                "label": "Suburb",
+                "name": "suburb",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "15",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_65dadf1f6fd58",
+                "label": "State",
+                "name": "state",
+                "aria-label": "",
+                "type": "select",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "10",
+                    "class": "",
+                    "id": ""
+                },
+                "choices": {
+                    "ACT": "ACT",
+                    "NSW": "NSW",
+                    "NT": "NT",
+                    "QLD": "QLD",
+                    "SA": "SA",
+                    "TAS": "TAS",
+                    "VIC": "VIC",
+                    "WA": "WA"
+                },
+                "default_value": false,
+                "return_format": "value",
+                "multiple": 0,
+                "max": "",
+                "prepend": "",
+                "append": "",
+                "allow_null": 0,
+                "ui": 0,
+                "ajax": 0,
+                "placeholder": "",
+                "allow_custom": 0,
+                "search_placeholder": "",
+                "min": "",
+                "create_options": 0,
+                "save_options": 0
+            },
+            {
+                "key": "field_65dadf296fd59",
+                "label": "Postcode",
+                "name": "postcode",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "15",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_66ba2fcea4f54",
+                "label": "Different Address",
+                "name": "different_address",
+                "aria-label": "",
+                "type": "checkbox",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": [
+                    [
+                        {
+                            "field": "field_65dad5b4b3322",
+                            "operator": "!=empty"
+                        }
+                    ]
+                ],
+                "wrapper": {
+                    "width": "25",
+                    "class": "",
+                    "id": ""
+                },
+                "choices": {
+                    "Yes": "Yes"
+                },
+                "default_value": [],
+                "return_format": "value",
+                "min": "",
+                "max": "",
+                "allow_custom": 0,
+                "layout": "vertical",
+                "toggle": 0,
+                "save_custom": 0,
+                "custom_choice_button_text": "Add new choice"
+            },
+            {
+                "key": "field_66ba2fd2a4f55",
+                "label": "Job Address",
+                "name": "job_address",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": [
+                    [
+                        {
+                            "field": "field_66ba2fcea4f54",
+                            "operator": "==",
+                            "value": "Yes"
+                        }
+                    ]
+                ],
+                "wrapper": {
+                    "width": "75",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "endpoint_1",
+                "label": "(Column Endpoint)",
+                "name": "",
+                "aria-label": "",
+                "type": "acfe_column",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": ""
+                },
+                "columns": "12\/12",
+                "endpoint": 1,
+                "border": [],
+                "border_endpoint": [
+                    "endpoint"
+                ]
+            },
+            {
+                "key": "column_row_2___vehicle_and_product",
+                "label": "(Column 12\/12)",
+                "name": "",
+                "aria-label": "",
+                "type": "acfe_column",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": ""
+                },
+                "columns": "12\/12",
+                "endpoint": 0,
+                "border": [
+                    "column"
+                ],
+                "border_endpoint": []
+            },
+            {
+                "key": "field_65dad6267124e",
+                "label": "Vehicle Make",
+                "name": "vehicle_make",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "16.66",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_6620600ef35b1",
+                "label": "Vehicle Model",
+                "name": "vehicle_model",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "16.66",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_65fe63bf39341",
+                "label": "Vehicle Rego",
+                "name": "vehicle_rego",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "16.66",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_65dad65a7124f",
+                "label": "Vehicle Year",
+                "name": "vehicle_year",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "16.66",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_660765e980148",
+                "label": "Vehicle Color",
+                "name": "vehicle_color",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "16.66",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_662060eedb900",
+                "label": "Vehicle Condition",
+                "name": "vehicle_condition",
+                "aria-label": "",
+                "type": "radio",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "16.66",
+                    "class": "",
+                    "id": ""
+                },
+                "choices": {
+                    "New": "New",
+                    "Used": "Used"
+                },
+                "default_value": "",
+                "return_format": "value",
+                "allow_null": 0,
+                "other_choice": 0,
+                "layout": "horizontal",
+                "save_other_choice": 0
+            },
+            {
+                "key": "field_660768005318c",
+                "label": "Products <span>(Hold 'control' key to select Multi)<\/span>",
+                "name": "products",
+                "aria-label": "",
+                "type": "select",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": "products_select_id"
+                },
+                "choices": {
+                    "329998": "Diamond Plate - Graphene Double coat + Interior (fabric, vinyl, leather) + Scratch and Dent Membership 3 years    :  ( $2,385.00 )",
+                    "329999": "Diamond Plate - Graphene Single coat + Interior (Fabric\/Vinyl\/Leather) + Scratch and Dent  3 year membership    :  ( $1,995.00 )",
+                    "312684": "Diamond Plate 9H+ Ceramic With Graphene    :  ( $890.00 )",
+                    "312706": "Diamond Plate 9H+ Ceramic with Graphene - Extra Coating    :  ( $295.00 )",
+                    "330018": "DIAMOND PLATE DOUBLE COAT GRAPHENE 12 YEAR WARRANTY    :  ( $1,490.00 )",
+                    "312686": "Diamond Plate Fabric, Vinyl + Wheel Protection    :  ( $295.00 )",
+                    "312696": "Diamond Plate Interior + Wheel Protection    :  ( $295.00 )",
+                    "330010": "DIAMOND PLATE SINGLE COAT GRAPHENE 12 YEAR WARRANTY    :  ( $990.00 )",
+                    "323420": "Diamond Plate Wheels Protection    :  ( $80.00 )",
+                    "330012": "FABRIC PROTECTION 12 YEAR WARRANTY",
+                    "330016": "LEATHER PROTECTION 12 YEAR WARRANTY",
+                    "330656": "Re-application    :  ( $750.00 )",
+                    "329997": "Scratch and dent 3 year membership    :  ( $500.00 )",
+                    "312707": "Stage 1 Paint Correction    :  ( $200.00 )",
+                    "312708": "Stage 2 Paint Correction    :  ( $400.00 )",
+                    "312709": "Stage 3 Paint Correction    :  ( $600.00 )",
+                    "330014": "VINYL PROTECTION 12 YEAR WARRANTY"
+                },
+                "default_value": [],
+                "return_format": "value",
+                "multiple": 1,
+                "min": "",
+                "max": "",
+                "prepend": "",
+                "append": "",
+                "allow_null": true,
+                "allow_in_bindings": 1,
+                "ui": 0,
+                "ajax": 0,
+                "placeholder": "",
+                "create_options": 0,
+                "save_options": 0,
+                "allow_custom": 0,
+                "search_placeholder": ""
+            },
+            {
+                "key": "field_664ff64443ecd",
+                "label": "Calculated Value",
+                "name": "calculated_value",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "20",
+                    "class": "",
+                    "id": "calculated_value"
+                },
+                "default_value": "",
+                "maxlength": "",
+                "allow_in_bindings": 1,
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_65dbc6c2866ec",
+                "label": "Agreed Sales Value",
+                "name": "final_value",
+                "aria-label": "",
+                "type": "number",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "15",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": 0,
+                "min": "",
+                "max": "",
+                "allow_in_bindings": 1,
+                "placeholder": "",
+                "step": "",
+                "prepend": "$",
+                "append": ""
+            },
+            {
+                "key": "endpoint_2",
+                "label": "(Column Endpoint)",
+                "name": "",
+                "aria-label": "",
+                "type": "acfe_column",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": ""
+                },
+                "columns": "12\/12",
+                "endpoint": 1,
+                "border": [],
+                "border_endpoint": [
+                    "endpoint"
+                ]
+            },
+            {
+                "key": "column_row_3___technician",
+                "label": "(Column 12\/12)",
+                "name": "",
+                "aria-label": "",
+                "type": "acfe_column",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": ""
+                },
+                "columns": "12\/12",
+                "endpoint": 0,
+                "border": [
+                    "column"
+                ],
+                "border_endpoint": []
+            },
+            {
+                "key": "field_66ba317661547",
+                "label": "At technicians premises",
+                "name": "at_techsite",
+                "aria-label": "",
+                "type": "checkbox",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "12",
+                    "class": "",
+                    "id": ""
+                },
+                "choices": {
+                    "Yes": "Yes"
+                },
+                "default_value": [],
+                "return_format": "value",
+                "min": "",
+                "max": "",
+                "allow_custom": 0,
+                "layout": "vertical",
+                "toggle": 0,
+                "save_custom": 0,
+                "custom_choice_button_text": "Add new choice"
+            },
+            {
+                "key": "field_65dbc685e179f",
+                "label": "Technician",
+                "name": "technician",
+                "aria-label": "",
+                "type": "select",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "17",
+                    "class": "",
+                    "id": ""
+                },
+                "choices": [],
+                "default_value": false,
+                "return_format": "value",
+                "multiple": 0,
+                "max": "",
+                "prepend": "",
+                "append": "",
+                "allow_null": 0,
+                "ui": 0,
+                "ajax": 0,
+                "placeholder": "",
+                "allow_custom": 0,
+                "search_placeholder": "",
+                "min": "",
+                "create_options": 0,
+                "save_options": 0
+            },
+            {
+                "key": "field_6607e48180354",
+                "label": "Email",
+                "name": "technician_email",
+                "aria-label": "",
+                "type": "email",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "17",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "allow_in_bindings": 0,
+                "placeholder": "",
+                "prepend": "",
+                "append": "",
+                "readonly": true
+            },
+            {
+                "key": "field_6607e49a80355",
+                "label": "Phone",
+                "name": "technician_phone",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "16",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "placeholder": "",
+                "prepend": "",
+                "append": "",
+                "readonly": true
+            },
+            {
+                "key": "field_660764f98495f",
+                "label": "Appointment Date",
+                "name": "appointment_date",
+                "aria-label": "",
+                "type": "date_time_picker",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "12",
+                    "class": "",
+                    "id": ""
+                },
+                "display_format": "d\/m\/Y g:i a",
+                "return_format": "d\/m\/Y g:i a",
+                "first_day": 1,
+                "placeholder": "",
+                "min_date": "",
+                "max_date": "",
+                "min_time": "",
+                "max_time": "",
+                "no_weekends": 0,
+                "min_hour": "",
+                "max_hour": "",
+                "min_min": "",
+                "max_min": "",
+                "min_sec": "",
+                "max_sec": ""
+            },
+            {
+                "key": "field_6618979c44fb3",
+                "label": "Email Client Warranties",
+                "name": "email_warranty",
+                "aria-label": "",
+                "type": "true_false",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": [
+                    [
+                        {
+                            "field": "field_65dbc4f8f532f",
+                            "operator": "==",
+                            "value": "completed"
+                        },
+                        {
+                            "field": "field_660768005318c",
+                            "operator": "!=empty"
+                        }
+                    ],
+                    [
+                        {
+                            "field": "field_65dbc4f8f532f",
+                            "operator": "==",
+                            "value": "assigned"
+                        },
+                        {
+                            "field": "field_660768005318c",
+                            "operator": "!=empty"
+                        }
+                    ]
+                ],
+                "wrapper": {
+                    "width": "12",
+                    "class": "",
+                    "id": ""
+                },
+                "message": "Tick & Save",
+                "default_value": 0,
+                "ui": 0,
+                "ui_on_text": "",
+                "ui_off_text": "",
+                "style": ""
+            },
+            {
+                "key": "field_66076a821bf6d",
+                "label": "Email Client & Technician",
+                "name": "email_technician",
+                "aria-label": "",
+                "type": "true_false",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": [
+                    [
+                        {
+                            "field": "field_660764f98495f",
+                            "operator": "!=empty"
+                        }
+                    ]
+                ],
+                "wrapper": {
+                    "width": "14",
+                    "class": "",
+                    "id": ""
+                },
+                "message": "Tick & Save",
+                "default_value": 0,
+                "ui": 0,
+                "ui_on_text": "",
+                "ui_off_text": "",
+                "style": ""
+            },
+            {
+                "key": "field_660768d42a6a7",
+                "label": "Technicians Instructions",
+                "name": "technician_instructions",
+                "aria-label": "",
+                "type": "textarea",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "100",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "acfe_textarea_code": 0,
+                "maxlength": "",
+                "rows": 3,
+                "placeholder": "",
+                "new_lines": ""
+            },
+            {
+                "key": "endpoint_3",
+                "label": "(Column Endpoint)",
+                "name": "",
+                "aria-label": "",
+                "type": "acfe_column",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": ""
+                },
+                "columns": "12\/12",
+                "endpoint": 1,
+                "border": [],
+                "border_endpoint": [
+                    "endpoint"
+                ]
+            },
+            {
+                "key": "column_full_width",
+                "label": "(Column 12\/12)",
+                "name": "",
+                "aria-label": "",
+                "type": "acfe_column",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": ""
+                },
+                "columns": "12\/12",
+                "endpoint": 0,
+                "border": [],
+                "border_endpoint": []
+            },
+            {
+                "key": "field_65dae54c777ba",
+                "label": "Enquiry Related Activities",
+                "name": "progress_details",
+                "aria-label": "",
+                "type": "repeater",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": ""
+                },
+                "acfe_repeater_stylised_button": 1,
+                "layout": "block",
+                "pagination": 0,
+                "min": 0,
+                "max": 0,
+                "collapsed": "",
+                "button_label": "Add New Job Activity",
+                "rows_per_page": 20,
+                "sub_fields": [
+                    {
+                        "key": "field_65fe6b82a3898",
+                        "label": "Staff Member",
+                        "name": "staff_member",
+                        "aria-label": "",
+                        "type": "text",
+                        "instructions": "",
+                        "required": 0,
+                        "conditional_logic": 0,
+                        "wrapper": {
+                            "width": "25",
+                            "class": "",
+                            "id": ""
+                        },
+                        "default_value": "master",
+                        "maxlength": "",
+                        "placeholder": "",
+                        "prepend": "",
+                        "append": "",
+                        "disabled": true,
+                        "parent_repeater": "field_65dae54c777ba"
+                    },
+                    {
+                        "key": "field_65dae59d777bb",
+                        "label": "Entry Date",
+                        "name": "entry_date",
+                        "aria-label": "",
+                        "type": "date_time_picker",
+                        "instructions": "",
+                        "required": 0,
+                        "conditional_logic": 0,
+                        "wrapper": {
+                            "width": "24",
+                            "class": "",
+                            "id": ""
+                        },
+                        "display_format": "d\/m\/Y g:i a",
+                        "return_format": "d\/m\/Y g:i a",
+                        "first_day": 1,
+                        "placeholder": "",
+                        "min_date": "",
+                        "max_date": "",
+                        "min_time": "",
+                        "max_time": "",
+                        "no_weekends": 0,
+                        "min_hour": "",
+                        "max_hour": "",
+                        "min_min": "",
+                        "max_min": "",
+                        "min_sec": "",
+                        "max_sec": "",
+                        "default_value": "07\/04\/2026 9:17 pm",
+                        "disabled": true,
+                        "parent_repeater": "field_65dae54c777ba"
+                    },
+                    {
+                        "key": "field_65dae5e5777bc",
+                        "label": "Next Event",
+                        "name": "next_event",
+                        "aria-label": "",
+                        "type": "date_time_picker",
+                        "instructions": "",
+                        "required": 1,
+                        "conditional_logic": 0,
+                        "wrapper": {
+                            "width": "25",
+                            "class": "",
+                            "id": ""
+                        },
+                        "display_format": "d\/m\/Y g:i a",
+                        "return_format": "d\/m\/Y g:i a",
+                        "first_day": 1,
+                        "placeholder": "",
+                        "min_date": "",
+                        "max_date": "",
+                        "min_time": "",
+                        "max_time": "",
+                        "no_weekends": 1,
+                        "min_hour": "",
+                        "max_hour": "",
+                        "min_min": "",
+                        "max_min": "",
+                        "min_sec": "",
+                        "max_sec": "",
+                        "required_message": "",
+                        "parent_repeater": "field_65dae54c777ba"
+                    },
+                    {
+                        "key": "field_65dae615777bd",
+                        "label": "Next Action",
+                        "name": "next_action",
+                        "aria-label": "",
+                        "type": "select",
+                        "instructions": "",
+                        "required": 0,
+                        "conditional_logic": 0,
+                        "wrapper": {
+                            "width": "25",
+                            "class": "",
+                            "id": ""
+                        },
+                        "choices": {
+                            "Phone": "Phone",
+                            "Email": "Email",
+                            "Appointment": "Appointment",
+                            "Invoice": "Invoice",
+                            "Warranty": "Warranty"
+                        },
+                        "default_value": false,
+                        "return_format": "value",
+                        "multiple": 0,
+                        "max": "",
+                        "allow_custom": 0,
+                        "search_placeholder": "",
+                        "prepend": "",
+                        "append": "",
+                        "allow_null": 0,
+                        "ui": 1,
+                        "ajax": 0,
+                        "placeholder": "",
+                        "min": "",
+                        "parent_repeater": "field_65dae54c777ba",
+                        "create_options": 0,
+                        "save_options": 0
+                    },
+                    {
+                        "key": "field_65dae666f33dc",
+                        "label": "Message Log",
+                        "name": "event_message",
+                        "aria-label": "",
+                        "type": "textarea",
+                        "instructions": "",
+                        "required": 0,
+                        "conditional_logic": 0,
+                        "wrapper": {
+                            "width": "100",
+                            "class": "",
+                            "id": ""
+                        },
+                        "default_value": "",
+                        "acfe_textarea_code": 0,
+                        "maxlength": "",
+                        "rows": 3,
+                        "placeholder": "",
+                        "new_lines": "",
+                        "parent_repeater": "field_65dae54c777ba"
+                    }
+                ]
+            }
+        ],
+        "location": [
+            [
+                {
+                    "param": "post_type",
+                    "operator": "==",
+                    "value": "clientenquiry"
+                }
+            ]
+        ],
+        "menu_order": 0,
+        "position": "acf_after_title",
+        "style": "default",
+        "label_placement": "top",
+        "instruction_placement": "above_field",
+        "hide_on_screen": "",
+        "active": true,
+        "description": "",
+        "show_in_rest": 1,
+        "acfe_autosync": "",
+        "acfe_form": 0,
+        "acfe_display_title": "",
+        "acfe_meta": "",
+        "acfe_note": ""
+    },
+    {
+        "key": "group_662209a38ae03",
+        "title": "Job Details",
+        "fields": [
+            {
+                "key": "field_6624627cd9afc",
+                "label": "Vehicle Warranties",
+                "name": "vehicle_warranties",
+                "aria-label": "",
+                "type": "file",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": "add_warranty"
+                },
+                "uploader": "",
+                "return_format": "array",
+                "upload_folder": "",
+                "button_label": "Add File",
+                "multiple": 1,
+                "min": "",
+                "max": "",
+                "min_size": "",
+                "max_size": "",
+                "mime_types": "",
+                "library": "all",
+                "preview_style": "default",
+                "placeholder": "Select",
+                "stylised_button": 0,
+                "file_count": 0
+            },
+            {
+                "key": "field_6634cdbf3e3a5",
+                "label": "Status Details",
+                "name": "email_details",
+                "aria-label": "",
+                "type": "textarea",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "acfe_textarea_code": 0,
+                "maxlength": "",
+                "rows": "",
+                "placeholder": "",
+                "new_lines": "",
+                "disabled": true,
+                "readonly": true
+            },
+            {
+                "key": "field_668640f667412",
+                "label": "Last Contacted Date",
+                "name": "contacted_date",
+                "aria-label": "",
+                "type": "date_picker",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": ""
+                },
+                "hide_field": "",
+                "hide_label": "",
+                "hide_instructions": "",
+                "hide_required": "",
+                "display_format": "d\/m\/Y",
+                "return_format": "d\/m\/Y",
+                "first_day": 1,
+                "placeholder": "",
+                "min_date": "",
+                "max_date": "",
+                "no_weekends": 0,
+                "acfe_settings": "",
+                "acfe_validate": "",
+                "instruction_placement": "",
+                "acfe_permissions": "",
+                "disabled": true,
+                "readonly": true
+            },
+            {
+                "key": "field_668635c99931e",
+                "label": "Invoiced Date",
+                "name": "invoiced_date",
+                "aria-label": "",
+                "type": "date_picker",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": ""
+                },
+                "hide_field": "",
+                "hide_label": "",
+                "hide_instructions": "",
+                "hide_required": "",
+                "display_format": "d\/m\/Y",
+                "return_format": "d\/m\/Y",
+                "first_day": 1,
+                "placeholder": "",
+                "min_date": "",
+                "max_date": "",
+                "no_weekends": 0,
+                "acfe_settings": "",
+                "acfe_validate": "",
+                "acfe_permissions": "",
+                "instruction_placement": "",
+                "disabled": true,
+                "readonly": true
+            },
+            {
+                "key": "field_667f89357f568",
+                "label": "Completion Date",
+                "name": "completion_date",
+                "aria-label": "",
+                "type": "date_picker",
+                "instructions": "",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "",
+                    "class": "",
+                    "id": ""
+                },
+                "display_format": "d\/m\/Y",
+                "return_format": "d\/m\/Y",
+                "first_day": 1,
+                "placeholder": "",
+                "min_date": "",
+                "max_date": "",
+                "no_weekends": 0,
+                "disabled": true,
+                "readonly": true
+            }
+        ],
+        "location": [
+            [
+                {
+                    "param": "post_type",
+                    "operator": "==",
+                    "value": "clientenquiry"
+                }
+            ]
+        ],
+        "menu_order": 0,
+        "position": "side",
+        "style": "default",
+        "label_placement": "top",
+        "instruction_placement": "label",
+        "hide_on_screen": "",
+        "active": true,
+        "description": "",
+        "show_in_rest": 0,
+        "acfe_autosync": "",
+        "acfe_form": 1,
+        "acfe_display_title": "",
+        "acfe_permissions": "",
+        "acfe_meta": "",
+        "acfe_note": ""
+    },
+    {
+        "key": "group_6993edd04e744",
+        "title": "Google Tracking",
+        "fields": [
+            {
+                "key": "field_6993edff564f0",
+                "label": "UTM Source",
+                "name": "utm_source",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "Traffic source (e.g. google, facebook, newsletter).",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "33",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "allow_in_bindings": 0,
+                "placeholder": "",
+                "prepend": "",
+                "append": "",
+                "readonly": 1,
+                "disabled": 1
+            },
+            {
+                "key": "field_6993ee02564f1",
+                "label": "UTM Medium",
+                "name": "utm_medium",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "Marketing medium (e.g. cpc, email, social).",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "34",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "allow_in_bindings": 0,
+                "placeholder": "",
+                "prepend": "",
+                "append": "",
+                "readonly": 1,
+                "disabled": 1
+            },
+            {
+                "key": "field_6993ee13564f2",
+                "label": "UTM Campaign",
+                "name": "utm_campaign",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "Campaign name (e.g. spring-sale, brand-awareness).",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "33",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "allow_in_bindings": 0,
+                "placeholder": "",
+                "prepend": "",
+                "append": "",
+                "readonly": 1,
+                "disabled": 1
+            },
+            {
+                "key": "field_69bc974f513aa",
+                "label": "UTM Ad Group",
+                "name": "utm_ad_group",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "Ad Group name (e.g. sub set of the campaign).",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "25",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "allow_in_bindings": 0,
+                "placeholder": "",
+                "prepend": "",
+                "append": ""
+            },
+            {
+                "key": "field_6993ee23564f3",
+                "label": "UTM Term",
+                "name": "utm_term",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "Paid search keyword or targeting term.",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "25",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "allow_in_bindings": 0,
+                "placeholder": "",
+                "prepend": "",
+                "append": "",
+                "readonly": 1,
+                "disabled": 1
+            },
+            {
+                "key": "field_6993ee2f564f4",
+                "label": "UTM Content",
+                "name": "utm_content",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "Ad variation or content identifier for A\/B testing.",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "25",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "allow_in_bindings": 0,
+                "placeholder": "",
+                "prepend": "",
+                "append": "",
+                "readonly": 1,
+                "disabled": 1
+            },
+            {
+                "key": "field_6993ee35a2c01",
+                "label": "Search Term",
+                "name": "search_term",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "The actual search query typed by the user. Captured from the search_term URL parameter, populated via Google Ads ValueTrack {keyword} in the final URL suffix.",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "25",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "allow_in_bindings": 0,
+                "placeholder": "",
+                "prepend": "",
+                "append": "",
+                "readonly": 1,
+                "disabled": 1
+            },
+            {
+                "key": "field_6993ef01a1b01",
+                "label": "Device Type",
+                "name": "device_type",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "Customer's device (Mobile, Tablet, or Desktop). Auto-captured from form submission.",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "33",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "allow_in_bindings": 0,
+                "placeholder": "",
+                "prepend": "",
+                "append": "",
+                "readonly": 1,
+                "disabled": 1
+            },
+            {
+                "key": "field_6993ef12a1b02",
+                "label": "Referral Page",
+                "name": "referral_page",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "The page the customer was on before submitting the form. Auto-captured from form submission.",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "34",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "allow_in_bindings": 0,
+                "placeholder": "",
+                "prepend": "",
+                "append": "",
+                "readonly": 1,
+                "disabled": 1
+            },
+            {
+                "key": "field_6993ef23a1b03",
+                "label": "Landing Page",
+                "name": "landing_page",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "The first page the customer landed on when they arrived at the site. Auto-captured from form submission.",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "33",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "allow_in_bindings": 0,
+                "placeholder": "",
+                "prepend": "",
+                "append": "",
+                "readonly": 1,
+                "disabled": 1
+            },
+            {
+                "key": "field_6993edd068ec8",
+                "label": "Google Click ID",
+                "name": "gclib",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "Google Ads click identifier (gclid). Auto-captured from form submission.",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "50",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "allow_in_bindings": 0,
+                "placeholder": "",
+                "prepend": "",
+                "append": "",
+                "readonly": 1,
+                "disabled": 1
+            },
+            {
+                "key": "field_6993ef23a1b04",
+                "label": "GA4 ClientID",
+                "name": "ga4_client_id",
+                "aria-label": "",
+                "type": "text",
+                "instructions": "The unique Google Analytics identifier used to track the user's full journey and multi-session behavior.",
+                "required": 0,
+                "conditional_logic": 0,
+                "wrapper": {
+                    "width": "50",
+                    "class": "",
+                    "id": ""
+                },
+                "default_value": "",
+                "maxlength": "",
+                "allow_in_bindings": 0,
+                "placeholder": "",
+                "prepend": "",
+                "append": "",
+                "readonly": 1,
+                "disabled": 1
+            }
+        ],
+        "location": [
+            [
+                {
+                    "param": "post_type",
+                    "operator": "==",
+                    "value": "clientenquiry"
+                }
+            ]
+        ],
+        "menu_order": 20,
+        "position": "normal",
+        "style": "default",
+        "label_placement": "top",
+        "instruction_placement": "label",
+        "hide_on_screen": "",
+        "active": true,
+        "description": "Tracks Google Ads click IDs and UTM parameters captured from website form submissions.",
+        "show_in_rest": 1,
+        "acfe_autosync": "",
+        "acfe_form": 0,
+        "acfe_display_title": "",
+        "acfe_meta": "",
+        "acfe_note": ""
+    }
+]
