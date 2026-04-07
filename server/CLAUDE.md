@@ -97,6 +97,12 @@ Check all three before editing:
 - `add_document`
 - `list_knowledge_sources`
 
+### storage.js — 4 tools
+- `storage_put_file`
+- `storage_get_file`
+- `storage_list_files`
+- `storage_delete_file`
+
 ---
 
 ## Prompt caching — how and why
@@ -194,6 +200,27 @@ Tool schema overhead is fixed per turn. Re-fetching compounds across every turn.
 `add_document` is intentionally excluded from the exported tool array (RAG poisoning vector).
 It is also removed from the system prompt tool list. Do not re-add it without a security review.
 The tool definition remains in tools.js as reference; it is not wired.
+
+### Prior analysis — prompt discipline pattern
+
+The conversation agent has `search_knowledge` and `search_report_history` wired and can query
+the full history of every report agent run. The prompt instructs the agent to check these tools
+before reasoning on any substantive analytical question.
+
+**Why this matters:**
+Every report agent run summary is auto-indexed into the knowledge base (EmbeddingService).
+Without prompt instruction, the agent ignores this history and re-derives conclusions from scratch.
+With the instruction, it surfaces relevant past findings and builds on them — enabling recursive
+learning without any new infrastructure.
+
+**What the prompt instructs:**
+- Call `search_knowledge` (and optionally `search_report_history`) before answering trend,
+  pattern, attribution, or strategy questions
+- Reference prior findings explicitly and note whether new data confirms or contradicts them
+- Skip the check for simple lookup questions (budget pacing, current search terms, etc.)
+
+**Do not remove or weaken this prompt section** without understanding that it is the only
+mechanism connecting the agent's live reasoning to the platform's accumulated report history.
 
 ---
 
@@ -348,6 +375,16 @@ Use double quotes instead: `` `error` `` → `"error"` in prompt text.
 **Always state whether a server restart is required after changes.**
 Environment variable changes and new MCP server registrations require a restart.
 Code-only changes in Railway auto-deploy and do not require manual restart.
+
+**`updated_by` in `system_settings` is `INTEGER REFERENCES users(id)` — always pass `req.user.id`, never `req.user.email`.**
+Passing a string (email) into an integer foreign key column causes a PostgreSQL foreign key violation. Every `updateXxxSettings` call must use `req.user.id`. This bit the storage settings PUT endpoint — it was silently failing with a FK error.
+
+**JS default parameters do not fire when the argument is `null` — only when it is `undefined`.**
+`function runDocExtraction(maxTokens = 4096)` will not use 4096 if the caller passes `null`. Always use `?? fallback` at the call site for any nullable admin config value:
+```js
+maxTokens: adminConfig.max_tokens ?? 4096  // correct
+maxTokens: adminConfig.max_tokens          // wrong — null passes through
+```
 
 ---
 
@@ -639,6 +676,24 @@ quality_advisory: {
 
 **Limitation**: Haiku may self-report confidently on a poor extraction. The confidence average is the more reliable signal. Neither is a guarantee — they are hints.
 
+### max_tokens — default is 4096, always use `?? fallback` at the call site
+
+`ADMIN_DEFAULTS.max_tokens` is `4096`. The `runDocExtraction` function signature default is also `4096`. However, JS default parameters only apply when the argument is `undefined` — if `adminConfig.max_tokens` is `null` (e.g. admin cleared the field), a bare default won't fire.
+
+Always use:
+```js
+maxTokens: adminConfig.max_tokens ?? 4096
+```
+Never:
+```js
+maxTokens: adminConfig.max_tokens  // null passes through as null
+```
+Complex analytics documents with many fields were truncating mid-JSON at the previous 2048 default.
+
+### Download URL
+
+`GET /runs/:runId/download-url` — generates a 1-hour pre-signed S3 URL for the original uploaded file. Only available when `storage_key` is set on the run. Returns `{ url }`. The signed URL is generated on demand; it is not stored anywhere.
+
 ### Known gap — purpose is not injected into the extraction prompt
 
 The `purpose` field (document type hint: invoice / receipt / contract / etc.) is stored in the DB and displayed in the view panel but is **never passed to `runDocExtraction`**. It should be prepended to the user message in `extractFromImage` so the model knows what to focus on. Not yet implemented.
@@ -646,6 +701,76 @@ The `purpose` field (document type hint: invoice / receipt / contract / etc.) is
 ### Known gap — Worker Thread for PDF rasterisation
 
 `convertPdfToImages` runs on the main event loop and blocks Node for large PDFs. The TOOLSFORGE_README.md states CPU-intensive work should run in Worker Threads. Not yet implemented — the interim improvement is concurrent page API calls (`inBatches` with `PDF_PAGE_CONCURRENCY = 3`). Fixing this properly requires changing the route to an async/polling pattern.
+
+---
+
+## S3 File Storage — platform primitive
+
+`server/services/StorageService.js` — thin wrapper around `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner`. Client is cached per region. All uploads use `ServerSideEncryption: 'AES256'`. AWS SDK v3 uses native Node.js HTTP internally — Railway-safe. No `https.request` workaround needed (unlike MailChannels or Gemini API calls).
+
+### StorageService methods
+
+| Method | Signature | Notes |
+|---|---|---|
+| `put` | `(key, buffer, contentType)` | `PutObjectCommand` with AES256 SSE |
+| `getSignedDownloadUrl` | `(key, expiresInSeconds)` | `GetObjectCommand` via `getSignedUrl`; default 3600s |
+| `remove` | `(key)` | `DeleteObjectCommand` |
+| `list` | `(prefix)` | `ListObjectsV2Command` |
+| `healthCheck` | `()` | `HeadBucketCommand`; returns `{ ok, error }` |
+
+Structure mirrors `EmbeddingService.js`. Instantiate with `{ bucket, region }` from `storage_settings`; falls back to env vars.
+
+### storage.js — 6th MCP server
+
+`server/mcp-servers/storage.js` — 4 tools: `storage_put_file`, `storage_get_file`, `storage_list_files`, `storage_delete_file`. File keys are scoped as `org/<orgId>/<timestamp>-<filename>`.
+
+Register in Admin > MCP Servers:
+```json
+{ "command": "node", "args": ["/app/server/mcp-servers/storage.js"] }
+```
+
+### storage_settings — AgentConfigService
+
+Key `storage_settings` in `system_settings` (per-org JSONB). Follows same pattern as `extraction_privacy` and `crm_privacy`.
+
+Defaults:
+```js
+{ enabled: false, default_behaviour: 'do_not_store', aws_bucket: null, aws_region: 'ap-southeast-2' }
+```
+
+Three behaviour values:
+- `store_original` — uploads the raw uploaded file bytes before any rasterisation, extraction, or privacy stripping
+- `do_not_store` — no upload; storage_key is never written
+- `store_redacted` — not yet implemented (reserved)
+
+AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) stay as env vars. Bucket and region live in `storage_settings` so admins can change without redeploying.
+
+Service methods: `AgentConfigService.getStorageSettings(orgId)`, `updateStorageSettings(orgId, patch, updatedBy)`.
+
+### Doc Extractor wiring
+
+`routes/docExtractor.js` checks `storage_settings` after each extraction + privacy strip. If `enabled: true` and `default_behaviour: 'store_original'`:
+- Uploads raw `req.files[fi].buffer` bytes (original file, before rasterisation) fire-and-forget (non-fatal — upload failure does not fail the extraction)
+- Writes `storage_key` back to the `doc_extraction_runs` row asynchronously
+
+`GET /runs/:runId` now returns `storage_key`.
+`GET /runs/:runId/download-url` generates a 1-hour pre-signed URL on demand (not stored).
+
+DB migration: `ALTER TABLE doc_extraction_runs ADD COLUMN IF NOT EXISTS storage_key TEXT`.
+
+### Admin
+
+- `AdminStoragePage.jsx` at `/admin/storage` — toggle enabled, choose behaviour, set bucket and region. Sidebar: "File Storage" with archive icon, between Data Privacy and Knowledge Base.
+- Check #9 in `GET /admin/diagnostics` — calls `StorageService.healthCheck()` (`HeadBucketCommand`).
+
+### New env vars
+
+| Var | Purpose |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | AWS credential |
+| `AWS_SECRET_ACCESS_KEY` | AWS credential |
+| `AWS_S3_BUCKET` | Default bucket (overridable per-org via storage_settings) |
+| `AWS_S3_REGION` | Default region (overridable per-org via storage_settings) |
 
 ---
 
