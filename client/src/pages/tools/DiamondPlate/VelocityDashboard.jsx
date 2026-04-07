@@ -30,9 +30,26 @@ function InfoTooltip({ text }) {
         aria-label="info"
         onMouseEnter={() => setShow(true)}
         onMouseLeave={() => setShow(false)}
-        style={{ cursor: 'help', color: 'var(--color-muted)', fontSize: 13, lineHeight: 1, userSelect: 'none' }}
+        style={{
+          cursor: 'help',
+          userSelect: 'none',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 15,
+          height: 15,
+          borderRadius: '50%',
+          border: '1.5px solid var(--color-muted)',
+          color: 'var(--color-muted)',
+          fontSize: 9,
+          fontWeight: 700,
+          fontStyle: 'italic',
+          lineHeight: 1,
+          fontFamily: 'Georgia, serif',
+          flexShrink: 0,
+        }}
       >
-        ℹ
+        i
       </span>
       {show && (
         <span
@@ -374,78 +391,89 @@ export default function VelocityDashboard({ result, startDate, endDate, onAskQue
         </div>
       )}
 
-      {/* ── Charts row 1 ────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <Section
-          title="Lead Status Funnel"
-          tooltip="How enquiries are distributed across pipeline stages. A large 'New Enquiry' bar means leads are sitting untouched. 'Contacted (unmeasured)' or low 'Completed' numbers reveal process gaps."
+      {/* ── Charts missing warning ──────────────────────────────────────── */}
+      {summary && !charts && (
+        <div
+          className="rounded-xl p-4 mb-4"
+          style={{ background: '#fef9c3', border: '1px solid #fde047' }}
         >
-          <BarChart data={charts?.statusFunnel || []} dataKey="value" labelKey="label" horizontal height={200} />
-        </Section>
-
-        <Section
-          title="Touchpoints to Convert"
-          tooltip="How many formal follow-up contacts were logged per lead. A high '0' bar means leads are being closed (or lost) without any logged activity. Look at whether converted leads require more or fewer touchpoints than average."
-        >
-          <BarChart data={charts?.touchpointDistribution || []} dataKey="value" height={200} />
-        </Section>
-      </div>
-
-      {/* ── Charts row 2 ────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <Section
-          title="First Response Time"
-          tooltip={`How quickly leads receive their first logged contact after enquiry. "Contacted (unmeasured)" = operator updated the status but did not log an activity row — the contact happened but we cannot measure the timing. "No response" = lead is still 'new' with no evidence of contact at all. Same-day and next-day responses typically correlate with higher conversion rates.`}
-        >
-          <BarChart data={charts?.responseTimeBuckets || []} dataKey="value" height={200} />
-        </Section>
-
-        <Section
-          title="Follow-up Action Mix"
-          tooltip="Types of follow-up activities logged across all leads. An over-reliance on one action type (e.g. Phone only) may indicate a narrow follow-up strategy. Appointment and Invoice actions are strong conversion signals."
-        >
-          <BarChart data={charts?.actionMix || []} dataKey="value" horizontal height={200} />
-        </Section>
-      </div>
-
-      {/* ── Campaign velocity table ─────────────────────────────────────── */}
-      <Section
-        title="Lead Velocity by Campaign"
-        tooltip="For each campaign: how fast the first response is, how many touchpoints are needed, how long it takes to close, and what percentage convert. Campaigns with high touchpoints but low conversion may need creative or landing page review."
-      >
-        <CampaignTable data={charts?.velocityByCampaign} />
-      </Section>
-
-      {/* ── Activity heatmap ────────────────────────────────────────────── */}
-      <Section
-        title="Activity Heatmap — When follow-ups are logged"
-        tooltip="Shows which days and hours follow-up activity is logged. Dark squares = high activity. Blank areas reveal when the team is not following up. Ideal pattern: activity concentrated in business hours with no multi-day gaps."
-      >
-        <HeatmapGrid data={charts?.heatmapData || []} />
-      </Section>
-
-      {/* ── Scatter (conditional) ───────────────────────────────────────── */}
-      {(charts?.scatterData?.length > 0) && (
-        <Section
-          title="Touchpoints vs Days to Close — Converted Leads"
-          tooltip="Each dot is a converted lead. X = number of follow-up contacts logged, Y = days from enquiry to close. Dots clustered bottom-left convert fast with few contacts. Dots top-right take many contacts over a long time. Look for whether fewer or more touchpoints predict faster close."
-        >
-          <ScatterPlot
-            data={charts.scatterData}
-            xLabel="Touchpoints"
-            yLabel="Days to close"
-            height={220}
-          />
-        </Section>
+          <p className="text-sm m-0" style={{ color: '#92400e' }}>
+            <strong>Note:</strong> Narrative loaded but chart data is unavailable for this run. Try re-running the velocity analysis, or load a different run from history below.
+          </p>
+        </div>
       )}
 
-      {/* ── Stale leads ─────────────────────────────────────────────────── */}
-      <Section
-        title="Stale & At-Risk Leads"
-        tooltip="Leads in an open pipeline status (new/contacted/emailed) where the last known contact is more than 7 days ago, or genuinely untouched new leads older than 3 days. Days shown in orange = 8–14 days. Red = 15+ days. These represent direct lost-revenue risk."
-      >
-        <StaleTable leads={charts?.staleLeads} />
-      </Section>
+      {/* ── Charts (all guarded — charts is null if run returned no data) ── */}
+      {charts && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <Section
+              title="Lead Status Funnel"
+              tooltip="How enquiries are distributed across pipeline stages. A large 'New Enquiry' bar means leads are sitting untouched. 'Contacted (unmeasured)' or low 'Completed' numbers reveal process gaps."
+            >
+              <BarChart data={charts.statusFunnel || []} dataKey="value" labelKey="label" horizontal height={200} />
+            </Section>
+
+            <Section
+              title="Touchpoints to Convert"
+              tooltip="How many formal follow-up contacts were logged per lead. A high '0' bar means leads are being closed (or lost) without any logged activity. Look at whether converted leads require more or fewer touchpoints than average."
+            >
+              <BarChart data={charts.touchpointDistribution || []} dataKey="value" height={200} />
+            </Section>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <Section
+              title="First Response Time"
+              tooltip={`How quickly leads receive their first logged contact after enquiry. "Contacted (unmeasured)" = operator updated the status but did not log an activity row — the contact happened but we cannot measure the timing. "No response" = lead is still 'new' with no evidence of contact at all. Same-day and next-day responses typically correlate with higher conversion rates.`}
+            >
+              <BarChart data={charts.responseTimeBuckets || []} dataKey="value" height={200} />
+            </Section>
+
+            <Section
+              title="Follow-up Action Mix"
+              tooltip="Types of follow-up activities logged across all leads. An over-reliance on one action type (e.g. Phone only) may indicate a narrow follow-up strategy. Appointment and Invoice actions are strong conversion signals."
+            >
+              <BarChart data={charts.actionMix || []} dataKey="value" horizontal height={200} />
+            </Section>
+          </div>
+
+          <Section
+            title="Lead Velocity by Campaign"
+            tooltip="For each campaign: how fast the first response is, how many touchpoints are needed, how long it takes to close, and what percentage convert. Campaigns with high touchpoints but low conversion may need creative or landing page review."
+          >
+            <CampaignTable data={charts.velocityByCampaign} />
+          </Section>
+
+          <Section
+            title="Activity Heatmap — When follow-ups are logged"
+            tooltip="Shows which days and hours follow-up activity is logged. Dark squares = high activity. Blank areas reveal when the team is not following up. Ideal pattern: activity concentrated in business hours with no multi-day gaps."
+          >
+            <HeatmapGrid data={charts.heatmapData || []} />
+          </Section>
+
+          {(charts.scatterData?.length > 0) && (
+            <Section
+              title="Touchpoints vs Days to Close — Converted Leads"
+              tooltip="Each dot is a converted lead. X = number of follow-up contacts logged, Y = days from enquiry to close. Dots clustered bottom-left convert fast with few contacts. Dots top-right take many contacts over a long time. Look for whether fewer or more touchpoints predict faster close."
+            >
+              <ScatterPlot
+                data={charts.scatterData}
+                xLabel="Touchpoints"
+                yLabel="Days to close"
+                height={220}
+              />
+            </Section>
+          )}
+
+          <Section
+            title="Stale & At-Risk Leads"
+            tooltip="Leads in an open pipeline status (new/contacted/emailed) where the last known contact is more than 7 days ago, or genuinely untouched new leads older than 3 days. Days shown in orange = 8–14 days. Red = 15+ days. These represent direct lost-revenue risk."
+          >
+            <StaleTable leads={charts.staleLeads} />
+          </Section>
+        </>
+      )}
 
       {/* ── Narrative + export ──────────────────────────────────────────── */}
       {summary && (

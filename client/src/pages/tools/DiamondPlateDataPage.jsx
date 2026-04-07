@@ -366,7 +366,10 @@ export default function DiamondPlateDataPage() {
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.warn('[Velocity] stream closed by server. resultReceived:', resultReceived, 'buffer remainder length:', buffer.length);
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop();
@@ -374,24 +377,37 @@ export default function DiamondPlateDataPage() {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const raw = line.slice(6).trim();
-          if (raw === '[DONE]') { setVelocityRunning(false); return; }
+          if (raw === '[DONE]') {
+            console.log('[Velocity] [DONE] received. resultReceived:', resultReceived);
+            setVelocityRunning(false);
+            return;
+          }
           try {
             const msg = JSON.parse(raw);
+            console.log('[Velocity] SSE msg type:', msg.type,
+              msg.type === 'result' ? `summary length: ${msg.data?.summary?.length}, charts keys: ${Object.keys(msg.data?.data?.charts || {}).join(',')}` :
+              msg.type === 'error'  ? msg.error : '');
             if (msg.type === 'progress') {
               setVelocityProgress((p) => [...p, msg.text]);
             } else if (msg.type === 'result') {
               resultReceived = true;
               setVelocityResult(msg.data);
-              // Refresh history so new run appears in the table + monthly banner updates
               loadVelocityHistory();
             } else if (msg.type === 'error') {
               setVelocityError(msg.error);
             }
-          } catch { /* ignore parse errors */ }
+          } catch (parseErr) {
+            console.error('[Velocity] failed to parse SSE line:', parseErr.message, '\nRaw (first 300):', raw.slice(0, 300));
+          }
         }
       }
-      if (!resultReceived) setVelocityError('Velocity run ended without a result — check server logs.');
+      if (!resultReceived) {
+        const msg = 'Velocity run ended without a result — check server logs.';
+        console.error('[Velocity]', msg);
+        setVelocityError(msg);
+      }
     } catch (err) {
+      console.error('[Velocity] stream error:', err.message);
       setVelocityError(err.message);
     } finally {
       setVelocityRunning(false);
@@ -637,7 +653,53 @@ export default function DiamondPlateDataPage() {
 
           {velocityRunning && <ProgressBar lines={velocityProgress} />}
 
-          {!velocityResult && !velocityRunning && !velocityError && (
+          {/* ── Archive — always visible ─────────────────────────────────── */}
+          {!velocityRunning && !velocityResult && velocityHistory.filter((r) => r.status === 'complete').length > 0 && (
+            <div
+              className="rounded-2xl border p-4 mb-4"
+              style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
+            >
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>
+                Previous Velocity Analyses — load one to view without re-running
+              </p>
+              <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-bg)' }}>
+                    {['Run date', 'Period', 'Leads', ''].map((h) => (
+                      <th key={h} className="px-3 py-2 text-left text-xs font-semibold"
+                        style={{ color: 'var(--color-muted)', borderBottom: '1px solid var(--color-border)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {velocityHistory.filter((r) => r.status === 'complete').map((r) => (
+                    <tr key={r.id} style={{ borderTop: '1px solid var(--color-border)' }}>
+                      <td className="px-3 py-2 text-xs" style={{ color: 'var(--color-muted)' }}>{fmtDate(r.run_at)}</td>
+                      <td className="px-3 py-2 text-xs" style={{ color: 'var(--color-text)' }}>
+                        {r.result?.startDate && r.result?.endDate
+                          ? `${fmtDate(r.result.startDate)} – ${fmtDate(r.result.endDate)}`
+                          : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-xs" style={{ color: 'var(--color-text)' }}>
+                        {r.result?.data?.charts?.summary_stats?.total ?? '—'}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          onClick={() => setVelocityResult(r.result)}
+                          className="text-xs rounded px-2.5 py-1 font-medium"
+                          style={{ background: 'none', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', cursor: 'pointer' }}
+                        >
+                          Load
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {!velocityResult && !velocityRunning && !velocityError && velocityHistory.filter((r) => r.status === 'complete').length === 0 && (
             <div
               className="rounded-2xl border p-8 text-center"
               style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
