@@ -13,6 +13,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import api from '../../../api/client';
+import { exportPdf, exportText, chatMessagesToHtml, chatMessagesToText } from '../../../utils/exportService';
 import MarkdownRenderer from '../../../components/ui/MarkdownRenderer';
 import Button from '../../../components/ui/Button';
 import MicButton from '../../../components/ui/MicButton';
@@ -217,75 +218,7 @@ function ReportPanel({ reportText, reportTitle, visible, onToggle }) {
 }
 
 // ── Export helpers ────────────────────────────────────────────────────────────
-
-function buildPlainText(messages) {
-  return messages.map((m) => {
-    const role = m.role === 'user' ? 'You' : 'Assistant';
-    const text = Array.isArray(m.content)
-      ? m.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
-      : (m.content ?? '');
-    return `${role}:\n${text}`;
-  }).join('\n\n---\n\n');
-}
-
-function downloadText(messages) {
-  const content = buildPlainText(messages);
-  const blob = new Blob([content], { type: 'text/plain' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = `discussion-${new Date().toISOString().slice(0, 10)}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function printAsPdf(messages, reportTitle) {
-  const rows = messages.map((m) => {
-    const isUser = m.role === 'user';
-    const text   = Array.isArray(m.content)
-      ? m.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
-      : (m.content ?? '');
-    const escaped = text
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/\n/g, '<br>');
-    return `<div class="${isUser ? 'user' : 'assistant'}">
-      <div class="role">${isUser ? 'You' : 'Assistant'}</div>
-      <div class="body">${escaped}</div>
-    </div>`;
-  }).join('\n');
-
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>${reportTitle} — Discussion</title>
-<style>
-  body { font-family: Georgia, serif; max-width: 800px; margin: 0 auto; padding: 24px; color: #111; }
-  h1 { font-size: 18px; margin-bottom: 4px; }
-  .meta { font-size: 12px; color: #666; margin-bottom: 24px; }
-  .user, .assistant { margin: 14px 0; padding: 10px 14px; border-radius: 8px; font-size: 14px; line-height: 1.6; }
-  .user { background: #f0f4ff; border-left: 3px solid #4f6ef7; }
-  .assistant { background: #f9f9f9; border-left: 3px solid #aaa; }
-  .role { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #666; margin-bottom: 6px; }
-  @media print { body { padding: 0; } }
-</style>
-</head>
-<body>
-<h1>${reportTitle} — Discussion</h1>
-<p class="meta">Exported ${new Date().toLocaleString('en-AU')}</p>
-${rows}
-</body>
-</html>`;
-
-  const win = window.open('', '_blank');
-  if (!win) return;
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => win.print(), 400);
-}
+// Delegated to exportService — no inline implementation here.
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -308,6 +241,8 @@ export default function ConversationView({
   const [editingTitle,  setEditingTitle]  = useState(null);
   const [titleDraft,    setTitleDraft]    = useState('');
   const [reportVisible, setReportVisible] = useState(!!reportText);
+  const [exporting,     setExporting]     = useState(false);
+  const [exportErr,     setExportErr]     = useState('');
 
   const threadRef = useRef(null);
   const inputRef  = useRef(null);
@@ -699,7 +634,13 @@ export default function ConversationView({
                 <div style={{ flex: 1 }} />
                 <span style={{ fontSize: 11, color: 'var(--color-muted)' }}>Export:</span>
                 <button
-                  onClick={() => downloadText(messages)}
+                  onClick={() => {
+                    setExportErr('');
+                    exportText({
+                      content:  chatMessagesToText(messages),
+                      filename: `discussion-${new Date().toISOString().slice(0, 10)}.txt`,
+                    });
+                  }}
                   title="Download discussion as plain text"
                   style={{
                     padding: '5px 12px', fontSize: 12, fontWeight: 500,
@@ -711,17 +652,37 @@ export default function ConversationView({
                   Text
                 </button>
                 <button
-                  onClick={() => printAsPdf(messages, reportTitle)}
-                  title="Open print dialog to save as PDF"
+                  onClick={async () => {
+                    setExporting(true);
+                    setExportErr('');
+                    try {
+                      await exportPdf({
+                        content:     chatMessagesToHtml(messages),
+                        contentType: 'html',
+                        title:       `${reportTitle} — Discussion`,
+                        filename:    `discussion-${new Date().toISOString().slice(0, 10)}.pdf`,
+                      });
+                    } catch (e) {
+                      setExportErr(e.message || 'PDF export failed');
+                    } finally {
+                      setExporting(false);
+                    }
+                  }}
+                  disabled={exporting}
+                  title="Download discussion as PDF"
                   style={{
                     padding: '5px 12px', fontSize: 12, fontWeight: 500,
-                    fontFamily: 'inherit', borderRadius: 8, cursor: 'pointer',
+                    fontFamily: 'inherit', borderRadius: 8, cursor: exporting ? 'not-allowed' : 'pointer',
                     border: '1px solid var(--color-border)',
                     background: 'transparent', color: 'var(--color-text)',
+                    opacity: exporting ? 0.5 : 1,
                   }}
                 >
-                  PDF
+                  {exporting ? 'Generating…' : 'PDF'}
                 </button>
+                {exportErr && (
+                  <span style={{ fontSize: 10, color: '#dc2626' }}>{exportErr}</span>
+                )}
               </div>
             )}
 

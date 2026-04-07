@@ -10,7 +10,8 @@ RUN npm run build
 FROM node:22-alpine
 WORKDIR /app/server
 # Ghostscript — required by pdf2pic for PDF-to-image rasterisation
-RUN apk add --no-cache ghostscript
+# Chromium — required by puppeteer-core for server-side PDF export
+RUN apk add --no-cache ghostscript chromium
 COPY server/package*.json ./
 RUN npm install --omit=dev
 COPY server/ ./

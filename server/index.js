@@ -57,6 +57,7 @@ app.use('/api/conversation', require('./routes/conversation'));
 app.use('/api/admin/knowledge', require('./routes/adminKnowledge'));
 app.use('/api/doc-extractor',  require('./routes/docExtractor'));
 app.use('/api/export-log',    require('./routes/exportLog'));
+app.use('/api/export',        require('./routes/export'));
 
 // ── Static files (production) ──────────────────────────────────────────────
 const publicDir = path.join(__dirname, 'public');
