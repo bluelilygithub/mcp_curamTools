@@ -1,8 +1,12 @@
 /**
- * ConversationView — persistent multi-turn AI conversation for Google Ads.
+ * ConversationView — persistent multi-turn AI conversation.
+ *
+ * Optional props:
+ *   reportText  — when provided, a collapsible report panel appears above the thread
+ *   reportTitle — label for the report panel toggle (default "Report")
  *
  * Left: conversation list + New button.
- * Right: chat thread + input.
+ * Right: collapsible report panel → chat thread → action bar → input bar.
  *
  * Each turn streams via SSE. Conversation history is persisted server-side
  * so threads can be resumed across sessions.
@@ -25,7 +29,6 @@ const fmtDate = (s) => {
   } catch { return ''; }
 };
 
-const fmtAud    = (n) => `$${Number(n ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtCost   = (n) => n != null ? `A$${Number(n).toFixed(4)}` : null;
 const fmtTokens = (n) => n != null ? Number(n).toLocaleString() : null;
 
@@ -65,8 +68,8 @@ const inputBarStyle = {
 
 // ── Image resize helper ───────────────────────────────────────────────────────
 
-const MAX_IMAGE_PX   = 1024; // longest side cap before sending to API
-const JPEG_QUALITY   = 0.82;
+const MAX_IMAGE_PX = 1024;
+const JPEG_QUALITY = 0.82;
 
 function resizeImageFile(file) {
   return new Promise((resolve) => {
@@ -93,7 +96,6 @@ function resizeImageFile(file) {
 function Bubble({ role, content, costAud, tokensUsed }) {
   const isUser = role === 'user';
 
-  // content may be a string or an array (image + text blocks)
   const textContent = Array.isArray(content)
     ? content.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
     : content;
@@ -173,19 +175,139 @@ function TypingIndicator({ text }) {
   );
 }
 
+// ── Report panel ──────────────────────────────────────────────────────────────
+
+function ReportPanel({ reportText, reportTitle, visible, onToggle }) {
+  return (
+    <div style={{
+      borderBottom: '1px solid var(--color-border)',
+      background: 'var(--color-surface)',
+      flexShrink: 0,
+    }}>
+      {/* Toggle bar */}
+      <button
+        onClick={onToggle}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '9px 16px', background: 'none', border: 'none', cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)' }}>
+          {reportTitle}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--color-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+          {visible ? 'Hide report' : 'Show report'}
+          <span style={{ fontSize: 10 }}>{visible ? '▲' : '▼'}</span>
+        </span>
+      </button>
+
+      {/* Collapsible content */}
+      {visible && (
+        <div style={{
+          maxHeight: 280, overflowY: 'auto',
+          padding: '0 16px 12px',
+          borderTop: '1px solid var(--color-border)',
+        }}>
+          <MarkdownRenderer text={reportText} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Export helpers ────────────────────────────────────────────────────────────
+
+function buildPlainText(messages) {
+  return messages.map((m) => {
+    const role = m.role === 'user' ? 'You' : 'Assistant';
+    const text = Array.isArray(m.content)
+      ? m.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
+      : (m.content ?? '');
+    return `${role}:\n${text}`;
+  }).join('\n\n---\n\n');
+}
+
+function downloadText(messages) {
+  const content = buildPlainText(messages);
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `discussion-${new Date().toISOString().slice(0, 10)}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function printAsPdf(messages, reportTitle) {
+  const rows = messages.map((m) => {
+    const isUser = m.role === 'user';
+    const text   = Array.isArray(m.content)
+      ? m.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
+      : (m.content ?? '');
+    const escaped = text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+    return `<div class="${isUser ? 'user' : 'assistant'}">
+      <div class="role">${isUser ? 'You' : 'Assistant'}</div>
+      <div class="body">${escaped}</div>
+    </div>`;
+  }).join('\n');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${reportTitle} — Discussion</title>
+<style>
+  body { font-family: Georgia, serif; max-width: 800px; margin: 0 auto; padding: 24px; color: #111; }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .meta { font-size: 12px; color: #666; margin-bottom: 24px; }
+  .user, .assistant { margin: 14px 0; padding: 10px 14px; border-radius: 8px; font-size: 14px; line-height: 1.6; }
+  .user { background: #f0f4ff; border-left: 3px solid #4f6ef7; }
+  .assistant { background: #f9f9f9; border-left: 3px solid #aaa; }
+  .role { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #666; margin-bottom: 6px; }
+  @media print { body { padding: 0; } }
+</style>
+</head>
+<body>
+<h1>${reportTitle} — Discussion</h1>
+<p class="meta">Exported ${new Date().toLocaleString('en-AU')}</p>
+${rows}
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 400);
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ConversationView({ startDate, endDate, seedText = '', onSeedConsumed }) {
+export default function ConversationView({
+  startDate,
+  endDate,
+  seedText       = '',
+  onSeedConsumed,
+  reportText     = '',
+  reportTitle    = 'Report',
+}) {
   const [conversations, setConversations] = useState([]);
   const [activeId,      setActiveId]      = useState(null);
   const [messages,      setMessages]      = useState([]);
   const [draft,         setDraft]         = useState('');
-  const [pastedImage,   setPastedImage]   = useState(null); // { dataUrl } | null
+  const [pastedImage,   setPastedImage]   = useState(null);
   const [sending,       setSending]       = useState(false);
   const [progressText,  setProgressText]  = useState('');
   const [error,         setError]         = useState('');
-  const [editingTitle,  setEditingTitle]  = useState(null); // conversation id being renamed
+  const [editingTitle,  setEditingTitle]  = useState(null);
   const [titleDraft,    setTitleDraft]    = useState('');
+  const [reportVisible, setReportVisible] = useState(!!reportText);
 
   const threadRef = useRef(null);
   const inputRef  = useRef(null);
@@ -193,29 +315,30 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
 
   useEffect(() => { loadConversations(); }, []);
 
-  // Seed from StrategicReviewCard "Continue in Conversation"
   useEffect(() => {
     if (seedText && !seedUsed.current) {
       seedUsed.current = true;
       setDraft(seedText);
       if (typeof onSeedConsumed === 'function') onSeedConsumed();
-      // Auto-create a new conversation and focus input
       handleNewConversation(seedText);
     }
   }, [seedText]);
 
   useEffect(() => {
-    // Scroll to bottom when messages update
     if (threadRef.current) {
       threadRef.current.scrollTop = threadRef.current.scrollHeight;
     }
   }, [messages, sending]);
 
+  // Update reportVisible when reportText first arrives
+  useEffect(() => {
+    if (reportText) setReportVisible(true);
+  }, [reportText]);
+
   async function loadConversations() {
     try {
       const rows = await api.get('/conversation');
       setConversations(rows);
-      // Auto-select most recent if none active
       if (!activeId && rows.length > 0) {
         selectConversation(rows[0].id);
       }
@@ -240,11 +363,9 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
       setActiveId(conv.id);
       setMessages([]);
       setError('');
-      if (initialDraft) {
-        setDraft(initialDraft);
-      }
+      if (initialDraft) setDraft(initialDraft);
       setTimeout(() => inputRef.current?.focus(), 50);
-    } catch (err) {
+    } catch {
       setError('Failed to create conversation.');
     }
   }
@@ -260,18 +381,13 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
     if (dataUrl) setPastedImage({ dataUrl });
   }
 
-  async function handleSend() {
-    if ((!draft.trim() && !pastedImage) || !activeId || sending) return;
+  async function dispatchMessage(userText, snapshot) {
+    if ((!userText && !snapshot) || !activeId || sending) return;
 
-    const userText  = draft.trim();
-    const snapshot  = pastedImage;
-    setDraft('');
-    setPastedImage(null);
     setSending(true);
     setProgressText('');
     setError('');
 
-    // Optimistic bubble — include image preview if present
     const optimisticContent = snapshot
       ? [
           { type: 'image_preview', dataUrl: snapshot.dataUrl },
@@ -280,7 +396,6 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
       : userText;
     setMessages((prev) => [...prev, { role: 'user', content: optimisticContent }]);
 
-    // Build request body — plain message string OR messageContent array with image
     const body = snapshot
       ? {
           messageContent: [
@@ -293,7 +408,7 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
       : { message: userText, startDate, endDate };
 
     try {
-      const res = await api.stream(`/conversation/${activeId}/message`, body);
+      const res     = await api.stream(`/conversation/${activeId}/message`, body);
       const reader  = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -320,7 +435,6 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
                 tokensUsed: msg.tokensUsed ?? null,
               }]);
               setProgressText('');
-              // Update conversation title in sidebar if auto-titled
               if (msg.title) {
                 setConversations((prev) =>
                   prev.map((c) => c.id === activeId ? { ...c, title: msg.title } : c)
@@ -338,6 +452,20 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
       setSending(false);
       setProgressText('');
     }
+  }
+
+  async function handleSend() {
+    const userText = draft.trim();
+    const snapshot = pastedImage;
+    if (!userText && !snapshot) return;
+    setDraft('');
+    setPastedImage(null);
+    await dispatchMessage(userText, snapshot);
+  }
+
+  async function handleSummarise() {
+    const prompt = 'Please provide a complete summary of our entire discussion — covering the key data points, insights explored, conclusions reached, and any recommended actions.';
+    await dispatchMessage(prompt, null);
   }
 
   function handleKeyDown(e) {
@@ -379,11 +507,17 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
     resize: 'none', outline: 'none', minHeight: 42, maxHeight: 160,
   };
 
+  const hasMessages = messages.length > 0;
+
   return (
     <div style={{
-      display: 'flex', height: 560,
-      borderRadius: 16, border: '1px solid var(--color-border)',
-      overflow: 'hidden', fontFamily: 'inherit',
+      display: 'flex',
+      height: 'calc(100vh - 200px)',
+      minHeight: 520,
+      borderRadius: 16,
+      border: '1px solid var(--color-border)',
+      overflow: 'hidden',
+      fontFamily: 'inherit',
     }}>
 
       {/* ── Sidebar ───────────────────────────────────────────────────────── */}
@@ -477,6 +611,16 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
           </div>
         ) : (
           <>
+            {/* Report panel — always visible at top, never scrolls away */}
+            {reportText && (
+              <ReportPanel
+                reportText={reportText}
+                reportTitle={reportTitle}
+                visible={reportVisible}
+                onToggle={() => setReportVisible((v) => !v)}
+              />
+            )}
+
             {/* Thread */}
             <div ref={threadRef} style={threadStyle}>
               {messages.length === 0 && !sending && (
@@ -530,6 +674,57 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
               </div>
             )}
 
+            {/* Action bar — summarise + export, visible once messages exist */}
+            {hasMessages && (
+              <div style={{
+                borderTop: '1px solid var(--color-border)',
+                padding: '8px 16px',
+                display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
+                background: 'var(--color-surface)',
+              }}>
+                <button
+                  onClick={handleSummarise}
+                  disabled={sending}
+                  title="Ask the AI to summarise the full discussion"
+                  style={{
+                    padding: '5px 12px', fontSize: 12, fontWeight: 500,
+                    fontFamily: 'inherit', borderRadius: 8, cursor: sending ? 'not-allowed' : 'pointer',
+                    border: '1px solid var(--color-border)',
+                    background: 'transparent', color: 'var(--color-text)',
+                    opacity: sending ? 0.5 : 1,
+                  }}
+                >
+                  Summarise discussion
+                </button>
+                <div style={{ flex: 1 }} />
+                <span style={{ fontSize: 11, color: 'var(--color-muted)' }}>Export:</span>
+                <button
+                  onClick={() => downloadText(messages)}
+                  title="Download discussion as plain text"
+                  style={{
+                    padding: '5px 12px', fontSize: 12, fontWeight: 500,
+                    fontFamily: 'inherit', borderRadius: 8, cursor: 'pointer',
+                    border: '1px solid var(--color-border)',
+                    background: 'transparent', color: 'var(--color-text)',
+                  }}
+                >
+                  Text
+                </button>
+                <button
+                  onClick={() => printAsPdf(messages, reportTitle)}
+                  title="Open print dialog to save as PDF"
+                  style={{
+                    padding: '5px 12px', fontSize: 12, fontWeight: 500,
+                    fontFamily: 'inherit', borderRadius: 8, cursor: 'pointer',
+                    border: '1px solid var(--color-border)',
+                    background: 'transparent', color: 'var(--color-text)',
+                  }}
+                >
+                  PDF
+                </button>
+              </div>
+            )}
+
             {/* Image preview */}
             {pastedImage && (
               <div style={{ padding: '6px 16px 0', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
@@ -566,10 +761,7 @@ export default function ConversationView({ startDate, endDate, seedText = '', on
                 onPaste={handlePaste}
                 placeholder="Ask a question or paste a screenshot…"
                 disabled={sending}
-                style={{
-                  ...inputStyle,
-                  opacity: sending ? 0.6 : 1,
-                }}
+                style={{ ...inputStyle, opacity: sending ? 0.6 : 1 }}
               />
               <MicButton
                 onResult={(t) => setDraft((q) => {

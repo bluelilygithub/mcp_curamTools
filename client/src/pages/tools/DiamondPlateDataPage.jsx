@@ -429,7 +429,67 @@ export default function DiamondPlateDataPage() {
           {summary && (
             <>
               <MarkdownRenderer text={summary} />
-              <div className="mt-4 flex justify-end">
+              <div className="mt-4 flex items-center justify-between flex-wrap gap-2">
+                {/* Export buttons */}
+                <div className="flex items-center gap-2">
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Export:</span>
+                  <button
+                    onClick={() => {
+                      const blob = new Blob([summary], { type: 'text/plain' });
+                      const url  = URL.createObjectURL(blob);
+                      const a    = document.createElement('a');
+                      a.href     = url;
+                      a.download = `diamondplate-report-${result?.startDate ?? startDate}-${result?.endDate ?? endDate}.txt`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    }}
+                    style={{
+                      padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 500,
+                      fontFamily: 'inherit', borderRadius: '0.5rem', cursor: 'pointer',
+                      border: '1px solid var(--color-border)',
+                      background: 'transparent', color: 'var(--color-muted)',
+                    }}
+                  >
+                    Text
+                  </button>
+                  <button
+                    onClick={() => {
+                      const escaped = summary
+                        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                        .replace(/\n/g, '<br>');
+                      const period = `${result?.startDate ?? startDate} – ${result?.endDate ?? endDate}`;
+                      const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>DiamondPlate Report · ${period}</title>
+<style>body{font-family:Georgia,serif;max-width:800px;margin:0 auto;padding:24px;color:#111}
+h1{font-size:18px;margin-bottom:4px}p.meta{font-size:12px;color:#666;margin-bottom:24px}
+pre{white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.7}
+@media print{body{padding:0}}</style>
+</head><body>
+<h1>DiamondPlate Data Report</h1>
+<p class="meta">${period} · Exported ${new Date().toLocaleString('en-AU')}</p>
+<pre>${escaped}</pre>
+</body></html>`;
+                      const win = window.open('', '_blank');
+                      if (!win) return;
+                      win.document.write(html);
+                      win.document.close();
+                      win.focus();
+                      setTimeout(() => win.print(), 400);
+                    }}
+                    style={{
+                      padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 500,
+                      fontFamily: 'inherit', borderRadius: '0.5rem', cursor: 'pointer',
+                      border: '1px solid var(--color-border)',
+                      background: 'transparent', color: 'var(--color-muted)',
+                    }}
+                  >
+                    PDF
+                  </button>
+                </div>
+
+                {/* Discuss button */}
                 <button
                   onClick={() => {
                     setConversationSeed(`Here is the DiamondPlate Data report for ${result?.startDate ?? startDate} to ${result?.endDate ?? endDate}:\n\n${summary}`);
@@ -457,6 +517,8 @@ export default function DiamondPlateDataPage() {
           endDate={endDate}
           seedText={conversationSeed}
           onSeedConsumed={() => setConversationSeed('')}
+          reportText={summary}
+          reportTitle={`DiamondPlate Report · ${result?.startDate ?? startDate} – ${result?.endDate ?? endDate}`}
         />
       )}
 

@@ -499,7 +499,7 @@ export default function GoogleAdsMonitorPage() {
   }
 
   return (
-    <div className="p-5 max-w-5xl mx-auto" style={{ fontFamily: 'inherit' }}>
+    <div className="p-5 max-w-7xl mx-auto" style={{ fontFamily: 'inherit' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
