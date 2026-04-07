@@ -22,11 +22,13 @@ Always produce a report with these sections, in order. Use markdown headings (##
 ### 3. Channel & Campaign Attribution
 - Top UTM sources and mediums by enquiry count (utm_source, utm_medium from CRM)
 - Which campaigns or channels are driving the most real leads (not just clicks)
+- Break down by ad group (byAdGroup) if data is present — this shows which ad group within a campaign converts best
 - Highlight any mismatch between high-click campaigns and low-enquiry outcomes if data allows
 
-### 4. Search Term Intelligence
-- Top search terms that produced enquiries (from CRM search_term field)
-- Note any high-volume search terms that appear in CRM data — these are confirmed converters
+### 4. Keyword Intelligence
+- Report top matched keywords from the CRM `topUtmTerms` field (utm_term — the bidded keyword that triggered the ad). These are confirmed converters.
+- Do NOT report the absence of utm_term data as a bug if topUtmTerms has entries — it is working correctly.
+- The `topSearchTerms` field contains the actual search query the user typed into Google. This requires a server-side GCLID lookup and is almost always empty — this is a known platform limitation, not a data error. If it is empty, note it once and move on. Do not flag it as a bug or a missing field.
 
 ### 5. Device Breakdown
 - Enquiry count and percentage by device_type (mobile / desktop / tablet)

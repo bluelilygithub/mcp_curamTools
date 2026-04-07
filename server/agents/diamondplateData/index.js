@@ -37,19 +37,36 @@ function topN(counts, n) {
     .reduce(function(acc, entry) { acc[entry[0]] = entry[1]; return acc; }, {});
 }
 
+function extractQsParam(url, param) {
+  if (!url) return null;
+  try {
+    return new URL(url).searchParams.get(param) || null;
+  } catch { return null; }
+}
+
 function aggregateEnquiries(raw, startDate, endDate) {
   if (!raw || !Array.isArray(raw)) return raw;
 
+  // Backfill utm_ad_group from the landing_page query string when the CRM field is empty
+  // (handler bug — utm_ad_group not always saved to its own meta key yet)
+  const rows = raw.map(function(r) {
+    if (r.utm_ad_group) return r;
+    const adGroup = extractQsParam(r.landing_page, 'utm_ad_group');
+    return adGroup ? Object.assign({}, r, { utm_ad_group: adGroup }) : r;
+  });
+
   return {
-    total:          raw.length,
-    period:         startDate + ' to ' + endDate,
-    byStatus:       countBy(raw, 'enquiry_status'),
-    byDevice:       countBy(raw, 'device_type'),
-    bySource:       topN(countBy(raw, 'utm_source'),   10),
-    byMedium:       topN(countBy(raw, 'utm_medium'),   10),
-    byCampaign:     topN(countBy(raw, 'utm_campaign'), 10),
-    topSearchTerms: topN(countBy(raw, 'search_term'),  20),
-    topLandingPages:topN(countBy(raw, 'landing_page'), 15),
+    total:           rows.length,
+    period:          startDate + ' to ' + endDate,
+    byStatus:        countBy(rows, 'enquiry_status'),
+    byDevice:        countBy(rows, 'device_type'),
+    bySource:        topN(countBy(rows, 'utm_source'),    10),
+    byMedium:        topN(countBy(rows, 'utm_medium'),    10),
+    byCampaign:      topN(countBy(rows, 'utm_campaign'),  10),
+    byAdGroup:       topN(countBy(rows, 'utm_ad_group'),  10),
+    topUtmTerms:     topN(countBy(rows, 'utm_term'),      20),
+    topSearchTerms:  topN(countBy(rows, 'search_term'),   20),
+    topLandingPages: topN(countBy(rows, 'landing_page'),  15),
   };
 }
 
