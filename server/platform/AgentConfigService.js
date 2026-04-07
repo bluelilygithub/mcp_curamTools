@@ -80,7 +80,7 @@ const ADMIN_DEFAULTS = {
   'doc-extractor': {
     enabled:             true,
     model:               'claude-sonnet-4-6',
-    max_tokens:          2048,
+    max_tokens:          4096, // 2048 was too low for complex multi-field documents
     max_task_budget_aud: 0.50, // single image, single call — low ceiling
     fallback_model:      null,
     // File upload constraints — configurable per-org

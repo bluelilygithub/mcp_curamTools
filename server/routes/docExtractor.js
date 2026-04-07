@@ -172,7 +172,7 @@ router.post(
           imageBuffer:  buffer,
           mimeType:     mimetype,
           model,
-          maxTokens:    adminConfig.max_tokens,
+          maxTokens:    adminConfig.max_tokens ?? 4096,
           instructions,
           maxPdfPages:  adminConfig.max_pdf_pages ?? 10,
           pdfDpi:       adminConfig.pdf_dpi       ?? 150,
