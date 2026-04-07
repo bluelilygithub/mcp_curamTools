@@ -57,8 +57,19 @@ function daysBetween(a, b) {
   return days < 0 ? 0 : days; // clamp negatives from data-entry errors
 }
 
-function responseBucket(days) {
-  if (days === null || days === undefined) return 'No response';
+/**
+ * Response time bucket.
+ * "No response" is reserved for leads still in 'new' status with no measured contact.
+ * Leads whose status has progressed (contacted, emailed, etc.) but have no formal
+ * progress_details row are bucketed as "Contacted (unmeasured)" — the operator
+ * updated the status but did not log the activity row. This is distinct from
+ * genuinely never-contacted leads.
+ */
+function responseBucket(days, enquiryStatus) {
+  if (days === null || days === undefined) {
+    const neverContacted = !enquiryStatus || enquiryStatus === 'new';
+    return neverContacted ? 'No response' : 'Contacted (unmeasured)';
+  }
   if (days === 0) return 'Same day';
   if (days === 1) return 'Next day';
   if (days <= 3)  return '2–3 days';
@@ -123,7 +134,12 @@ function computeAllMetrics(enquiries, progressMap) {
     const firstEntry = sortedRows[0];
     const lastEntry  = sortedRows[sortedRows.length - 1];
 
-    const daysToFirstResponse = firstEntry ? daysBetween(enquiryDate, firstEntry._dt) : null;
+    // First response: prefer first progress row, fallback to contacted_date field
+    let daysToFirstResponse = firstEntry ? daysBetween(enquiryDate, firstEntry._dt) : null;
+    if (daysToFirstResponse === null && enq.contacted_date) {
+      const cd = parseAcfDate(enq.contacted_date);
+      if (cd) daysToFirstResponse = daysBetween(enquiryDate, cd);
+    }
 
     // Days to close: prefer completion_date, fall back to last activity row
     let daysToClose = null;
@@ -139,11 +155,27 @@ function computeAllMetrics(enquiries, progressMap) {
     const isWon       = WON_STATUSES.has(enq.enquiry_status);
     const isOpen      = OPEN_STATUSES.has(enq.enquiry_status) || (!isTerminal && !enq.enquiry_status);
 
-    const daysSinceLast = lastEntry
-      ? daysBetween(lastEntry._dt, today)
+    // Last known contact: prefer last progress row, fallback to contacted_date, fallback to enquiry date
+    let lastKnownContactDate = null;
+    if (lastEntry) {
+      lastKnownContactDate = lastEntry._dt;
+    } else if (enq.contacted_date) {
+      lastKnownContactDate = parseAcfDate(enq.contacted_date);
+    }
+
+    const daysSinceLast = lastKnownContactDate
+      ? daysBetween(lastKnownContactDate, today)
       : daysBetween(enquiryDate, today);
 
-    const isStale = isOpen && daysSinceLast > 7;
+    // Only truly stale if: open status AND last known contact (or enquiry) was >7 days ago
+    // AND either has had some contact (to avoid flooding with brand-new leads) OR been waiting 3+ days
+    const isStale = isOpen && (
+      (lastKnownContactDate !== null && daysSinceLast > 7) ||
+      (lastKnownContactDate === null && enq.enquiry_status === 'new' && daysSinceLast > 3)
+    );
+
+    // True never-contacted: still 'new', no progress rows, no contacted_date
+    const isNeverContacted = enq.enquiry_status === 'new' && touchpointCount === 0 && !enq.contacted_date;
 
     return {
       id:                  enq.id,
@@ -164,6 +196,7 @@ function computeAllMetrics(enquiries, progressMap) {
       isTerminal,
       isOpen,
       isStale,
+      isNeverContacted,
       daysSinceLast,
       actionTypes:         sortedRows.map((r) => r.next_action).filter(Boolean),
     };
@@ -198,13 +231,16 @@ function buildCharts(metrics, heatmapAcc) {
   }
   const touchpointDistribution = tpOrder.map((name) => ({ name, value: tpBuckets[name] }));
 
-  // 3. Response time buckets
-  const rtOrder = ['Same day', 'Next day', '2–3 days', '4–7 days', '7+ days', 'No response'];
+  // 3. Response time buckets — pass status so we distinguish true no-response from unmeasured
+  const rtOrder = ['Same day', 'Next day', '2–3 days', '4–7 days', '7+ days', 'Contacted (unmeasured)', 'No response'];
   const rtBuckets = Object.fromEntries(rtOrder.map((k) => [k, 0]));
   for (const m of metrics) {
-    rtBuckets[responseBucket(m.daysToFirstResponse)]++;
+    const bucket = responseBucket(m.daysToFirstResponse, m.enquiry_status);
+    if (rtBuckets[bucket] !== undefined) rtBuckets[bucket]++;
   }
-  const responseTimeBuckets = rtOrder.map((name) => ({ name, value: rtBuckets[name] }));
+  const responseTimeBuckets = rtOrder
+    .map((name) => ({ name, value: rtBuckets[name] }))
+    .filter((b) => b.value > 0);
 
   // 4. Velocity by campaign (top 10 by volume)
   const byCampaign = {};
@@ -304,12 +340,14 @@ function buildCharts(metrics, heatmapAcc) {
     summary_stats: {
       total,
       won,
-      conversionRate:    round1((won / total) * 100),
-      avgTouchpoints:    round1(avg(metrics.map((m) => m.touchpoints))),
-      avgDaysToClose:    round1(avg(metrics.filter((m) => m.daysToClose !== null).map((m) => m.daysToClose))),
-      avgFirstResponse:  round1(avg(metrics.filter((m) => m.daysToFirstResponse !== null).map((m) => m.daysToFirstResponse))),
-      zeroFollowUp:      metrics.filter((m) => m.touchpoints === 0).length,
-      staleCount:        metrics.filter((m) => m.isStale).length,
+      conversionRate:       round1((won / total) * 100),
+      avgTouchpoints:       round1(avg(metrics.map((m) => m.touchpoints))),
+      avgDaysToClose:       round1(avg(metrics.filter((m) => m.daysToClose !== null).map((m) => m.daysToClose))),
+      avgFirstResponse:     round1(avg(metrics.filter((m) => m.daysToFirstResponse !== null).map((m) => m.daysToFirstResponse))),
+      zeroFollowUp:         metrics.filter((m) => m.touchpoints === 0).length,
+      neverContacted:       metrics.filter((m) => m.isNeverContacted).length,
+      contactedUnmeasured:  metrics.filter((m) => !m.isNeverContacted && m.touchpoints === 0 && m.enquiry_status !== 'new').length,
+      staleCount:           metrics.filter((m) => m.isStale).length,
     },
   };
 }
@@ -394,6 +432,10 @@ async function runLeadVelocity(context) {
   const userMessage =
     `Produce the Lead Velocity and Follow-up Intensity report for ${startDate} to ${endDate}.\n` +
     `All metrics have been pre-computed below. Do not request additional data.\n\n` +
+    `IMPORTANT — response time note: "Contacted (unmeasured)" in responseTimeDist means the lead's status ` +
+    `progressed beyond 'new' (i.e. the operator did contact them) but no formal progress_details activity ` +
+    `row was logged. This is a data-quality gap, not a true non-response. Only "No response" means the lead ` +
+    `is still in 'new' status with no evidence of contact at all.\n\n` +
     '```json\n' + JSON.stringify(agentPayload, null, 2) + '\n```';
 
   emit('Analysing velocity patterns…');

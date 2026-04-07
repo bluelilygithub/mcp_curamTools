@@ -227,10 +227,11 @@ export default function DiamondPlateDataPage() {
   const [conversationSeed, setConversationSeed] = useState('');
 
   // Velocity tab state
-  const [velocityRunning, setVelocityRunning] = useState(false);
+  const [velocityRunning,  setVelocityRunning]  = useState(false);
   const [velocityProgress, setVelocityProgress] = useState([]);
-  const [velocityError,   setVelocityError]   = useState('');
-  const [velocityResult,  setVelocityResult]  = useState(null);
+  const [velocityError,    setVelocityError]    = useState('');
+  const [velocityResult,   setVelocityResult]   = useState(null);
+  const [velocityHistory,  setVelocityHistory]  = useState([]);
 
   // Warn before leaving mid-run
   useEffect(() => {
@@ -248,6 +249,15 @@ export default function DiamondPlateDataPage() {
       })
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load velocity history (called on mount and when switching to velocity tab)
+  function loadVelocityHistory() {
+    api.get(`/agents/${VELOCITY_AGENT_SLUG}/history`)
+      .then((rows) => setVelocityHistory(rows ?? []))
+      .catch(() => {});
+  }
+
+  useEffect(() => { loadVelocityHistory(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function applyPreset(preset) {
     setActivePreset(preset.key);
@@ -372,6 +382,8 @@ export default function DiamondPlateDataPage() {
             } else if (msg.type === 'result') {
               resultReceived = true;
               setVelocityResult(msg.data);
+              // Refresh history so new run appears in the table + monthly banner updates
+              loadVelocityHistory();
             } else if (msg.type === 'error') {
               setVelocityError(msg.error);
             }
@@ -391,7 +403,7 @@ export default function DiamondPlateDataPage() {
   const tabBtn = (tab, label) => (
     <button
       key={tab}
-      onClick={() => setActiveTab(tab)}
+      onClick={() => { setActiveTab(tab); if (tab === 'velocity') loadVelocityHistory(); }}
       style={{
         padding: '0.35rem 0.85rem', fontSize: '0.8rem', fontWeight: 500,
         fontFamily: 'inherit', borderRadius: '0.5rem', cursor: 'pointer', border: 'none',
@@ -564,6 +576,42 @@ export default function DiamondPlateDataPage() {
       {/* ── Velocity ───────────────────────────────────────────────────── */}
       {activeTab === 'velocity' && (
         <div>
+          {/* Smart monthly reminder banner */}
+          {(() => {
+            if (activePreset !== 'm') return null;
+            const thisMonthStart = startOfMonth();
+            const recentRun = velocityHistory.find((r) =>
+              r.status === 'complete' &&
+              r.result?.startDate === thisMonthStart
+            );
+            if (!recentRun) return null;
+            const daysSince = Math.floor(
+              (Date.now() - new Date(recentRun.run_at).getTime()) / 86_400_000
+            );
+            return (
+              <div
+                className="rounded-xl p-3 mb-4 flex items-center justify-between gap-3 flex-wrap"
+                style={{ background: '#fffbeb', border: '1px solid #fcd34d' }}
+              >
+                <p className="text-sm m-0" style={{ color: '#92400e' }}>
+                  <strong>Heads up:</strong> a velocity run for this month already exists
+                  {daysSince === 0 ? ' (run today)' : ` (${daysSince} day${daysSince === 1 ? '' : 's'} ago)`}.
+                  Consider loading it instead of re-running to save tokens.
+                </p>
+                <button
+                  onClick={() => { setVelocityResult(recentRun.result); }}
+                  style={{
+                    padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 600,
+                    fontFamily: 'inherit', borderRadius: '0.5rem', border: 'none', cursor: 'pointer',
+                    background: '#f59e0b', color: '#fff', whiteSpace: 'nowrap',
+                  }}
+                >
+                  Load that run
+                </button>
+              </div>
+            );
+          })()}
+
           {/* Velocity run button + progress */}
           <div className="flex items-center gap-3 mb-4">
             <button
@@ -603,6 +651,10 @@ export default function DiamondPlateDataPage() {
           {velocityResult && !velocityRunning && (
             <VelocityDashboard
               result={velocityResult}
+              startDate={startDate}
+              endDate={endDate}
+              history={velocityHistory}
+              onLoadHistory={(r) => setVelocityResult(r)}
               onAskQuestion={(q) => {
                 setConversationSeed(q);
                 setActiveTab('conversation');
