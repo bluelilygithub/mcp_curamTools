@@ -34,6 +34,7 @@ const { logUsage }            = require('../services/UsageLogger');
 const { computeCostAud, getDailyOrgSpendAud, check: checkBudget, BudgetExceededError } = require('../services/CostGuardService');
 const { requireRole }         = require('../middleware/requireRole');
 const AgentConfigService      = require('../platform/AgentConfigService');
+const StorageService          = require('../services/StorageService');
 
 const router = express.Router();
 
@@ -126,10 +127,11 @@ router.post(
       model = requested;
     }
 
-    // ── Budget check + privacy settings — load once before the batch ─────
+    // ── Budget check + privacy settings + storage — load once before the batch ─
     const dailyOrgSpendAud = await getDailyOrgSpendAud(orgId);
     const { excluded_field_names: excludedFields = [] } =
       await AgentConfigService.getExtractionPrivacySettings(orgId);
+    const storageSettings = await AgentConfigService.getStorageSettings(orgId);
 
     // ── Sanitise and cap input fields at the platform boundary ────────────
     const batchLabel   = (req.body.label        || '').trim().slice(0, MAX_LABEL_LEN)        || null;
@@ -182,6 +184,33 @@ router.post(
         if (excludedFields.length > 0) {
           const excludedSet = new Set(excludedFields);
           result.fields = result.fields.filter((f) => !excludedSet.has(f.name));
+        }
+
+        // ── S3 storage — fire-and-forget, non-fatal ───────────────────────
+        // store_original: upload the raw file bytes (before extraction privacy,
+        //   which only affects the DB record — the file itself is unchanged).
+        // store_redacted: not yet implemented for native PDFs — falls back to do_not_store.
+        // do_not_store:   skip.
+        //
+        // Storage happens after privacy is applied to result.fields so the
+        // storageKey can be saved alongside the extraction result in the DB.
+        let storageKey = null;
+        if (storageSettings.enabled && storageSettings.default_behaviour === 'store_original') {
+          const storageBucket = storageSettings.aws_bucket ?? process.env.AWS_S3_BUCKET;
+          const storageRegion = storageSettings.aws_region ?? process.env.AWS_S3_REGION ?? 'ap-southeast-2';
+          if (storageBucket && process.env.AWS_ACCESS_KEY_ID) {
+            const safe = originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const key  = `org/${orgId}/${Date.now()}-${safe}`;
+            StorageService.put({ bucket: storageBucket, region: storageRegion, key, body: buffer, contentType: mimetype, metadata: { orgId: String(orgId), runId: String(runId) } })
+              .then(({ storageKey: sk }) => {
+                storageKey = sk;
+                return pool.query(
+                  `UPDATE doc_extraction_runs SET storage_key = $1 WHERE id = $2`,
+                  [sk, runId]
+                );
+              })
+              .catch((err) => console.warn(`[doc-extractor] S3 upload failed (non-fatal):`, err.message));
+          }
         }
 
         const costAud = computeCostAud({

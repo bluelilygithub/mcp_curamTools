@@ -972,6 +972,38 @@ router.put('/crm-privacy', async (req, res) => {
   }
 });
 
+// ── Storage Settings ──────────────────────────────────────────────────────
+//
+// GET  /admin/storage-settings — returns current storage_settings for the org
+// PUT  /admin/storage-settings — updates storage_settings (org_admin only)
+//
+// AWS credentials are env vars (secrets). bucket/region live in storage_settings
+// so admins can change them without a redeploy.
+
+router.get('/storage-settings', async (req, res) => {
+  try {
+    const settings = await AgentConfigService.getStorageSettings(req.user.orgId);
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load storage settings.' });
+  }
+});
+
+router.put('/storage-settings', async (req, res) => {
+  try {
+    const { enabled, default_behaviour, aws_bucket, aws_region } = req.body;
+    const patch = {};
+    if (typeof enabled           === 'boolean') patch.enabled           = enabled;
+    if (typeof default_behaviour === 'string')  patch.default_behaviour = default_behaviour;
+    if (typeof aws_bucket        === 'string')  patch.aws_bucket        = aws_bucket.trim() || null;
+    if (typeof aws_region        === 'string')  patch.aws_region        = aws_region.trim() || 'ap-southeast-2';
+    const updated = await AgentConfigService.updateStorageSettings(req.user.orgId, patch, req.user.email);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update storage settings.' });
+  }
+});
+
 // ── Diagnostics ───────────────────────────────────────────────────────────
 
 router.post('/diagnostics', async (req, res) => {
@@ -1151,6 +1183,25 @@ router.post('/diagnostics', async (req, res) => {
     }
     const data = await r.json();
     return `Property ${propertyId} accessible — ${data.rowCount ?? 0} rows`;
+  });
+
+  // ── 9. AWS S3 ─────────────────────────────────────────────────────────────
+  await check('AWS S3', async () => {
+    const AgentConfigService = require('../platform/AgentConfigService');
+    const StorageService     = require('../services/StorageService');
+
+    if (!process.env.AWS_ACCESS_KEY_ID)     throw new Error('AWS_ACCESS_KEY_ID is not set');
+    if (!process.env.AWS_SECRET_ACCESS_KEY) throw new Error('AWS_SECRET_ACCESS_KEY is not set');
+
+    const settings = await AgentConfigService.getStorageSettings(req.user.orgId);
+    const bucket   = settings.aws_bucket ?? process.env.AWS_S3_BUCKET;
+    const region   = settings.aws_region ?? process.env.AWS_S3_REGION ?? 'ap-southeast-2';
+
+    if (!bucket) throw new Error('S3 bucket not configured — set AWS_S3_BUCKET env var or configure storage_settings');
+
+    await StorageService.healthCheck({ bucket, region });
+    const status = settings.enabled ? `enabled (${settings.default_behaviour})` : 'disabled';
+    return `Bucket "${bucket}" (${region}) reachable — storage ${status}`;
   });
 
   console.log(`[Diagnostics] Run by ${req.user.email} — ${results.filter(r => r.ok).length}/${results.length} passed`);

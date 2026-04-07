@@ -454,6 +454,11 @@ async function initSchema() {
         USING GIN ((COALESCE(label, '') || ' ' || filename) gin_trgm_ops)
     `);
 
+    await client.query(`
+      ALTER TABLE doc_extraction_runs
+        ADD COLUMN IF NOT EXISTS storage_key TEXT
+    `);
+
     // ── Export Logs ────────────────────────────────────────────────────────────
     // Generic reusable log — any tool that exports data writes here.
     // tool_slug identifies the source tool; run_ids is an array of source record IDs.

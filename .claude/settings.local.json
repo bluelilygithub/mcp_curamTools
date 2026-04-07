@@ -37,7 +37,11 @@
       "Bash(node -e \"require\\('./platform/AgentConfigService'\\)\")",
       "Bash(node -e \"require\\('./routes/admin'\\)\")",
       "Bash(node -e \"require\\('./routes/docExtractor'\\)\")",
-      "Bash(node -e ':*)"
+      "Bash(node -e ':*)",
+      "Bash(node -e \"require\\('@aws-sdk/client-s3'\\); console.log\\('installed'\\)\")",
+      "Bash(node -e \"require\\('./services/StorageService'\\); console.log\\('StorageService OK'\\)\")",
+      "Bash(node -e \"require\\('./platform/AgentConfigService'\\); console.log\\('AgentConfigService OK'\\)\")",
+      "Bash(node -e \"require\\('acorn'\\).parse\\(require\\('fs'\\).readFileSync\\('./routes/docExtractor.js','utf8'\\),{ecmaVersion:2022}\\); console.log\\('OK'\\)\")"
     ]
   }
 }

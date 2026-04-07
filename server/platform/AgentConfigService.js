@@ -528,6 +528,52 @@ async function updateCrmPrivacySettings(orgId, patch, updatedBy) {
   return merged;
 }
 
+// ── Storage settings (system_settings key: 'storage_settings') ───────────────
+//
+// Controls whether and how Doc Extractor (and future tools) store files in S3.
+// AWS credentials stay as env vars (secrets); bucket/region live here because
+// admins may reasonably change them without a redeploy.
+
+const STORAGE_SETTINGS_DEFAULTS = {
+  enabled:           false,
+  default_behaviour: 'do_not_store', // 'store_original' | 'store_redacted' | 'do_not_store'
+  aws_bucket:        null,
+  aws_region:        'ap-southeast-2',
+};
+
+/**
+ * Returns org-level storage settings.
+ */
+async function getStorageSettings(orgId) {
+  try {
+    const res = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'storage_settings' LIMIT 1`,
+      [orgId]
+    );
+    if (res.rows.length === 0) return { ...STORAGE_SETTINGS_DEFAULTS };
+    return { ...STORAGE_SETTINGS_DEFAULTS, ...(res.rows[0].value || {}) };
+  } catch (err) {
+    console.error('[AgentConfigService] getStorageSettings error:', err.message);
+    return { ...STORAGE_SETTINGS_DEFAULTS };
+  }
+}
+
+/**
+ * Saves org-level storage settings.
+ */
+async function updateStorageSettings(orgId, patch, updatedBy) {
+  const current = await getStorageSettings(orgId);
+  const merged  = { ...current, ...patch };
+  await pool.query(
+    `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+     VALUES ($1, 'storage_settings', $2, $3, NOW())
+     ON CONFLICT (org_id, key)
+     DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+    [orgId, JSON.stringify(merged), updatedBy]
+  );
+  return merged;
+}
+
 module.exports = {
   getAgentConfig,
   getAgentConfigMeta,
@@ -543,6 +589,8 @@ module.exports = {
   updateExtractionPrivacySettings,
   getCrmPrivacySettings,
   updateCrmPrivacySettings,
+  getStorageSettings,
+  updateStorageSettings,
   AGENT_DEFAULTS,
   ADMIN_DEFAULTS,
   AGENT_MODEL_REQUIREMENTS,
