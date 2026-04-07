@@ -194,11 +194,12 @@ export default function DocExtractorPage() {
     try {
       const full = await api.get(`/doc-extractor/runs/${row.id}`);
       setViewed({
-        runId:        full.id,
-        result:       full.result,
-        filename:     full.label || full.filename,
-        purpose:      full.purpose,
+        runId:       full.id,
+        result:      full.result,
+        filename:    full.label || full.filename,
+        purpose:     full.purpose,
         instructions: full.instructions,
+        storageKey:  full.storage_key ?? null,
       });
     } catch (err) {
       setRunsError(`Failed to load run: ${err.message}`);
@@ -479,6 +480,7 @@ export default function DocExtractorPage() {
           filename={viewed.filename}
           purpose={viewed.purpose}
           instructions={viewed.instructions}
+          storageKey={viewed.storageKey}
           onClose={() => setViewed(null)}
         />
       )}
@@ -875,10 +877,11 @@ async function logExport(runIds, format, fieldCount) {
 
 // ── Export button ─────────────────────────────────────────────────────────────
 
-function ExportBtn({ onClick, title, children }) {
+function ExportBtn({ onClick, title, children, disabled }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
       title={title}
       className="flex items-center justify-center rounded-lg text-xs px-2.5 py-1.5 gap-1.5"
@@ -1129,11 +1132,29 @@ function FieldCustomizationModal({ fields, baseName, format, runId, onClose }) {
 
 // ── Result panel ──────────────────────────────────────────────────────────────
 
-function ResultPanel({ runId, result, filename, purpose, instructions, onClose }) {
-  const [customizeFor, setCustomizeFor] = useState(null); // 'pdf' | 'csv' | null
+function ResultPanel({ runId, result, filename, purpose, instructions, storageKey, onClose }) {
+  const [customizeFor,   setCustomizeFor]   = useState(null);  // 'pdf' | 'csv' | null
+  const [downloading,    setDownloading]    = useState(false);
+  const [downloadError,  setDownloadError]  = useState('');
 
   const fields   = result?.fields ?? [];
   const baseName = (filename ?? 'extraction').replace(/\.[^.]+$/, '');
+
+  async function handleDownload() {
+    setDownloading(true);
+    setDownloadError('');
+    try {
+      const { url, filename: dlFilename } = await api.get(`/doc-extractor/runs/${runId}/download-url`);
+      const a = Object.assign(document.createElement('a'), { href: url, download: dlFilename ?? filename ?? 'file', target: '_blank' });
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      setDownloadError(err.message);
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return (
     <>
@@ -1161,6 +1182,12 @@ function ResultPanel({ runId, result, filename, purpose, instructions, onClose }
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {storageKey && (
+              <ExportBtn title="Download original file" onClick={handleDownload} disabled={downloading}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                {downloading ? 'Getting link…' : 'Download'}
+              </ExportBtn>
+            )}
             {fields.length > 0 && (
               <>
                 <ExportBtn title="Export as PDF" onClick={() => setCustomizeFor('pdf')}>
@@ -1183,6 +1210,12 @@ function ResultPanel({ runId, result, filename, purpose, instructions, onClose }
             </button>
           </div>
         </div>
+
+        {downloadError && (
+          <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--color-error-subtle, #fef2f2)', color: 'var(--color-error, #dc2626)' }}>
+            Download failed: {downloadError}
+          </p>
+        )}
 
         {/* Purpose + Instructions metadata */}
         {(purpose || instructions) && (

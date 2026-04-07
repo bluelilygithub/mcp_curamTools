@@ -398,7 +398,7 @@ router.get('/runs/:runId', requireAuth, async (req, res) => {
                 THEN 'stale'
                 ELSE status
               END AS status,
-              result, error, created_at, completed_at, deleted_at
+              result, error, created_at, completed_at, deleted_at, storage_key
          FROM doc_extraction_runs
         WHERE id = $1 AND org_id = $2 ${ownerClause}`,
       params
@@ -409,6 +409,48 @@ router.get('/runs/:runId', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[doc-extractor] Failed to fetch run:', err.message);
     res.status(500).json({ error: 'Failed to fetch run.' });
+  }
+});
+
+// ── GET /runs/:runId/download-url — pre-signed S3 URL ────────────────────────
+// Generates a 1-hour pre-signed URL for the stored original file.
+// Returns 404 if the run has no storage_key (file was not stored).
+
+router.get('/runs/:runId/download-url', requireAuth, async (req, res) => {
+  try {
+    const { orgId, id: userId } = req.user;
+    const admin = await isOrgAdmin(userId);
+
+    const ownerClause = admin ? '' : 'AND user_id = $3';
+    const params = admin
+      ? [req.params.runId, orgId]
+      : [req.params.runId, orgId, userId];
+
+    const { rows } = await pool.query(
+      `SELECT storage_key, filename FROM doc_extraction_runs
+        WHERE id = $1 AND org_id = $2 ${ownerClause} AND deleted_at IS NULL`,
+      params
+    );
+
+    if (!rows[0])             return res.status(404).json({ error: 'Run not found.' });
+    if (!rows[0].storage_key) return res.status(404).json({ error: 'No stored file for this run.' });
+
+    const storageSettings = await AgentConfigService.getStorageSettings(orgId);
+    const bucket = storageSettings.aws_bucket ?? process.env.AWS_S3_BUCKET;
+    const region = storageSettings.aws_region ?? process.env.AWS_S3_REGION ?? 'ap-southeast-2';
+
+    if (!bucket) return res.status(503).json({ error: 'S3 not configured.' });
+
+    const { url, expiresAt } = await StorageService.getSignedDownloadUrl({
+      bucket,
+      region,
+      key: rows[0].storage_key,
+    });
+
+    res.json({ url, expiresAt, filename: rows[0].filename });
+  } catch (err) {
+    console.error('[doc-extractor] download-url error:', err.message);
+    res.status(500).json({ error: 'Failed to generate download URL.' });
   }
 });
 
