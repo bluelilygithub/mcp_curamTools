@@ -15,7 +15,7 @@
 
 const { agentOrchestrator } = require('../../platform/AgentOrchestrator');
 const AgentConfigService    = require('../../platform/AgentConfigService');
-const { getAnalyticsServer, getWordPressServer, callMcpTool } = require('../../platform/mcpTools');
+const { getAdsServer, getAnalyticsServer, getWordPressServer, callMcpTool } = require('../../platform/mcpTools');
 const { buildSystemPrompt } = require('./prompt');
 const { TOOL_SLUG }         = require('./tools');
 
@@ -111,8 +111,9 @@ async function runDiamondplateData(context) {
 
   emit('Fetching CRM and analytics data...');
 
-  const gaServer = await getAnalyticsServer(orgId).catch(function() { return null; });
-  const wpServer = await getWordPressServer(orgId).catch(function() { return null; });
+  const gaServer  = await getAnalyticsServer(orgId).catch(function() { return null; });
+  const wpServer  = await getWordPressServer(orgId).catch(function() { return null; });
+  const adsServer = await getAdsServer(orgId).catch(function() { return null; });
 
   function notConfigured(source) {
     return { error: source + ' MCP server is not configured for this organisation.' };
@@ -141,12 +142,18 @@ async function runDiamondplateData(context) {
       ? callMcpTool(orgId, gaServer, 'ga4_get_landing_page_performance', rangeArgs)
           .catch(function(e) { return { error: e.message }; })
       : Promise.resolve(notConfigured('Google Analytics')),
+
+    adsServer
+      ? callMcpTool(orgId, adsServer, 'ads_get_change_history', rangeArgs)
+          .catch(function(e) { return { error: e.message }; })
+      : Promise.resolve(notConfigured('Google Ads')),
   ]);
 
   const rawEnquiries      = results[0];
   const rawNotInterested  = results[1];
   const trafficSources    = results[2];
   const landingPages      = results[3];
+  const changeHistory     = results[4];
 
   // Emit diagnostic progress so errors are visible in the UI
   if (rawEnquiries && rawEnquiries.error) {
@@ -169,6 +176,12 @@ async function runDiamondplateData(context) {
     emit('GA4 landing pages: ' + landingPages.error);
   }
 
+  if (changeHistory && changeHistory.error) {
+    emit('Ads change history: ' + changeHistory.error);
+  } else if (Array.isArray(changeHistory)) {
+    emit('Fetched ' + changeHistory.length + ' campaign change events');
+  }
+
   // ── Aggregate before passing to Claude ───────────────────────────────────
 
   emit('Aggregating lead data...');
@@ -186,6 +199,7 @@ async function runDiamondplateData(context) {
     notInterestedReasons:notInterestedSummary,
     ga4TrafficSources:   trafficSources,
     ga4LandingPages:     landingPages,
+    campaignChangeHistory: changeHistory,
   };
 
   const userMessage =

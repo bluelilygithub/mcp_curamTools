@@ -43,7 +43,14 @@ Always produce a report with these sections, in order. Use markdown headings (##
 - Group reasons by frequency; call out the top 2-3 explicitly
 - Suggest one concrete action for each top reason
 
-### 8. Key Recommendations
+### 8. Campaign Changes & Impact
+- Only include this section if campaignChangeHistory is present and non-empty.
+- List notable changes made during the period (bid changes, budget adjustments, status changes, ad edits, keyword additions/removals).
+- For each significant change, comment on whether lead volume or conversion patterns shifted after the change date — use the CRM enquiry dates as the signal.
+- Flag any changes that appear to have had a negative impact on enquiry volume.
+- If no changes were recorded in the period, note that briefly and skip the section.
+
+### 9. Key Recommendations
 - Maximum 5 bullet points, ordered by impact
 - Each recommendation must be directly supported by the data above
 - Be specific: name campaigns, search terms, landing pages, or device types
