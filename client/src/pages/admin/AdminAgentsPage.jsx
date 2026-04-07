@@ -209,7 +209,7 @@ function DocExtractorSettingsSection({ config, onChange }) {
   );
 }
 
-function AgentCard({ agent, models, onSave }) {
+function AgentCard({ agent, models, onSave, isOpen, onToggle }) {
   const [config,         setConfig]         = useState(agent);
   const [profile,        setProfile]        = useState(null);
   const [saving,         setSaving]         = useState(false);
@@ -238,13 +238,19 @@ function AgentCard({ agent, models, onSave }) {
 
   return (
     <div
-      className="rounded-2xl border p-6 space-y-4"
+      className="rounded-2xl border overflow-hidden"
       style={{
-        background:   'var(--color-surface)',
-        borderColor:  hasMismatch ? '#f59e0b' : 'var(--color-border)',
+        background:  'var(--color-surface)',
+        borderColor: hasMismatch ? '#f59e0b' : 'var(--color-border)',
       }}
     >
-      <div className="flex items-center justify-between">
+      {/* ── Clickable header ── */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-6 py-4 text-left"
+        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+      >
         <div className="flex items-center gap-2 flex-wrap">
           <h2 className="text-base font-semibold" style={{ color: 'var(--color-text)' }}>{agent.slug}</h2>
           {hasMismatch && (
@@ -256,21 +262,42 @@ function AgentCard({ agent, models, onSave }) {
               ⚠ Not on recommended model
             </span>
           )}
+          {!isOpen && (
+            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: config.enabled ? 'var(--color-primary)' : '#ef4444', color: '#fff' }}>
+              {config.enabled ? 'Enabled' : 'Disabled'}
+            </span>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: 'var(--color-muted)' }}>Enabled</span>
-          <button
-            onClick={() => setConfig((c) => ({ ...c, enabled: !c.enabled }))}
-            className="relative inline-flex h-5 w-9 rounded-full transition-all"
-            style={{ background: config.enabled ? 'var(--color-primary)' : '#ef4444' }}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <svg
+            width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2"
+            style={{ color: 'var(--color-muted)', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
           >
-            <span
-              className="absolute top-0.5 left-0.5 h-4 w-4 rounded-full transition-all"
-              style={{ background: '#fff', transform: config.enabled ? 'translateX(16px)' : 'translateX(0)' }}
-            />
-          </button>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
         </div>
-      </div>
+      </button>
+
+      {/* ── Collapsible body ── */}
+      {isOpen && (
+        <div className="px-6 pb-6 space-y-4" style={{ borderTop: '1px solid var(--color-border)' }}>
+          <div className="flex items-center justify-between pt-4">
+            <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>Kill switch</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs" style={{ color: 'var(--color-muted)' }}>Enabled</span>
+              <button
+                onClick={() => setConfig((c) => ({ ...c, enabled: !c.enabled }))}
+                className="relative inline-flex h-5 w-9 rounded-full transition-all"
+                style={{ background: config.enabled ? 'var(--color-primary)' : '#ef4444' }}
+              >
+                <span
+                  className="absolute top-0.5 left-0.5 h-4 w-4 rounded-full transition-all"
+                  style={{ background: '#fff', transform: config.enabled ? 'translateX(16px)' : 'translateX(0)' }}
+                />
+              </button>
+            </div>
+          </div>
 
       {error   && <InlineBanner type="error"   message={error}   onDismiss={() => setError('')} />}
       {success && <InlineBanner type="neutral" message={success} />}
@@ -376,15 +403,22 @@ function AgentCard({ agent, models, onSave }) {
       <div className="flex justify-end pt-2">
         <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
       </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function AdminAgentsPage() {
-  const [agents,  setAgents]  = useState([]);
-  const [models,  setModels]  = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState('');
+  const [agents,   setAgents]   = useState([]);
+  const [models,   setModels]   = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState('');
+  const [openSlug, setOpenSlug] = useState(null);
+
+  function toggleSlug(slug) {
+    setOpenSlug((prev) => (prev === slug ? null : slug));
+  }
 
   useEffect(() => {
     Promise.all([
@@ -414,7 +448,14 @@ export default function AdminAgentsPage() {
         <EmptyState icon="bot" message="No agents configured yet." hint="Agents appear here once registered in the platform." />
       ) : (
         agents.map((agent) => (
-          <AgentCard key={agent.slug} agent={agent} models={models} onSave={() => {}} />
+          <AgentCard
+            key={agent.slug}
+            agent={agent}
+            models={models}
+            onSave={() => {}}
+            isOpen={openSlug === agent.slug}
+            onToggle={() => toggleSlug(agent.slug)}
+          />
         ))
       )}
     </div>
