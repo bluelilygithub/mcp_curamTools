@@ -82,7 +82,7 @@ Check all three before editing:
 ### wordpress.js — 7 tools
 - `wp_get_enquiries` ← core attribution fields; returns device_type on every record
 - `wp_get_enquiry_details` ← extended fields: sales_rep, package_type, enquiry_source, completion_date, final_value, technician, job_number + all core fields
-- `wp_get_progress_details` ← progress_details ACF repeater; entry_date (d/m/Y g:i a), next_event, next_action (Phone/Email/Appointment/Invoice/Warranty), event_message, staff_member; row_count=0 for no-activity leads
+- `wp_get_progress_details` ← progress_details ACF repeater; entry_date (MySQL datetime Y-m-d H:i:s — auto-populated by ACF JS, unreliable due to m/d vs d/m format bug in ACF UI; do not use for timing analysis), next_event (MySQL datetime Y-m-d H:i:s — operator-scheduled follow-up date, reliable), next_action (Phone/Email/Appointment/Invoice/Warranty), event_message, staff_member; row_count=0 for no-activity leads
 - `wp_get_not_interested_reasons`
 - `wp_enquiry_field_check`
 - `wp_find_meta_key`

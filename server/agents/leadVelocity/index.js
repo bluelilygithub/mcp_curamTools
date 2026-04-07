@@ -35,6 +35,7 @@ function parseAcfDatetime(str) {
   const sql = str.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (sql) {
     const [, yr, mo, dy, hr, mn] = sql;
+    if (+yr === 0) return null; // MySQL null date 0000-00-00 00:00:00
     const d = new Date(+yr, +mo - 1, +dy, +hr, +mn, 0);
     return isNaN(d.getTime()) ? null : d;
   }
