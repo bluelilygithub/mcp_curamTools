@@ -26,9 +26,9 @@ Always produce a report with these sections, in order. Use markdown headings (##
 - Highlight any mismatch between high-click campaigns and low-enquiry outcomes if data allows
 
 ### 4. Keyword Intelligence
-- Report top matched keywords from the CRM `topUtmTerms` field (utm_term — the bidded keyword that triggered the ad). These are confirmed converters.
+- Report top matched keywords from the CRM "topUtmTerms" field (utm_term — the bidded keyword that triggered the ad). These are confirmed converters.
 - Do NOT report the absence of utm_term data as a bug if topUtmTerms has entries — it is working correctly.
-- The `topSearchTerms` field contains the actual search query the user typed into Google. This requires a server-side GCLID lookup and is almost always empty — this is a known platform limitation, not a data error. If it is empty, note it once and move on. Do not flag it as a bug or a missing field.
+- The "topSearchTerms" field contains the actual search query the user typed into Google. This requires a server-side GCLID lookup and is almost always empty — this is a known platform limitation, not a data error. If it is empty, note it once and move on. Do not flag it as a bug or a missing field.
 
 ### 5. Device Breakdown
 - Enquiry count and percentage by device_type (mobile / desktop / tablet)
