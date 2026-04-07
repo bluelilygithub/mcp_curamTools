@@ -371,7 +371,7 @@ export default function VelocityDashboard({ result, startDate, endDate, onAskQue
           <StatCard
             label="Avg First Response"
             value={stats.avgFirstResponse != null ? `${stats.avgFirstResponse}d` : '—'}
-            tooltip="Average days from enquiry submission to first logged contact. Uses contacted_date field as fallback when no activity row exists. Faster response = higher conversion in most markets."
+            tooltip="Average days from enquiry submission to the first scheduled next_event follow-up date. Uses contacted_date as fallback when no follow-up was scheduled. Measures how quickly the team plans action on a new lead."
           />
           <StatCard
             label="Never Contacted" value={stats.neverContacted}
@@ -387,6 +387,11 @@ export default function VelocityDashboard({ result, startDate, endDate, onAskQue
             label="Stale Open Leads" value={stats.staleCount}
             sub="open, 7+ days no contact"
             tooltip="Leads in an open status (new/contacted/emailed) where the last known contact was more than 7 days ago. These represent revenue at risk of being lost."
+          />
+          <StatCard
+            label="No Next Step Planned" value={stats.noNextStepLeads}
+            sub={stats.noNextStepRows != null ? `${stats.noNextStepRows} activity rows affected` : undefined}
+            tooltip="Leads where an operator logged a CRM activity but did not schedule a next_event follow-up date. The lead was worked but left with no planned next action — a direct process failure. Each instance is a training opportunity."
           />
         </div>
       )}
@@ -446,8 +451,8 @@ export default function VelocityDashboard({ result, startDate, endDate, onAskQue
           </Section>
 
           <Section
-            title="Activity Heatmap — When follow-ups are logged"
-            tooltip="Shows which days and hours follow-up activity is logged. Dark squares = high activity. Blank areas reveal when the team is not following up. Ideal pattern: activity concentrated in business hours with no multi-day gaps."
+            title="Follow-up Schedule Heatmap"
+            tooltip="Shows which days and hours the team schedules their next follow-up events. Dark squares = many follow-ups planned at that time. Blank areas mean no follow-ups are being scheduled then. Note: only rows where a next follow-up date was set are counted — rows with no next step planned are excluded and tracked separately."
           >
             <HeatmapGrid data={charts.heatmapData || []} />
           </Section>

@@ -48,6 +48,7 @@ Produce sections in order using markdown headings. Skip any section where data i
 
 ### 8. Training & Process Gaps
 - Specific process failures evidenced in the data (e.g. no-response leads, follow-up dropping after 2 attempts, no Appointment actions logged)
+- **No next step planned**: if noNextStepLeads > 0, call it out explicitly. An operator logged activity on a lead but did not set a next_event (next follow-up date). The lead is now in limbo — worked but not progressing. State how many leads and how many individual activity rows this affects. This is a direct training requirement.
 - Each observation must cite a specific data point
 
 ### 9. Key Recommendations

@@ -19,18 +19,34 @@ const { TOOL_SLUG }         = require('./tools');
 // ── Date parsing ──────────────────────────────────────────────────────────────
 
 /**
- * Parse ACF date_time_picker value stored as "d/m/Y g:i a"
- * e.g. "08/04/2026 9:30 am"
+ * Parse a datetime string from ACF postmeta.
+ *
+ * ACF stores datetime picker values in MySQL datetime format regardless of the
+ * configured display/return format — e.g. "2026-04-07 14:30:27".
+ * Parsed as local time (no UTC conversion) to preserve day/hour intent.
+ *
+ * Falls back to the "d/m/Y g:i a" display format for any legacy rows that may
+ * have been stored differently.
  */
 function parseAcfDatetime(str) {
   if (!str || typeof str !== 'string') return null;
-  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*(am|pm)$/i);
-  if (!m) return null;
-  const [, day, mon, yr, hr, min, ampm] = m;
+
+  // Primary: MySQL datetime — 2026-04-07 14:30:27
+  const sql = str.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (sql) {
+    const [, yr, mo, dy, hr, mn] = sql;
+    const d = new Date(+yr, +mo - 1, +dy, +hr, +mn, 0);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // Fallback: ACF display format — 08/04/2026 9:30 am
+  const acf = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+  if (!acf) return null;
+  const [, day, mon, yr, hr, min, ampm] = acf;
   let h = parseInt(hr, 10);
   if (ampm.toLowerCase() === 'pm' && h !== 12) h += 12;
   if (ampm.toLowerCase() === 'am' && h === 12) h = 0;
-  return new Date(parseInt(yr, 10), parseInt(mon, 10) - 1, parseInt(day, 10), h, parseInt(min, 10));
+  return new Date(+yr, +mon - 1, +day, h, +min, 0);
 }
 
 /**
@@ -117,48 +133,54 @@ function computeAllMetrics(enquiries, progressMap) {
   const metrics = enquiries.map((enq) => {
     const enquiryDate    = new Date(enq.date);
     const progressData   = progressMap.get(String(enq.id)) || { row_count: 0, rows: [] };
+    const allRows        = progressData.rows || [];
     const touchpointCount = progressData.row_count;
 
-    // Parse and sort rows by entry_date
-    const sortedRows = (progressData.rows || [])
-      .map((r) => ({ ...r, _dt: parseAcfDatetime(r.entry_date) }))
+    // Parse next_event timestamps (user-scheduled follow-up dates — more reliable than
+    // auto-populated entry_date which has known ACF format/timezone issues).
+    // Rows with no next_event still count as touchpoints but are flagged as inefficient.
+    const rowsWithNextEvent = allRows
+      .map((r) => ({ ...r, _dt: parseAcfDatetime(r.next_event) }))
       .filter((r) => r._dt)
       .sort((a, b) => a._dt - b._dt);
 
-    // Accumulate heatmap counts
-    for (const r of sortedRows) {
+    // Rows where an activity was logged but no follow-up date was scheduled
+    const noNextEventCount = allRows.filter((r) => !r.next_event).length;
+
+    // Accumulate heatmap from scheduled next_event dates
+    for (const r of rowsWithNextEvent) {
       const key = `${r._dt.getDay()}-${r._dt.getHours()}`;
       if (heatmapAcc[key] !== undefined) heatmapAcc[key]++;
     }
 
-    const firstEntry = sortedRows[0];
-    const lastEntry  = sortedRows[sortedRows.length - 1];
+    const firstScheduled = rowsWithNextEvent[0];
+    const lastScheduled  = rowsWithNextEvent[rowsWithNextEvent.length - 1];
 
-    // First response: prefer first progress row, fallback to contacted_date field
-    let daysToFirstResponse = firstEntry ? daysBetween(enquiryDate, firstEntry._dt) : null;
+    // First planned follow-up: prefer row 0 next_event, fallback to contacted_date
+    let daysToFirstResponse = firstScheduled ? daysBetween(enquiryDate, firstScheduled._dt) : null;
     if (daysToFirstResponse === null && enq.contacted_date) {
       const cd = parseAcfDate(enq.contacted_date);
       if (cd) daysToFirstResponse = daysBetween(enquiryDate, cd);
     }
 
-    // Days to close: prefer completion_date, fall back to last activity row
+    // Days to close: prefer completion_date, fall back to last scheduled event
     let daysToClose = null;
     if (enq.completion_date) {
       const cd = parseAcfDate(enq.completion_date);
       if (cd) daysToClose = daysBetween(enquiryDate, cd);
     }
-    if (daysToClose === null && lastEntry) {
-      daysToClose = daysBetween(enquiryDate, lastEntry._dt);
+    if (daysToClose === null && lastScheduled) {
+      daysToClose = daysBetween(enquiryDate, lastScheduled._dt);
     }
 
     const isTerminal  = TERMINAL_STATUSES.has(enq.enquiry_status);
     const isWon       = WON_STATUSES.has(enq.enquiry_status);
     const isOpen      = OPEN_STATUSES.has(enq.enquiry_status) || (!isTerminal && !enq.enquiry_status);
 
-    // Last known contact: prefer last progress row, fallback to contacted_date, fallback to enquiry date
+    // Last known contact: prefer last scheduled next_event, fallback to contacted_date
     let lastKnownContactDate = null;
-    if (lastEntry) {
-      lastKnownContactDate = lastEntry._dt;
+    if (lastScheduled) {
+      lastKnownContactDate = lastScheduled._dt;
     } else if (enq.contacted_date) {
       lastKnownContactDate = parseAcfDate(enq.contacted_date);
     }
@@ -167,8 +189,6 @@ function computeAllMetrics(enquiries, progressMap) {
       ? daysBetween(lastKnownContactDate, today)
       : daysBetween(enquiryDate, today);
 
-    // Only truly stale if: open status AND last known contact (or enquiry) was >7 days ago
-    // AND either has had some contact (to avoid flooding with brand-new leads) OR been waiting 3+ days
     const isStale = isOpen && (
       (lastKnownContactDate !== null && daysSinceLast > 7) ||
       (lastKnownContactDate === null && enq.enquiry_status === 'new' && daysSinceLast > 3)
@@ -190,6 +210,7 @@ function computeAllMetrics(enquiries, progressMap) {
       enquiry_source:      enq.enquiry_source,
       final_value:         enq.final_value,
       touchpoints:         touchpointCount,
+      noNextEventCount,
       daysToFirstResponse,
       daysToClose,
       isWon,
@@ -198,7 +219,8 @@ function computeAllMetrics(enquiries, progressMap) {
       isStale,
       isNeverContacted,
       daysSinceLast,
-      actionTypes:         sortedRows.map((r) => r.next_action).filter(Boolean),
+      // Action types from all rows (not just those with next_event)
+      actionTypes: allRows.map((r) => r.next_action).filter(Boolean),
     };
   });
 
@@ -348,6 +370,10 @@ function buildCharts(metrics, heatmapAcc) {
       neverContacted:       metrics.filter((m) => m.isNeverContacted).length,
       contactedUnmeasured:  metrics.filter((m) => !m.isNeverContacted && m.touchpoints === 0 && m.enquiry_status !== 'new').length,
       staleCount:           metrics.filter((m) => m.isStale).length,
+      // Leads where an activity was logged but no next follow-up date was scheduled —
+      // a process failure: the operator worked the lead but left it with no next step.
+      noNextStepLeads:      metrics.filter((m) => m.noNextEventCount > 0).length,
+      noNextStepRows:       metrics.reduce((sum, m) => sum + m.noNextEventCount, 0),
     },
   };
 }
@@ -432,10 +458,16 @@ async function runLeadVelocity(context) {
   const userMessage =
     `Produce the Lead Velocity and Follow-up Intensity report for ${startDate} to ${endDate}.\n` +
     `All metrics have been pre-computed below. Do not request additional data.\n\n` +
-    `IMPORTANT — response time note: "Contacted (unmeasured)" in responseTimeDist means the lead's status ` +
-    `progressed beyond 'new' (i.e. the operator did contact them) but no formal progress_details activity ` +
-    `row was logged. This is a data-quality gap, not a true non-response. Only "No response" means the lead ` +
-    `is still in 'new' status with no evidence of contact at all.\n\n` +
+    `DATA NOTES:\n` +
+    `- "Contacted (unmeasured)" in responseTimeDist means the lead's status progressed beyond 'new' ` +
+    `but no formal progress_details row was logged. This is a data-quality gap, not a true non-response. ` +
+    `Only "No response" means the lead is still 'new' with no evidence of contact.\n` +
+    `- Timing metrics (first response, heatmap) are derived from the next_event field on each ` +
+    `progress_details row — the date the operator scheduled the next follow-up. This is intentionally ` +
+    `set by staff and more reliable than the auto-populated entry_date.\n` +
+    `- noNextStepLeads / noNextStepRows: leads/rows where an activity was logged but the operator ` +
+    `did not schedule a next_event. This is a process failure — the lead was worked but left with ` +
+    `no planned next action. Flag this explicitly in the Training & Process Gaps section.\n\n` +
     '```json\n' + JSON.stringify(agentPayload, null, 2) + '\n```';
 
   emit('Analysing velocity patterns…');
