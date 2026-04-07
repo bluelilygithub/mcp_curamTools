@@ -19,7 +19,7 @@
  *   exportText({ content: 'some text', filename: 'export.txt' });
  */
 
-import { useAuthStore } from '../stores/authStore';
+import useAuthStore from '../stores/authStore';
 
 // ── PDF — server-side via Puppeteer ──────────────────────────────────────────
 
