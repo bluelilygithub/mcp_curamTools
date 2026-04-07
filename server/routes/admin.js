@@ -997,7 +997,7 @@ router.put('/storage-settings', async (req, res) => {
     if (typeof default_behaviour === 'string')  patch.default_behaviour = default_behaviour;
     if (typeof aws_bucket        === 'string')  patch.aws_bucket        = aws_bucket.trim() || null;
     if (typeof aws_region        === 'string')  patch.aws_region        = aws_region.trim() || 'ap-southeast-2';
-    const updated = await AgentConfigService.updateStorageSettings(req.user.orgId, patch, req.user.email);
+    const updated = await AgentConfigService.updateStorageSettings(req.user.orgId, patch, req.user.id);
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update storage settings.' });
