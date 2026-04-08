@@ -222,6 +222,11 @@ function computeAllMetrics(enquiries, progressMap) {
       daysSinceLast,
       // Action types from all rows (not just those with next_event)
       actionTypes: allRows.map((r) => r.next_action).filter(Boolean),
+
+      // Note engagement: total characters logged across all event_message fields.
+      // Used as a rough proxy for interaction depth — longer notes imply more substantive engagement.
+      totalNoteChars: allRows.reduce((sum, r) => sum + (r.event_message ? r.event_message.trim().length : 0), 0),
+      notedTouchpoints: allRows.filter((r) => r.event_message && r.event_message.trim().length > 0).length,
     };
   });
 
@@ -330,7 +335,30 @@ function buildCharts(metrics, heatmapAcc) {
       final_value:    m.final_value,
     }));
 
-  // 9. Velocity by enquiry source
+  // 9. Note engagement distribution
+  // Bucket leads by total characters logged across all their progress notes.
+  // Leads with 0 touchpoints are excluded (no opportunity to write notes).
+  // Thresholds: minimal <50 chars, standard 50–250, detailed 250+
+  const noteOrder   = ['No notes', 'Minimal (<50)', 'Standard (50–250)', 'Detailed (250+)'];
+  const noteBuckets = Object.fromEntries(noteOrder.map((k) => [k, 0]));
+  for (const m of metrics) {
+    if (m.touchpoints === 0) continue; // skip — no touchpoints means no opportunity for notes
+    const chars = m.totalNoteChars;
+    if (chars === 0)        noteBuckets['No notes']++;
+    else if (chars < 50)   noteBuckets['Minimal (<50)']++;
+    else if (chars <= 250) noteBuckets['Standard (50–250)']++;
+    else                   noteBuckets['Detailed (250+)']++;
+  }
+  const noteEngagement = noteOrder
+    .map((name) => ({ name, value: noteBuckets[name] }))
+    .filter((b) => b.value > 0);
+
+  // Stat: leads with touchpoints that have no notes at all
+  const leadsWithTouchpoints = metrics.filter((m) => m.touchpoints > 0);
+  const noNotesCount = leadsWithTouchpoints.filter((m) => m.totalNoteChars === 0).length;
+  const detailedNotesCount = leadsWithTouchpoints.filter((m) => m.totalNoteChars > 250).length;
+
+  // 10. Velocity by enquiry source
   const bySource = {};
   for (const m of metrics) {
     const k = m.enquiry_source || m.utm_source || '(unknown)';
@@ -357,6 +385,7 @@ function buildCharts(metrics, heatmapAcc) {
     velocityByCampaign,
     velocityBySource,
     actionMix,
+    noteEngagement,
     heatmapData,
     scatterData,
     staleLeads,
@@ -377,6 +406,10 @@ function buildCharts(metrics, heatmapAcc) {
       // a process failure: the operator worked the lead but left it with no next step.
       noNextStepLeads:      metrics.filter((m) => m.noNextEventCount > 0).length,
       noNextStepRows:       metrics.reduce((sum, m) => sum + m.noNextEventCount, 0),
+      // Note engagement (only leads that have at least one touchpoint)
+      leadsWithTouchpoints: leadsWithTouchpoints.length,
+      noNotesCount,
+      detailedNotesCount,
     },
   };
 }
@@ -455,6 +488,7 @@ async function runLeadVelocity(context) {
     velocityByCampaign: charts.velocityByCampaign,
     velocityBySource:  charts.velocityBySource,
     actionMix:         charts.actionMix,
+    noteEngagement:    charts.noteEngagement,
     staleLeads:        charts.staleLeads.slice(0, 10),
   };
 
@@ -479,6 +513,11 @@ async function runLeadVelocity(context) {
     `the operator-scheduled follow-up date. More reliable than entry_date.\n\n` +
     `6. noNextStepLeads / noNextStepRows: activity was logged but no next_event was scheduled. ` +
     `The lead was worked but left with no planned next action. Flag in Training & Process Gaps.\n\n` +
+    `7. noteEngagement: buckets leads (with at least one touchpoint) by total characters written ` +
+    `across all their event_message note fields. "No notes" = touchpoints logged but every note was blank. ` +
+    `"Detailed (250+)" = substantive notes written. Character count is a proxy for engagement depth only — ` +
+    `a long note is not proof of quality, and a blank note may reflect a genuine call not documented. ` +
+    `Flag the "No notes" count as a CRM discipline concern if it is high relative to total touchpoints.\n\n` +
     '```json\n' + JSON.stringify(agentPayload, null, 2) + '\n```';
 
   emit('Analysing velocity patterns…');

@@ -393,6 +393,14 @@ export default function VelocityDashboard({ result, startDate, endDate, onAskQue
             sub={stats.noNextStepRows != null ? `${stats.noNextStepRows} activity rows affected` : undefined}
             tooltip="Leads where an operator logged a CRM activity but did not schedule a next_event follow-up date. The lead was worked but left with no planned next action — a direct process failure. Each instance is a training opportunity."
           />
+          {stats.leadsWithTouchpoints > 0 && (
+            <StatCard
+              label="No Notes Logged"
+              value={stats.noNotesCount}
+              sub={stats.leadsWithTouchpoints != null ? `of ${stats.leadsWithTouchpoints} leads with activity` : undefined}
+              tooltip="Leads where the operator logged touchpoints but left every note field blank. Notes are an indicator of engagement depth — a blank note suggests a brief or low-quality interaction was not recorded for future reference."
+            />
+          )}
         </div>
       )}
 
@@ -442,6 +450,17 @@ export default function VelocityDashboard({ result, startDate, endDate, onAskQue
               <BarChart data={charts.actionMix || []} dataKey="value" horizontal height={200} />
             </Section>
           </div>
+
+          {charts.noteEngagement && charts.noteEngagement.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <Section
+                title="Note Engagement Depth"
+                tooltip="For leads with at least one logged touchpoint, how many characters were written in the note fields across all their activity rows. Longer notes suggest more substantive interactions were recorded. 'No notes' means the operator logged the touchpoint but left every note blank. 'Detailed (250+)' means enough was written to infer meaningful engagement."
+              >
+                <BarChart data={charts.noteEngagement} dataKey="value" horizontal height={180} />
+              </Section>
+            </div>
+          )}
 
           <Section
             title="Lead Velocity by Campaign"
