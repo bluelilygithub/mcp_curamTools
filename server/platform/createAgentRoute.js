@@ -89,6 +89,9 @@ function createAgentRoute({ slug, runFn, requiredPermission }) {
 
       const emit = (type, payload) => {
         res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
+        if (type === 'progress') {
+          progressLog.push({ ts: new Date().toISOString(), text: payload.text });
+        }
       };
       const done = () => {
         res.write('data: [DONE]\n\n');
@@ -97,6 +100,9 @@ function createAgentRoute({ slug, runFn, requiredPermission }) {
 
       const { orgId, id: userId } = req.user;
       const startTime = new Date();
+
+      // Accumulate progress messages for auditing — saved into the run record on completion
+      const progressLog = [];
 
       // Insert initial 'running' row
       let runId;
@@ -195,6 +201,7 @@ function createAgentRoute({ slug, runFn, requiredPermission }) {
           costAud:   taskCostAud,
           startDate: req.body.startDate ?? null,
           endDate:   req.body.endDate   ?? null,
+          progressLog,
         };
 
         await persistRun({ slug, orgId, status: 'complete', result: resultPayload, runId });
@@ -221,7 +228,10 @@ function createAgentRoute({ slug, runFn, requiredPermission }) {
         emit('result', { data: resultPayload });
       } catch (runErr) {
         console.error(`[${slug}] run error:`, runErr.message);
-        await persistRun({ slug, orgId, status: 'error', error: runErr.message, runId });
+        await persistRun({
+          slug, orgId, status: 'error', error: runErr.message, runId,
+          result: { progressLog },
+        });
         emit('error', { error: runErr.message });
       }
 

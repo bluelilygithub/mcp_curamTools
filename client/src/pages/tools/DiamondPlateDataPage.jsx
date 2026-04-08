@@ -493,27 +493,8 @@ export default function DiamondPlateDataPage() {
               style={{ ...inputStyle, fontSize: '0.8rem' }}
             />
           </div>
-
-          <button
-            onClick={handleRun}
-            disabled={running}
-            style={{
-              padding: '0.4rem 1rem', fontSize: '0.875rem', fontWeight: 600,
-              fontFamily: 'inherit', borderRadius: '0.5rem', border: 'none',
-              background: running ? 'var(--color-border)' : 'var(--color-primary)',
-              color: '#fff', cursor: running ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {running ? 'Running…' : 'Run'}
-          </button>
         </div>
       </div>
-
-      {error && (
-        <InlineBanner type="error" message={error} onDismiss={() => setError('')} className="mb-4" />
-      )}
-
-      {running && <ProgressBar lines={progress} />}
 
       {/* ── Tabs ───────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1 mb-4">
@@ -525,6 +506,32 @@ export default function DiamondPlateDataPage() {
 
       {/* ── Report ─────────────────────────────────────────────────────── */}
       {activeTab === 'report' && (
+        <div>
+          {/* Run button row — mirrors Velocity tab layout */}
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              onClick={handleRun}
+              disabled={running}
+              style={{
+                padding: '0.4rem 1rem', fontSize: '0.875rem', fontWeight: 600,
+                fontFamily: 'inherit', borderRadius: '0.5rem', border: 'none',
+                background: running ? 'var(--color-border)' : 'var(--color-primary)',
+                color: '#fff', cursor: running ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {running ? 'Running…' : 'Run Report'}
+            </button>
+            <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+              Uses date range above · Typically 30–60 seconds
+            </span>
+          </div>
+
+          {error && (
+            <InlineBanner type="error" message={error} onDismiss={() => setError('')} className="mb-4" />
+          )}
+
+          {running && <ProgressBar lines={progress} />}
+
         <div
           className="rounded-2xl border p-5"
           style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
@@ -542,7 +549,7 @@ export default function DiamondPlateDataPage() {
           )}
           {!summary && !runError && !running && (
             <p className="text-sm py-6 text-center" style={{ color: 'var(--color-muted)' }}>
-              Select a date range and click <strong>Run</strong> to generate a lead intelligence report.
+              Select a date range above and click <strong>Run Report</strong> to generate a lead intelligence report.
             </p>
           )}
           {summary && (
@@ -586,6 +593,7 @@ export default function DiamondPlateDataPage() {
               </div>
             </>
           )}
+        </div>
         </div>
       )}
 

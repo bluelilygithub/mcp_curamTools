@@ -144,7 +144,15 @@ async function runDiamondplateData(context) {
       : Promise.resolve(notConfigured('Google Analytics')),
 
     adsServer
-      ? callMcpTool(orgId, adsServer, 'ads_get_change_history', rangeArgs)
+      ? callMcpTool(orgId, adsServer, 'ads_get_change_history', (function() {
+          // Google Ads change history API hard limit: 30 days. Cap start_date if range is longer.
+          var thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          var cappedStart = rangeArgs.start_date > thirtyDaysAgo.toISOString().slice(0, 10)
+            ? rangeArgs.start_date
+            : thirtyDaysAgo.toISOString().slice(0, 10);
+          return { start_date: cappedStart, end_date: rangeArgs.end_date };
+        })())
           .catch(function(e) { return { error: e.message }; })
       : Promise.resolve(notConfigured('Google Ads')),
   ]);

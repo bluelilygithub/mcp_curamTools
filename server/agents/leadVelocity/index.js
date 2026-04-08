@@ -367,7 +367,9 @@ function buildCharts(metrics, heatmapAcc) {
       avgTouchpoints:       round1(avg(metrics.map((m) => m.touchpoints))),
       avgDaysToClose:       round1(avg(metrics.filter((m) => m.daysToClose !== null).map((m) => m.daysToClose))),
       avgFirstResponse:     round1(avg(metrics.filter((m) => m.daysToFirstResponse !== null).map((m) => m.daysToFirstResponse))),
-      zeroFollowUp:         metrics.filter((m) => m.touchpoints === 0).length,
+      // zeroFollowUp intentionally excluded — it is already decomposed into the two
+      // stats below. The aggregate is misleading because it conflates truly untouched
+      // leads with leads that were contacted but not formally logged.
       neverContacted:       metrics.filter((m) => m.isNeverContacted).length,
       contactedUnmeasured:  metrics.filter((m) => !m.isNeverContacted && m.touchpoints === 0 && m.enquiry_status !== 'new').length,
       staleCount:           metrics.filter((m) => m.isStale).length,
@@ -459,16 +461,24 @@ async function runLeadVelocity(context) {
   const userMessage =
     `Produce the Lead Velocity and Follow-up Intensity report for ${startDate} to ${endDate}.\n` +
     `All metrics have been pre-computed below. Do not request additional data.\n\n` +
-    `DATA NOTES:\n` +
-    `- "Contacted (unmeasured)" in responseTimeDist means the lead's status progressed beyond 'new' ` +
-    `but no formal progress_details row was logged. This is a data-quality gap, not a true non-response. ` +
-    `Only "No response" means the lead is still 'new' with no evidence of contact.\n` +
-    `- Timing metrics (first response, heatmap) are derived from the next_event field on each ` +
-    `progress_details row — the date the operator scheduled the next follow-up. This is intentionally ` +
-    `set by staff and more reliable than the auto-populated entry_date.\n` +
-    `- noNextStepLeads / noNextStepRows: leads/rows where an activity was logged but the operator ` +
-    `did not schedule a next_event. This is a process failure — the lead was worked but left with ` +
-    `no planned next action. Flag this explicitly in the Training & Process Gaps section.\n\n` +
+    `CRITICAL DATA NOTES — read before interpreting any metric:\n\n` +
+    `1. ZERO TOUCHPOINTS DOES NOT MEAN ZERO CONTACT.\n` +
+    `   "touchpoints" counts formal progress_details rows logged by operators. A lead with 0 touchpoints ` +
+    `may still have been contacted — the operator simply updated the enquiry_status field (e.g. new → contacted) ` +
+    `without writing a progress_details row. Do NOT describe zero-touchpoint leads as "never contacted" or ` +
+    `"zero follow-up" unless they are specifically in the neverContacted count.\n\n` +
+    `2. neverContacted = leads STILL in 'new' status with no progress row and no contacted_date. ` +
+    `These are genuinely untouched. State this number plainly.\n\n` +
+    `3. contactedUnmeasured = leads whose status moved beyond 'new' (proving contact happened) but who have ` +
+    `no progress_details row. Contact occurred but was not logged. This is a DATA QUALITY AND DISCIPLINE ` +
+    `FAILURE — the business is doing the work but not recording it, which means velocity cannot be measured ` +
+    `and performance cannot be managed. Call this out explicitly.\n\n` +
+    `4. The touchpoint distribution "0" bar includes BOTH neverContacted and contactedUnmeasured leads. ` +
+    `Do not describe it as "zero contact" — describe it as "zero logged activity."\n\n` +
+    `5. Timing metrics (first response, heatmap) are derived from next_event on each progress_details row — ` +
+    `the operator-scheduled follow-up date. More reliable than entry_date.\n\n` +
+    `6. noNextStepLeads / noNextStepRows: activity was logged but no next_event was scheduled. ` +
+    `The lead was worked but left with no planned next action. Flag in Training & Process Gaps.\n\n` +
     '```json\n' + JSON.stringify(agentPayload, null, 2) + '\n```';
 
   emit('Analysing velocity patterns…');

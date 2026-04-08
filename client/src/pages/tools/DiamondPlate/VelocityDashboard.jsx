@@ -421,7 +421,7 @@ export default function VelocityDashboard({ result, startDate, endDate, onAskQue
 
             <Section
               title="Touchpoints to Convert"
-              tooltip="How many formal follow-up contacts were logged per lead. A high '0' bar means leads are being closed (or lost) without any logged activity. Look at whether converted leads require more or fewer touchpoints than average."
+              tooltip="How many follow-up activities were formally logged per lead. The '0' bar includes two distinct groups: leads with no evidence of any contact (see 'Never Contacted' stat) AND leads whose status was updated by the operator but who had no activity logged in the CRM (see 'Contacted Unmeasured' stat). A high '0' bar does not mean those leads were abandoned — it means contact was not recorded here. Use 'Never Contacted' and 'Contacted Unmeasured' stats to separate the two groups."
             >
               <BarChart data={charts.touchpointDistribution || []} dataKey="value" height={200} />
             </Section>
