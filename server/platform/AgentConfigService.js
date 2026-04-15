@@ -91,6 +91,13 @@ const ADMIN_DEFAULTS = {
     max_pdf_pages:        10,               // pages processed per PDF (cost control)
     pdf_dpi:              150,              // rasterisation quality: 100 | 150 | 200
   },
+  'ai-visibility-monitor': {
+    enabled:             true,
+    model:               'claude-sonnet-4-6',
+    max_tokens:          4096,   // final narrative analysis call only
+    max_task_budget_aud: 2.00,   // covers 13 web search calls + 1 analysis call
+    fallback_model:      null,
+  },
   _platform: {
     enabled: true,
     model: 'claude-sonnet-4-6',
@@ -120,6 +127,7 @@ const AGENT_MODEL_REQUIREMENTS = {
   'ads-bounce-analysis':         { tier: 'standard', reason: 'Structured bounce report from pre-fetched data' },
   'auction-insights':            { tier: 'standard', reason: 'Structured competitive metrics report' },
   'diamondplate-data':           { tier: 'advanced', reason: 'Cross-source CRM lead intelligence with channel, device, and conversion analysis' },
+  'ai-visibility-monitor':       { tier: 'advanced', reason: 'Multi-prompt web search with cross-source brand and competitor analysis' },
   'doc-extractor':               { tier: 'advanced', reason: 'Vision extraction quality scales with model capability — Sonnet handles complex layouts, poor scans, and dense forms significantly better than Haiku' },
   _platform:                     { tier: 'advanced', reason: 'Default for unrecognised agents' },
 };
