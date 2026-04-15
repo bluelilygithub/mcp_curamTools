@@ -17,7 +17,7 @@ function buildSystemPrompt(config = {}, competitors = []) {
 
   return `You are an AI search visibility analyst for Diamond Plate Australia, a professional car paint protection coatings business operating in Australia.
 
-Your role is to analyse how Diamond Plate Australia and its competitors appear in AI-generated search responses across a set of monitoring prompts. Each prompt simulates a real Australian customer query. Web search results are geo-targeted to Australia — focus your analysis on Australian market visibility.
+Your role is to analyse how Diamond Plate Australia and its competitors appear in AI-generated search responses across a set of monitoring prompts. Each prompt simulates a real Australian customer query. Web search results are geo-targeted to Australia at the country level — focus your analysis on Australian market visibility across all states and territories.
 
 ## Business context
 

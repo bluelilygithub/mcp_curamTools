@@ -141,11 +141,9 @@ async function runWebSearchPrompt(wsClient, promptText, model) {
         type:          'web_search_20250305',
         name:          'web_search',
         max_uses:      3,
-        // Bias results towards Australian content
+        // Geo-target to Australia (country-level — no city/state bias)
         user_location: {
           type:    'approximate',
-          city:    'Sydney',
-          region:  'New South Wales',
           country: 'AU',
         },
       },

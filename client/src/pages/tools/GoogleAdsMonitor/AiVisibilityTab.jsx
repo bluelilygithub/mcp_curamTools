@@ -992,8 +992,8 @@ export default function AiVisibilityTab() {
               Geographic Targeting
             </p>
             <p style={{ fontSize: 12, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
-              Web search is geo-targeted to <strong style={{ color: 'var(--color-text)' }}>Australia (Sydney, NSW)</strong>.
-              All AI responses reflect Australian search context.
+              Web search is geo-targeted to <strong style={{ color: 'var(--color-text)' }}>Australia (country-level)</strong> — no city or state bias.
+              All AI responses reflect the Australian market broadly.
             </p>
           </div>
 
