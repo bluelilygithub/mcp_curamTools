@@ -30,12 +30,13 @@ const BRAND_TERMS = [
   'diamondplate',
 ];
 
-const COMPETITORS = [
-  'Ceramic Pro',
-  'Gtechniq',
-  'IGL Coatings',
-  'Gyeon',
-  'Autobond',
+// Fallback list used when no competitors are configured in agent_configs.
+const DEFAULT_COMPETITORS = [
+  { name: 'Ceramic Pro',  url: 'ceramicpro.com.au' },
+  { name: 'Gtechniq',     url: 'gtechniq.com' },
+  { name: 'IGL Coatings', url: 'iglcoatings.com' },
+  { name: 'Gyeon',        url: 'gyeonquartz.com.au' },
+  { name: 'Autobond',     url: 'autobond.com.au' },
 ];
 
 // Default prompts seeded on first run per org. Covers 5 categories.
@@ -67,10 +68,14 @@ function detectBrandMention(text) {
 
 /**
  * Returns an array of competitor names found in the response text.
+ * @param {string} text
+ * @param {Array<{name:string,url:string}>} competitors
  */
-function detectCompetitorMentions(text) {
+function detectCompetitorMentions(text, competitors) {
   const lower = text.toLowerCase();
-  return COMPETITORS.filter((c) => lower.includes(c.toLowerCase()));
+  return competitors
+    .filter((c) => lower.includes(c.name.toLowerCase()))
+    .map((c) => c.name);
 }
 
 /**
@@ -133,9 +138,16 @@ async function runWebSearchPrompt(wsClient, promptText, model) {
     max_tokens: 1024,
     tools: [
       {
-        type:     'web_search_20250305',
-        name:     'web_search',
-        max_uses: 3,
+        type:          'web_search_20250305',
+        name:          'web_search',
+        max_uses:      3,
+        // Bias results towards Australian content
+        user_location: {
+          type:    'approximate',
+          city:    'Sydney',
+          region:  'New South Wales',
+          country: 'AU',
+        },
       },
     ],
     messages: [
@@ -163,6 +175,12 @@ async function runAiVisibilityMonitor(context) {
     : await AgentConfigService.getAdminConfig(TOOL_SLUG);
 
   const model = (adminConfig.model) || 'claude-sonnet-4-6';
+
+  // ── Resolve competitor list from config (falls back to built-in defaults) ──
+
+  const competitors = (Array.isArray(config.competitors) && config.competitors.length > 0)
+    ? config.competitors
+    : DEFAULT_COMPETITORS;
 
   // ── Seed defaults and load active prompts ─────────────────────────────────
 
@@ -224,7 +242,7 @@ async function runAiVisibilityMonitor(context) {
       const { responseText, citedUrls } = await runWebSearchPrompt(wsClient, p.prompt_text, model);
 
       const brandMentioned       = detectBrandMention(responseText);
-      const competitorsMentioned = detectCompetitorMentions(responseText);
+      const competitorsMentioned = detectCompetitorMentions(responseText, competitors);
 
       if (brandMentioned) brandMentionCount++;
       for (const comp of competitorsMentioned) {
@@ -324,7 +342,7 @@ async function runAiVisibilityMonitor(context) {
     '```json\n' + JSON.stringify(analysisPayload, null, 2) + '\n```';
 
   const run = await agentOrchestrator.run({
-    systemPrompt:  buildSystemPrompt(config),
+    systemPrompt:  buildSystemPrompt(config, competitors),
     userMessage:   userMessage,
     tools:         [],
     maxIterations: 1,

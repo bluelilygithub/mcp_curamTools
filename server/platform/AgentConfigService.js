@@ -42,6 +42,17 @@ const AGENT_DEFAULTS = {
     comparison_window_days:  7,   // days before/after each change for metric comparison
     max_suggestions:         5,
   },
+  'ai-visibility-monitor': {
+    // Structured competitor list — each entry has a display name and optional URL.
+    // Stored as JSONB; the agent uses the names for mention detection in AI responses.
+    competitors: [
+      { name: 'Ceramic Pro',  url: 'ceramicpro.com.au' },
+      { name: 'Gtechniq',     url: 'gtechniq.com' },
+      { name: 'IGL Coatings', url: 'iglcoatings.com' },
+      { name: 'Gyeon',        url: 'gyeonquartz.com.au' },
+      { name: 'Autobond',     url: 'autobond.com.au' },
+    ],
+  },
 };
 
 const ADMIN_DEFAULTS = {

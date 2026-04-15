@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../../../api/client';
 import Button from '../../../components/ui/Button';
 import MarkdownRenderer from '../../../components/ui/MarkdownRenderer';
+import { exportPdf } from '../../../utils/exportService';
 
 // ── Shared style helpers ──────────────────────────────────────────────────────
 
@@ -236,6 +237,184 @@ function PromptResultsAccordion({ promptResults }) {
 
 const CATEGORY_OPTIONS = ['brand', 'competitor', 'category', 'differentiator', 'sources', 'general'];
 
+// Mirrors DEFAULT_PROMPTS in server/agents/aiVisibilityMonitor/index.js
+const DEFAULT_PROMPTS_PREVIEW = [
+  { label: 'Best paint protection in Australia',       category: 'brand',         prompt_text: 'best car paint protection coating in Australia' },
+  { label: 'Best protection for new car',             category: 'brand',         prompt_text: 'what is the best paint protection for a new car Australia' },
+  { label: 'Ceramic coating installer near me',       category: 'brand',         prompt_text: 'recommended ceramic coating installer near me Australia' },
+  { label: 'Ceramic Pro vs Gtechniq comparison',      category: 'competitor',    prompt_text: 'Ceramic Pro vs Gtechniq paint protection comparison' },
+  { label: 'Best professional ceramic coating brand', category: 'competitor',    prompt_text: 'best professional ceramic coating brand Australia' },
+  { label: 'Gyeon vs IGL Coatings',                   category: 'competitor',    prompt_text: 'Gyeon vs IGL Coatings which is better' },
+  { label: 'How long does ceramic coating last',      category: 'category',      prompt_text: 'how long does ceramic coating last on a car' },
+  { label: 'Is paint protection film worth it',       category: 'category',      prompt_text: 'is paint protection film worth the cost' },
+  { label: 'Ceramic coating vs PPF difference',       category: 'category',      prompt_text: 'difference between ceramic coating and paint protection film' },
+  { label: 'Self-healing paint protection review',    category: 'differentiator', prompt_text: 'self-healing paint protection coating review' },
+  { label: 'Long-life hydrophobic ceramic coating',   category: 'differentiator', prompt_text: 'hydrophobic ceramic coating that lasts 5 years' },
+  { label: 'Ceramic coating reviews Australia',       category: 'sources',       prompt_text: 'ceramic coating reviews Australia' },
+  { label: 'Paint protection pros and cons',          category: 'sources',       prompt_text: 'paint protection coating pros and cons' },
+];
+
+// ── Competitor manager ────────────────────────────────────────────────────────
+
+function CompetitorManager() {
+  const [competitors, setCompetitors] = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [saving,      setSaving]      = useState(false);
+  const [error,       setError]       = useState('');
+  const [success,     setSuccess]     = useState('');
+  const [newName,     setNewName]     = useState('');
+  const [newUrl,      setNewUrl]      = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const cfg = await api.get('/agent-configs/ai-visibility-monitor');
+      setCompetitors(Array.isArray(cfg.competitors) ? cfg.competitors : []);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function save(updated) {
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      await api.put('/agent-configs/ai-visibility-monitor', { competitors: updated });
+      setCompetitors(updated);
+      setSuccess('Saved.');
+      setTimeout(() => setSuccess(''), 2500);
+    } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
+  }
+
+  function handleAdd() {
+    if (!newName.trim()) return;
+    save([...competitors, { name: newName.trim(), url: newUrl.trim() }]);
+    setNewName('');
+    setNewUrl('');
+  }
+
+  function handleRemove(i) {
+    save(competitors.filter((_, idx) => idx !== i));
+  }
+
+  function handleChange(i, field, value) {
+    const updated = competitors.map((c, idx) => idx === i ? { ...c, [field]: value } : c);
+    setCompetitors(updated); // optimistic local update; save on blur
+  }
+
+  async function handleBlurSave() {
+    await save(competitors);
+  }
+
+  const fieldStyle = { ...inputStyle, flex: 1, minWidth: 0 };
+
+  if (loading) return <p style={{ fontSize: 12, color: 'var(--color-muted)', fontFamily: 'inherit' }}>Loading…</p>;
+
+  return (
+    <div style={{ fontFamily: 'inherit' }}>
+      {error   && <p style={{ fontSize: 12, color: '#ef4444', marginBottom: 8 }}>{error}</p>}
+      {success && <p style={{ fontSize: 12, color: '#16a34a', marginBottom: 8 }}>{success}</p>}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+        {competitors.length === 0 && (
+          <p style={{ fontSize: 12, color: 'var(--color-muted)', textAlign: 'center', padding: '8px 0' }}>
+            No competitors configured — defaults (Ceramic Pro, Gtechniq, IGL Coatings, Gyeon, Autobond) will be used.
+          </p>
+        )}
+        {competitors.map((c, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              style={fieldStyle} value={c.name} placeholder="Company name"
+              onChange={(e) => handleChange(i, 'name', e.target.value)}
+              onBlur={handleBlurSave}
+            />
+            <input
+              style={{ ...fieldStyle, color: 'var(--color-muted)' }} value={c.url} placeholder="Website (optional)"
+              onChange={(e) => handleChange(i, 'url', e.target.value)}
+              onBlur={handleBlurSave}
+            />
+            <button onClick={() => handleRemove(i)} style={{
+              fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #fca5a5',
+              background: 'transparent', color: '#ef4444', cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit',
+            }}>Remove</button>
+          </div>
+        ))}
+      </div>
+
+      {/* Add row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <input
+          style={fieldStyle} value={newName} placeholder="Company name"
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+        />
+        <input
+          style={{ ...fieldStyle, color: 'var(--color-muted)' }} value={newUrl} placeholder="Website (optional)"
+          onChange={(e) => setNewUrl(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+        />
+        <Button variant="primary" onClick={handleAdd} disabled={saving || !newName.trim()}
+          style={{ fontSize: 11, padding: '4px 12px', flexShrink: 0 }}>
+          {saving ? 'Saving…' : 'Add'}
+        </Button>
+      </div>
+      <p style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 8, fontFamily: 'inherit' }}>
+        Company names are used for mention detection in AI responses. Edits auto-save on blur.
+      </p>
+    </div>
+  );
+}
+
+function DefaultPromptsPreview() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ borderRadius: 10, border: '1px solid var(--color-border)', overflow: 'hidden', fontFamily: 'inherit' }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: '100%', textAlign: 'left', background: 'none', border: 'none',
+          cursor: 'pointer', padding: '10px 14px',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}
+      >
+        <span style={{ fontSize: 11, color: 'var(--color-muted)' }}>{open ? '▼' : '▶'}</span>
+        <span style={{ fontSize: 13, color: 'var(--color-text)', flex: 1 }}>
+          13 default prompts will be seeded on first run
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--color-primary)', fontFamily: 'inherit' }}>
+          {open ? 'Hide' : 'Preview'}
+        </span>
+      </button>
+
+      {open && (
+        <div style={{ borderTop: '1px solid var(--color-border)' }}>
+          {DEFAULT_PROMPTS_PREVIEW.map((p, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              padding: '8px 14px',
+              borderBottom: i < DEFAULT_PROMPTS_PREVIEW.length - 1 ? '1px solid var(--color-border)' : 'none',
+              background: 'var(--color-bg)',
+            }}>
+              <CategoryBadge category={p.category} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text)', marginBottom: 2, fontFamily: 'inherit' }}>
+                  {p.label}
+                </p>
+                <p style={{ fontSize: 11, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
+                  "{p.prompt_text}"
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PromptManager() {
   const [prompts,   setPrompts]   = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -370,9 +549,7 @@ function PromptManager() {
       {loading ? (
         <p style={{ fontSize: 12, color: 'var(--color-muted)', textAlign: 'center', padding: '16px 0' }}>Loading prompts…</p>
       ) : prompts.length === 0 ? (
-        <p style={{ fontSize: 12, color: 'var(--color-muted)', textAlign: 'center', padding: '16px 0' }}>
-          No prompts yet. Defaults will be seeded on the first run.
-        </p>
+        <DefaultPromptsPreview />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {prompts.map((p) => {
@@ -471,7 +648,8 @@ export default function AiVisibilityTab() {
   const [running,   setRunning]   = useState(false);
   const [progress,  setProgress]  = useState([]);
   const [error,     setError]     = useState('');
-  const [activeSection, setActiveSection] = useState('results'); // 'results' | 'prompts'
+  const [activeSection, setActiveSection] = useState('results'); // 'results' | 'prompts' | 'settings'
+  const [exporting,     setExporting]     = useState(false);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -540,6 +718,34 @@ export default function AiVisibilityTab() {
     }
   }
 
+  // ── PDF export ──────────────────────────────────────────────────────────────
+
+  async function handleExport() {
+    if (!summary) return;
+    setExporting(true);
+    try {
+      const runDate = currentRun?.run_at ? new Date(currentRun.run_at).toLocaleDateString('en-AU') : '';
+      const statsBlock = stats ? [
+        '',
+        '## Summary Statistics',
+        '',
+        `- **Brand mention rate:** ${stats.brandMentionRate ?? 0}%  (${stats.brandMentionCount ?? 0} of ${stats.totalPrompts ?? 0} prompts)`,
+        stats.topCompetitor ? `- **Top competitor:** ${stats.topCompetitor}` : '',
+        stats.topDomains?.[0] ? `- **Top cited domain:** ${stats.topDomains[0].domain}` : '',
+      ].filter(Boolean).join('\n') : '';
+
+      await exportPdf({
+        content:  statsBlock + '\n\n' + summary,
+        title:    'AI Visibility Monitor Report' + (runDate ? ' — ' + runDate : ''),
+        filename: 'ai-visibility-report' + (runDate ? '-' + runDate.replace(/\//g, '-') : '') + '.pdf',
+      });
+    } catch (e) {
+      setError('PDF export failed: ' + e.message);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────────
 
   const sectionTabBtn = (key, label) => (
@@ -573,9 +779,21 @@ export default function AiVisibilityTab() {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 4, borderRadius: 8, padding: 3, background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-          {sectionTabBtn('results', 'Results')}
-          {sectionTabBtn('prompts', 'Prompts')}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {summary && (
+            <button onClick={handleExport} disabled={exporting} style={{
+              fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'inherit',
+              border: '1px solid var(--color-border)', background: 'transparent',
+              color: 'var(--color-muted)', cursor: exporting ? 'not-allowed' : 'pointer',
+            }}>
+              {exporting ? 'Exporting…' : 'Export PDF'}
+            </button>
+          )}
+          <div style={{ display: 'flex', gap: 4, borderRadius: 8, padding: 3, background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+            {sectionTabBtn('results',  'Results')}
+            {sectionTabBtn('prompts',  'Prompts')}
+            {sectionTabBtn('settings', 'Settings')}
+          </div>
         </div>
       </div>
 
@@ -746,6 +964,52 @@ export default function AiVisibilityTab() {
             Toggle prompts on/off, edit, or add new ones. Changes take effect on the next run.
           </p>
           <PromptManager />
+        </div>
+      )}
+
+      {/* ── Settings section ────────────────────────────────────────────── */}
+      {activeSection === 'settings' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{
+            borderRadius: 14, border: '1px solid var(--color-border)',
+            background: 'var(--color-surface)', padding: '14px 16px',
+          }}>
+            <p style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-muted)', marginBottom: 4, fontFamily: 'inherit' }}>
+              Competitors
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--color-muted)', marginBottom: 14, fontFamily: 'inherit' }}>
+              Company names are matched against AI response text for mention detection.
+              Website URLs are stored for reference and future analysis.
+            </p>
+            <CompetitorManager />
+          </div>
+
+          <div style={{
+            borderRadius: 14, border: '1px solid var(--color-border)',
+            background: 'var(--color-surface)', padding: '14px 16px',
+          }}>
+            <p style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-muted)', marginBottom: 4, fontFamily: 'inherit' }}>
+              Geographic Targeting
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
+              Web search is geo-targeted to <strong style={{ color: 'var(--color-text)' }}>Australia (Sydney, NSW)</strong>.
+              All AI responses reflect Australian search context.
+            </p>
+          </div>
+
+          <div style={{
+            borderRadius: 14, border: '1px solid var(--color-border)',
+            background: 'var(--color-surface)', padding: '14px 16px',
+          }}>
+            <p style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-muted)', marginBottom: 4, fontFamily: 'inherit' }}>
+              Schedule & Kill Switch
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
+              This agent runs automatically every <strong style={{ color: 'var(--color-text)' }}>Monday at 7am AEST</strong>.
+              To pause it, go to <strong style={{ color: 'var(--color-text)' }}>Admin → Agents → AI Visibility Monitor</strong> and toggle the enabled switch.
+              Model and token settings are also managed there.
+            </p>
+          </div>
         </div>
       )}
     </div>

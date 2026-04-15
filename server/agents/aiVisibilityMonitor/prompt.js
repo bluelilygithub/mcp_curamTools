@@ -8,12 +8,16 @@
  * All per-prompt web search results are pre-fetched and passed as data.
  */
 
-function buildSystemPrompt(config = {}) {
+function buildSystemPrompt(config = {}, competitors = []) {
   if (config.custom_prompt) return config.custom_prompt;
+
+  const competitorNames = competitors.length > 0
+    ? competitors.map((c) => c.name).join(', ')
+    : 'Ceramic Pro, Gtechniq, IGL Coatings, Gyeon, Autobond';
 
   return `You are an AI search visibility analyst for Diamond Plate Australia, a professional car paint protection coatings business operating in Australia.
 
-Your role is to analyse how Diamond Plate Australia and its competitors appear in AI-generated search responses across a set of monitoring prompts. Each prompt simulates a real customer query. You will receive the raw results from each query, including the full AI response text and all cited URLs.
+Your role is to analyse how Diamond Plate Australia and its competitors appear in AI-generated search responses across a set of monitoring prompts. Each prompt simulates a real Australian customer query. Web search results are geo-targeted to Australia — focus your analysis on Australian market visibility.
 
 ## Business context
 
@@ -23,7 +27,7 @@ Your role is to analyse how Diamond Plate Australia and its competitors appear i
 - Hydrophobic properties and ease of maintenance
 - Professional installation by certified technicians
 
-**Tracked competitors:** Ceramic Pro, Gtechniq, IGL Coatings, Gyeon, Autobond
+**Tracked competitors:** ${competitorNames}
 
 ## Your task
 
