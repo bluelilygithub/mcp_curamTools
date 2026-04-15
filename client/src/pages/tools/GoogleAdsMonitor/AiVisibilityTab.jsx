@@ -21,21 +21,29 @@ const inputStyle = {
 };
 
 const CATEGORY_LABELS = {
-  brand:         'Brand',
-  competitor:    'Competitor',
-  category:      'Category',
-  differentiator:'Differentiator',
-  sources:       'Sources',
-  general:       'General',
+  brand:          'Brand',
+  competitor:     'Competitor',
+  category:       'Category',
+  differentiator: 'Differentiator',
+  sources:        'Sources',
+  vehicle:        'Vehicle',
+  seasonal:       'Seasonal',
+  bundle:         'Bundle',
+  roi:            'ROI',
+  general:        'General',
 };
 
 const CATEGORY_COLORS = {
-  brand:         { bg: '#3b82f620', text: '#3b82f6' },
-  competitor:    { bg: '#f5920820', text: '#d97706' },
-  category:      { bg: '#8b5cf620', text: '#8b5cf6' },
-  differentiator:{ bg: '#10b98120', text: '#059669' },
-  sources:       { bg: '#ec489920', text: '#db2777' },
-  general:       { bg: '#64748b20', text: '#64748b' },
+  brand:          { bg: '#3b82f620', text: '#3b82f6' },
+  competitor:     { bg: '#f5920820', text: '#d97706' },
+  category:       { bg: '#8b5cf620', text: '#8b5cf6' },
+  differentiator: { bg: '#10b98120', text: '#059669' },
+  sources:        { bg: '#ec489920', text: '#db2777' },
+  vehicle:        { bg: '#0ea5e920', text: '#0284c7' },
+  seasonal:       { bg: '#f9731620', text: '#ea580c' },
+  bundle:         { bg: '#a855f720', text: '#9333ea' },
+  roi:            { bg: '#84cc1620', text: '#65a30d' },
+  general:        { bg: '#64748b20', text: '#64748b' },
 };
 
 function CategoryBadge({ category }) {
@@ -116,7 +124,7 @@ function PromptResultsAccordion({ promptResults }) {
     grouped[cat].push(pr);
   }
 
-  const categoryOrder = ['brand', 'competitor', 'category', 'differentiator', 'sources', 'general'];
+  const categoryOrder = ['brand', 'competitor', 'category', 'differentiator', 'sources', 'vehicle', 'seasonal', 'bundle', 'roi', 'general'];
   const sortedCategories = Object.keys(grouped).sort((a, b) => {
     const ai = categoryOrder.indexOf(a); const bi = categoryOrder.indexOf(b);
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
@@ -235,23 +243,38 @@ function PromptResultsAccordion({ promptResults }) {
 
 // ── Prompt management table ───────────────────────────────────────────────────
 
-const CATEGORY_OPTIONS = ['brand', 'competitor', 'category', 'differentiator', 'sources', 'general'];
+const CATEGORY_OPTIONS = ['brand', 'competitor', 'category', 'differentiator', 'sources', 'vehicle', 'seasonal', 'bundle', 'roi', 'general'];
 
 // Mirrors DEFAULT_PROMPTS in server/agents/aiVisibilityMonitor/index.js
 const DEFAULT_PROMPTS_PREVIEW = [
-  { label: 'Best paint protection in Australia',       category: 'brand',         prompt_text: 'best car paint protection coating in Australia' },
-  { label: 'Best protection for new car',             category: 'brand',         prompt_text: 'what is the best paint protection for a new car Australia' },
-  { label: 'Ceramic coating installer near me',       category: 'brand',         prompt_text: 'recommended ceramic coating installer near me Australia' },
-  { label: 'Ceramic Pro vs Gtechniq comparison',      category: 'competitor',    prompt_text: 'Ceramic Pro vs Gtechniq paint protection comparison' },
-  { label: 'Best professional ceramic coating brand', category: 'competitor',    prompt_text: 'best professional ceramic coating brand Australia' },
-  { label: 'Gyeon vs IGL Coatings',                   category: 'competitor',    prompt_text: 'Gyeon vs IGL Coatings which is better' },
-  { label: 'How long does ceramic coating last',      category: 'category',      prompt_text: 'how long does ceramic coating last on a car' },
-  { label: 'Is paint protection film worth it',       category: 'category',      prompt_text: 'is paint protection film worth the cost' },
-  { label: 'Ceramic coating vs PPF difference',       category: 'category',      prompt_text: 'difference between ceramic coating and paint protection film' },
-  { label: 'Self-healing paint protection review',    category: 'differentiator', prompt_text: 'self-healing paint protection coating review' },
-  { label: 'Long-life hydrophobic ceramic coating',   category: 'differentiator', prompt_text: 'hydrophobic ceramic coating that lasts 5 years' },
-  { label: 'Ceramic coating reviews Australia',       category: 'sources',       prompt_text: 'ceramic coating reviews Australia' },
-  { label: 'Paint protection pros and cons',          category: 'sources',       prompt_text: 'paint protection coating pros and cons' },
+  // Core
+  { label: 'Best paint protection in Australia',         category: 'brand',          prompt_text: 'best car paint protection coating in Australia' },
+  { label: 'Best protection for new car',               category: 'brand',          prompt_text: 'what is the best paint protection for a new car Australia' },
+  { label: 'Ceramic coating installer near me',         category: 'brand',          prompt_text: 'recommended ceramic coating installer near me Australia' },
+  { label: 'Ceramic Pro vs Gtechniq comparison',        category: 'competitor',     prompt_text: 'Ceramic Pro vs Gtechniq paint protection comparison' },
+  { label: 'Best professional ceramic coating brand',   category: 'competitor',     prompt_text: 'best professional ceramic coating brand Australia' },
+  { label: 'Gyeon vs IGL Coatings',                     category: 'competitor',     prompt_text: 'Gyeon vs IGL Coatings which is better' },
+  { label: 'How long does ceramic coating last',        category: 'category',       prompt_text: 'how long does ceramic coating last on a car' },
+  { label: 'Is paint protection film worth it',         category: 'category',       prompt_text: 'is paint protection film worth the cost' },
+  { label: 'Ceramic coating vs PPF difference',         category: 'category',       prompt_text: 'difference between ceramic coating and paint protection film' },
+  { label: 'Self-healing paint protection review',      category: 'differentiator', prompt_text: 'self-healing paint protection coating review' },
+  { label: 'Long-life hydrophobic ceramic coating',     category: 'differentiator', prompt_text: 'hydrophobic ceramic coating that lasts 5 years' },
+  { label: 'Ceramic coating reviews Australia',         category: 'sources',        prompt_text: 'ceramic coating reviews Australia' },
+  { label: 'Paint protection pros and cons',            category: 'sources',        prompt_text: 'paint protection coating pros and cons' },
+  // Strategic
+  { label: 'Paint protection for Ford Ranger',          category: 'vehicle',        prompt_text: 'paint protection for Ford Ranger Australia' },
+  { label: 'Ceramic coating for Toyota HiLux',          category: 'vehicle',        prompt_text: 'best ceramic coating for Toyota HiLux Australia' },
+  { label: 'Tesla Model Y paint protection',            category: 'vehicle',        prompt_text: 'Tesla Model Y paint protection Australia' },
+  { label: 'New car paint protection 2025',             category: 'vehicle',        prompt_text: 'best paint protection for new car purchase Australia 2025' },
+  { label: 'UV sun damage paint protection QLD',        category: 'seasonal',       prompt_text: 'car paint protection UV sun damage Queensland Australia' },
+  { label: 'Hydrophobic coating wet weather',           category: 'seasonal',       prompt_text: 'best hydrophobic car coating for wet weather Australia' },
+  { label: 'Ceramic coating summer heat protection',    category: 'seasonal',       prompt_text: 'ceramic coating car heat protection Australian summer' },
+  { label: 'Paint protection and window tint bundle',   category: 'bundle',         prompt_text: 'car paint protection and window tint package Australia' },
+  { label: 'Full new car protection package',           category: 'bundle',         prompt_text: 'full new car protection package ceramic coating PPF tint Australia' },
+  { label: 'Interior and exterior protection bundle',   category: 'bundle',         prompt_text: 'interior and exterior car protection bundle package Australia' },
+  { label: 'Paint protection resale value',             category: 'roi',            prompt_text: 'does paint protection increase car resale value Australia' },
+  { label: 'Ceramic coating trade-in value',            category: 'roi',            prompt_text: 'is ceramic coating worth it for car trade-in value' },
+  { label: 'Paint protection financial investment',     category: 'roi',            prompt_text: 'paint protection financial investment car value Australia' },
 ];
 
 // ── Competitor manager ────────────────────────────────────────────────────────
@@ -382,7 +405,7 @@ function DefaultPromptsPreview() {
       >
         <span style={{ fontSize: 11, color: 'var(--color-muted)' }}>{open ? '▼' : '▶'}</span>
         <span style={{ fontSize: 13, color: 'var(--color-text)', flex: 1 }}>
-          13 default prompts will be seeded on first run
+          26 default prompts will be seeded on first run
         </span>
         <span style={{ fontSize: 11, color: 'var(--color-primary)', fontFamily: 'inherit' }}>
           {open ? 'Hide' : 'Preview'}

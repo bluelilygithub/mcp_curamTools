@@ -39,21 +39,37 @@ const DEFAULT_COMPETITORS = [
   { name: 'Autobond',     url: 'autobond.com.au' },
 ];
 
-// Default prompts seeded on first run per org. Covers 5 categories.
+// Default prompts seeded on first run per org. Covers 9 categories.
 const DEFAULT_PROMPTS = [
-  { label: 'Best paint protection in Australia',         category: 'brand',        prompt_text: 'best car paint protection coating in Australia',                         sort_order: 1 },
-  { label: 'Best protection for new car',               category: 'brand',        prompt_text: 'what is the best paint protection for a new car Australia',               sort_order: 2 },
-  { label: 'Ceramic coating installer near me',         category: 'brand',        prompt_text: 'recommended ceramic coating installer near me Australia',                 sort_order: 3 },
-  { label: 'Ceramic Pro vs Gtechniq comparison',        category: 'competitor',   prompt_text: 'Ceramic Pro vs Gtechniq paint protection comparison',                     sort_order: 4 },
-  { label: 'Best professional ceramic coating brand',   category: 'competitor',   prompt_text: 'best professional ceramic coating brand Australia',                       sort_order: 5 },
-  { label: 'Gyeon vs IGL Coatings',                     category: 'competitor',   prompt_text: 'Gyeon vs IGL Coatings which is better',                                  sort_order: 6 },
-  { label: 'How long does ceramic coating last',        category: 'category',     prompt_text: 'how long does ceramic coating last on a car',                            sort_order: 7 },
-  { label: 'Is paint protection film worth it',         category: 'category',     prompt_text: 'is paint protection film worth the cost',                                sort_order: 8 },
-  { label: 'Ceramic coating vs PPF difference',         category: 'category',     prompt_text: 'difference between ceramic coating and paint protection film',           sort_order: 9 },
-  { label: 'Self-healing paint protection review',      category: 'differentiator', prompt_text: 'self-healing paint protection coating review',                         sort_order: 10 },
-  { label: 'Long-life hydrophobic ceramic coating',     category: 'differentiator', prompt_text: 'hydrophobic ceramic coating that lasts 5 years',                      sort_order: 11 },
-  { label: 'Ceramic coating reviews Australia',         category: 'sources',      prompt_text: 'ceramic coating reviews Australia',                                      sort_order: 12 },
-  { label: 'Paint protection pros and cons',            category: 'sources',      prompt_text: 'paint protection coating pros and cons',                                 sort_order: 13 },
+  // ── Core 5 categories ──────────────────────────────────────────────────────
+  { label: 'Best paint protection in Australia',         category: 'brand',         prompt_text: 'best car paint protection coating in Australia',                          sort_order: 1  },
+  { label: 'Best protection for new car',               category: 'brand',         prompt_text: 'what is the best paint protection for a new car Australia',                sort_order: 2  },
+  { label: 'Ceramic coating installer near me',         category: 'brand',         prompt_text: 'recommended ceramic coating installer near me Australia',                  sort_order: 3  },
+  { label: 'Ceramic Pro vs Gtechniq comparison',        category: 'competitor',    prompt_text: 'Ceramic Pro vs Gtechniq paint protection comparison',                      sort_order: 4  },
+  { label: 'Best professional ceramic coating brand',   category: 'competitor',    prompt_text: 'best professional ceramic coating brand Australia',                        sort_order: 5  },
+  { label: 'Gyeon vs IGL Coatings',                     category: 'competitor',    prompt_text: 'Gyeon vs IGL Coatings which is better',                                   sort_order: 6  },
+  { label: 'How long does ceramic coating last',        category: 'category',      prompt_text: 'how long does ceramic coating last on a car',                             sort_order: 7  },
+  { label: 'Is paint protection film worth it',         category: 'category',      prompt_text: 'is paint protection film worth the cost',                                 sort_order: 8  },
+  { label: 'Ceramic coating vs PPF difference',         category: 'category',      prompt_text: 'difference between ceramic coating and paint protection film',            sort_order: 9  },
+  { label: 'Self-healing paint protection review',      category: 'differentiator', prompt_text: 'self-healing paint protection coating review',                          sort_order: 10 },
+  { label: 'Long-life hydrophobic ceramic coating',     category: 'differentiator', prompt_text: 'hydrophobic ceramic coating that lasts 5 years',                       sort_order: 11 },
+  { label: 'Ceramic coating reviews Australia',         category: 'sources',       prompt_text: 'ceramic coating reviews Australia',                                       sort_order: 12 },
+  { label: 'Paint protection pros and cons',            category: 'sources',       prompt_text: 'paint protection coating pros and cons',                                  sort_order: 13 },
+
+  // ── Strategic categories ───────────────────────────────────────────────────
+  { label: 'Paint protection for Ford Ranger',          category: 'vehicle',       prompt_text: 'paint protection for Ford Ranger Australia',                              sort_order: 14 },
+  { label: 'Ceramic coating for Toyota HiLux',          category: 'vehicle',       prompt_text: 'best ceramic coating for Toyota HiLux Australia',                         sort_order: 15 },
+  { label: 'Tesla Model Y paint protection',            category: 'vehicle',       prompt_text: 'Tesla Model Y paint protection Australia',                                 sort_order: 16 },
+  { label: 'New car paint protection 2025',             category: 'vehicle',       prompt_text: 'best paint protection for new car purchase Australia 2025',                sort_order: 17 },
+  { label: 'UV sun damage paint protection QLD',        category: 'seasonal',      prompt_text: 'car paint protection UV sun damage Queensland Australia',                  sort_order: 18 },
+  { label: 'Hydrophobic coating wet weather',           category: 'seasonal',      prompt_text: 'best hydrophobic car coating for wet weather Australia',                   sort_order: 19 },
+  { label: 'Ceramic coating summer heat protection',    category: 'seasonal',      prompt_text: 'ceramic coating car heat protection Australian summer',                    sort_order: 20 },
+  { label: 'Paint protection and window tint bundle',   category: 'bundle',        prompt_text: 'car paint protection and window tint package Australia',                   sort_order: 21 },
+  { label: 'Full new car protection package',           category: 'bundle',        prompt_text: 'full new car protection package ceramic coating PPF tint Australia',      sort_order: 22 },
+  { label: 'Interior and exterior protection bundle',   category: 'bundle',        prompt_text: 'interior and exterior car protection bundle package Australia',            sort_order: 23 },
+  { label: 'Paint protection resale value',             category: 'roi',           prompt_text: 'does paint protection increase car resale value Australia',                sort_order: 24 },
+  { label: 'Ceramic coating trade-in value',            category: 'roi',           prompt_text: 'is ceramic coating worth it for car trade-in value',                      sort_order: 25 },
+  { label: 'Paint protection financial investment',     category: 'roi',           prompt_text: 'paint protection financial investment car value Australia',                sort_order: 26 },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -116,16 +132,37 @@ async function seedDefaultPromptsIfEmpty(orgId) {
 
   if (parseInt(rows[0].cnt, 10) > 0) return;
 
-  const values = DEFAULT_PROMPTS.map((p, i) => [
-    orgId, p.prompt_text, p.category, p.label, true, p.sort_order,
-  ]);
-
-  for (const v of values) {
+  for (const p of DEFAULT_PROMPTS) {
     await pool.query(
       `INSERT INTO ai_visibility_prompts
          (org_id, prompt_text, category, label, is_active, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      v
+       VALUES ($1, $2, $3, $4, true, $5)`,
+      [orgId, p.prompt_text, p.category, p.label, p.sort_order]
+    );
+  }
+}
+
+/**
+ * Seeds any new strategic categories for existing orgs that were seeded before
+ * these categories were introduced. Skips categories already present — safe to
+ * call on every run.
+ */
+async function seedMissingCategories(orgId) {
+  const NEW_CATEGORIES = ['vehicle', 'seasonal', 'bundle', 'roi'];
+  const { rows } = await pool.query(
+    'SELECT DISTINCT category FROM ai_visibility_prompts WHERE org_id = $1',
+    [orgId]
+  );
+  const existing = new Set(rows.map((r) => r.category));
+  const toSeed = DEFAULT_PROMPTS.filter(
+    (p) => NEW_CATEGORIES.includes(p.category) && !existing.has(p.category)
+  );
+  for (const p of toSeed) {
+    await pool.query(
+      `INSERT INTO ai_visibility_prompts
+         (org_id, prompt_text, category, label, is_active, sort_order)
+       VALUES ($1, $2, $3, $4, true, $5)`,
+      [orgId, p.prompt_text, p.category, p.label, p.sort_order]
     );
   }
 }
@@ -184,6 +221,7 @@ async function runAiVisibilityMonitor(context) {
 
   emit('Loading monitoring prompts...');
   await seedDefaultPromptsIfEmpty(orgId);
+  await seedMissingCategories(orgId);
 
   const { rows: prompts } = await pool.query(
     `SELECT id, prompt_text, category, label
