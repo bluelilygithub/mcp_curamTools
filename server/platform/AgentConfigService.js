@@ -105,8 +105,8 @@ const ADMIN_DEFAULTS = {
   'ai-visibility-monitor': {
     enabled:             true,
     model:               'claude-sonnet-4-6',
-    max_tokens:          4096,   // final narrative analysis call only
-    max_task_budget_aud: 2.00,   // covers 13 web search calls + 1 analysis call
+    max_tokens:          8192,   // final narrative analysis call — 29 prompts needs headroom
+    max_task_budget_aud: 3.00,   // covers 26 web search calls + 1 analysis call
     fallback_model:      null,
   },
   _platform: {

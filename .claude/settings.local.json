@@ -41,7 +41,12 @@
       "Bash(node -e \"require\\('@aws-sdk/client-s3'\\); console.log\\('installed'\\)\")",
       "Bash(node -e \"require\\('./services/StorageService'\\); console.log\\('StorageService OK'\\)\")",
       "Bash(node -e \"require\\('./platform/AgentConfigService'\\); console.log\\('AgentConfigService OK'\\)\")",
-      "Bash(node -e \"require\\('acorn'\\).parse\\(require\\('fs'\\).readFileSync\\('./routes/docExtractor.js','utf8'\\),{ecmaVersion:2022}\\); console.log\\('OK'\\)\")"
+      "Bash(node -e \"require\\('acorn'\\).parse\\(require\\('fs'\\).readFileSync\\('./routes/docExtractor.js','utf8'\\),{ecmaVersion:2022}\\); console.log\\('OK'\\)\")",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File \"C:/Users/micha/Local Sites/mcp_curamTools/read_pdf.ps1\")",
+      "Bash(where pdftotext *)",
+      "Bash(where gs *)",
+      "Bash(where ghostscript *)",
+      "Bash(pdftotext \"C:/Users/micha/Local Sites/mcp_curamTools/ai-visibility-report-15-04-2026.pdf\" -)"
     ]
   }
 }

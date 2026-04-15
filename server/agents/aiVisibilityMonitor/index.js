@@ -242,13 +242,14 @@ async function runAiVisibilityMonitor(context) {
   let previousRunData = null;
   try {
     const { rows: prevRows } = await pool.query(
-      `SELECT result FROM agent_runs
+      `SELECT result, run_at FROM agent_runs
         WHERE org_id = $1 AND slug = $2 AND status = 'complete'
         ORDER BY run_at DESC LIMIT 1`,
       [orgId, TOOL_SLUG]
     );
     if (prevRows.length > 0 && prevRows[0].result) {
       previousRunData = prevRows[0].result.data ?? null;
+      previousRunData = previousRunData ? { ...previousRunData, _runAt: prevRows[0].run_at } : null;
     }
   } catch (e) {
     // Non-fatal — proceed without prior comparison
@@ -338,10 +339,18 @@ async function runAiVisibilityMonitor(context) {
     .slice(0, 15)
     .map(([domain, count]) => ({ domain, count }));
 
-  // Prior period comparison
+  // Prior period comparison + period label
   let priorBrandMentionRate = null;
+  let periodLabel = 'periodic';
   if (previousRunData && previousRunData.summaryStats) {
     priorBrandMentionRate = previousRunData.summaryStats.brandMentionRate ?? null;
+    if (previousRunData._runAt) {
+      const daysSince = Math.round((Date.now() - new Date(previousRunData._runAt).getTime()) / 86400000);
+      if (daysSince >= 6 && daysSince <= 8)        periodLabel = 'weekly';
+      else if (daysSince >= 13 && daysSince <= 16) periodLabel = 'fortnightly';
+      else if (daysSince >= 27 && daysSince <= 33) periodLabel = '30-day';
+      else                                          periodLabel = `${daysSince}-day`;
+    }
   }
 
   const summaryStats = {
@@ -359,6 +368,7 @@ async function runAiVisibilityMonitor(context) {
   emit('Analysing AI visibility results...');
 
   const analysisPayload = {
+    periodLabel,
     summaryStats,
     promptResults: promptResults.map((pr) => ({
       promptText:           pr.promptText,
@@ -374,7 +384,7 @@ async function runAiVisibilityMonitor(context) {
   };
 
   const userMessage =
-    'Produce the AI Visibility Monitor weekly report. All monitoring data has been pre-fetched below.\n\n' +
+    `Produce the AI Visibility Monitor report for this ${periodLabel} monitoring period. All monitoring data has been pre-fetched below.\n\n` +
     '```json\n' + JSON.stringify(analysisPayload, null, 2) + '\n```';
 
   const run = await agentOrchestrator.run({
