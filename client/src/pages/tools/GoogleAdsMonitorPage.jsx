@@ -2,6 +2,7 @@
  * GoogleAdsMonitorPage — Google Ads performance analysis tool.
  */
 import { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import api from '../../api/client';
 import useAuthStore from '../../stores/authStore';
 import Button from '../../components/ui/Button';
@@ -301,8 +302,17 @@ function AllAgentsHistory({ onDiscuss }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+const VALID_TABS = ['dashboard', 'ai-visibility', 'history', 'settings'];
+
 export default function GoogleAdsMonitorPage() {
-  const { user } = useAuthStore();
+  const { user }   = useAuthStore();
+  const location   = useLocation();
+
+  // Initialise tab from ?tab= query param so sidebar deep-links work
+  const initialTab = (() => {
+    const t = new URLSearchParams(location.search).get('tab');
+    return VALID_TABS.includes(t) ? t : 'dashboard';
+  })();
 
   const [startDate,  setStartDate]  = useState(daysAgo(30));
   const [endDate,    setEndDate]    = useState(isoDate(new Date()));
@@ -314,7 +324,7 @@ export default function GoogleAdsMonitorPage() {
   const [config,     setConfig]     = useState(null);
   const [savingCfg,  setSavingCfg]  = useState(false);
   const [cfgSuccess, setCfgSuccess] = useState('');
-  const [activeTab,  setActiveTab]  = useState('dashboard');
+  const [activeTab,  setActiveTab]  = useState(initialTab);
   const [openCard,   setOpenCard]   = useState(null);
   const [emailModal, setEmailModal] = useState(false);
   const [emailSending, setEmailSending] = useState(false);

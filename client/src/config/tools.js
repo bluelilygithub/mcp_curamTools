@@ -31,6 +31,14 @@ const TOOLS = [
     roles:       ['org_member', 'org_admin'],
   },
   {
+    id:          'ai-visibility-monitor',
+    name:        'AI Visibility Monitor',
+    description: 'Track how Diamond Plate Australia appears in AI-generated search responses. Monitors brand presence, competitor mentions, and cited sources across weekly web search prompts.',
+    icon:        'eye',
+    path:        '/tools/google-ads-monitor?tab=ai-visibility',
+    roles:       ['org_member', 'org_admin'],
+  },
+  {
     id:          'doc-extractor',
     name:        'Document Extractor',
     description: 'Upload any image document and extract structured fields using Claude Vision. Compare accuracy across AI providers.',
