@@ -13,6 +13,7 @@ import SearchTermsTable from './GoogleAdsMonitor/SearchTermsTable';
 import AISuggestionsPanel from './GoogleAdsMonitor/AISuggestionsPanel';
 import AgentDashboardCard from './GoogleAdsMonitor/AgentDashboardCard';
 import StrategicReviewCard from './GoogleAdsMonitor/StrategicReviewCard';
+import AiVisibilityTab from './GoogleAdsMonitor/AiVisibilityTab';
 
 const AGENT_SLUG = 'google-ads-monitor';
 
@@ -551,9 +552,10 @@ export default function GoogleAdsMonitorPage() {
 
       {/* ── Tabs ───────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1 mb-4 flex-wrap">
-        {tabBtn('dashboard', 'Dashboard')}
-        {tabBtn('history',   'History')}
-        {tabBtn('settings',  'Settings')}
+        {tabBtn('dashboard',    'Dashboard')}
+        {tabBtn('ai-visibility','AI Visibility')}
+        {tabBtn('history',      'History')}
+        {tabBtn('settings',     'Settings')}
       </div>
 
       {/* ── Dashboard ──────────────────────────────────────────────────── */}
@@ -695,6 +697,11 @@ export default function GoogleAdsMonitorPage() {
             onToggle={() => toggleCard('google-ads-strategic-review')}
           />
         </div>
+      )}
+
+      {/* ── AI Visibility ───────────────────────────────────────────────── */}
+      {activeTab === 'ai-visibility' && (
+        <AiVisibilityTab />
       )}
 
       {/* ── History ────────────────────────────────────────────────────── */}

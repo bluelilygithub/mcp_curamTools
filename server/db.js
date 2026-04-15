@@ -480,6 +480,28 @@ async function initSchema() {
         ON export_logs(org_id, created_at DESC)
     `);
 
+    // ── AI Visibility Prompts ──────────────────────────────────────────────────
+    // Stores the monitoring prompts used by the AI Visibility Monitor agent.
+    // Configurable per-org without code changes — add/edit/toggle via the UI.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_visibility_prompts (
+        id          SERIAL      PRIMARY KEY,
+        org_id      INTEGER     NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        prompt_text TEXT        NOT NULL,
+        category    TEXT        NOT NULL DEFAULT 'general',
+        label       TEXT,
+        is_active   BOOLEAN     DEFAULT true,
+        sort_order  INTEGER     DEFAULT 0,
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ai_visibility_prompts_org
+        ON ai_visibility_prompts(org_id, sort_order)
+    `);
+
     await client.query('COMMIT');
 
     // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)

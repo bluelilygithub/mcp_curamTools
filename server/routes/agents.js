@@ -159,6 +159,24 @@ agentsRouter.use(
   })
 );
 
+// ── AI Visibility Monitor ─────────────────────────────────────────────────
+const { runAiVisibilityMonitor } = require('../agents/aiVisibilityMonitor');
+
+agentsRouter.use(
+  '/ai-visibility-monitor',
+  createAgentRoute({
+    slug:               'ai-visibility-monitor',
+    runFn:              runAiVisibilityMonitor,
+    requiredPermission: 'org_member',
+  })
+);
+
+AgentScheduler.register({
+  slug:     'ai-visibility-monitor',
+  schedule: '0 7 * * 1',
+  runFn:    runAiVisibilityMonitor,
+});
+
 // Email report — POST /api/agents/google-ads-monitor/email
 agentsRouter.post('/google-ads-monitor/email', requireAuth, async (req, res) => {
   try {
@@ -366,6 +384,93 @@ agentConfigsRouter.post('/:slug/flags/:id/resolve', requireAuth, requireRole(['o
   } catch (err) {
     console.error('[agent-configs flags resolve]', err.message);
     res.status(500).json({ error: 'Failed to resolve flag.' });
+  }
+});
+
+// ── AI Visibility Prompt Management ─────────────────────────────────────────
+// GET    /api/agents/ai-visibility-monitor/prompts        — list all prompts for org
+// POST   /api/agents/ai-visibility-monitor/prompts        — create new prompt
+// PUT    /api/agents/ai-visibility-monitor/prompts/:id    — update prompt (text, label, category, is_active, sort_order)
+// DELETE /api/agents/ai-visibility-monitor/prompts/:id    — delete prompt
+
+agentsRouter.get('/ai-visibility-monitor/prompts', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, prompt_text, category, label, is_active, sort_order, created_at, updated_at
+         FROM ai_visibility_prompts
+        WHERE org_id = $1
+        ORDER BY sort_order, id`,
+      [req.user.orgId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[ai-visibility-prompts GET]', err.message);
+    res.status(500).json({ error: 'Failed to load prompts.' });
+  }
+});
+
+agentsRouter.post('/ai-visibility-monitor/prompts', requireAuth, async (req, res) => {
+  try {
+    const { prompt_text, category = 'general', label = null, sort_order = 0 } = req.body;
+    if (!prompt_text || !prompt_text.trim()) {
+      return res.status(400).json({ error: 'prompt_text is required.' });
+    }
+    const { rows } = await pool.query(
+      `INSERT INTO ai_visibility_prompts
+         (org_id, prompt_text, category, label, is_active, sort_order)
+       VALUES ($1, $2, $3, $4, true, $5)
+       RETURNING id, prompt_text, category, label, is_active, sort_order, created_at, updated_at`,
+      [req.user.orgId, prompt_text.trim().slice(0, 500), String(category).slice(0, 50), label ? String(label).slice(0, 200) : null, Number(sort_order) || 0]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('[ai-visibility-prompts POST]', err.message);
+    res.status(500).json({ error: 'Failed to create prompt.' });
+  }
+});
+
+agentsRouter.put('/ai-visibility-monitor/prompts/:id', requireAuth, async (req, res) => {
+  try {
+    const { prompt_text, category, label, is_active, sort_order } = req.body;
+    const { rows } = await pool.query(
+      `UPDATE ai_visibility_prompts
+          SET prompt_text = COALESCE($1, prompt_text),
+              category    = COALESCE($2, category),
+              label       = $3,
+              is_active   = COALESCE($4, is_active),
+              sort_order  = COALESCE($5, sort_order),
+              updated_at  = NOW()
+        WHERE id = $6 AND org_id = $7
+        RETURNING id, prompt_text, category, label, is_active, sort_order, created_at, updated_at`,
+      [
+        prompt_text ? prompt_text.trim().slice(0, 500) : null,
+        category    ? String(category).slice(0, 50)    : null,
+        label !== undefined ? (label ? String(label).slice(0, 200) : null) : undefined,
+        is_active   !== undefined ? Boolean(is_active) : null,
+        sort_order  !== undefined ? Number(sort_order) : null,
+        req.params.id,
+        req.user.orgId,
+      ]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Prompt not found.' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('[ai-visibility-prompts PUT]', err.message);
+    res.status(500).json({ error: 'Failed to update prompt.' });
+  }
+});
+
+agentsRouter.delete('/ai-visibility-monitor/prompts/:id', requireAuth, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      'DELETE FROM ai_visibility_prompts WHERE id = $1 AND org_id = $2',
+      [req.params.id, req.user.orgId]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'Prompt not found.' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[ai-visibility-prompts DELETE]', err.message);
+    res.status(500).json({ error: 'Failed to delete prompt.' });
   }
 });
 
