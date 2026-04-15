@@ -190,6 +190,7 @@ Converted agents:
 - `google-ads-change-impact` — change history + campaign performance + daily performance + GA4 sessions
 - `ads-attribution-summary` — campaign performance + GA4 sessions + WordPress enquiries
 - `ads-bounce-analysis` — search terms + GA4 paid bounced sessions
+- `ai-visibility-monitor` — 26 AU geo-targeted web searches (one per monitoring prompt) + single Claude analysis call; no external API data layer — uses Anthropic's native `web_search_20250305` tool directly in Node.js pre-fetch loop
 
 ---
 

@@ -356,6 +356,57 @@ First domain agent. Wires `GoogleAdsService` and `GoogleAnalyticsService` into t
 
 ---
 
+#### AI Visibility Monitor Agent (`server/agents/aiVisibilityMonitor/`)
+
+Monitors how Diamond Plate Australia and its competitors appear in AI-generated search responses across a structured set of monitoring prompts. Uses the **pre-fetch pattern** — no ReAct loop. All web searches are executed in Node.js first, then a single Claude call produces the full analysis report.
+
+**Entry point:** `runAiVisibilityMonitor(context)` — `context` must include `{ userId, orgId, toolSlug: 'ai-visibility-monitor' }`.
+
+**Architecture:** pre-fetch, not ReAct. Each active prompt in `ai_visibility_prompts` is run through Anthropic's `web_search_20250305` tool with `user_location: { type: 'approximate', country: 'AU' }` for Australian geo-targeting. Results are aggregated into a single analysis payload, then passed to Claude in one message (`maxIterations: 1`, `tools: []`).
+
+**Monitoring prompts — 26 defaults across 9 categories:**
+
+| Category | Count | Purpose |
+|---|---|---|
+| `brand` | 3 | Direct brand and installer searches |
+| `competitor` | 3 | Competitor comparison and brand ranking searches |
+| `category` | 3 | Generic product category queries (ceramic coating, PPF, graphene) |
+| `differentiator` | 3 | Feature-specific searches (self-healing, hydrophobic, long-duration) |
+| `sources` | 1 | Review and source credibility searches |
+| `vehicle` | 4 | Vehicle-specific searches (Ranger, HiLux, Tesla Model Y, new car 2025) |
+| `seasonal` | 3 | Weather/UV-driven searches (QLD sun, wet weather, summer heat) |
+| `bundle` | 3 | Full-service package searches (PPF + ceramic + tint) |
+| `roi` | 3 | Financial/resale value searches |
+
+**Prompt seeding:** two-stage on every run:
+1. `seedDefaultPromptsIfEmpty(orgId)` — seeds all 26 defaults when org has zero prompts.
+2. `seedMissingCategories(orgId)` — seeds only the 4 new-category prompts (`vehicle`, `seasonal`, `bundle`, `roi`) for existing orgs that already have the original 13. Safe to call every run — skips categories already present.
+
+**Competitor detection:** structured `{ name, url }` config loaded from `agent_configs`. Default fallback: Ceramic Pro, Gtechniq, IGL Coatings, Gyeon, Autobond. Admin can add/remove competitors via the Settings tab in the UI.
+
+**Period-aware labelling:** derives a period label from the gap since the last completed run — `weekly` (6–8 days), `fortnightly` (13–16 days), `30-day` (27–33 days), `N-day` (exact), or `periodic` (no prior run). Label is included in the analysis payload so the AI uses it in the report title and comparison language.
+
+**Report sections (8):**
+1. Executive Summary — 2–3 sentences, standout findings, trend vs prior period
+2. Brand Presence Score — mention rate table with current/prior/change columns
+3. Competitor Intelligence — per-competitor mention rate, prompts appeared in, framing notes
+4. Category & Differentiator Visibility — whether key differentiators appear in AI responses even without brand attribution
+5. Source Analysis — top 15 cited domains with current/prior/change counts
+6. Prompt-by-Prompt Highlights — one finding per category
+7. Strategic Opportunities — vehicle gaps, seasonal angles, bundle/AOV positioning, ROI narrative
+8. Recommendations — numbered, prioritised by impact
+
+**DB table:** `ai_visibility_prompts` — `(id, org_id, prompt_text, category, label, is_active, sort_order)`. Prompts are per-org; admins can customise via the Prompts tab in the UI.
+
+**Agent config (`ADMIN_DEFAULTS`):**
+- `model`: `claude-sonnet-4-6`
+- `max_tokens`: `8192` — required headroom for 26-prompt full analysis
+- `max_task_budget_aud`: `3.00` — covers 26 web search calls + 1 analysis call
+
+**Scheduling:** registered in `routes/agents.js` with `AgentScheduler` at `0 7 * * 1` (Monday 7am). Can also be triggered manually from the AI Visibility tab.
+
+---
+
 #### File Ingestion Pipeline
 
 Server-side extraction, chunking, and embedding of uploaded documents. The pipeline runs entirely on the server — no client-side processing, no third-party storage.
@@ -761,6 +812,9 @@ server/
       tools.js   # 4 tools registered into ToolRegistry (toolSlug: 'google-ads-monitor'): get_campaign_performance, get_daily_performance, get_search_terms, get_analytics_overview
       prompt.js  # SYSTEM_PROMPT — analyst role, data-gathering protocol, output format (Summary / Campaign Analysis / Search Term Insights / Recommendations)
       index.js   # runAdsMonitor(context) — getAvailableTools → agentOrchestrator.run → stateManager.saveConclusion → { result, trace, tokensUsed }
+    aiVisibilityMonitor/
+      prompt.js  # buildSystemPrompt(config, competitors) — 8-section report spec: Executive Summary, Brand Presence, Competitor Intelligence, Differentiator Visibility, Source Analysis, Prompt Highlights, Strategic Opportunities, Recommendations
+      index.js   # runAiVisibilityMonitor(context) — seedDefaultPromptsIfEmpty → seedMissingCategories → 26 web searches (AU geo-targeted) → single Claude analysis call → { result, trace, tokensUsed }
     chunkingService.js         # chunkText(text, targetTokens, overlapTokens) — ~500 token chunks, 50 token overlap
     embeddingService.js        # embedText / embedBatch — Google text-embedding-004 (768-dim), lazy client init
     telemetryService.js        # recordEvent(orgId, userId, eventType, metadata) — fire-and-forget, never throws
@@ -1522,14 +1576,11 @@ Current date injection is the highest-value, lowest-effort item — one utility 
 - [x] First domain agent — `googleAdsMonitor` (tools.js + prompt.js + index.js) — end-to-end verified ✓
 - [x] **AgentOrchestrator bug fixed** — was sending `execute`, `requiredPermissions`, `toolSlug` to Anthropic API (400 error); now strips all three internal fields. Fix applies to all future agents. ✓
 
-**KNOWN LIMITATION:**
-- `StateManager.saveConclusion()` requires a valid integer `orgId`. Test runs with `orgId: 'test'` log a warning but complete successfully. Resolves automatically when agent runs via authenticated routes.
-
-**NEXT SESSION — Agent routes + scheduling + UI:**
-- `POST /api/agents/google-ads-monitor/run` — trigger a full agent run; stream steps via SSE
-- `GET /api/agents/google-ads-monitor/history` — return past conclusions from `agent_conclusions`
-- `AgentScheduler` registration for twice-daily automated runs
-- React UI: report view with charts and AI suggestions panel
+**COMPLETE (v0.3.0):**
+- [x] AI Visibility Monitor agent — `aiVisibilityMonitor` (prompt.js + index.js) — pre-fetch pattern, 26 monitoring prompts across 9 categories, AU geo-targeted web search, structured competitor config, period-aware report labelling, 8-section analysis report ✓
+- [x] AI Visibility Monitor UI — `AiVisibilityTab.jsx` — run controls, SSE progress log, results accordion by category, prompts management tab, settings tab (competitor manager, geo-targeting info, schedule info), PDF export ✓
+- [x] AI Visibility Monitor scheduling — registered in `AgentScheduler` at Monday 7am; manual trigger available from UI ✓
+- [x] Sidebar entry + Admin dashboard registration for AI Visibility Monitor ✓
 
 ### Chat Improvements
 
