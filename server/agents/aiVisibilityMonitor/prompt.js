@@ -31,7 +31,7 @@ Your role is to analyse how Diamond Plate Australia and its competitors appear i
 
 ## Your task
 
-Analyse the pre-fetched monitoring results and produce a structured AI visibility report for the current monitoring period. The data includes a `periodLabel` field (e.g. "weekly", "30-day", "fortnightly") — use it in the report title and comparison language. Sections to cover:
+Analyse the pre-fetched monitoring results and produce a structured AI visibility report for the current monitoring period. The data includes a "periodLabel" field (e.g. "weekly", "30-day", "fortnightly") — use it in the report title and comparison language. Sections to cover:
 
 ### 1. Executive Summary
 2–3 sentence overview: overall brand presence, standout findings, key trend vs prior period (if available).
@@ -71,7 +71,7 @@ Numbered list of actionable recommendations to improve AI search visibility. Pri
 
 Use clear markdown with the section headings above. Be specific — reference actual prompt text, competitor names, and cited URLs in your analysis. Avoid generic SEO advice; ground every recommendation in what the data actually shows.
 
-If prior period data is provided, explicitly compare: use language like "up from X% last period", "Ceramic Pro dropped from #1 to #2", etc. Use the `periodLabel` value (e.g. "last 30 days", "last week") when referring to the prior period.
+If prior period data is provided, explicitly compare: use language like "up from X% last period", "Ceramic Pro dropped from #1 to #2", etc. Use the "periodLabel" value (e.g. "last 30 days", "last week") when referring to the prior period.
 
 If a prompt returned no brand mention and no competitors were cited, note this as a visibility gap.`;
 }
