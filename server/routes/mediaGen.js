@@ -41,6 +41,42 @@ const MAX_PROMPT_LEN = 2000;
 const POLL_INTERVAL_MS = 4000;
 const MAX_POLLS = 90; // 6 minutes
 
+// Fal.ai estimated USD cost per unit (video = per second, image = per image)
+const FAL_COST_PER_UNIT = {
+  'bytedance/seedance-1-lite/text-to-video':          0.040,
+  'bytedance/seedance-2.0/fast/text-to-video':        0.060,
+  'bytedance/seedance-2.0/text-to-video':             0.080,
+  'bytedance/seedance-2.0/image-to-video':            0.080,
+  'fal-ai/kling-video/v2.5-turbo/pro/text-to-video':  0.060,
+  'fal-ai/kling-video/v3/text-to-video':              0.080,
+  'fal-ai/sora-2/text-to-video':                      0.080,
+  'fal-ai/sora-2/image-to-video':                     0.080,
+  'fal-ai/pixverse/v6/text-to-video':                 0.045,
+  'fal-ai/fast-svd/text-to-video':                    0.025,
+  'fal-ai/fast-svd/image-to-video':                   0.025,
+  'fal-ai/minimax-video/image-to-video':              0.060,
+  'fal-ai/wan-2.2/image-to-video':                    0.060,
+  'fal-ai/pika/v2.2/image-to-video':                  0.050,
+  'fal-ai/flux/schnell':                              0.003,
+  'fal-ai/black-forest-labs/flux.1schnell':           0.003,
+  'fal-ai/flux/dev':                                  0.025,
+  'fal-ai/flux/pro':                                  0.050,
+  'fal-ai/flux/kontext':                              0.040,
+  'fal-ai/flux/dev/image-to-image':                   0.025,
+  'fal-ai/flux/pro/image-to-image':                   0.050,
+  'fal-ai/flux-lora/image-to-image':                  0.025,
+  'fal-ai/glm-image/image-to-image':                  0.020,
+  'fal-ai/uno':                                       0.020,
+  'fal-ai/ideogram/v2':                               0.060,
+};
+
+function estimateCost(modelId, outputType, duration) {
+  const rate = FAL_COST_PER_UNIT[modelId] ?? null;
+  if (rate === null) return null;
+  if (outputType === 'video') return parseFloat((rate * (parseInt(duration, 10) || 5)).toFixed(4));
+  return rate;
+}
+
 // ── Fal.ai helpers ──────────────────────────────────────────────────────────
 
 /**
@@ -127,6 +163,33 @@ function uploadToFalStorage(buffer, mimetype, apiKey) {
     );
     req.on('error', reject);
     req.write(body);
+    req.end();
+  });
+}
+
+/**
+ * Fetch the bytes at a URL using https.request (fetch silently fails on Railway).
+ * Returns { buffer, contentType }.
+ */
+function fetchUrl(urlStr) {
+  return new Promise((resolve, reject) => {
+    let u;
+    try { u = new URL(urlStr); } catch { return reject(new Error(`Invalid URL: ${urlStr}`)); }
+    const req = https.request(
+      { hostname: u.hostname, path: u.pathname + (u.search || ''), method: 'GET' },
+      (res) => {
+        if (res.statusCode >= 400) {
+          return reject(new Error(`Failed to fetch media: HTTP ${res.statusCode}`));
+        }
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => resolve({
+          buffer:      Buffer.concat(chunks),
+          contentType: res.headers['content-type'] || 'application/octet-stream',
+        }));
+      },
+    );
+    req.on('error', reject);
     req.end();
   });
 }
@@ -440,15 +503,16 @@ router.post(
         throw new Error('Generation timed out after 6 minutes.');
       }
 
-      // 5. Save result
+      // 5. Save result + cost estimate
+      const costUsd = estimateCost(model, outType, duration);
       await pool.query(
         `UPDATE media_gen_runs
-         SET status='completed', result=$1, completed_at=NOW()
+         SET status='completed', result=$1, completed_at=NOW(), cost_usd=$3
          WHERE id=$2`,
-        [JSON.stringify(result), runId],
+        [JSON.stringify(result), runId, costUsd],
       );
 
-      sseWrite(res, { type: 'complete', result, runId, outputType: outType });
+      sseWrite(res, { type: 'complete', result, runId, outputType: outType, costUsd });
 
     } catch (err) {
       console.error('[media-gen] generation error:', err.message);
@@ -491,6 +555,7 @@ router.get('/runs', requireAuth, async (req, res) => {
       pool.query(
         `SELECT id, model, output_type, prompt, status, error,
                 duration, aspect_ratio, created_at, completed_at,
+                storage_key, cost_usd,
                 result->'video'->>'url'  AS video_url,
                 result->'images'->0->>'url' AS image_url
          FROM media_gen_runs
@@ -528,6 +593,80 @@ router.get('/runs/:id', requireAuth, async (req, res) => {
     res.json(r.rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Failed to load run.' });
+  }
+});
+
+/**
+ * POST /runs/:id/save-to-s3
+ * Fetches the generated media from Fal.ai and uploads it to S3.
+ * Idempotent — returns the existing key if already saved.
+ */
+router.post('/runs/:id/save-to-s3', requireAuth, async (req, res) => {
+  const { orgId } = req.user;
+  try {
+    const r = await pool.query(
+      `SELECT id, output_type, result, storage_key FROM media_gen_runs WHERE id=$1 AND org_id=$2 AND deleted_at IS NULL`,
+      [req.params.id, orgId],
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Run not found.' });
+    const run = r.rows[0];
+
+    // Already saved — return cached key
+    if (run.storage_key) return res.json({ ok: true, storageKey: run.storage_key, cached: true });
+
+    const mediaUrl = run.result?.video?.url || run.result?.images?.[0]?.url;
+    if (!mediaUrl) return res.status(400).json({ error: 'No media URL on this run.' });
+
+    const AgentConfigService = require('../platform/AgentConfigService');
+    const StorageService     = require('../services/StorageService');
+    const settings = await AgentConfigService.getStorageSettings(orgId);
+    const bucket   = settings.aws_bucket ?? process.env.AWS_S3_BUCKET;
+    const region   = settings.aws_region ?? process.env.AWS_S3_REGION ?? 'ap-southeast-2';
+
+    if (!bucket) {
+      return res.status(503).json({ error: 'S3 not configured — set AWS_S3_BUCKET in environment or Admin › Storage.' });
+    }
+
+    const { buffer, contentType } = await fetchUrl(mediaUrl);
+    const ext = run.output_type === 'video' ? 'mp4' : 'jpg';
+    const ct  = run.output_type === 'video' ? 'video/mp4' : 'image/jpeg';
+    const key = `org/${orgId}/media-gen/${Date.now()}-run-${run.id}.${ext}`;
+
+    await StorageService.put({ bucket, region, key, body: buffer, contentType: contentType.split(';')[0] || ct });
+    await pool.query(`UPDATE media_gen_runs SET storage_key=$1 WHERE id=$2`, [key, run.id]);
+
+    res.json({ ok: true, storageKey: key });
+  } catch (err) {
+    console.error('[media-gen] save-to-s3:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /runs/:id/download-url
+ * Returns a 1-hour pre-signed S3 URL for a previously saved media file.
+ */
+router.get('/runs/:id/download-url', requireAuth, async (req, res) => {
+  const { orgId } = req.user;
+  try {
+    const r = await pool.query(
+      `SELECT storage_key FROM media_gen_runs WHERE id=$1 AND org_id=$2 AND deleted_at IS NULL`,
+      [req.params.id, orgId],
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Run not found.' });
+    const { storage_key } = r.rows[0];
+    if (!storage_key) return res.status(404).json({ error: 'No S3 file for this run.' });
+
+    const AgentConfigService = require('../platform/AgentConfigService');
+    const StorageService     = require('../services/StorageService');
+    const settings = await AgentConfigService.getStorageSettings(orgId);
+    const bucket   = settings.aws_bucket ?? process.env.AWS_S3_BUCKET;
+    const region   = settings.aws_region ?? process.env.AWS_S3_REGION ?? 'ap-southeast-2';
+
+    const { url, expiresAt } = await StorageService.getSignedDownloadUrl({ bucket, region, key: storage_key, expiresIn: 3600 });
+    res.json({ url, expiresAt });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

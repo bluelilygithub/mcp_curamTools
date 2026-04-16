@@ -330,8 +330,9 @@ export default function MediaGenPage() {
   // Generation state
   const [generating,  setGenerating]  = useState(false);
   const [statusMsgs,  setStatusMsgs]  = useState([]);
-  const [result,      setResult]      = useState(null);
+  const [result,      setResult]      = useState(null);   // { type, url, runId, raw, costUsd }
   const [genError,    setGenError]    = useState(null);
+  const [s3State,     setS3State]     = useState({});     // { [runId]: 'saving' | 'saved' | { error } }
 
   // History state
   const [runs,        setRuns]        = useState([]);
@@ -468,7 +469,7 @@ export default function MediaGenPage() {
             case 'complete': {
               const r = evt.result;
               const url = r?.video?.url || r?.images?.[0]?.url || null;
-              setResult({ type: evt.outputType, url, runId: evt.runId, raw: r });
+              setResult({ type: evt.outputType, url, runId: evt.runId, raw: r, costUsd: evt.costUsd ?? null });
               setStatusMsgs((p) => [...p, 'Complete.']);
               loadRuns(1, search);
               break;
@@ -482,6 +483,22 @@ export default function MediaGenPage() {
       setGenError(err.message);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const saveToS3 = async (runId) => {
+    setS3State((p) => ({ ...p, [runId]: 'saving' }));
+    try {
+      const res = await fetch(`/api/media-gen/runs/${runId}/save-to-s3`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setS3State((p) => ({ ...p, [runId]: 'saved' }));
+      loadRuns(page, search);
+    } catch (err) {
+      setS3State((p) => ({ ...p, [runId]: { error: err.message } }));
     }
   };
 
@@ -714,16 +731,44 @@ export default function MediaGenPage() {
       {/* ── Result ── */}
       {result && (
         <div style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:8, padding:20, marginBottom:24 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
-            <span style={{ fontSize:15, fontWeight:600, color:'var(--color-text)' }}>
-              Result <Badge color="green">{result.type === 'video' ? 'Video' : 'Image'}</Badge>
-            </span>
-            {result.url && (
-              <a href={result.url} target="_blank" rel="noopener noreferrer" download
-                style={{ padding:'6px 14px', borderRadius:6, border:'1px solid var(--color-primary)', background:'transparent', color:'var(--color-primary)', fontSize:12, fontWeight:600, textDecoration:'none' }}>
-                Download
-              </a>
-            )}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8, marginBottom:14 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <span style={{ fontSize:15, fontWeight:600, color:'var(--color-text)' }}>
+                Result <Badge color="green">{result.type === 'video' ? 'Video' : 'Image'}</Badge>
+              </span>
+              {result.costUsd != null && (
+                <Badge color="amber">~${result.costUsd.toFixed(result.costUsd < 0.01 ? 4 : 2)}</Badge>
+              )}
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              {result.url && result.runId && (() => {
+                const st = s3State[result.runId];
+                if (st === 'saved') {
+                  return <span style={{ fontSize:12, color:'#16a34a', fontWeight:600 }}>✓ Saved to S3</span>;
+                }
+                if (st?.error) {
+                  return <span style={{ fontSize:12, color:'#991b1b' }} title={st.error}>S3 error ⓘ</span>;
+                }
+                return (
+                  <button
+                    onClick={() => saveToS3(result.runId)}
+                    disabled={st === 'saving'}
+                    style={{ padding:'6px 14px', borderRadius:6, border:'1px solid var(--color-border)',
+                      background:'transparent', color: st === 'saving' ? 'var(--color-muted)' : 'var(--color-text)',
+                      fontSize:12, fontWeight:600, cursor: st === 'saving' ? 'not-allowed' : 'pointer',
+                      display:'flex', alignItems:'center', gap:6 }}>
+                    {st === 'saving' && <Spinner size={11}/>}
+                    {st === 'saving' ? 'Saving…' : 'Save to S3'}
+                  </button>
+                );
+              })()}
+              {result.url && (
+                <a href={result.url} target="_blank" rel="noopener noreferrer" download
+                  style={{ padding:'6px 14px', borderRadius:6, border:'1px solid var(--color-primary)', background:'transparent', color:'var(--color-primary)', fontSize:12, fontWeight:600, textDecoration:'none' }}>
+                  Download
+                </a>
+              )}
+            </div>
           </div>
           {result.url && result.type === 'video' && (
             <video src={result.url} controls style={{ width:'100%', maxWidth:720, borderRadius:6, background:'#000', display:'block' }} />
@@ -762,7 +807,7 @@ export default function MediaGenPage() {
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
               <thead>
                 <tr style={{ borderBottom:'1px solid var(--color-border)' }}>
-                  {['Model','Prompt','Type','Status','Created','Result',''].map((h) => (
+                  {['Model','Prompt','Type','Status','Cost','Created','Result',''].map((h) => (
                     <th key={h} style={{ textAlign:'left', padding:'8px 10px', fontSize:11, fontWeight:600,
                       textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--color-muted)', whiteSpace:'nowrap' }}>{h}</th>
                   ))}
@@ -771,12 +816,14 @@ export default function MediaGenPage() {
               <tbody>
                 {runs.map((run) => {
                   const mediaUrl = run.video_url || run.image_url;
+                  const histS3 = s3State[run.id];
+                  const savedToS3 = run.storage_key || histS3 === 'saved';
                   return (
                     <tr key={run.id} style={{ borderBottom:'1px solid var(--color-border)' }}>
                       <td style={{ padding:'10px 10px', maxWidth:160 }}>
-                        <span style={{ fontSize:11, color:'var(--color-muted)' }}>{run.model.replace('fal-ai/','')}</span>
+                        <span style={{ fontSize:11, color:'var(--color-muted)' }}>{run.model.replace('fal-ai/','').replace('bytedance/','')}</span>
                       </td>
-                      <td style={{ padding:'10px 10px', maxWidth:280 }}>
+                      <td style={{ padding:'10px 10px', maxWidth:240 }}>
                         <span title={run.prompt} style={{ display:'block', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', color:'var(--color-text)' }}>
                           {run.prompt}
                         </span>
@@ -785,15 +832,37 @@ export default function MediaGenPage() {
                         <Badge color={run.output_type==='video'?'blue':'gray'}>{run.output_type}</Badge>
                       </td>
                       <td style={{ padding:'10px 10px', whiteSpace:'nowrap' }}>{statusBadge(run.status)}</td>
+                      <td style={{ padding:'10px 10px', whiteSpace:'nowrap' }}>
+                        {run.cost_usd != null
+                          ? <span style={{ fontSize:12, color:'var(--color-muted)' }}>~${parseFloat(run.cost_usd).toFixed(parseFloat(run.cost_usd) < 0.01 ? 4 : 2)}</span>
+                          : <span style={{ color:'var(--color-muted)', fontSize:12 }}>—</span>}
+                      </td>
                       <td style={{ padding:'10px 10px', whiteSpace:'nowrap', color:'var(--color-muted)' }}>{fmtDate(run.created_at)}</td>
                       <td style={{ padding:'10px 10px' }}>
-                        {mediaUrl
-                          ? <a href={mediaUrl} target="_blank" rel="noopener noreferrer" style={{ color:'var(--color-primary)', fontSize:12 }}>
+                        {mediaUrl ? (
+                          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                            <a href={mediaUrl} target="_blank" rel="noopener noreferrer" style={{ color:'var(--color-primary)', fontSize:12 }}>
                               {run.output_type==='video'?'Video':'Image'}
                             </a>
-                          : run.error
-                            ? <span title={run.error} style={{ color:'var(--color-error)', fontSize:12, cursor:'help' }}>Error ⓘ</span>
-                            : <span style={{ color:'var(--color-muted)', fontSize:12 }}>—</span>}
+                            {savedToS3 ? (
+                              <span title="Saved to S3" style={{ fontSize:11, color:'#16a34a' }}>✓ S3</span>
+                            ) : histS3 === 'saving' ? (
+                              <Spinner size={11}/>
+                            ) : (
+                              <button
+                                onClick={() => saveToS3(run.id)}
+                                title="Save to S3"
+                                style={{ background:'none', border:'1px solid var(--color-border)', borderRadius:4, cursor:'pointer',
+                                  color:'var(--color-muted)', fontSize:11, padding:'1px 6px', lineHeight:'1.5' }}>
+                                S3
+                              </button>
+                            )}
+                          </div>
+                        ) : run.error ? (
+                          <span title={run.error} style={{ color:'var(--color-error)', fontSize:12, cursor:'help' }}>Error ⓘ</span>
+                        ) : (
+                          <span style={{ color:'var(--color-muted)', fontSize:12 }}>—</span>
+                        )}
                       </td>
                       <td style={{ padding:'10px 10px' }}>
                         <button onClick={() => handleDelete(run.id)}

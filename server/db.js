@@ -530,6 +530,12 @@ async function initSchema() {
         ON media_gen_runs(org_id, created_at DESC)
     `);
 
+    await client.query(`
+      ALTER TABLE media_gen_runs
+        ADD COLUMN IF NOT EXISTS storage_key TEXT,
+        ADD COLUMN IF NOT EXISTS cost_usd    NUMERIC(10,4)
+    `);
+
     await client.query('COMMIT');
 
     // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)
