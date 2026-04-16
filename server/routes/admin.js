@@ -444,67 +444,38 @@ function httpsPost(hostname, path, reqHeaders, bodyObj) {
 router.post('/models/:modelId/test', async (req, res) => {
   const { modelId } = req.params;
   const start = Date.now();
+  const { resolveProvider, getAdapter } = require('../platform/providerRegistry');
 
-  // ── Google Gemini ─────────────────────────────────────────────────────────
-  if (modelId.startsWith('gemini-')) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ ok: false, error: 'GEMINI_API_KEY environment variable is not set.' });
-    }
-    try {
-      const { status, body } = await httpsPost(
-        'generativelanguage.googleapis.com',
-        `/v1beta/models/${encodeURIComponent(modelId)}:generateContent?key=${apiKey}`,
-        {},
-        { contents: [{ role: 'user', parts: [{ text: 'Reply with the single word: ok' }] }] }
-      );
-      const latencyMs = Date.now() - start;
-      if (status !== 200) {
-        const message = body?.error?.message ?? `HTTP ${status}`;
-        return res.json({ ok: false, error: message, latencyMs });
-      }
-      return res.json({ ok: true, latencyMs });
-    } catch (err) {
-      return res.json({ ok: false, error: err.message, latencyMs: Date.now() - start });
-    }
-  }
-
-  // ── Anthropic Claude ──────────────────────────────────────────────────────
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ ok: false, error: 'ANTHROPIC_API_KEY is not set on the server.' });
-  }
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key':         apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type':      'application/json',
-      },
-      body: JSON.stringify({
-        model:      modelId,
-        max_tokens: 10,
-        messages:   [{ role: 'user', content: 'Reply with the single word: ok' }],
-      }),
+  const prov = resolveProvider(modelId);
+  if (!process.env[prov.envVar]) {
+    return res.status(500).json({
+      ok:    false,
+      error: `${prov.envVar} environment variable is not set.`,
     });
-    const latencyMs = Date.now() - start;
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      const message = body?.error?.message ?? `HTTP ${response.status}`;
-      return res.json({ ok: false, error: message, latencyMs });
-    }
-    res.json({ ok: true, latencyMs });
+  }
+
+  try {
+    const adapter = getAdapter(modelId);
+    await adapter.chat({
+      model:      modelId,
+      max_tokens: 10,
+      system:     null,
+      messages:   [{ role: 'user', content: 'Reply with the single word: ok' }],
+      tools:      undefined,
+    });
+    return res.json({ ok: true, latencyMs: Date.now() - start });
   } catch (err) {
-    res.json({ ok: false, error: err.message, latencyMs: Date.now() - start });
+    return res.json({ ok: false, error: err.message, latencyMs: Date.now() - start });
   }
 });
 
 router.get('/model-status', (req, res) => {
-  res.json({
-    anthropic: !!process.env.ANTHROPIC_API_KEY,
-    google:    !!process.env.GEMINI_API_KEY,
-  });
+  const { PROVIDERS } = require('../platform/providerRegistry');
+  const status = {};
+  for (const [key, prov] of Object.entries(PROVIDERS)) {
+    status[key] = { label: prov.label, configured: !!process.env[prov.envVar] };
+  }
+  res.json(status);
 });
 
 router.post('/models/reset', async (req, res) => {

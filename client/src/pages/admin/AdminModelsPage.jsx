@@ -203,22 +203,16 @@ export default function AdminModelsPage() {
           className="flex items-center gap-4 px-4 py-2.5 rounded-xl border mb-5 text-sm flex-wrap"
           style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
         >
-          <div className="flex items-center gap-2">
-            <span style={{ color: 'var(--color-muted)' }}>Anthropic API key:</span>
-            {apiKeyOk.anthropic ? (
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#16a34a' }}>✓ Configured</span>
-            ) : (
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309' }}>⚠ Not set</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <span style={{ color: 'var(--color-muted)' }}>Google API key:</span>
-            {apiKeyOk.google ? (
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#16a34a' }}>✓ Configured</span>
-            ) : (
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309' }}>⚠ GEMINI_API_KEY not set</span>
-            )}
-          </div>
+          {Object.entries(apiKeyOk).map(([key, prov]) => (
+            <div key={key} className="flex items-center gap-2">
+              <span style={{ color: 'var(--color-muted)' }}>{prov.label} API key:</span>
+              {prov.configured ? (
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#16a34a' }}>✓ Configured</span>
+              ) : (
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309' }}>⚠ Not set</span>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -233,10 +227,10 @@ export default function AdminModelsPage() {
           </p>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Model API ID *" hint="e.g. claude-sonnet-4-6 or gemini-2.5-flash-preview-04-17">
+            <Field label="Model API ID *" hint="exact API identifier, e.g. claude-sonnet-4-6 · gpt-4o · grok-3">
               <input
                 style={{ ...fi, fontFamily: 'monospace' }}
-                placeholder={form.provider === 'google' ? 'gemini-2.5-flash-preview-04-17' : 'claude-sonnet-4-6'}
+                placeholder="e.g. claude-sonnet-4-6, gpt-4o, grok-3, mistral-large-latest"
                 value={form.id}
                 disabled={editingId !== 'new'}
                 onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
@@ -255,8 +249,22 @@ export default function AdminModelsPage() {
             <Field label="Provider">
               <select style={fi} value={form.provider}
                 onChange={(e) => setForm((f) => ({ ...f, provider: e.target.value }))}>
-                <option value="anthropic">Anthropic</option>
-                <option value="google">Google</option>
+                {Object.keys(apiKeyOk).length > 0
+                  ? Object.entries(apiKeyOk).map(([key, prov]) => (
+                      <option key={key} value={key}>{prov.label}</option>
+                    ))
+                  : (
+                    <>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="google">Google</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="mistral">Mistral</option>
+                      <option value="deepseek">DeepSeek</option>
+                      <option value="xai">xAI (Grok)</option>
+                      <option value="groq">Groq</option>
+                    </>
+                  )
+                }
               </select>
             </Field>
             <Field label="Emoji">

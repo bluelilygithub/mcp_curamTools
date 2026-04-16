@@ -22,10 +22,7 @@ const MAX_ITERATIONS_HARD_CAP = 20;
 // ─── Provider selection ───────────────────────────────────────────────────────
 
 function getProvider(model) {
-  if (typeof model === 'string' && model.startsWith('gemini')) {
-    return require('./providers/gemini');
-  }
-  return require('./providers/anthropic');
+  return require('./providerRegistry').getAdapter(model ?? '');
 }
 
 // ─── AgentError ───────────────────────────────────────────────────────────────
