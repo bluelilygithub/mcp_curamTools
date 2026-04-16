@@ -501,6 +501,7 @@ router.get('/model-status', async (req, res) => {
   const { PROVIDERS } = require('../platform/providerRegistry');
   const { getCustomProviders } = require('../platform/AgentConfigService');
 
+  // Start with hardcoded built-ins
   const status = {};
   for (const [key, prov] of Object.entries(PROVIDERS)) {
     status[key] = { label: prov.label, configured: !!process.env[prov.envVar] };
@@ -509,12 +510,23 @@ router.get('/model-status', async (req, res) => {
   try {
     const customs = await getCustomProviders(req.user.orgId);
     for (const cp of customs) {
-      if (!status[cp.key]) {
-        status[cp.key] = {
-          label:      cp.label || cp.key,
-          configured: !!process.env[cp.apiKeyEnv],
-          custom:     true,
-        };
+      if (cp.builtin) {
+        // Override or hide a built-in provider
+        if (cp.hidden) {
+          delete status[cp.key];
+        } else {
+          // Apply label override if present
+          if (status[cp.key] && cp.label) status[cp.key].label = cp.label;
+        }
+      } else {
+        // Fully custom provider
+        if (!status[cp.key]) {
+          status[cp.key] = {
+            label:      cp.label || cp.key,
+            configured: !!process.env[cp.apiKeyEnv],
+            custom:     true,
+          };
+        }
       }
     }
   } catch { /* non-fatal */ }
@@ -541,16 +553,16 @@ router.put('/providers', async (req, res) => {
   if (!Array.isArray(providers)) {
     return res.status(400).json({ error: 'providers must be an array' });
   }
-  // Validate each entry has key, apiKeyEnv, baseUrl
   for (const p of providers) {
-    if (!p.key || !p.apiKeyEnv || !p.baseUrl) {
-      return res.status(400).json({ error: 'Each provider requires key, apiKeyEnv, and baseUrl' });
-    }
-    // Normalise key to lowercase
+    if (!p.key) return res.status(400).json({ error: 'Each provider requires a key' });
     p.key = p.key.toLowerCase().trim();
+    // Custom providers (non-builtin) require apiKeyEnv + baseUrl
+    if (!p.builtin && (!p.apiKeyEnv || !p.baseUrl)) {
+      return res.status(400).json({ error: `Custom provider "${p.key}" requires apiKeyEnv and baseUrl` });
+    }
   }
   const saved = await updateCustomProviders(req.user.orgId, providers, req.user.id);
-  res.json(saved.map((p) => ({ ...p, configured: !!process.env[p.apiKeyEnv] })));
+  res.json(saved.map((p) => ({ ...p, configured: p.apiKeyEnv ? !!process.env[p.apiKeyEnv] : null })));
 });
 
 router.post('/models/reset', async (req, res) => {
