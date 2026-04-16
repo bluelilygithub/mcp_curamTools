@@ -133,10 +133,18 @@ function uploadToFalStorage(buffer, mimetype, apiKey) {
 
 /**
  * Determine whether a model produces video or image output.
- * Seedance models always produce video; everything else is assumed image.
+ * Checks path segments — any model with a video-generation path is video.
  */
 function modelType(modelId) {
-  return (modelId || '').includes('seedance') ? 'video' : 'image';
+  const id = (modelId || '').toLowerCase();
+  if (id.includes('text-to-video') || id.includes('image-to-video')) return 'video';
+  if (id.includes('seedance'))  return 'video';
+  if (id.includes('kling'))     return 'video';
+  if (id.includes('sora'))      return 'video';
+  if (id.includes('svd'))       return 'video';
+  if (id.includes('pixverse'))  return 'video';
+  if (id.includes('wan'))       return 'video';
+  return 'image';
 }
 
 /**

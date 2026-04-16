@@ -10,14 +10,55 @@ import useAuthStore from '../../stores/authStore';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const MODELS = [
-  // Video models
-  { id: 'fal-ai/seedance-1-lite',  label: 'Seedance 1 Lite  (video, fast)',        type: 'video' },
-  { id: 'fal-ai/seedance-1-pro',   label: 'Seedance 1 Pro   (video, high quality)', type: 'video' },
-  // Image models
-  { id: 'fal-ai/flux/schnell',     label: 'FLUX Schnell     (image, fast)',         type: 'image' },
-  { id: 'fal-ai/flux/dev',         label: 'FLUX Dev         (image, quality)',      type: 'image' },
+const MODEL_GROUPS = [
+  {
+    label: 'Text → Video',
+    models: [
+      { id: 'fal-ai/seedance-1-lite',                           label: 'Seedance 1 Lite',     requiresImage: false, type: 'video' },
+      { id: 'bytedance/seedance-2.0/text-to-video',             label: 'Seedance 2.0',        requiresImage: false, type: 'video' },
+      { id: 'fal-ai/kling-video/v2.5-turbo/pro/text-to-video',  label: 'Kling 2.5 Turbo Pro', requiresImage: false, type: 'video' },
+      { id: 'kling-video/v3/text-to-video',                     label: 'Kling 3.0',           requiresImage: false, type: 'video' },
+      { id: 'fal-ai/sora-2/text-to-video',                      label: 'Sora 2',              requiresImage: false, type: 'video' },
+      { id: 'fal-ai/pixverse/v6/text-to-video',                 label: 'Pixverse V6',         requiresImage: false, type: 'video' },
+      { id: 'fal-ai/fast-svd/text-to-video',                    label: 'Fast SVD',            requiresImage: false, type: 'video' },
+    ],
+  },
+  {
+    label: 'Image → Video',
+    models: [
+      { id: 'fal-ai/minimax-video/image-to-video',              label: 'MiniMax (Hailuo AI)', requiresImage: true, type: 'video' },
+      { id: 'fal-ai/sora-2/image-to-video',                     label: 'Sora 2',              requiresImage: true, type: 'video' },
+      { id: 'fal-ai/wan-2.2/image-to-video',                    label: 'Wan 2.2',             requiresImage: true, type: 'video' },
+      { id: 'fal-ai/seedance-2.0/image-to-video',               label: 'Seedance 2.0',        requiresImage: true, type: 'video' },
+      { id: 'fal-ai/pika/v2.2/image-to-video',                  label: 'Pika 2.2',            requiresImage: true, type: 'video' },
+      { id: 'fal-ai/fast-svd/image-to-video',                   label: 'Fast SVD',            requiresImage: true, type: 'video' },
+    ],
+  },
+  {
+    label: 'Image → Image',
+    models: [
+      { id: 'fal-ai/flux/dev/image-to-image',                   label: 'FLUX Dev',            requiresImage: true, type: 'image' },
+      { id: 'fal-ai/flux/pro/image-to-image',                   label: 'FLUX Pro',            requiresImage: true, type: 'image' },
+      { id: 'fal-ai/flux-lora/image-to-image',                  label: 'FLUX LoRA',           requiresImage: true, type: 'image' },
+      { id: 'fal-ai/glm-image/image-to-image',                  label: 'GLM Image',           requiresImage: true, type: 'image' },
+      { id: 'fal-ai/uno',                                        label: 'UNO',                 requiresImage: true, type: 'image' },
+    ],
+  },
+  {
+    label: 'Text → Image',
+    models: [
+      { id: 'fal-ai/flux/schnell',                               label: 'FLUX Schnell',        requiresImage: false, type: 'image' },
+      { id: 'fal-ai/black-forest-labs/flux.1schnell',            label: 'FLUX.1 Schnell',      requiresImage: false, type: 'image' },
+      { id: 'fal-ai/flux/dev',                                   label: 'FLUX Dev',            requiresImage: false, type: 'image' },
+      { id: 'fal-ai/flux/pro',                                   label: 'FLUX Pro',            requiresImage: false, type: 'image' },
+      { id: 'fal-ai/flux/kontext',                               label: 'FLUX Kontext',        requiresImage: false, type: 'image' },
+      { id: 'fal-ai/ideogram/v2',                                label: 'Ideogram 2.0',        requiresImage: false, type: 'image' },
+    ],
+  },
 ];
+
+// Flat list for lookups
+const MODELS = MODEL_GROUPS.flatMap((g) => g.models);
 
 const ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4'];
 const DURATIONS     = ['5', '10'];
@@ -263,7 +304,7 @@ export default function MediaGenPage() {
           Media Generator
         </h1>
         <p style={{ marginTop: 4, fontSize: 14, color: 'var(--color-muted)' }}>
-          Generate images and videos using Fal.ai. Provide a prompt and optional reference image.
+          Text-to-video, image-to-video, image-to-image, and text-to-image — powered by Fal.ai.
         </p>
       </div>
 
@@ -279,30 +320,47 @@ export default function MediaGenPage() {
       >
         {/* Model selector */}
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text)', marginBottom: 6 }}>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text)', marginBottom: 10 }}>
             Model
           </label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {MODELS.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setModel(m.id)}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: 6,
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  border: model === m.id
-                    ? '2px solid var(--color-primary)'
-                    : '1px solid var(--color-border)',
-                  background: model === m.id ? 'var(--color-primary)' : 'var(--color-bg)',
-                  color: model === m.id ? '#fff' : 'var(--color-text)',
-                  fontWeight: model === m.id ? 600 : 400,
-                  transition: 'all 150ms',
-                }}
-              >
-                {m.label}
-              </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {MODEL_GROUPS.map((group) => (
+              <div key={group.label}>
+                <div style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  color: 'var(--color-muted)',
+                  marginBottom: 5,
+                }}>
+                  {group.label}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {group.models.map((m) => {
+                    const active = model === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => setModel(m.id)}
+                        style={{
+                          padding: '5px 12px',
+                          borderRadius: 5,
+                          fontSize: 12,
+                          cursor: 'pointer',
+                          border: active ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                          background: active ? 'var(--color-primary)' : 'var(--color-bg)',
+                          color: active ? '#fff' : 'var(--color-text)',
+                          fontWeight: active ? 600 : 400,
+                          transition: 'all 120ms',
+                        }}
+                      >
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -392,7 +450,10 @@ export default function MediaGenPage() {
         {/* Reference image */}
         <div style={{ marginBottom: 20 }}>
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text)', marginBottom: 6 }}>
-            Reference Image <span style={{ fontWeight: 400, color: 'var(--color-muted)' }}>(optional)</span>
+            Reference Image{' '}
+            {selectedModel.requiresImage
+              ? <span style={{ color: 'var(--color-error)' }}>* required for this model</span>
+              : <span style={{ fontWeight: 400, color: 'var(--color-muted)' }}>(optional)</span>}
           </label>
           {refPreview ? (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -462,16 +523,16 @@ export default function MediaGenPage() {
         {/* Generate button */}
         <button
           onClick={handleGenerate}
-          disabled={generating || !prompt.trim()}
+          disabled={generating || !prompt.trim() || (selectedModel.requiresImage && !refFile)}
           style={{
             padding: '10px 24px',
             borderRadius: 6,
             border: 'none',
-            background: generating || !prompt.trim() ? 'var(--color-border)' : 'var(--color-primary)',
-            color: generating || !prompt.trim() ? 'var(--color-muted)' : '#fff',
+            background: generating || !prompt.trim() || (selectedModel.requiresImage && !refFile) ? 'var(--color-border)' : 'var(--color-primary)',
+            color: generating || !prompt.trim() || (selectedModel.requiresImage && !refFile) ? 'var(--color-muted)' : '#fff',
             fontSize: 14,
             fontWeight: 600,
-            cursor: generating || !prompt.trim() ? 'not-allowed' : 'pointer',
+            cursor: generating || !prompt.trim() || (selectedModel.requiresImage && !refFile) ? 'not-allowed' : 'pointer',
             display: 'flex',
             alignItems: 'center',
             gap: 8,
