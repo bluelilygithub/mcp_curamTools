@@ -209,8 +209,9 @@ function sleep(ms) {
 
 const DEFAULT_MODELS = [
   // Text → Video
-  { id: 'fal-ai/seedance-1-lite',                           label: 'Seedance 1 Lite',     group: 'Text → Video', type: 'video', requiresImage: false },
-  { id: 'fal-ai/seedance-2.0/text-to-video',                label: 'Seedance 2.0',        group: 'Text → Video', type: 'video', requiresImage: false },
+  { id: 'bytedance/seedance-1-lite/text-to-video',           label: 'Seedance 1 Lite',     group: 'Text → Video', type: 'video', requiresImage: false },
+  { id: 'bytedance/seedance-2.0/fast/text-to-video',         label: 'Seedance 2.0 Fast',   group: 'Text → Video', type: 'video', requiresImage: false },
+  { id: 'bytedance/seedance-2.0/text-to-video',              label: 'Seedance 2.0',        group: 'Text → Video', type: 'video', requiresImage: false },
   { id: 'fal-ai/kling-video/v2.5-turbo/pro/text-to-video',  label: 'Kling 2.5 Turbo Pro', group: 'Text → Video', type: 'video', requiresImage: false },
   { id: 'fal-ai/kling-video/v3/text-to-video',              label: 'Kling 3.0',           group: 'Text → Video', type: 'video', requiresImage: false },
   { id: 'fal-ai/sora-2/text-to-video',                      label: 'Sora 2',              group: 'Text → Video', type: 'video', requiresImage: false },
@@ -220,7 +221,7 @@ const DEFAULT_MODELS = [
   { id: 'fal-ai/minimax-video/image-to-video',              label: 'MiniMax (Hailuo AI)', group: 'Image → Video', type: 'video', requiresImage: true },
   { id: 'fal-ai/sora-2/image-to-video',                     label: 'Sora 2',              group: 'Image → Video', type: 'video', requiresImage: true },
   { id: 'fal-ai/wan-2.2/image-to-video',                    label: 'Wan 2.2',             group: 'Image → Video', type: 'video', requiresImage: true },
-  { id: 'fal-ai/seedance-2.0/image-to-video',               label: 'Seedance 2.0',        group: 'Image → Video', type: 'video', requiresImage: true },
+  { id: 'bytedance/seedance-2.0/image-to-video',             label: 'Seedance 2.0',        group: 'Image → Video', type: 'video', requiresImage: true },
   { id: 'fal-ai/pika/v2.2/image-to-video',                  label: 'Pika 2.2',            group: 'Image → Video', type: 'video', requiresImage: true },
   { id: 'fal-ai/fast-svd/image-to-video',                   label: 'Fast SVD',            group: 'Image → Video', type: 'video', requiresImage: true },
   // Image → Image

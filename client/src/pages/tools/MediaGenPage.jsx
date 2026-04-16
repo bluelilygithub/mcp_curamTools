@@ -65,6 +65,64 @@ function statusBadge(s) {
   return <Badge color={b.color}>{b.label}</Badge>;
 }
 
+// ── Stable helper components (must be at module scope — never inside a component) ──
+
+function DraftField({ label, value, onChange, type = 'text', children }) {
+  return (
+    <div style={{ flex: 1, minWidth: 100 }}>
+      <div style={{ fontSize: 10, color: 'var(--color-muted)', marginBottom: 2 }}>{label}</div>
+      {children || (
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={{
+            width: '100%', padding: '5px 7px', borderRadius: 4,
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-bg)', color: 'var(--color-text)',
+            fontSize: 12, boxSizing: 'border-box',
+            fontFamily: label === 'Model ID' ? 'var(--font-mono,monospace)' : 'inherit',
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function SelectField({ label, value, onChange, options }) {
+  return (
+    <DraftField label={label} value={value} onChange={onChange}>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          width: '100%', padding: '5px 7px', borderRadius: 4,
+          border: '1px solid var(--color-border)',
+          background: 'var(--color-bg)', color: 'var(--color-text)', fontSize: 12,
+        }}
+      >
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </DraftField>
+  );
+}
+
+function MgrBtn({ label, onClick, color = 'var(--color-text)', disabled = false }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        padding: '4px 10px', borderRadius: 4, border: '1px solid var(--color-border)',
+        background: 'transparent', color: disabled ? 'var(--color-muted)' : color,
+        fontSize: 11, cursor: disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 // ── Model Management Panel ───────────────────────────────────────────────────
 
 function ModelManager({ models, onSave, apiToken }) {
@@ -130,34 +188,6 @@ function ModelManager({ models, onSave, apiToken }) {
     setSaving(false);
   };
 
-  const DraftField = ({ label, value, onChange, type='text', children }) => (
-    <div style={{ flex:1, minWidth:100 }}>
-      <div style={{ fontSize:10, color:'var(--color-muted)', marginBottom:2 }}>{label}</div>
-      {children || (
-        <input type={type} value={value} onChange={(e) => onChange(e.target.value)}
-          style={{ width:'100%', padding:'5px 7px', borderRadius:4, border:'1px solid var(--color-border)',
-            background:'var(--color-bg)', color:'var(--color-text)', fontSize:12, boxSizing:'border-box',
-            fontFamily: type==='text' && label==='Model ID' ? 'var(--font-mono,monospace)' : 'inherit' }} />
-      )}
-    </div>
-  );
-
-  const SelectField = ({ label, value, onChange, options }) => (
-    <DraftField label={label} value={value} onChange={onChange}>
-      <select value={value} onChange={(e) => onChange(e.target.value)}
-        style={{ width:'100%', padding:'5px 7px', borderRadius:4, border:'1px solid var(--color-border)',
-          background:'var(--color-bg)', color:'var(--color-text)', fontSize:12 }}>
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </DraftField>
-  );
-
-  const btn = (label, onClick, color='var(--color-text)', disabled=false) => (
-    <button onClick={onClick} disabled={disabled} style={{ padding:'4px 10px', borderRadius:4, border:'1px solid var(--color-border)',
-      background:'transparent', color: disabled ? 'var(--color-muted)' : color, fontSize:11, cursor: disabled ? 'not-allowed' : 'pointer', whiteSpace:'nowrap' }}>
-      {label}
-    </button>
-  );
 
   // Group models for display
   const grouped = GROUP_ORDER.map((g) => ({ group:g, rows: list.map((m,i)=>({...m,_i:i})).filter((m) => m.group===g) }));
@@ -201,8 +231,8 @@ function ModelManager({ models, onSave, apiToken }) {
             </DraftField>
           </div>
           <div style={{ display:'flex', gap:8 }}>
-            {btn('Add', addModel, 'var(--color-primary)', !addDraft.id.trim() || !addDraft.label.trim())}
-            {btn('Cancel', () => setAddOpen(false))}
+            <MgrBtn label="Add"    onClick={addModel}             color="var(--color-primary)" disabled={!addDraft.id.trim() || !addDraft.label.trim()} />
+            <MgrBtn label="Cancel" onClick={() => setAddOpen(false)} />
           </div>
         </div>
       )}
@@ -236,9 +266,9 @@ function ModelManager({ models, onSave, apiToken }) {
                     </div>
 
                     <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-                      {btn('Test',   () => testModel(m.id),   'var(--color-primary)', testState[m.id]?.status==='testing')}
-                      {btn('Edit',   () => startEdit(m._i))}
-                      {btn('Delete', () => deleteRow(m._i),   'var(--color-error)')}
+                      <MgrBtn label="Test"   onClick={() => testModel(m.id)}  color="var(--color-primary)" disabled={testState[m.id]?.status==='testing'} />
+                      <MgrBtn label="Edit"   onClick={() => startEdit(m._i)} />
+                      <MgrBtn label="Delete" onClick={() => deleteRow(m._i)}  color="var(--color-error)" />
                     </div>
                   </div>
                 )}
@@ -263,8 +293,8 @@ function ModelManager({ models, onSave, apiToken }) {
                       </DraftField>
                     </div>
                     <div style={{ display:'flex', gap:8 }}>
-                      {btn('Save',   saveEdit, 'var(--color-primary)', !editDraft.id.trim() || !editDraft.label.trim())}
-                      {btn('Cancel', () => { setEditIdx(null); setEditDraft(null); })}
+                      <MgrBtn label="Save"   onClick={saveEdit}                                      color="var(--color-primary)" disabled={!editDraft.id.trim() || !editDraft.label.trim()} />
+                      <MgrBtn label="Cancel" onClick={() => { setEditIdx(null); setEditDraft(null); }} />
                     </div>
                   </div>
                 )}
