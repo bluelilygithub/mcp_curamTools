@@ -475,26 +475,45 @@ export default function MediaGenPage() {
   return (
     <div style={{ maxWidth: 940, margin: '0 auto', padding: '24px 20px' }}>
       {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>Media Generator</h1>
-        <p style={{ marginTop: 4, fontSize: 14, color: 'var(--color-muted)' }}>
-          Text-to-video, image-to-video, image-to-image, and text-to-image — powered by Fal.ai.
-        </p>
+      <div style={{ marginBottom: 24, display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:12 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>Media Generator</h1>
+          <p style={{ marginTop: 4, fontSize: 14, color: 'var(--color-muted)', margin:'4px 0 0' }}>
+            Text-to-video, image-to-video, image-to-image, and text-to-image — powered by Fal.ai.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowManager((p) => !p)}
+          style={{
+            padding: '8px 16px',
+            borderRadius: 6,
+            border: showManager ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+            background: showManager ? 'var(--color-primary)' : 'var(--color-bg)',
+            color: showManager ? '#fff' : 'var(--color-text)',
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          ⚙ Manage Models
+        </button>
       </div>
+
+      {/* Model manager — full-width panel above the form when open */}
+      {showManager && (
+        <div style={{ marginBottom: 24 }}>
+          <ModelManager models={allModels} onSave={saveModels} apiToken={token} />
+        </div>
+      )}
 
       {/* Form card */}
       <div style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:8, padding:24, marginBottom:24 }}>
 
         {/* ── Model selector ── */}
         <div style={{ marginBottom: 16 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+          <div style={{ marginBottom:10 }}>
             <label style={{ fontSize:13, fontWeight:600, color:'var(--color-text)' }}>Model</label>
-            <button
-              onClick={() => setShowManager((p) => !p)}
-              style={{ fontSize:11, color:'var(--color-primary)', background:'none', border:'none', cursor:'pointer', padding:'2px 4px' }}
-            >
-              {showManager ? '▲ Hide manager' : '⚙ Manage models'}
-            </button>
           </div>
 
           {!modelsLoaded ? (
@@ -550,10 +569,6 @@ export default function MediaGenPage() {
             </div>
           )}
 
-          {/* Model manager */}
-          {showManager && (
-            <ModelManager models={allModels} onSave={saveModels} apiToken={token} />
-          )}
         </div>
 
         {/* ── Prompt ── */}
