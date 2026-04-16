@@ -147,6 +147,7 @@ const ALL_AGENT_SLUGS = [
   { slug: 'google-ads-change-audit',  label: 'Change Audit' },
   { slug: 'ads-attribution-summary',  label: 'Attribution Summary' },
   { slug: 'ads-bounce-analysis',      label: 'Bounce Analysis' },
+  { slug: 'search-term-intelligence', label: 'Search Term Intelligence' },
   { slug: 'auction-insights',         label: 'Auction Insights' },
   { slug: 'competitor-keyword-intel', label: 'Competitor Keywords' },
   { slug: 'google-ads-strategic-review', label: 'Strategic Review' },
@@ -684,6 +685,7 @@ export default function GoogleAdsMonitorPage() {
             { slug: 'google-ads-change-audit',   title: 'Change Audit',        description: 'Before/after metric comparison per change. Scores each change as Positive, Neutral, or Negative.' },
             { slug: 'ads-attribution-summary',   title: 'Attribution Summary', description: 'Connects ad spend, GA4 traffic, and WordPress enquiries — shows which campaigns are generating actual leads.' },
             { slug: 'ads-bounce-analysis',       title: 'Bounce Analysis',     description: 'Paid keywords that sent traffic to high-bounce landing pages, broken down by device.' },
+            { slug: 'search-term-intelligence',  title: 'Search Term Intelligence', description: 'Cross-references Ads search terms with CRM lead outcomes — surfaces terms that bounce and terms that generate not-interested leads.' },
             { slug: 'auction-insights',          title: 'Auction Insights',    description: 'Which competitors are bidding in the same auctions — impression share, top-of-page rate, and where Diamond Plate is losing visibility.' },
             { slug: 'competitor-keyword-intel',  title: 'Competitor Keywords', description: 'Keyword gaps for Diamond Plate Australia — what competitors are targeting that we are not. Requires Standard API access.' },
           ].map(({ slug, title, description }) => (
