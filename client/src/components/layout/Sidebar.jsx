@@ -76,7 +76,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
           {collapsed && <div className="pt-3" />}
           <NavItem to="/admin/users" icon="users" label="Users" collapsed={collapsed} onClick={onLinkClick} />
           <NavItem to="/admin/models" icon="cpu" label="Models" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/providers" icon="plug" label="Providers" collapsed={collapsed} onClick={onLinkClick} />
+          <NavItem to="/admin/providers" icon="globe" label="Providers" collapsed={collapsed} onClick={onLinkClick} />
           <NavItem to="/admin/agents" icon="bot" label="Agents" collapsed={collapsed} onClick={onLinkClick} />
           <NavItem to="/admin/settings" icon="settings" label="App Settings" collapsed={collapsed} onClick={onLinkClick} />
           <NavItem to="/admin/email-templates" icon="mail" label="Email Templates" collapsed={collapsed} onClick={onLinkClick} />
