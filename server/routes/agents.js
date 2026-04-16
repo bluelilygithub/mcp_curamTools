@@ -147,6 +147,18 @@ agentsRouter.use(
   })
 );
 
+// ── Search Term Intelligence ──────────────────────────────────────────────────
+const { runSearchTermIntelligence } = require('../agents/searchTermIntelligence');
+
+agentsRouter.use(
+  '/search-term-intelligence',
+  createAgentRoute({
+    slug:               'search-term-intelligence',
+    runFn:              runSearchTermIntelligence,
+    requiredPermission: 'org_member',
+  })
+);
+
 // ── Lead Velocity ─────────────────────────────────────────────────────────────
 const { runLeadVelocity } = require('../agents/leadVelocity');
 

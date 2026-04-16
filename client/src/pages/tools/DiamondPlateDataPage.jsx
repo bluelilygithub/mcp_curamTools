@@ -16,8 +16,9 @@ import VelocityDashboard from './DiamondPlate/VelocityDashboard';
 import { fmtDate } from '../../utils/date';
 import { exportPdf, exportText } from '../../utils/exportService';
 
-const AGENT_SLUG          = 'diamondplate-data';
-const VELOCITY_AGENT_SLUG = 'lead-velocity';
+const AGENT_SLUG              = 'diamondplate-data';
+const VELOCITY_AGENT_SLUG     = 'lead-velocity';
+const SEARCH_TERM_AGENT_SLUG  = 'search-term-intelligence';
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -233,6 +234,12 @@ export default function DiamondPlateDataPage() {
   const [velocityResult,   setVelocityResult]   = useState(null);
   const [velocityHistory,  setVelocityHistory]  = useState([]);
 
+  // Search Terms tab state
+  const [stRunning,  setStRunning]  = useState(false);
+  const [stProgress, setStProgress] = useState([]);
+  const [stError,    setStError]    = useState('');
+  const [stResult,   setStResult]   = useState(null);
+
   // Warn before leaving mid-run
   useEffect(() => {
     const handler = (e) => { if (running) { e.preventDefault(); e.returnValue = ''; } };
@@ -246,6 +253,12 @@ export default function DiamondPlateDataPage() {
       .then((rows) => {
         const latest = rows?.find((r) => r.status === 'complete');
         if (latest?.result && !result) setResult(latest.result);
+      })
+      .catch(() => {});
+    api.get(`/agents/${SEARCH_TERM_AGENT_SLUG}/history`)
+      .then((rows) => {
+        const latest = rows?.find((r) => r.status === 'complete');
+        if (latest?.result) setStResult(latest.result);
       })
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -414,6 +427,57 @@ export default function DiamondPlateDataPage() {
     }
   }
 
+  async function handleSearchTermsRun() {
+    if (new Date(startDate) > new Date(endDate)) {
+      setStError('Start date must be before end date.');
+      return;
+    }
+    setStRunning(true);
+    setStProgress([]);
+    setStError('');
+
+    try {
+      const res     = await api.stream(`/agents/${SEARCH_TERM_AGENT_SLUG}/run`, { startDate, endDate });
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let resultReceived = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]') { setStRunning(false); return; }
+          try {
+            const msg = JSON.parse(raw);
+            if (msg.type === 'progress') {
+              setStProgress((p) => [...p, msg.text]);
+            } else if (msg.type === 'result') {
+              resultReceived = true;
+              setStResult(msg.data);
+            } else if (msg.type === 'error') {
+              setStError(msg.error);
+            }
+          } catch (parseErr) {
+            console.error('[SearchTerms] failed to parse SSE line:', parseErr.message);
+          }
+        }
+      }
+      if (!resultReceived) setStError('Run ended without a result — check server logs.');
+    } catch (err) {
+      console.error('[SearchTerms] stream error:', err.message);
+      setStError(err.message);
+    } finally {
+      setStRunning(false);
+    }
+  }
+
   const summary = result?.summary ?? result?.result ?? '';
 
   const tabBtn = (tab, label) => (
@@ -498,10 +562,11 @@ export default function DiamondPlateDataPage() {
 
       {/* ── Tabs ───────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1 mb-4">
-        {tabBtn('report',       'Report')}
-        {tabBtn('velocity',     'Velocity')}
-        {tabBtn('conversation', 'Conversation')}
-        {tabBtn('history',      'History')}
+        {tabBtn('report',        'Report')}
+        {tabBtn('velocity',      'Velocity')}
+        {tabBtn('search-terms',  'Search Terms')}
+        {tabBtn('conversation',  'Conversation')}
+        {tabBtn('history',       'History')}
       </div>
 
       {/* ── Report ─────────────────────────────────────────────────────── */}
@@ -731,6 +796,92 @@ export default function DiamondPlateDataPage() {
               }}
             />
           )}
+        </div>
+      )}
+
+      {/* ── Search Terms ───────────────────────────────────────────────── */}
+      {activeTab === 'search-terms' && (
+        <div>
+          <p className="text-sm mb-4" style={{ color: 'var(--color-muted)' }}>
+            Cross-references Google Ads search terms with CRM lead outcomes and GA4 bounce data. Identifies
+            terms that are wasting budget (high bounce) and terms attracting poor-fit leads (not interested).
+          </p>
+
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              onClick={handleSearchTermsRun}
+              disabled={stRunning}
+              style={{
+                padding: '0.4rem 1rem', fontSize: '0.875rem', fontWeight: 600,
+                fontFamily: 'inherit', borderRadius: '0.5rem', border: 'none',
+                background: stRunning ? 'var(--color-border)' : 'var(--color-primary)',
+                color: '#fff', cursor: stRunning ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {stRunning ? 'Analysing…' : 'Run Search Term Analysis'}
+            </button>
+            <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+              Uses date range above · Typically 20–40 seconds
+            </span>
+          </div>
+
+          {stError && (
+            <InlineBanner type="error" message={stError} onDismiss={() => setStError('')} className="mb-4" />
+          )}
+
+          {stRunning && <ProgressBar lines={stProgress} />}
+
+          <div
+            className="rounded-2xl border p-5"
+            style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
+          >
+            {!stResult && !stRunning && !stError && (
+              <p className="text-sm py-6 text-center" style={{ color: 'var(--color-muted)' }}>
+                Select a date range above and click <strong>Run Search Term Analysis</strong> to
+                identify bouncing and not-interested search terms.
+              </p>
+            )}
+            {stResult?.summary && (
+              <>
+                <MarkdownRenderer text={stResult.summary} />
+                <div className="mt-4 flex items-center justify-between flex-wrap gap-2">
+                  <ExportButtons
+                    onText={() => {
+                      const period = `${stResult?.startDate ?? startDate} to ${stResult?.endDate ?? endDate}`;
+                      exportText({
+                        content:  `Search Term Intelligence — ${period}\n\n${stResult.summary}`,
+                        filename: `search-terms-${stResult?.startDate ?? startDate}-${stResult?.endDate ?? endDate}.txt`,
+                      });
+                    }}
+                    onPdf={async () => {
+                      const period = `${stResult?.startDate ?? startDate} – ${stResult?.endDate ?? endDate}`;
+                      await exportPdf({
+                        content:  stResult.summary,
+                        title:    `Search Term Intelligence · ${period}`,
+                        filename: `search-terms-${stResult?.startDate ?? startDate}-${stResult?.endDate ?? endDate}.pdf`,
+                      });
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      setConversationSeed(
+                        `Here is the Search Term Intelligence report for ${stResult?.startDate ?? startDate} to ${stResult?.endDate ?? endDate}:\n\n${stResult.summary}`
+                      );
+                      setActiveTab('conversation');
+                    }}
+                    style={{
+                      padding: '0.35rem 0.9rem', fontSize: '0.8rem', fontWeight: 500,
+                      fontFamily: 'inherit', borderRadius: '0.5rem', cursor: 'pointer',
+                      border: '1px solid var(--color-border)',
+                      background: 'transparent', color: 'var(--color-muted)',
+                    }}
+                  >
+                    Discuss this report
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 

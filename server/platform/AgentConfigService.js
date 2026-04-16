@@ -138,6 +138,7 @@ const AGENT_MODEL_REQUIREMENTS = {
   'ads-bounce-analysis':         { tier: 'standard', reason: 'Structured bounce report from pre-fetched data' },
   'auction-insights':            { tier: 'standard', reason: 'Structured competitive metrics report' },
   'diamondplate-data':           { tier: 'advanced', reason: 'Cross-source CRM lead intelligence with channel, device, and conversion analysis' },
+  'search-term-intelligence':    { tier: 'advanced', reason: 'Cross-source analysis joining Ads search terms, GA4 bounce data, and CRM lead outcomes' },
   'ai-visibility-monitor':       { tier: 'advanced', reason: 'Multi-prompt web search with cross-source brand and competitor analysis' },
   'doc-extractor':               { tier: 'advanced', reason: 'Vision extraction quality scales with model capability — Sonnet handles complex layouts, poor scans, and dense forms significantly better than Haiku' },
   _platform:                     { tier: 'advanced', reason: 'Default for unrecognised agents' },
