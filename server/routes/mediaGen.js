@@ -175,6 +175,26 @@ function buildPayload(modelId, prompt, imageUrl, opts) {
   return payload;
 }
 
+/**
+ * Extract the path component from a Fal.ai URL string.
+ * Used to get the correct status_url / response_url paths from the submit response
+ * rather than constructing them manually (manual construction breaks for deep model paths).
+ *
+ * "https://queue.fal.run/fal-ai/kling-video/…/requests/abc/status"
+ *  → "/fal-ai/kling-video/…/requests/abc/status"
+ *
+ * Returns null if the URL is missing or unparseable.
+ */
+function extractFalPath(urlStr) {
+  if (!urlStr) return null;
+  try {
+    const u = new URL(urlStr);
+    return u.pathname + (u.search || '');
+  } catch {
+    return null;
+  }
+}
+
 // ── SSE helper ──────────────────────────────────────────────────────────────
 
 function sseWrite(res, data) {
@@ -368,6 +388,14 @@ router.post(
         throw new Error(`Fal.ai did not return a request_id. Response: ${JSON.stringify(submitted).slice(0, 200)}`);
       }
 
+      // Use the URLs returned by Fal.ai rather than constructing them manually.
+      // For models with deep paths (e.g. kling-video/v2.5-turbo/pro/…) the manually
+      // constructed path doesn't match what Fal.ai expects — the response URLs are authoritative.
+      const statusPath = extractFalPath(submitted.status_url)
+        || `${modelPath}/requests/${requestId}/status`;
+      const resultPath = extractFalPath(submitted.response_url)
+        || `${modelPath}/requests/${requestId}`;
+
       // 3. Save pending run
       const ins = await pool.query(
         `INSERT INTO media_gen_runs
@@ -381,9 +409,8 @@ router.post(
       sseWrite(res, { type: 'submitted', requestId, runId });
 
       // 4. Poll status
-      const statusPath = `${modelPath}/requests/${requestId}/status`;
-      const startMs    = Date.now();
-      let   result     = null;
+      const startMs = Date.now();
+      let   result  = null;
 
       for (let i = 0; i < MAX_POLLS; i++) {
         await sleep(POLL_INTERVAL_MS);
@@ -392,8 +419,7 @@ router.post(
         const elapsed   = Math.round((Date.now() - startMs) / 1000);
 
         if (statusRes.status === 'COMPLETED') {
-          // Fetch the result
-          result = await falJson('GET', 'queue.fal.run', `${modelPath}/requests/${requestId}`, apiKey, null);
+          result = await falJson('GET', 'queue.fal.run', resultPath, apiKey, null);
           break;
         }
 
