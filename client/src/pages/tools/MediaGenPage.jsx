@@ -14,7 +14,6 @@ const MODEL_GROUPS = [
   {
     label: 'Text → Video',
     models: [
-      { id: 'fal-ai/seedance-2.0/text-to-video',                label: 'Seedance 2.0',        requiresImage: false, type: 'video' },
       { id: 'fal-ai/kling-video/v2.5-turbo/pro/text-to-video',  label: 'Kling 2.5 Turbo Pro', requiresImage: false, type: 'video' },
       { id: 'kling-video/v3/text-to-video',                     label: 'Kling 3.0',           requiresImage: false, type: 'video' },
       { id: 'fal-ai/sora-2/text-to-video',                      label: 'Sora 2',              requiresImage: false, type: 'video' },
@@ -58,6 +57,22 @@ const MODEL_GROUPS = [
 
 // Flat list for lookups
 const MODELS = MODEL_GROUPS.flatMap((g) => g.models);
+
+/**
+ * Infer type/requiresImage for a model ID that isn't in the preset list.
+ * Mirrors the server-side modelType() logic.
+ */
+function inferModelMeta(id) {
+  const s = (id || '').toLowerCase();
+  const isVideo =
+    s.includes('text-to-video') || s.includes('image-to-video') ||
+    s.includes('seedance') || s.includes('kling') || s.includes('sora') ||
+    s.includes('svd') || s.includes('pixverse') || s.includes('wan') ||
+    s.includes('pika') || s.includes('minimax');
+  const requiresImage =
+    s.includes('image-to-video') || s.includes('image-to-image');
+  return { type: isVideo ? 'video' : 'image', requiresImage };
+}
 
 const ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4'];
 const DURATIONS     = ['5', '10'];
@@ -130,6 +145,7 @@ export default function MediaGenPage() {
 
   // Form state
   const [model,        setModel]        = useState(MODELS[0].id);
+  const [customInput,  setCustomInput]  = useState('');   // raw text field
   const [prompt,       setPrompt]       = useState('');
   const [aspectRatio,  setAspectRatio]  = useState('16:9');
   const [duration,     setDuration]     = useState('5');
@@ -151,8 +167,11 @@ export default function MediaGenPage() {
   const [search,       setSearch]       = useState('');
   const [searchInput,  setSearchInput]  = useState('');
 
-  const selectedModel = MODELS.find((m) => m.id === model) || MODELS[0];
-  const isVideo       = selectedModel.type === 'video';
+  // Effective model: custom input wins if non-empty
+  const effectiveModelId = customInput.trim() || model;
+  const presetMatch      = MODELS.find((m) => m.id === effectiveModelId);
+  const selectedModel    = presetMatch || { id: effectiveModelId, ...inferModelMeta(effectiveModelId) };
+  const isVideo          = selectedModel.type === 'video';
   const LIMIT         = 10;
 
   // Load history
@@ -202,7 +221,7 @@ export default function MediaGenPage() {
     setGenError(null);
 
     const form = new FormData();
-    form.append('model',       model);
+    form.append('model',       effectiveModelId);
     form.append('prompt',      prompt.trim());
     form.append('aspectRatio', aspectRatio);
     if (isVideo) form.append('duration', duration);
@@ -322,7 +341,9 @@ export default function MediaGenPage() {
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text)', marginBottom: 10 }}>
             Model
           </label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+          {/* Preset groups — dimmed when a custom ID is typed */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, opacity: customInput.trim() ? 0.4 : 1, transition: 'opacity 150ms' }}>
             {MODEL_GROUPS.map((group) => (
               <div key={group.label}>
                 <div style={{
@@ -337,11 +358,11 @@ export default function MediaGenPage() {
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {group.models.map((m) => {
-                    const active = model === m.id;
+                    const active = !customInput.trim() && model === m.id;
                     return (
                       <button
                         key={m.id}
-                        onClick={() => setModel(m.id)}
+                        onClick={() => { setModel(m.id); setCustomInput(''); }}
                         style={{
                           padding: '5px 12px',
                           borderRadius: 5,
@@ -362,6 +383,55 @@ export default function MediaGenPage() {
               </div>
             ))}
           </div>
+
+          {/* Custom model ID */}
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <input
+                value={customInput}
+                onChange={(e) => setCustomInput(e.target.value)}
+                placeholder="Or paste any Fal.ai model ID — e.g. fal-ai/seedance-2.0/text-to-video"
+                style={{
+                  width: '100%',
+                  padding: '7px 10px',
+                  borderRadius: 6,
+                  border: customInput.trim()
+                    ? '2px solid var(--color-primary)'
+                    : '1px solid var(--color-border)',
+                  background: 'var(--color-bg)',
+                  color: 'var(--color-text)',
+                  fontSize: 12,
+                  fontFamily: 'var(--font-mono, monospace)',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+            {customInput.trim() && (
+              <button
+                onClick={() => setCustomInput('')}
+                title="Clear custom ID"
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 5,
+                  border: '1px solid var(--color-border)',
+                  background: 'transparent',
+                  color: 'var(--color-muted)',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                ✕ Clear
+              </button>
+            )}
+          </div>
+          {customInput.trim() && (
+            <div style={{ marginTop: 4, fontSize: 11, color: 'var(--color-muted)' }}>
+              Using custom ID: <code style={{ fontFamily: 'var(--font-mono, monospace)' }}>{customInput.trim()}</code>
+              {' · '}detected as <strong>{selectedModel.type}</strong>
+              {selectedModel.requiresImage ? ' · image required' : ''}
+            </div>
+          )}
         </div>
 
         {/* Prompt */}
