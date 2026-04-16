@@ -444,18 +444,46 @@ function httpsPost(hostname, path, reqHeaders, bodyObj) {
 router.post('/models/:modelId/test', async (req, res) => {
   const { modelId } = req.params;
   const start = Date.now();
-  const { resolveProvider, getAdapter } = require('../platform/providerRegistry');
+  const { PROVIDERS, resolveProvider, getAdapterWithCustom } = require('../platform/providerRegistry');
+  const { getCustomProviders } = require('../platform/AgentConfigService');
 
-  const prov = resolveProvider(modelId);
-  if (!process.env[prov.envVar]) {
-    return res.status(500).json({
-      ok:    false,
-      error: `${prov.envVar} environment variable is not set.`,
-    });
+  const customProviders = await getCustomProviders(req.user.orgId).catch(() => []);
+
+  // Find which env var is needed
+  const lower = modelId.toLowerCase();
+  let envVarNeeded = null;
+  let foundInRegistry = false;
+
+  for (const prov of Object.values(PROVIDERS)) {
+    if (prov.modelPrefixes.some((pfx) => lower.startsWith(pfx.toLowerCase()))) {
+      envVarNeeded = prov.envVar;
+      foundInRegistry = true;
+      break;
+    }
+  }
+
+  if (!foundInRegistry) {
+    // Check custom providers
+    for (const cp of customProviders) {
+      if (lower === cp.key.toLowerCase() || lower.startsWith(cp.key.toLowerCase() + '-')) {
+        envVarNeeded = cp.apiKeyEnv;
+        break;
+      }
+    }
+    // Fallback: env var convention
+    if (!envVarNeeded) {
+      const dashIdx = modelId.indexOf('-');
+      const prefix  = dashIdx > 0 ? modelId.slice(0, dashIdx).toUpperCase() : modelId.toUpperCase();
+      envVarNeeded  = `${prefix}_API_KEY`;
+    }
+  }
+
+  if (envVarNeeded && !process.env[envVarNeeded]) {
+    return res.status(500).json({ ok: false, error: `${envVarNeeded} is not set in Railway.` });
   }
 
   try {
-    const adapter = getAdapter(modelId);
+    const adapter = getAdapterWithCustom(modelId, customProviders);
     await adapter.chat({
       model:      modelId,
       max_tokens: 10,
@@ -469,13 +497,60 @@ router.post('/models/:modelId/test', async (req, res) => {
   }
 });
 
-router.get('/model-status', (req, res) => {
+router.get('/model-status', async (req, res) => {
   const { PROVIDERS } = require('../platform/providerRegistry');
+  const { getCustomProviders } = require('../platform/AgentConfigService');
+
   const status = {};
   for (const [key, prov] of Object.entries(PROVIDERS)) {
     status[key] = { label: prov.label, configured: !!process.env[prov.envVar] };
   }
+
+  try {
+    const customs = await getCustomProviders(req.user.orgId);
+    for (const cp of customs) {
+      if (!status[cp.key]) {
+        status[cp.key] = {
+          label:      cp.label || cp.key,
+          configured: !!process.env[cp.apiKeyEnv],
+          custom:     true,
+        };
+      }
+    }
+  } catch { /* non-fatal */ }
+
   res.json(status);
+});
+
+// ── Custom Providers ──────────────────────────────────────────────────────────
+
+router.get('/providers', async (req, res) => {
+  const { getCustomProviders } = require('../platform/AgentConfigService');
+  const providers = await getCustomProviders(req.user.orgId);
+  // Annotate each with whether the env var is currently set
+  const annotated = providers.map((p) => ({
+    ...p,
+    configured: !!process.env[p.apiKeyEnv],
+  }));
+  res.json(annotated);
+});
+
+router.put('/providers', async (req, res) => {
+  const { updateCustomProviders } = require('../platform/AgentConfigService');
+  const providers = req.body.providers;
+  if (!Array.isArray(providers)) {
+    return res.status(400).json({ error: 'providers must be an array' });
+  }
+  // Validate each entry has key, apiKeyEnv, baseUrl
+  for (const p of providers) {
+    if (!p.key || !p.apiKeyEnv || !p.baseUrl) {
+      return res.status(400).json({ error: 'Each provider requires key, apiKeyEnv, and baseUrl' });
+    }
+    // Normalise key to lowercase
+    p.key = p.key.toLowerCase().trim();
+  }
+  const saved = await updateCustomProviders(req.user.orgId, providers, req.user.id);
+  res.json(saved.map((p) => ({ ...p, configured: !!process.env[p.apiKeyEnv] })));
 });
 
 router.post('/models/reset', async (req, res) => {

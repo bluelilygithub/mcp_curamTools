@@ -594,6 +594,40 @@ async function updateStorageSettings(orgId, patch, updatedBy) {
   return merged;
 }
 
+// ── Custom AI Providers ────────────────────────────────────────────────────
+
+/**
+ * Returns the org's custom provider definitions.
+ * Each entry: { key, label, apiKeyEnv, baseUrl }
+ * key is lowercase, used as prefix in model IDs (e.g. 'seedance' matches 'seedance-video-3')
+ */
+async function getCustomProviders(orgId) {
+  try {
+    const res = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'custom_providers' LIMIT 1`,
+      [orgId]
+    );
+    return Array.isArray(res.rows[0]?.value) ? res.rows[0].value : [];
+  } catch (err) {
+    console.error('[AgentConfigService] getCustomProviders error:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Replaces the org's custom providers list.
+ */
+async function updateCustomProviders(orgId, providers, updatedBy) {
+  await pool.query(
+    `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+     VALUES ($1, 'custom_providers', $2, $3, NOW())
+     ON CONFLICT (org_id, key)
+     DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+    [orgId, JSON.stringify(providers), updatedBy]
+  );
+  return providers;
+}
+
 module.exports = {
   getAgentConfig,
   getAgentConfigMeta,
@@ -611,6 +645,8 @@ module.exports = {
   updateCrmPrivacySettings,
   getStorageSettings,
   updateStorageSettings,
+  getCustomProviders,
+  updateCustomProviders,
   AGENT_DEFAULTS,
   ADMIN_DEFAULTS,
   AGENT_MODEL_REQUIREMENTS,

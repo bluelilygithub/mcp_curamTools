@@ -207,7 +207,13 @@ export default function AdminModelsPage() {
             <div key={key} className="flex items-center gap-2">
               <span style={{ color: 'var(--color-muted)' }}>{prov.label} API key:</span>
               {prov.configured ? (
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#16a34a' }}>✓ Configured</span>
+                prov.needsBaseUrl ? (
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309' }}>
+                    ⚠ Key set — {key.toUpperCase()}_BASE_URL missing
+                  </span>
+                ) : (
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#16a34a' }}>✓ Configured</span>
+                )
               ) : (
                 <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309' }}>⚠ Not set</span>
               )}
@@ -246,26 +252,19 @@ export default function AdminModelsPage() {
                 {TIERS.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </Field>
-            <Field label="Provider">
-              <select style={fi} value={form.provider}
-                onChange={(e) => setForm((f) => ({ ...f, provider: e.target.value }))}>
-                {Object.keys(apiKeyOk).length > 0
-                  ? Object.entries(apiKeyOk).map(([key, prov]) => (
-                      <option key={key} value={key}>{prov.label}</option>
-                    ))
-                  : (
-                    <>
-                      <option value="anthropic">Anthropic</option>
-                      <option value="google">Google</option>
-                      <option value="openai">OpenAI</option>
-                      <option value="mistral">Mistral</option>
-                      <option value="deepseek">DeepSeek</option>
-                      <option value="xai">xAI (Grok)</option>
-                      <option value="groq">Groq</option>
-                    </>
-                  )
-                }
-              </select>
+            <Field label="Provider" hint="pick from list or type a custom key (lowercase)">
+              <input
+                style={fi}
+                list="provider-datalist"
+                placeholder="e.g. anthropic, openai, seedance"
+                value={form.provider}
+                onChange={(e) => setForm((f) => ({ ...f, provider: e.target.value.toLowerCase().trim() }))}
+              />
+              <datalist id="provider-datalist">
+                {Object.entries(apiKeyOk).map(([key, prov]) => (
+                  <option key={key} value={key}>{prov.label}</option>
+                ))}
+              </datalist>
             </Field>
             <Field label="Emoji">
               <input style={fi} placeholder="🤖"

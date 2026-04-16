@@ -21,8 +21,8 @@ const MAX_ITERATIONS_HARD_CAP = 20;
 
 // ─── Provider selection ───────────────────────────────────────────────────────
 
-function getProvider(model) {
-  return require('./providerRegistry').getAdapter(model ?? '');
+function getProvider(model, customProviders) {
+  return require('./providerRegistry').getAdapterWithCustom(model ?? '', customProviders);
 }
 
 // ─── AgentError ───────────────────────────────────────────────────────────────
@@ -94,8 +94,15 @@ class AgentOrchestrator {
       );
     }
 
+    // Load this org's custom providers once per run
+    let customProviders = [];
+    try {
+      const { getCustomProviders } = require('./AgentConfigService');
+      customProviders = await getCustomProviders(context.orgId);
+    } catch { /* use hardcoded + env var fallback only */ }
+
     const capped   = Math.min(maxIterations, MAX_ITERATIONS_HARD_CAP);
-    const provider = getProvider(model);
+    const provider = getProvider(model, customProviders);
 
     // Strip execute + meta fields from tool defs before sending to model
     const providerTools = tools.length > 0
@@ -134,7 +141,7 @@ class AgentOrchestrator {
           if (typeof onStep === 'function') onStep(alertMsg, tokensUsed);
 
           try {
-            response = await getProvider(fallbackModel).chat({
+            response = await getProvider(fallbackModel, customProviders).chat({
               model:      fallbackModel,
               max_tokens: maxTokens,
               system:     systemPrompt,

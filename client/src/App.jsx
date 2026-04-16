@@ -26,6 +26,7 @@ import AdminCrmPrivacyPage from './pages/admin/AdminCrmPrivacyPage';
 import AdminDataPrivacyPage from './pages/admin/AdminDataPrivacyPage';
 import AdminStoragePage from './pages/admin/AdminStoragePage';
 import AdminKnowledgePage from './pages/admin/AdminKnowledgePage';
+import AdminProvidersPage from './pages/admin/AdminProvidersPage';
 import GoogleAdsMonitorPage   from './pages/tools/GoogleAdsMonitorPage';
 import DiamondPlateDataPage   from './pages/tools/DiamondPlateDataPage';
 import DocExtractorPage       from './pages/tools/DocExtractorPage';
@@ -72,6 +73,7 @@ export default function App() {
                   <Route path="/admin/data-privacy" element={<AdminDataPrivacyPage />} />
                   <Route path="/admin/storage" element={<AdminStoragePage />} />
                   <Route path="/admin/knowledge" element={<AdminKnowledgePage />} />
+                  <Route path="/admin/providers" element={<AdminProvidersPage />} />
                 </Route>
               </Route>
             </Route>
