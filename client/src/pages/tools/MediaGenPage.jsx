@@ -14,8 +14,7 @@ const MODEL_GROUPS = [
   {
     label: 'Text → Video',
     models: [
-      { id: 'fal-ai/seedance-1-lite',                           label: 'Seedance 1 Lite',     requiresImage: false, type: 'video' },
-      { id: 'bytedance/seedance-2.0/text-to-video',             label: 'Seedance 2.0',        requiresImage: false, type: 'video' },
+      { id: 'fal-ai/seedance-2.0/text-to-video',                label: 'Seedance 2.0',        requiresImage: false, type: 'video' },
       { id: 'fal-ai/kling-video/v2.5-turbo/pro/text-to-video',  label: 'Kling 2.5 Turbo Pro', requiresImage: false, type: 'video' },
       { id: 'kling-video/v3/text-to-video',                     label: 'Kling 3.0',           requiresImage: false, type: 'video' },
       { id: 'fal-ai/sora-2/text-to-video',                      label: 'Sora 2',              requiresImage: false, type: 'video' },
