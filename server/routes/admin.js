@@ -444,6 +444,7 @@ function httpsPost(hostname, path, reqHeaders, bodyObj) {
 router.post('/models/:modelId/test', async (req, res) => {
   const { modelId } = req.params;
   const start = Date.now();
+  const logger = require('../utils/logger');
   const { PROVIDERS, resolveProvider, getAdapterWithCustom } = require('../platform/providerRegistry');
   const { getCustomProviders } = require('../platform/AgentConfigService');
 
@@ -479,7 +480,9 @@ router.post('/models/:modelId/test', async (req, res) => {
   }
 
   if (envVarNeeded && !process.env[envVarNeeded]) {
-    return res.status(500).json({ ok: false, error: `${envVarNeeded} is not set in Railway.` });
+    const msg = `${envVarNeeded} is not set — add it to Railway env vars and redeploy.`;
+    logger.error(`Provider test failed: ${modelId}`, { model: modelId, reason: msg, user: req.user.email });
+    return res.status(500).json({ ok: false, error: msg });
   }
 
   try {
@@ -491,8 +494,10 @@ router.post('/models/:modelId/test', async (req, res) => {
       messages:   [{ role: 'user', content: 'Reply with the single word: ok' }],
       tools:      undefined,
     });
+    logger.info(`Provider test passed: ${modelId}`, { model: modelId, latencyMs: Date.now() - start });
     return res.json({ ok: true, latencyMs: Date.now() - start });
   } catch (err) {
+    logger.error(`Provider test failed: ${modelId}`, { model: modelId, error: err.message, user: req.user.email });
     return res.json({ ok: false, error: err.message, latencyMs: Date.now() - start });
   }
 });
