@@ -514,9 +514,10 @@ router.get('/model-status', async (req, res) => {
         // Override or hide a built-in provider
         if (cp.hidden) {
           delete status[cp.key];
-        } else {
-          // Apply label override if present
-          if (status[cp.key] && cp.label) status[cp.key].label = cp.label;
+        } else if (status[cp.key]) {
+          if (cp.label)     status[cp.key].label = cp.label;
+          // If the user overrode the env var name, re-check with their var
+          if (cp.apiKeyEnv) status[cp.key].configured = !!process.env[cp.apiKeyEnv];
         }
       } else {
         // Fully custom provider

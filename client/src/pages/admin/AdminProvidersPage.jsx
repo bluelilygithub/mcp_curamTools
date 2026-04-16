@@ -107,14 +107,13 @@ export default function AdminProvidersPage() {
   }
 
   function openEditBuiltin(key, statusEntry) {
-    // Find any existing override in saved list
     const override = saved.find((p) => p.key === key && p.builtin);
     setForm({
       ...EMPTY_FORM,
       key,
-      label:       override?.label || statusEntry.label || key,
+      label:       override?.label       || statusEntry.label || key,
       testModelId: override?.testModelId || BUILTIN_TEST_MODELS[key] || '',
-      apiKeyEnv:   BUILTIN_ENV_VARS[key] || '',
+      apiKeyEnv:   override?.apiKeyEnv   || BUILTIN_ENV_VARS[key] || '',
       _isBuiltin:  true,
     });
     setEditingKey(key);
@@ -137,10 +136,10 @@ export default function AdminProvidersPage() {
     let newList;
 
     if (form._isBuiltin) {
-      // Save/replace a built-in override (no apiKeyEnv/baseUrl needed)
       const entry = {
         key:         form.key,
         label:       form.label.trim() || form.key,
+        apiKeyEnv:   form.apiKeyEnv.trim() || undefined,
         testModelId: form.testModelId.trim(),
         builtin:     true,
       };
@@ -317,8 +316,12 @@ export default function AdminProvidersPage() {
             </Field>
 
             {form._isBuiltin ? (
-              <Field label="API key env var" hint="set in Railway — cannot be changed here">
-                <input style={fiReadonly} value={form.apiKeyEnv} readOnly />
+              <Field label="API key env var" hint="name of the variable set in Railway">
+                <input
+                  style={{ ...fi, fontFamily: 'monospace' }}
+                  value={form.apiKeyEnv}
+                  onChange={(e) => setForm((f) => ({ ...f, apiKeyEnv: e.target.value.toUpperCase() }))}
+                />
               </Field>
             ) : (
               <>
@@ -404,7 +407,7 @@ export default function AdminProvidersPage() {
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           <button
                             onClick={() => testProvider(p.key, p.testModelId || null)}
-                            disabled={test?.status === 'testing' || !p.configured}
+                            disabled={test?.status === 'testing'}
                             className="text-xs px-2.5 py-1 rounded-lg border transition-opacity hover:opacity-70 disabled:opacity-40"
                             style={btnBase}
                           >
@@ -469,7 +472,7 @@ export default function AdminProvidersPage() {
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           <button
                             onClick={() => testProvider(p.key, p.testModelId || null)}
-                            disabled={test?.status === 'testing' || !p.configured}
+                            disabled={test?.status === 'testing'}
                             className="text-xs px-2.5 py-1 rounded-lg border transition-opacity hover:opacity-70 disabled:opacity-40"
                             style={btnBase}
                           >
