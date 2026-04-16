@@ -17,7 +17,8 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", 'fonts.googleapis.com', 'fonts.gstatic.com'],
       fontSrc: ["'self'", 'fonts.gstatic.com'],
       connectSrc: ["'self'"],
-      imgSrc: ["'self'", 'data:', 'blob:'],
+      imgSrc:     ["'self'", 'data:', 'blob:', 'https://fal.media', 'https://cdn.fal.run', 'https://storage.fal.run'],
+      mediaSrc:   ["'self'", 'blob:', 'https://fal.media', 'https://cdn.fal.run', 'https://storage.fal.run'],
     },
   },
 }));
@@ -56,6 +57,7 @@ app.use('/api/google-ads', require('./routes/googleAds'));
 app.use('/api/conversation', require('./routes/conversation'));
 app.use('/api/admin/knowledge', require('./routes/adminKnowledge'));
 app.use('/api/doc-extractor',  require('./routes/docExtractor'));
+app.use('/api/media-gen',      require('./routes/mediaGen'));
 app.use('/api/export-log',    require('./routes/exportLog'));
 app.use('/api/export',        require('./routes/export'));
 

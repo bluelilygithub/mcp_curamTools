@@ -46,6 +46,14 @@ const TOOLS = [
     path:        '/tools/doc-extractor',
     roles:       ['org_member', 'org_admin'],
   },
+  {
+    id:          'media-gen',
+    name:        'Media Generator',
+    description: 'Generate images and videos using Fal.ai models. Provide a text prompt and optional reference image to create AI-generated media.',
+    icon:        'film',
+    path:        '/tools/media-gen',
+    roles:       ['org_member', 'org_admin'],
+  },
 ];
 
 /**

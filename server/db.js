@@ -502,6 +502,34 @@ async function initSchema() {
         ON ai_visibility_prompts(org_id, sort_order)
     `);
 
+    // ── Media Generator ────────────────────────────────────────────────────────
+    // Stores image and video generation runs via Fal.ai.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS media_gen_runs (
+        id                   SERIAL      PRIMARY KEY,
+        org_id               INTEGER     NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        user_id              INTEGER     REFERENCES users(id) ON DELETE SET NULL,
+        model                TEXT        NOT NULL,
+        output_type          TEXT        NOT NULL DEFAULT 'video',
+        prompt               TEXT        NOT NULL,
+        reference_image_url  TEXT,
+        duration             TEXT,
+        aspect_ratio         TEXT,
+        fal_request_id       TEXT,
+        status               TEXT        NOT NULL DEFAULT 'pending',
+        result               JSONB,
+        error                TEXT,
+        created_at           TIMESTAMPTZ DEFAULT NOW(),
+        completed_at         TIMESTAMPTZ,
+        deleted_at           TIMESTAMPTZ
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_media_gen_runs_org
+        ON media_gen_runs(org_id, created_at DESC)
+    `);
+
     await client.query('COMMIT');
 
     // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)

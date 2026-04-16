@@ -76,6 +76,9 @@ import {
   Hash,
   TrendingUp,
   BookOpen,
+  Film,
+  Image,
+  Archive,
 } from 'lucide-react';
 
 const semanticMap = {
@@ -153,6 +156,9 @@ const semanticMap = {
   volume: Volume2,
   pause: Pause,
   play: Play,
+  film: Film,
+  image: Image,
+  archive: Archive,
   bookmark: Bookmark,
   star: Star,
 

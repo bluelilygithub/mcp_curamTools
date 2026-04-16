@@ -30,6 +30,7 @@ import AdminProvidersPage from './pages/admin/AdminProvidersPage';
 import GoogleAdsMonitorPage   from './pages/tools/GoogleAdsMonitorPage';
 import DiamondPlateDataPage   from './pages/tools/DiamondPlateDataPage';
 import DocExtractorPage       from './pages/tools/DocExtractorPage';
+import MediaGenPage           from './pages/tools/MediaGenPage';
 
 export default function App() {
   return (
@@ -52,6 +53,7 @@ export default function App() {
                 <Route path="/tools/google-ads-monitor"  element={<GoogleAdsMonitorPage />} />
                 <Route path="/tools/diamondplate-data"   element={<DiamondPlateDataPage />} />
                 <Route path="/tools/doc-extractor"       element={<DocExtractorPage />} />
+                <Route path="/tools/media-gen"           element={<MediaGenPage />} />
 
                 {/* Admin-only */}
                 <Route element={<RequireRole allowedRoles={['org_admin']} />}>

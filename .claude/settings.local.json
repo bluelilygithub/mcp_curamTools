@@ -46,7 +46,10 @@
       "Bash(where pdftotext *)",
       "Bash(where gs *)",
       "Bash(where ghostscript *)",
-      "Bash(pdftotext \"C:/Users/micha/Local Sites/mcp_curamTools/ai-visibility-report-15-04-2026.pdf\" -)"
+      "Bash(pdftotext \"C:/Users/micha/Local Sites/mcp_curamTools/ai-visibility-report-15-04-2026.pdf\" -)",
+      "Bash(node --check server/routes/mediaGen.js)",
+      "Bash(node --check server/db.js)",
+      "Bash(node --check server/index.js)"
     ]
   }
 }
