@@ -96,6 +96,7 @@ const getBudgetPacingTool = {
   name: 'get_budget_pacing',
   description: 'Current month spend vs monthly budget per campaign. Use for budget questions or to check if a campaign is on track.',
   input_schema: { type: 'object', properties: {}, required: [] },
+  cacheable: false,
   requiredPermissions: [], toolSlug: TOOL_SLUG,
   async execute(_input, context) {
     const ads = await getAdsServer(context.orgId);

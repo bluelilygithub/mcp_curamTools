@@ -19,6 +19,24 @@
 const DEFAULT_MODEL           = 'claude-sonnet-4-6';
 const MAX_ITERATIONS_HARD_CAP = 20;
 
+// ─── Session-scoped tool result cache ────────────────────────────────────────
+
+const TOOL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes — matches Anthropic prompt cache TTL
+
+// sessionKey (orgId:userId) → Map(cacheKey → { result, timestamp })
+const sessionCache = new Map();
+
+// Evict expired entries every 5 minutes to prevent unbounded growth
+setInterval(() => {
+  const now = Date.now();
+  for (const [sessionId, cache] of sessionCache) {
+    for (const [key, hit] of cache) {
+      if (now - hit.timestamp >= TOOL_CACHE_TTL) cache.delete(key);
+    }
+    if (cache.size === 0) sessionCache.delete(sessionId);
+  }
+}, TOOL_CACHE_TTL).unref();
+
 // ─── Provider selection ───────────────────────────────────────────────────────
 
 function getProvider(model, customProviders) {
@@ -106,7 +124,7 @@ class AgentOrchestrator {
 
     // Strip execute + meta fields from tool defs before sending to model
     const providerTools = tools.length > 0
-      ? tools.map(({ execute: _e, requiredPermissions: _p, toolSlug: _s, ...schema }) => schema)
+      ? tools.map(({ execute: _e, requiredPermissions: _p, toolSlug: _s, cacheable: _c, ...schema }) => schema)
       : undefined;
 
     const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]));
@@ -220,23 +238,43 @@ class AgentOrchestrator {
       for (const toolCall of step.toolCalls) {
         const t0 = Date.now();
         let result;
+        let fromCache = false;
 
         const tool = toolMap[toolCall.name];
         if (!tool) {
           console.warn('[AgentOrchestrator] unknown tool:', toolCall.name);
           result = { error: `Tool not found: ${toolCall.name}` };
         } else {
-          try {
-            if (typeof onStep === 'function') onStep(`Running ${toolCall.name}…`, tokensUsed);
-            result = await tool.execute(toolCall.input, context);
-          } catch (err) {
-            console.warn('[AgentOrchestrator] tool error', { tool: toolCall.name, error: err.message });
-            result = { error: err.message ?? 'Tool execution failed' };
+          const cacheable  = tool.cacheable !== false;
+          const sessionKey = `${context.orgId}:${context.userId ?? ''}`;
+          const cacheKey   = `${toolCall.name}:${JSON.stringify(toolCall.input)}`;
+
+          if (cacheable) {
+            if (!sessionCache.has(sessionKey)) sessionCache.set(sessionKey, new Map());
+            const hit = sessionCache.get(sessionKey).get(cacheKey);
+            if (hit && Date.now() - hit.timestamp < TOOL_CACHE_TTL) {
+              result    = hit.result;
+              fromCache = true;
+              console.info('[AgentOrchestrator] cache hit', { tool: toolCall.name, sessionKey });
+            }
+          }
+
+          if (!fromCache) {
+            try {
+              if (typeof onStep === 'function') onStep(`Running ${toolCall.name}…`, tokensUsed);
+              result = await tool.execute(toolCall.input, context);
+              if (cacheable && !result?.error) {
+                sessionCache.get(sessionKey).set(cacheKey, { result, timestamp: Date.now() });
+              }
+            } catch (err) {
+              console.warn('[AgentOrchestrator] tool error', { tool: toolCall.name, error: err.message });
+              result = { error: err.message ?? 'Tool execution failed' };
+            }
           }
         }
 
         const durationMs = Date.now() - t0;
-        step.toolResults.push({ id: toolCall.id, name: toolCall.name, result, durationMs });
+        step.toolResults.push({ id: toolCall.id, name: toolCall.name, result, durationMs, fromCache });
 
         toolResultBlocks.push({
           type:        'tool_result',
