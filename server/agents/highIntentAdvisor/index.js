@@ -20,7 +20,7 @@ async function runHighIntentAdvisor(context) {
     `Phase 1: review pending suggestions. Phase 2: gather current data. ` +
     `Phase 3: generate new evidence-backed suggestions.`;
 
-  const { result, trace, tokensUsed } = await agentOrchestrator.run({
+  const { result: resultObj, trace, tokensUsed } = await agentOrchestrator.run({
     systemPrompt:  buildSystemPrompt(config),
     userMessage,
     tools:         highIntentAdvisorTools,
@@ -33,7 +33,8 @@ async function runHighIntentAdvisor(context) {
   });
 
   // ── Parse structured suggestions from agent output ────────────────────────
-  const suggestionMatches = [...result.matchAll(/<suggestion>([\s\S]*?)<\/suggestion>/g)];
+  const resultText = typeof resultObj === 'string' ? resultObj : (resultObj?.summary ?? '');
+  const suggestionMatches = [...resultText.matchAll(/<suggestion>([\s\S]*?)<\/suggestion>/g)];
 
   let savedCount = 0;
   const runId = trace?.[0]?.runId ?? null;
