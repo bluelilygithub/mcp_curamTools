@@ -52,7 +52,8 @@
       "Bash(node --check server/index.js)",
       "Bash(sort -k6,7)",
       "Bash(awk '{print $NF, $5, $6, $7}')",
-      "Bash(xargs -I{} basename {})"
+      "Bash(xargs -I{} basename {})",
+      "Bash(node -e \"const p = require\\('./node_modules/@anthropic-ai/sdk/package.json'\\); console.log\\(p.version\\)\")"
     ]
   }
 }
