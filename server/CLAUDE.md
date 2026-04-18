@@ -170,6 +170,31 @@ Query `usage_logs` to see cache hits per run.
 
 ---
 
+## Tool result cache — session-scoped, 5-minute TTL
+
+`AgentOrchestrator` maintains a module-level `sessionCache` that avoids redundant tool executions within a session.
+
+**How it works:**
+- Session key: `orgId:userId` — scoped per user, shared across turns within the TTL
+- Entry key: `toolName:JSON(input)` — identical calls (same name + same input) return the cached result
+- TTL: 5 minutes — matches Anthropic's prompt cache window; the two caches warm and expire together
+- Eviction: `setInterval` purges expired entries every 5 minutes; `.unref()` prevents it blocking process exit
+- Cache hits skip the `onStep` "Running…" callback and set `fromCache: true` in the trace
+- Error results are never cached — `result?.error` always re-runs
+
+**Opting out:**
+Add `cacheable: false` to a tool definition. The orchestrator checks `tool.cacheable !== false` before caching. The field is stripped from the schema before it's sent to the provider (alongside `execute`, `requiredPermissions`, `toolSlug`).
+
+Tools that must always be `cacheable: false`:
+- `getBudgetPacingTool` (`get_budget_pacing`) — returns live today's spend; a 5-min-old result could cause wrong budget decisions
+
+Everything else is cacheable by default. Google Ads and GA4 data is 24h delayed; CRM data is stable within a session window.
+
+**Why this matters:**
+In a multi-turn conversation, Claude often re-fetches the same data for a follow-up question ("now compare that to last month" → re-calls `get_campaign_performance` with slightly different dates). With the cache, identical calls within the same 5-minute window return instantly without an MCP round-trip.
+
+---
+
 ## Pre-fetch pattern — use for report agents with fixed data requirements
 
 Report agents that always fetch the same data sequence do NOT need a ReAct loop.

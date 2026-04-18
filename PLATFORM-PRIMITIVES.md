@@ -400,7 +400,7 @@ const { result, trace, tokensUsed } = await agentOrchestrator.run({
 // tokensUsed: { input, output, cacheRead, cacheWrite } — accumulated across all iterations
 ```
 
-**Tool stripping:** Before sending tool definitions to Anthropic, the orchestrator strips `execute`, `requiredPermissions`, and `toolSlug` fields — these are agent-platform metadata, not part of the Anthropic tool schema.
+**Tool stripping:** Before sending tool definitions to the provider, the orchestrator strips `execute`, `requiredPermissions`, `toolSlug`, and `cacheable` fields — these are agent-platform metadata, not part of the provider's tool schema.
 
 **Full content preservation:** When feeding tool results back to Claude, the orchestrator passes the full assistant response content array (including any `thinking` blocks if extended thinking was active). This is required by the Anthropic API — stripping thinking blocks from multi-turn conversations causes an API error.
 
@@ -408,9 +408,11 @@ const { result, trace, tokensUsed } = await agentOrchestrator.run({
 
 **Error behaviour:** Tool execution errors are caught per-tool and fed back to Claude as error text (not thrown) so the agent can recover or report the issue. An orchestrator-level error (e.g. Anthropic API failure) propagates to `createAgentRoute`'s catch block.
 
+**Session-scoped tool result cache:** The orchestrator maintains a module-level `sessionCache` keyed by `orgId:userId`. Within a 5-minute TTL window, identical tool calls (same name + same JSON input) return the cached result without re-executing the tool. This eliminates redundant MCP round-trips when Claude calls the same tool twice in one run, or when a user sends a follow-up message that triggers the same fetch. Cache hits skip the `onStep` callback and record `fromCache: true` in the trace. Error results are never cached. To opt a tool out of caching, set `cacheable: false` on the tool definition — `getBudgetPacingTool` uses this because it returns live today's spend. The cache evicts expired entries every 5 minutes via a `setInterval` with `.unref()` to avoid blocking clean process exit.
+
 **Used by:** All agents via their `index.js` `runFn`. Currently: `runGoogleAdsMonitor`.
-**Reuse contract:** Agents never construct their own Anthropic API client. All Claude calls go through `agentOrchestrator.run()`. The `context` object is passed through verbatim to each tool's `execute()` — include `startDate`, `endDate`, `orgId`, `toolSlug` etc. at the `context` level, not inside tool input schemas.
-**Does not handle:** Tool registration or lookup (tools are passed as an array per run). Cost computation (callers use `CostGuardService.computeCostAud(tokensUsed)`). Prompt caching structure (system prompt is passed as a string; callers may structure it as a block array if using Anthropic's cache API — not currently used by agents).
+**Reuse contract:** Agents never construct their own Anthropic API client. All Claude calls go through `agentOrchestrator.run()`. The `context` object is passed through verbatim to each tool's `execute()` — include `startDate`, `endDate`, `orgId`, `toolSlug` etc. at the `context` level, not inside tool input schemas. The cache session key uses `context.orgId` and `context.userId` — both must be present for correct scoping.
+**Does not handle:** Tool registration or lookup (tools are passed as an array per run). Cost computation (callers use `CostGuardService.computeCostAud(tokensUsed)`). Prompt caching structure (handled in `platform/providers/anthropic.js`).
 
 ---
 

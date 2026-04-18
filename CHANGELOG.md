@@ -68,6 +68,39 @@
 
 ---
 
+## 2026-04-18 — Code audit + session-scoped tool result cache
+
+### Built
+
+**Session-scoped tool result cache in AgentOrchestrator**
+- Added module-level `sessionCache: Map(sessionKey → Map(cacheKey → { result, timestamp }))` in `AgentOrchestrator.js`
+- Cache key: `orgId:userId` (per-user, cross-turn within TTL)
+- Entry key: `toolName:JSON(input)` — different inputs get separate entries
+- TTL: 5 minutes (matches Anthropic prompt cache window)
+- Eviction: `setInterval` every 5 min purges expired entries and removes empty session Maps; `.unref()` ensures it won't block process exit
+- Error results (`result?.error`) are never cached — failed tool calls always re-run
+- `cacheable` field on tool definitions controls opt-out (`cacheable: false` on `getBudgetPacingTool`)
+- `cacheable` stripped from provider schema alongside `execute`, `requiredPermissions`, `toolSlug`
+- Cache hits: `onStep` callback skipped (no "Running…" noise), `fromCache: true` stored in trace
+- Verified correct with `console.info '[AgentOrchestrator] cache hit'` log
+
+**`getBudgetPacingTool` marked non-cacheable**
+- Added `cacheable: false` to `getBudgetPacingTool` in `googleAdsConversation/tools.js`
+- Reason: returns today's live spend — a 5-min-old result could cause incorrect budget decisions
+
+### Fixed / discovered
+
+**Code audit of recent AI provider commits**
+- `ca363ad` (`Minimal AI provider fixes`) reviewed: `anthropic.js` system prompt changes are correct and safe — string path is functionally identical to the old one-liner; array handling is defensive and never triggered by current callers
+- Commit message inaccuracy: `ca363ad` claims "Added model mapping for deprecated models (gemini-2.0-flash → gemini-2.0-flash-exp)" — no such mapping exists in the committed files
+- Gemini URL bug identified: `ca363ad` kept `providerRegistry.js` change (`'models/gemini-'` prefix) but reverted the matching `gemini.js` fix, leaving the URL builder as `/v1beta/models/${model}:generateContent`. A `models/gemini-*` model ID would produce a double-prefixed, URL-encoded path (`/v1beta/models/models%2Fgemini-...`). Not applied yet — Gemini is a stub in this deployment
+
+### Open / next
+- Apply Gemini URL fix: `const modelPath = model.startsWith('models/') ? model : \`models/${model}\``; use `modelPath` in the `httpsPost` call in `gemini.js` — needed before Gemini is activated
+- `logUsage` in docExtractor only passes `{ input, output }` — missing `cacheRead`/`cacheWrite` in `usage_logs` DB record (cost tracking is still correct; breakdown is incomplete)
+
+---
+
 ## 2026-04-17 — MCP Resource Support: Phase 1.2-1.3 Complete
 
 ### Built
