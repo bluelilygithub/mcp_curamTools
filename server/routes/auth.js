@@ -43,11 +43,9 @@ router.post('/login', authLimiter, async (req, res) => {
 
     const user = userRes.rows[0];
 
-    // Check if account is locked
+    // Check if account is locked (same error message as invalid password)
     if (user.locked_until && new Date(user.locked_until) > new Date()) {
-      return res.status(401).json({ 
-        error: 'Account is temporarily locked. Try again later.' 
-      });
+      return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
     if (!user.is_active) {

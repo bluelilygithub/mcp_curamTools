@@ -338,7 +338,7 @@ class MCPRegistryClass extends EventEmitter {
       if (!command) return reject(new Error('stdio transport requires config.command'));
 
       const child = spawn(command, args, {
-        env: this._sanitizeEnvironment(env),
+        env: this._sanitizeEnvironment(server.config || {}),
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
@@ -419,31 +419,43 @@ class MCPRegistryClass extends EventEmitter {
 
   /**
    * Sanitize environment variables before passing to child processes.
-   * Returns only safe variables that child processes might need.
+   * Only passes:
+   * 1. System variables that child processes need (PATH, NODE_ENV, etc.)
+   * 2. Variables explicitly declared in server.config.requiredEnv array
+   * 
+   * Sensitive secrets (DATABASE_URL, JWT_SECRET, etc.) are NEVER passed.
+   * Each MCP server config must declare what environment variables it needs.
    */
-  _sanitizeEnvironment(extraEnv = {}) {
-    // Safe variables that child processes might need
-    const safeVars = [
+  _sanitizeEnvironment(serverConfig = {}) {
+    const { env = {}, requiredEnv = [] } = serverConfig;
+    
+    // System variables that child processes might need
+    const systemVars = [
       'PATH', 'NODE_ENV', 'TZ', 'LANG', 'LC_ALL',
       'NODE_PATH', 'HOME', 'USER', 'LOGNAME',
-      // Application-specific safe variables (MCP server credentials)
-      'WP_URL', 'WP_USER', 'WP_APP_PASSWORD', // WordPress MCP server
-      'GOOGLE_ADS_CLIENT_ID', 'GOOGLE_ADS_CLIENT_SECRET', // Google Ads
-      'GOOGLE_ANALYTICS_CLIENT_ID', 'GOOGLE_ANALYTICS_CLIENT_SECRET',
-      'ANTHROPIC_API_KEY', 'FAL_API_KEY',
     ];
     
-    const env = {};
-    safeVars.forEach(key => {
+    const sanitized = {};
+    
+    // Add system variables
+    systemVars.forEach(key => {
       if (process.env[key] !== undefined) {
-        env[key] = process.env[key];
+        sanitized[key] = process.env[key];
       }
     });
     
-    // Add explicitly allowed extra env from server config
-    Object.assign(env, extraEnv);
+    // Add explicitly required environment variables from server config
+    // Only if they exist in the parent environment
+    requiredEnv.forEach(key => {
+      if (process.env[key] !== undefined) {
+        sanitized[key] = process.env[key];
+      }
+    });
     
-    return env;
+    // Add any extra env from server config (these are explicitly allowed)
+    Object.assign(sanitized, env);
+    
+    return sanitized;
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

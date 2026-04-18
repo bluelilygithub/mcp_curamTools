@@ -55,6 +55,7 @@ function createRateLimiter({ windowMs = 60_000, max = 20, keyFn } = {}) {
 /**
  * Auth-specific rate limiter for login, register, password reset endpoints.
  * Limits to 5 attempts per 15 minutes per IP:email combination.
+ * Hardcoded values — this is a security control, not a configurable setting.
  */
 function createAuthRateLimiter() {
   return createRateLimiter({
@@ -68,3 +69,4 @@ function createAuthRateLimiter() {
 }
 
 module.exports = { createRateLimiter, createAuthRateLimiter };
+
