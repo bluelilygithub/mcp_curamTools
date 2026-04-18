@@ -65,3 +65,51 @@
 - `ROI.md` not yet created — cost model and budget thresholds not yet documented.
 - Media Generator: Fal.ai URLs on some models may expire before user clicks "Save to S3" — unknown TTL; test in production.
 - `server/CLAUDE.md` is now superseded by the new documentation system but has not been deleted — confirm before removing.
+
+---
+
+## 2026-04-17 — MCP Resource Support: Phase 1.2-1.3 Complete
+
+### Built
+
+**Phase 1.2: Basic MCP Resources Implementation**
+- Updated Google Ads MCP server (`google-ads.js`) with 3 resources:
+  - `google-ads://campaigns/current` - Active campaigns with performance metrics
+  - `google-ads://keywords/top-performing` - Top converting keywords
+  - `google-ads://budget/pacing-summary` - Budget pacing status
+- Updated WordPress MCP server (`wordpress.js`) with 3 resources:
+  - `wordpress://enquiries/recent` - Recent enquiries with attribution
+  - `wordpress://enquiries/device-breakdown` - Device type analysis
+  - `wordpress://enquiries/utm-sources` - Top UTM sources
+- Both servers now advertise resources capability in `initialize` response
+- Resource handlers reuse existing tool functionality for consistency
+- Updated server versions: Google Ads v1.1.0, WordPress v2.1.0
+
+**Phase 1.3: Resource Discovery UI**
+- Added backend API endpoints:
+  - `GET /api/admin/mcp-servers/:id/resources` - Discover resources from connected server
+  - `POST /api/admin/mcp-servers/:id/resources/read` - Read resource content
+- Enhanced Admin MCP Servers page with "Resources" button
+- Created `ResourceViewer` component for displaying and reading resources
+- Enhanced Admin MCP Resources page with "Discover resources" button
+- Added modal for bulk resource discovery with one-click registration
+- Resource content viewing with JSON formatting and MIME type display
+
+**Documentation Updates**
+- Updated `MCP-SERVERS.md` with resource documentation tables
+- Created `test-mcp-resources.js` for testing resource support
+- Updated `CHANGELOG.md` with comprehensive session summary
+
+### Fixed / discovered
+- MCP protocol requires proper `capabilities.resources` advertisement in `initialize`
+- Resource URIs should follow consistent pattern: `{server}://{category}/{name}`
+- Backend auto-connects to servers if not already connected for resource discovery
+- Frontend handles servers without resource support gracefully
+
+### Open / next
+- **Phase 1.4: Resource Integration in Agent Tools** - Update agent tools to use resources
+- Add resource references in tool descriptions
+- Implement resource-based prompts for AI agents
+- Create resource usage analytics
+- Test resource discovery with actual connected servers
+- Consider automatic resource registration on discovery

@@ -119,6 +119,29 @@ const TOOLS = [
   },
 ];
 
+// ── Resource definitions ──────────────────────────────────────────────────────
+
+const RESOURCES = [
+  {
+    uri:         'wordpress://enquiries/recent',
+    name:        'Recent Enquiries',
+    description: 'Last 50 client enquiries with basic attribution data (last 30 days).',
+    mimeType:    'application/json',
+  },
+  {
+    uri:         'wordpress://enquiries/device-breakdown',
+    name:        'Device Breakdown',
+    description: 'Enquiry volume by device type (mobile/desktop/tablet) over the last 90 days.',
+    mimeType:    'application/json',
+  },
+  {
+    uri:         'wordpress://enquiries/utm-sources',
+    name:        'Top UTM Sources',
+    description: 'Top 10 UTM sources by enquiry volume over the last 30 days.',
+    mimeType:    'application/json',
+  },
+];
+
 // ── Tool handlers ─────────────────────────────────────────────────────────────
 
 async function callTool(name, args = {}) {
@@ -458,6 +481,84 @@ async function callTool(name, args = {}) {
   }
 }
 
+// ── Resource handlers ─────────────────────────────────────────────────────────
+
+async function handleResource(uri) {
+  switch (uri) {
+    case 'wordpress://enquiries/recent': {
+      const enquiries = await callTool('wp_get_enquiries', { limit: 50 });
+      // Simplify for resource view
+      const simplified = enquiries.map(e => ({
+        id: e.id,
+        date: e.date,
+        enquiry_status: e.enquiry_status,
+        utm_source: e.utm_source,
+        utm_campaign: e.utm_campaign,
+        device_type: e.device_type,
+        search_term: e.search_term,
+        landing_page: e.landing_page,
+      }));
+      return {
+        contents: [{
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(simplified, null, 2),
+        }],
+      };
+    }
+
+    case 'wordpress://enquiries/device-breakdown': {
+      const enquiries = await callTool('wp_get_enquiries', { limit: 1000 });
+      // Group by device type
+      const deviceCounts = {};
+      enquiries.forEach(e => {
+        const device = e.device_type || 'unknown';
+        deviceCounts[device] = (deviceCounts[device] || 0) + 1;
+      });
+      
+      const breakdown = Object.entries(deviceCounts).map(([device, count]) => ({
+        device,
+        count,
+        percentage: Math.round((count / enquiries.length) * 100),
+      }));
+      
+      return {
+        contents: [{
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(breakdown, null, 2),
+        }],
+      };
+    }
+
+    case 'wordpress://enquiries/utm-sources': {
+      const enquiries = await callTool('wp_get_enquiries', { limit: 1000 });
+      // Group by UTM source
+      const sourceCounts = {};
+      enquiries.forEach(e => {
+        const source = e.utm_source || 'direct';
+        sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+      });
+      
+      const topSources = Object.entries(sourceCounts)
+        .map(([source, count]) => ({ source, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+      
+      return {
+        contents: [{
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(topSources, null, 2),
+        }],
+      };
+    }
+
+    default:
+      throw new Error(`Unknown resource: ${uri}`);
+  }
+}
+
 // ── JSON-RPC transport ────────────────────────────────────────────────────────
 
 function send(obj) {
@@ -487,8 +588,11 @@ rl.on('line', async (line) => {
       case 'initialize':
         respond(id, {
           protocolVersion: '2024-11-05',
-          capabilities:    { tools: {} },
-          serverInfo:      { name: 'wordpress-mcp', version: '2.0.0' },
+          capabilities:    { 
+            tools: {},
+            resources: RESOURCES.length > 0 ? {} : undefined,
+          },
+          serverInfo:      { name: 'wordpress-mcp', version: '2.1.0' },
         });
         break;
 
@@ -504,6 +608,23 @@ rl.on('line', async (line) => {
         respond(id, {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         });
+        break;
+      }
+
+      case 'resources/list':
+        respond(id, {
+          resources: RESOURCES.map(({ uri, name, description, mimeType }) => ({
+            uri,
+            name,
+            description,
+            mimeType,
+          })),
+        });
+        break;
+
+      case 'resources/read': {
+        const result = await handleResource(params.uri);
+        respond(id, result);
         break;
       }
 

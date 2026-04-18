@@ -46,6 +46,7 @@ export default function AdminMcpResourcesPage() {
   const [resForm, setResForm] = useState(EMPTY_RES_FORM);
   const [resFormLoading, setResFormLoading] = useState(false);
   const [resDeleteConfirm, setResDeleteConfirm] = useState(null);
+  const [discoveredResourcesModal, setDiscoveredResourcesModal] = useState(null);
 
   // Permissions
   const [permissions, setPermissions] = useState([]);
@@ -72,6 +73,43 @@ export default function AdminMcpResourcesPage() {
       setResourceError(e.message);
     } finally {
       setResourcesLoading(false);
+    }
+  }
+
+  async function handleDiscoverAllResources() {
+    setResourceError('');
+    try {
+      // Get all connected servers
+      const connectedServers = servers.filter(s => s.connection_status === 'connected');
+      if (connectedServers.length === 0) {
+        setResourceError('No connected MCP servers found. Connect servers first.');
+        return;
+      }
+
+      // Discover resources from each connected server
+      const discoveredResources = [];
+      for (const server of connectedServers) {
+        try {
+          const resources = await api.get(`/admin/mcp-servers/${server.id}/resources`);
+          discoveredResources.push(...resources.map(r => ({
+            ...r,
+            server_name: server.name,
+            server_id: server.id,
+            discovered: true,
+          })));
+        } catch (err) {
+          console.warn(`Failed to discover resources from ${server.name}:`, err.message);
+        }
+      }
+
+      if (discoveredResources.length > 0) {
+        // Show discovered resources in a modal or update the table
+        setDiscoveredResourcesModal(discoveredResources);
+      } else {
+        setResourceError('No resources discovered from connected servers.');
+      }
+    } catch (e) {
+      setResourceError(e.message);
     }
   }
 
@@ -185,9 +223,14 @@ export default function AdminMcpResourcesPage() {
               Register resource URIs exposed by connected MCP servers.
             </p>
           </div>
-          <Button variant="primary" onClick={() => setResFormOpen(true)}>
-            {getIcon('plus', { size: 14 })} Register resource
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={handleDiscoverAllResources}>
+              {getIcon('refresh', { size: 14 })} Discover resources
+            </Button>
+            <Button variant="primary" onClick={() => setResFormOpen(true)}>
+              {getIcon('plus', { size: 14 })} Register resource
+            </Button>
+          </div>
         </div>
 
         {resourceError && <InlineBanner type="error" message={resourceError} onDismiss={() => setResourceError('')} className="mb-4" />}
@@ -455,6 +498,62 @@ export default function AdminMcpResourcesPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Discovered resources modal */}
+      <Modal open={!!discoveredResourcesModal} onClose={() => setDiscoveredResourcesModal(null)} title="Discovered Resources" maxWidth="max-w-4xl">
+        <div className="space-y-4">
+          <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
+            Resources automatically discovered from connected MCP servers. These are not yet registered in the system.
+          </p>
+          
+          <div className="rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+            <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
+                  {['URI', 'Name', 'Server', 'Description', 'MIME Type', 'Actions'].map((col) => (
+                    <th key={col} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+                      {col}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {discoveredResourcesModal?.map((r) => (
+                  <tr key={`${r.server_id}-${r.uri}`} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <td className="px-4 py-3 text-sm font-mono" style={{ color: 'var(--color-text)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.uri}
+                    </td>
+                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text)' }}>{r.name}</td>
+                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-muted)' }}>{r.server_name}</td>
+                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.description || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-mono" style={{ color: 'var(--color-muted)' }}>{r.mimeType || '—'}</td>
+                    <td className="px-4 py-3">
+                      <Button variant="secondary" size="sm" onClick={() => {
+                        setResForm({
+                          serverId: r.server_id,
+                          uri: r.uri,
+                          name: r.name,
+                          description: r.description || '',
+                        });
+                        setResFormOpen(true);
+                        setDiscoveredResourcesModal(null);
+                      }}>
+                        {getIcon('plus', { size: 12 })} Register
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          <div className="flex justify-end pt-4">
+            <Button variant="secondary" onClick={() => setDiscoveredResourcesModal(null)}>Close</Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

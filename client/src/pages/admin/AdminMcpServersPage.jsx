@@ -85,6 +85,78 @@ function ToolRunner({ tool, serverId }) {
   );
 }
 
+function ResourceViewer({ resource, serverId }) {
+  const [open, setOpen] = useState(false);
+  const [content, setContent] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function readResource() {
+    setLoading(true);
+    setContent(null);
+    setError('');
+    try {
+      const data = await api.post(`/admin/mcp-servers/${serverId}/resources/read`, { uri: resource.uri });
+      setContent(data);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <li className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+      {/* Header row — click to expand */}
+      <button
+        className="w-full px-4 py-3 flex items-center justify-between text-left"
+        style={{ background: 'var(--color-surface)' }}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div>
+          <div className="text-sm font-semibold font-mono" style={{ color: 'var(--color-text)' }}>{resource.uri}</div>
+          {resource.name && <div className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>{resource.name}</div>}
+          {resource.description && <div className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>{resource.description}</div>}
+        </div>
+        <span className="text-xs ml-4 shrink-0" style={{ color: 'var(--color-muted)' }}>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div className="px-4 py-3 space-y-2" style={{ background: 'var(--color-bg)' }}>
+          <div className="flex items-center gap-2">
+            <Button variant="primary" onClick={readResource} disabled={loading}>
+              {loading ? 'Loading…' : 'Read resource'}
+            </Button>
+            {error && <span className="text-xs text-red-500">{error}</span>}
+          </div>
+          {content && (
+            <div className="space-y-2">
+              {content.contents?.map((c, idx) => (
+                <div key={idx} className="space-y-1">
+                  {c.mimeType && (
+                    <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+                      {c.mimeType}
+                    </div>
+                  )}
+                  <pre className="text-xs rounded-xl p-3 overflow-auto" style={{ 
+                    background: 'var(--color-surface)', 
+                    color: 'var(--color-text)', 
+                    maxHeight: 300, 
+                    whiteSpace: 'pre-wrap', 
+                    wordBreak: 'break-word' 
+                  }}>
+                    {c.text || JSON.stringify(c, null, 2)}
+                  </pre>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
 const STATUS_STYLES = {
   connected:    { background: '#dcfce7', color: '#166534' },
   connecting:   { background: '#fef9c3', color: '#854d0e' },
@@ -121,6 +193,7 @@ export default function AdminMcpServersPage() {
   const [actionLoading, setActionLoading] = useState({});
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [toolsModal, setToolsModal] = useState(null); // { serverName, tools[] }
+  const [resourcesModal, setResourcesModal] = useState(null); // { serverName, resources[] }
 
   async function load() {
     try {
@@ -239,6 +312,20 @@ export default function AdminMcpServersPage() {
     }
   }
 
+  async function handleDiscoverResources(s) {
+    setAction(s.id, 'resources');
+    setError('');
+    try {
+      const resources = await api.get(`/admin/mcp-servers/${s.id}/resources`);
+      setResourcesModal({ serverName: s.name, serverId: s.id, resources });
+      load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAction(s.id, null);
+    }
+  }
+
   async function handleDelete(id) {
     try {
       await api.delete(`/admin/mcp-servers/${id}`);
@@ -307,10 +394,16 @@ export default function AdminMcpServersPage() {
                           </Button>
                         )}
                         {isConnected && (
-                          <Button variant="secondary" onClick={() => handleDiscoverTools(s)} disabled={!!busy} title="Discover tools">
-                            {busy === 'tools' ? getIcon('loading', { size: 14 }) : getIcon('search', { size: 14 })}
-                            {' '}Tools
-                          </Button>
+                          <>
+                            <Button variant="secondary" onClick={() => handleDiscoverTools(s)} disabled={!!busy} title="Discover tools">
+                              {busy === 'tools' ? getIcon('loading', { size: 14 }) : getIcon('search', { size: 14 })}
+                              {' '}Tools
+                            </Button>
+                            <Button variant="secondary" onClick={() => handleDiscoverResources(s)} disabled={!!busy} title="Discover resources">
+                              {busy === 'resources' ? getIcon('loading', { size: 14 }) : getIcon('layers', { size: 14 })}
+                              {' '}Resources
+                            </Button>
+                          </>
                         )}
                         <Button variant="icon" onClick={() => openEdit(s)} title="Edit server">
                           {getIcon('edit', { size: 14 })}
@@ -351,6 +444,24 @@ export default function AdminMcpServersPage() {
           )}
           <div className="flex justify-end pt-4">
             <Button variant="secondary" onClick={() => setToolsModal(null)}>Close</Button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Resources modal */}
+      {resourcesModal && (
+        <Modal open onClose={() => setResourcesModal(null)} title={`Resources — ${resourcesModal.serverName}`} maxWidth="max-w-xl">
+          {resourcesModal.resources.length === 0 ? (
+            <p className="text-sm" style={{ color: 'var(--color-muted)' }}>No resources returned by this server.</p>
+          ) : (
+            <ul className="space-y-4">
+              {resourcesModal.resources.map((r) => (
+                <ResourceViewer key={r.uri} resource={r} serverId={resourcesModal.serverId} />
+              ))}
+            </ul>
+          )}
+          <div className="flex justify-end pt-4">
+            <Button variant="secondary" onClick={() => setResourcesModal(null)}>Close</Button>
           </div>
         </Modal>
       )}

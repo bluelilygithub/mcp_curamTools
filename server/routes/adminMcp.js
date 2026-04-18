@@ -117,6 +117,40 @@ router.get('/mcp-servers/:id/tools', async (req, res) => {
   }
 });
 
+// NEW: Discover resources from a connected MCP server
+router.get('/mcp-servers/:id/resources', async (req, res) => {
+  try {
+    // Auto-connect if not already connected
+    const existing = MCPRegistry._connections.get(req.params.id);
+    if (!existing || existing.status !== 'connected') {
+      await MCPRegistry.connect(req.user.orgId, req.params.id);
+    }
+    const result = await MCPRegistry.send(req.user.orgId, req.params.id, 'resources/list');
+    res.json(result.resources || []);
+  } catch (err) {
+    logger.error('admin/mcp-servers/resources', { error: err.message });
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// NEW: Read a resource from a connected MCP server
+router.post('/mcp-servers/:id/resources/read', async (req, res) => {
+  const { uri } = req.body;
+  if (!uri) return res.status(400).json({ error: 'uri is required.' });
+  try {
+    // Auto-connect if not already connected
+    const existing = MCPRegistry._connections.get(req.params.id);
+    if (!existing || existing.status !== 'connected') {
+      await MCPRegistry.connect(req.user.orgId, req.params.id);
+    }
+    const result = await MCPRegistry.send(req.user.orgId, req.params.id, 'resources/read', { uri });
+    res.json(result);
+  } catch (err) {
+    logger.error('admin/mcp-servers/resources/read', { error: err.message });
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.post('/mcp-servers/:id/call', async (req, res) => {
   const { toolName, args } = req.body;
   if (!toolName) return res.status(400).json({ error: 'toolName is required.' });

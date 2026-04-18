@@ -136,6 +136,29 @@ const TOOLS = [
   },
 ];
 
+// ── Resource definitions ──────────────────────────────────────────────────────
+
+const RESOURCES = [
+  {
+    uri:         'google-ads://campaigns/current',
+    name:        'Current Campaigns',
+    description: 'List of all active Google Ads campaigns with basic performance metrics from the last 7 days.',
+    mimeType:    'application/json',
+  },
+  {
+    uri:         'google-ads://keywords/top-performing',
+    name:        'Top Performing Keywords',
+    description: 'Top 20 keywords by conversions over the last 30 days.',
+    mimeType:    'application/json',
+  },
+  {
+    uri:         'google-ads://budget/pacing-summary',
+    name:        'Budget Pacing Summary',
+    description: 'Monthly budget pacing status for all campaigns.',
+    mimeType:    'application/json',
+  },
+];
+
 // ── Tool handlers ─────────────────────────────────────────────────────────────
 
 async function callTool(name, args = {}) {
@@ -174,6 +197,82 @@ async function callTool(name, args = {}) {
   }
 }
 
+// ── Resource handlers ─────────────────────────────────────────────────────────
+
+async function handleResource(uri) {
+  switch (uri) {
+    case 'google-ads://campaigns/current': {
+      const campaigns = await ads.getCampaignPerformance({ days: 7 });
+      // Simplify for resource view
+      const simplified = campaigns.map(c => ({
+        id: c.id,
+        name: c.name,
+        status: c.status,
+        budget_aud: c.budget_aud,
+        cost_aud: c.cost_aud,
+        conversions: c.conversions,
+        ctr: c.ctr,
+        avg_cpc: c.avg_cpc,
+      }));
+      return {
+        contents: [{
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(simplified, null, 2),
+        }],
+      };
+    }
+
+    case 'google-ads://keywords/top-performing': {
+      const searchTerms = await ads.getSearchTerms({ days: 30 });
+      // Filter for converting keywords and take top 20
+      const converting = searchTerms
+        .filter(st => st.conversions > 0)
+        .sort((a, b) => b.conversions - a.conversions)
+        .slice(0, 20)
+        .map(st => ({
+          term: st.term,
+          status: st.status,
+          impressions: st.impressions,
+          clicks: st.clicks,
+          cost_aud: st.cost_aud,
+          conversions: st.conversions,
+          ctr: st.ctr,
+        }));
+      return {
+        contents: [{
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(converting, null, 2),
+        }],
+      };
+    }
+
+    case 'google-ads://budget/pacing-summary': {
+      const pacing = await ads.getBudgetPacing();
+      const summary = pacing.map(p => ({
+        campaign_name: p.campaign_name,
+        monthly_budget_aud: p.monthly_budget_aud,
+        spend_to_date_aud: p.spend_to_date_aud,
+        percentage_spent: p.monthly_budget_aud > 0 
+          ? Math.round((p.spend_to_date_aud / p.monthly_budget_aud) * 100)
+          : 0,
+        days_remaining: new Date().getDate() > 1 ? 30 - new Date().getDate() : 30,
+      }));
+      return {
+        contents: [{
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(summary, null, 2),
+        }],
+      };
+    }
+
+    default:
+      throw new Error(`Unknown resource: ${uri}`);
+  }
+}
+
 // ── JSON-RPC transport ────────────────────────────────────────────────────────
 
 function send(obj) {
@@ -203,8 +302,11 @@ rl.on('line', async (line) => {
       case 'initialize':
         respond(id, {
           protocolVersion: '2024-11-05',
-          capabilities:    { tools: {} },
-          serverInfo:      { name: 'google-ads-mcp', version: '1.0.0' },
+          capabilities:    { 
+            tools: {},
+            resources: RESOURCES.length > 0 ? {} : undefined,
+          },
+          serverInfo:      { name: 'google-ads-mcp', version: '1.1.0' },
         });
         break;
 
@@ -220,6 +322,23 @@ rl.on('line', async (line) => {
         respond(id, {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         });
+        break;
+      }
+
+      case 'resources/list':
+        respond(id, {
+          resources: RESOURCES.map(({ uri, name, description, mimeType }) => ({
+            uri,
+            name,
+            description,
+            mimeType,
+          })),
+        });
+        break;
+
+      case 'resources/read': {
+        const result = await handleResource(params.uri);
+        respond(id, result);
         break;
       }
 
