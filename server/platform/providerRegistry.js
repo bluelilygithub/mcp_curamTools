@@ -24,7 +24,7 @@ const PROVIDERS = {
   google: {
     label:         'Google',
     envVar:        'GEMINI_API_KEY',
-    modelPrefixes: ['gemini-', 'models/gemini-'],
+    modelPrefixes: ['gemini-'],
     adapter:       'gemini',
   },
   openai: {
