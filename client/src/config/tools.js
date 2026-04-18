@@ -54,6 +54,14 @@ const TOOLS = [
     path:        '/tools/media-gen',
     roles:       ['org_member', 'org_admin'],
   },
+  {
+    id:          'high-intent-advisor',
+    name:        'High Intent Advisor',
+    description: 'Daily suggestions for attracting high-intent customers based on your ad, analytics, and CRM data.',
+    icon:        'target',
+    path:        '/tools/high-intent-advisor',
+    roles:       ['org_admin'],
+  },
 ];
 
 /**

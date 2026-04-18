@@ -189,6 +189,82 @@ AgentScheduler.register({
   runFn:    runAiVisibilityMonitor,
 });
 
+// ── High Intent Advisor ───────────────────────────────────────────────────
+const { runHighIntentAdvisor } = require('../agents/highIntentAdvisor');
+
+agentsRouter.use(
+  '/high-intent-advisor',
+  createAgentRoute({
+    slug:               'high-intent-advisor',
+    runFn:              runHighIntentAdvisor,
+    requiredPermission: 'org_admin',
+  })
+);
+// AgentScheduler cron registration deferred — add after manual QA
+
+// GET /api/agents/high-intent-advisor/suggestions
+agentsRouter.get('/high-intent-advisor/suggestions', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, category, priority, suggestion_text, rationale, status,
+              baseline_metrics, outcome_metrics, outcome_notes, acted_on_at,
+              reviewed_at, created_at, run_id
+       FROM agent_suggestions
+       WHERE org_id = $1 AND status IN ('pending', 'monitoring')
+       ORDER BY CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+                created_at DESC`,
+      [req.user.orgId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[high-intent-advisor/suggestions GET]', err.message);
+    res.status(500).json({ error: 'Failed to load suggestions.' });
+  }
+});
+
+// GET /api/agents/high-intent-advisor/suggestions/history
+agentsRouter.get('/high-intent-advisor/suggestions/history', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, category, priority, suggestion_text, rationale, status,
+              outcome_notes, acted_on_at, reviewed_at, created_at
+       FROM agent_suggestions
+       WHERE org_id = $1 AND status IN ('acted_on', 'dismissed')
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      [req.user.orgId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[high-intent-advisor/suggestions/history GET]', err.message);
+    res.status(500).json({ error: 'Failed to load suggestion history.' });
+  }
+});
+
+// PATCH /api/agents/high-intent-advisor/suggestions/:id
+agentsRouter.patch('/high-intent-advisor/suggestions/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, outcome_notes, acted_on_at } = req.body;
+
+    const { rows } = await pool.query(
+      `UPDATE agent_suggestions
+       SET status        = COALESCE($1, status),
+           outcome_notes = COALESCE($2, outcome_notes),
+           acted_on_at   = COALESCE($3, acted_on_at)
+       WHERE id = $4 AND org_id = $5
+       RETURNING *`,
+      [status ?? null, outcome_notes ?? null, acted_on_at ?? null, id, req.user.orgId]
+    );
+
+    if (rows.length === 0) return res.status(404).json({ error: 'Suggestion not found.' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('[high-intent-advisor/suggestions PATCH]', err.message);
+    res.status(500).json({ error: 'Failed to update suggestion.' });
+  }
+});
+
 // Email report — POST /api/agents/google-ads-monitor/email
 agentsRouter.post('/google-ads-monitor/email', requireAuth, async (req, res) => {
   try {

@@ -543,6 +543,37 @@ async function initSchema() {
         ADD COLUMN IF NOT EXISTS cost_usd    NUMERIC(10,4)
     `);
 
+    // ── High Intent Advisor ────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS agent_suggestions (
+        id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id           INTEGER     REFERENCES organizations(id),
+        run_id           UUID,
+        slug             TEXT        NOT NULL DEFAULT 'high-intent-advisor',
+        category         TEXT        NOT NULL,
+        priority         TEXT        NOT NULL DEFAULT 'medium',
+        suggestion_text  TEXT        NOT NULL,
+        rationale        TEXT        NOT NULL,
+        status           TEXT        NOT NULL DEFAULT 'pending',
+        baseline_metrics JSONB       DEFAULT '{}',
+        outcome_metrics  JSONB       DEFAULT '{}',
+        outcome_notes    TEXT,
+        acted_on_at      TIMESTAMPTZ,
+        reviewed_at      TIMESTAMPTZ,
+        created_at       TIMESTAMPTZ DEFAULT now()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_agent_suggestions_org_status
+        ON agent_suggestions(org_id, status, created_at DESC)
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_agent_suggestions_run
+        ON agent_suggestions(run_id)
+    `);
+
     await client.query('COMMIT');
 
     // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)

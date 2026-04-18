@@ -42,6 +42,9 @@ const AGENT_DEFAULTS = {
     comparison_window_days:  7,   // days before/after each change for metric comparison
     max_suggestions:         5,
   },
+  'high-intent-advisor': {
+    schedule: '0 7 * * *', // 7am UTC = 5pm AEST; not active until cron registered
+  },
   'ai-visibility-monitor': {
     // Structured competitor list — each entry has a display name and optional URL.
     // Stored as JSONB; the agent uses the names for mention detection in AI responses.
@@ -109,6 +112,15 @@ const ADMIN_DEFAULTS = {
     max_task_budget_aud: 3.00,   // covers 26 web search calls + 1 analysis call
     fallback_model:      null,
   },
+  'high-intent-advisor': {
+    enabled:             true,
+    model:               null,          // inherits org default
+    max_tokens:          4096,
+    max_iterations:      25,            // three phases with multiple tool calls each
+    max_task_budget_aud: 3.00,
+    fallback_model:      null,
+    maxTokensHardLimit:  6000,
+  },
   _platform: {
     enabled: true,
     model: 'claude-sonnet-4-6',
@@ -141,6 +153,7 @@ const AGENT_MODEL_REQUIREMENTS = {
   'search-term-intelligence':    { tier: 'advanced', reason: 'Cross-source analysis joining Ads search terms, GA4 bounce data, and CRM lead outcomes' },
   'ai-visibility-monitor':       { tier: 'advanced', reason: 'Multi-prompt web search with cross-source brand and competitor analysis' },
   'doc-extractor':               { tier: 'advanced', reason: 'Vision extraction quality scales with model capability — Sonnet handles complex layouts, poor scans, and dense forms significantly better than Haiku' },
+  'high-intent-advisor':         { tier: 'advanced', reason: 'Three-phase cross-source analysis with ReAct loop — requires strong reasoning to connect Ads, GA4, and CRM signals into actionable suggestions' },
   _platform:                     { tier: 'advanced', reason: 'Default for unrecognised agents' },
 };
 

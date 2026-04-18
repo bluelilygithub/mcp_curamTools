@@ -59,6 +59,32 @@ const TOOLS = [
     },
   },
   {
+    name: 'get_pending_suggestions',
+    description: 'Returns all suggestions for this org with status pending or monitoring, ordered by priority (high first) then created_at DESC. Used by the High Intent Advisor to review its own prior suggestions before generating new ones.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        org_id: { type: 'number', description: 'Organisation ID to scope results.' },
+      },
+      required: ['org_id'],
+    },
+  },
+  {
+    name: 'update_suggestion_outcome',
+    description: 'Updates outcome_metrics, outcome_notes, and reviewed_at on a suggestion row. Called by the High Intent Advisor during its review phase to record whether a past suggestion moved the needle.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        org_id:          { type: 'number', description: 'Organisation ID — must match the suggestion org.' },
+        suggestion_id:   { type: 'string', description: 'UUID of the suggestion row.' },
+        outcome_metrics: { type: 'object', description: 'Current metric values for comparison against baseline.' },
+        outcome_notes:   { type: 'string', description: 'Agent assessment of whether this suggestion moved the needle.' },
+        status:          { type: 'string', description: 'Updated status if appropriate: monitoring | pending.' },
+      },
+      required: ['org_id', 'suggestion_id', 'outcome_metrics', 'outcome_notes'],
+    },
+  },
+  {
     name: 'flag_prompt_for_review',
     description: 'Raise a flag on a prompt that needs admin review. Call this when you notice your own system prompt is outdated, references stale context, uses capabilities no longer available, or would benefit from an update. Flags are visible to administrators in the MCP Prompts page.',
     inputSchema: {
@@ -169,6 +195,38 @@ async function callTool(name, args = {}) {
       }));
     }
 
+    case 'get_pending_suggestions': {
+      const { org_id } = args;
+      if (!org_id) throw new Error('org_id is required');
+      const { rows } = await pool.query(
+        `SELECT id, category, priority, suggestion_text, rationale, status,
+                baseline_metrics, outcome_notes, created_at, reviewed_at
+         FROM agent_suggestions
+         WHERE org_id = $1 AND status IN ('pending', 'monitoring')
+         ORDER BY CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+                  created_at DESC`,
+        [org_id]
+      );
+      return rows;
+    }
+
+    case 'update_suggestion_outcome': {
+      const { org_id, suggestion_id, outcome_metrics, outcome_notes, status } = args;
+      if (!org_id || !suggestion_id || !outcome_metrics || !outcome_notes) {
+        throw new Error('org_id, suggestion_id, outcome_metrics, and outcome_notes are required');
+      }
+      await pool.query(
+        `UPDATE agent_suggestions
+         SET outcome_metrics = $1,
+             outcome_notes   = $2,
+             reviewed_at     = now(),
+             status          = COALESCE($3, status)
+         WHERE id = $4 AND org_id = $5`,
+        [outcome_metrics, outcome_notes, status ?? null, suggestion_id, org_id]
+      );
+      return { updated: true, suggestion_id };
+    }
+
     case 'flag_prompt_for_review': {
       const { org_id, slug, reason } = args;
       if (!org_id || !slug || !reason) throw new Error('org_id, slug, and reason are required');
@@ -205,7 +263,7 @@ rl.on('line', async (line) => {
         respond(id, {
           protocolVersion: '2024-11-05',
           capabilities:    { tools: {} },
-          serverInfo:      { name: 'platform-mcp', version: '1.0.0' },
+          serverInfo:      { name: 'platform-mcp', version: '1.1.0' },
         });
         break;
       case 'notifications/initialized': break;

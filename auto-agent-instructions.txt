@@ -1,0 +1,406 @@
+Architected comprehensive Claude Code prompt following established platform conventionsArchitected comprehensive Claude Code prompt following established platform conventionsYou are continuing development on MCP_curamTools.
+
+Before writing a single line of code, read every .md file in the project root. 
+They are your specification and take precedence over your defaults and assumptions.
+Do not proceed past this reading step until you have processed all of them.
+
+Priority reading order:
+DECISIONS.md — settled architectural decisions; never deviate without flagging explicitly
+PLATFORM-PRIMITIVES.md — what is a platform primitive vs agent-specific code
+MCP-SERVERS.md — source of truth for all MCP tools; do not call tools not listed here
+CHANGELOG.md — read the last 3 entries to understand current state
+setup.md — port architecture and environment; do not get these wrong
+SECTION-2-LAYOUT.md through SECTION-6-DECISIONS.md — UI specification
+SECTION-ANNOTATION.md — unresolved UI decisions; do not introduce new ones
+
+---
+
+## What you are building in this session
+
+A new agent called `high-intent-advisor` and its supporting infrastructure.
+
+This agent runs daily, analyses data across Google Ads, GA4, and the WordPress CRM, 
+and produces specific evidence-backed suggestions for driving high-intent customers 
+to the site who will make an enquiry. It tracks its own suggestions over time, 
+measures outcomes, and uses that history to improve future suggestions.
+
+Do not build anything outside this scope. Do not modify any platform primitives.
+Do not add npm packages without stopping and asking first.
+
+---
+
+## Step 1 — DB migration (db.js)
+
+Add the following table to the idempotent schema in db.js using the 
+existing ALTER TABLE ADD COLUMN IF NOT EXISTS pattern.
+Do not create a new migration file — add it inline with the existing schema init.
+
+```sql
+CREATE TABLE IF NOT EXISTS agent_suggestions (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id           INTEGER REFERENCES organizations(id),
+  run_id           UUID,
+  slug             TEXT NOT NULL DEFAULT 'high-intent-advisor',
+  category         TEXT NOT NULL,
+  priority         TEXT NOT NULL DEFAULT 'medium',
+  suggestion_text  TEXT NOT NULL,
+  rationale        TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'pending',
+  baseline_metrics JSONB DEFAULT '{}',
+  outcome_metrics  JSONB DEFAULT '{}',
+  outcome_notes    TEXT,
+  acted_on_at      TIMESTAMPTZ,
+  reviewed_at      TIMESTAMPTZ,
+  created_at       TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_suggestions_org_status 
+  ON agent_suggestions(org_id, status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_agent_suggestions_run 
+  ON agent_suggestions(run_id);
+```
+
+Valid values:
+- category: 'keyword' | 'budget' | 'landing_page' | 'audience' | 'search_term' | 'device' | 'scheduling'
+- priority: 'high' | 'medium' | 'low'
+- status: 'pending' | 'acted_on' | 'monitoring' | 'dismissed'
+
+---
+
+## Step 2 — Two new platform tools in platform.js MCP server
+
+Add these two tools to the existing platform.js MCP server 
+(server/mcp-servers/platform.js). Do not create a new MCP server.
+Follow the exact tool definition pattern already used in that file.
+
+### get_pending_suggestions
+- Description: Returns all suggestions for this org with status 'pending' or 
+  'monitoring', ordered by priority (high first) then created_at DESC.
+- Input schema: { type: 'object', properties: {}, required: [] }
+- Returns: Array of suggestion rows including id, category, priority, 
+  suggestion_text, rationale, status, baseline_metrics, outcome_notes, 
+  created_at, reviewed_at
+- SQL: SELECT * FROM agent_suggestions 
+  WHERE org_id = $1 AND status IN ('pending', 'monitoring') 
+  ORDER BY CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+  created_at DESC
+
+### update_suggestion_outcome
+- Description: Updates outcome_metrics, outcome_notes, and reviewed_at on a 
+  suggestion row. Called by the agent during its review phase.
+- Input schema: 
+  {
+    type: 'object',
+    properties: {
+      suggestion_id: { type: 'string', description: 'UUID of the suggestion row' },
+      outcome_metrics: { type: 'object', description: 'Current metric values for comparison against baseline' },
+      outcome_notes: { type: 'string', description: 'Agent assessment of whether this suggestion moved the needle' },
+      status: { type: 'string', description: 'Updated status if appropriate: monitoring | pending' }
+    },
+    required: ['suggestion_id', 'outcome_metrics', 'outcome_notes']
+  }
+- Returns: { updated: true, suggestion_id }
+- SQL: UPDATE agent_suggestions 
+  SET outcome_metrics = $1, outcome_notes = $2, reviewed_at = now(),
+  status = COALESCE($3, status)
+  WHERE id = $4 AND org_id = $5
+- orgId must come from the MCP server session context, not from the tool input.
+  The tool must validate that the suggestion belongs to this org before updating.
+
+After adding these tools, increment the platform.js server version.
+Update MCP-SERVERS.md to add both tools to the platform.js table.
+
+---
+
+## Step 3 — Agent files
+
+Create the following three files. 
+Agent code belongs in server/agents/high-intent-advisor/ only.
+No agent-specific logic goes in platform files.
+
+### server/agents/high-intent-advisor/tools.js
+
+Export { highIntentAdvisorTools, TOOL_SLUG }.
+TOOL_SLUG = 'high-intent-advisor'.
+
+Wire the following tools from your existing MCP servers.
+All tool names must exactly match MCP-SERVERS.md — do not invent tool names.
+
+From google-ads.js:
+- ads_get_campaign_performance
+- ads_get_search_terms (cacheable: false — intent signals must be fresh)
+- ads_get_daily_performance
+- ads_get_budget_pacing (cacheable: false — live spend data)
+- ads_get_impression_share_by_campaign
+
+From google-analytics.js:
+- ga4_get_paid_bounced_sessions (cacheable: false)
+- ga4_get_landing_page_performance
+- ga4_get_traffic_sources
+
+From wordpress.js:
+- wp_get_enquiries (cacheable: false — ground truth, must be fresh)
+- wp_get_not_interested_reasons
+
+From platform.js:
+- get_pending_suggestions (cacheable: false — must reflect current DB state)
+- update_suggestion_outcome (cacheable: false)
+- get_report_history
+- search_knowledge
+
+Total: 14 tools.
+
+Strip cacheable field from provider schema alongside execute, 
+requiredPermissions, toolSlug — follow the existing pattern in AgentOrchestrator.
+
+### server/agents/high-intent-advisor/index.js
+
+Export runHighIntentAdvisor(context).
+context shape provided by createAgentRoute: { orgId, userId, emit, config }
+
+Implementation notes:
+- Load timezone and todayDate from config or fall back to UTC / new Date()
+- Build system prompt via buildSystemPrompt(config)
+- Run via AgentOrchestrator following the exact pattern used by the existing 
+  Google Ads conversation agent
+- emit() progress updates at each phase boundary:
+  "Phase 1 complete — reviewed N pending suggestions"
+  "Phase 2 complete — data gathered across all sources"  
+  "Phase 3 complete — N suggestions generated"
+- After AgentOrchestrator completes, parse the agent output to extract 
+  structured suggestions. Each suggestion must have all required fields.
+- For each valid parsed suggestion, INSERT into agent_suggestions:
+  { org_id, run_id, slug, category, priority, suggestion_text, rationale, 
+    baseline_metrics }
+- Return { result: summaryText, trace, tokensUsed }
+- summaryText should be a brief plain-English summary of what the run found:
+  how many pending suggestions were reviewed, what the overall data picture 
+  showed, how many new suggestions were generated and at what priorities.
+
+Parsing the agent output into structured suggestions:
+The agent will produce a text response. You need to extract suggestions from it.
+Prompt the agent to wrap each suggestion in a structured format you can parse.
+Add this instruction to the end of Block 3:
+
+"Format each suggestion as a JSON block wrapped in <suggestion> tags:
+<suggestion>
+{
+  "category": "...",
+  "priority": "...", 
+  "suggestion_text": "...",
+  "rationale": "...",
+  "baseline_metrics": {}
+}
+</suggestion>
+
+Wrap each suggestion individually. Plain text analysis and phase summaries 
+go outside the tags."
+
+Then in index.js, parse with:
+const suggestionMatches = result.matchAll(/<suggestion>([\s\S]*?)<\/suggestion>/g);
+
+Handle JSON parse errors per suggestion gracefully — 
+a malformed suggestion block should not fail the entire run.
+
+---
+
+## Step 4 — Route registration
+
+In server/routes/agents.js, add:
+
+```js
+import { runHighIntentAdvisor } from '../agents/high-intent-advisor/index.js';
+
+agentsRouter.use('/high-intent-advisor',
+  createAgentRoute({
+    slug: 'high-intent-advisor',
+    runFn: runHighIntentAdvisor,
+    requiredPermission: 'org_admin'
+  })
+);
+```
+
+Do NOT register the AgentScheduler cron in this session.
+The cron will be added after manual testing confirms output quality.
+Add a comment: // AgentScheduler cron registration deferred — add after manual QA
+
+---
+
+## Step 5 — AgentConfigService defaults
+
+In server/platform/AgentConfigService.js, add to AGENT_DEFAULTS:
+
+```js
+'high-intent-advisor': {
+  enabled: true,
+  model: null,          // inherits org default
+  maxTokens: 4096,
+  maxIterations: 25,    // three phases with multiple tool calls each
+  schedule: '0 7 * * *' // 7am UTC = 5pm AEST; not active until cron registered
+}
+```
+
+Add to ADMIN_DEFAULTS:
+```js
+'high-intent-advisor': {
+  killSwitch: false,
+  maxTokensHardLimit: 6000
+}
+```
+
+---
+
+## Step 6 — UI page
+
+Create client/src/pages/tools/HighIntentAdvisorPage.jsx
+
+This page has two tabs: Active Suggestions and Suggestion History.
+
+### Active Suggestions tab
+
+Fetches from GET /api/agents/high-intent-advisor/suggestions
+(You need to add this route — see Step 7)
+
+Groups suggestions by priority: high (red dot), medium (amber dot), low (grey dot).
+Priority group headers use the sidebar section label pattern:
+text-xs font-semibold uppercase tracking-wider in var(--color-muted).
+
+Each suggestion card:
+- rounded-2xl border p-5 space-y-3, background: var(--color-surface)
+- Top row: category pill (rounded-full px-2 py-0.5 text-xs, 
+  background: rgba(var(--color-primary-rgb), 0.1), 
+  color: var(--color-primary)) + priority dot + created date in muted text
+- suggestion_text in font-medium text-sm
+- rationale in text-xs var(--color-muted) with a small icon prefix (lightbulb or info)
+- baseline_metrics rendered as a compact horizontal row of key: value pairs 
+  in text-xs monospace, var(--color-muted). Only show; do not make it editable.
+- outcome_notes (if present) in text-xs italic var(--color-muted) 
+  prefixed with "Agent note:"
+- Action row (bottom): 
+  - "Mark acted on" — secondary button, calls PATCH /api/agents/high-intent-advisor/suggestions/:id 
+    with { status: 'acted_on', acted_on_at: new Date() }
+  - "Dismiss" — ghost button with inline confirm pattern 
+    ("Dismiss? Yes / No" — follow the Vault inline destructive confirm pattern, 
+    not a modal)
+  - Optional: a small textarea (2 rows, text-xs) that appears on "Dismiss" click 
+    for outcome_notes before confirming. Label: "Optional note for the agent:"
+    This note is written to outcome_notes on the suggestion row.
+
+Empty state when no active suggestions:
+Use EmptyState component. Icon: 'check-circle'. 
+Message: "No active suggestions". 
+Hint: "Run the advisor to generate new suggestions."
+
+Run button in page header: primary button, "Run Advisor", 
+calls POST /api/agents/high-intent-advisor/run,
+shows spinner during run (SSE stream), 
+shows toast on completion, 
+refreshes suggestions list.
+
+### Suggestion History tab
+
+Fetches from GET /api/agents/high-intent-advisor/suggestions/history
+Returns all suggestions with status acted_on or dismissed, 
+ordered by created_at DESC, limit 50.
+
+Table layout (standard admin table pattern from SECTION-2-LAYOUT.md):
+Columns: Date | Category | Priority | Suggestion | Status | Outcome notes
+
+Status rendered as pill:
+- acted_on: green tint (bg-green-100 text-green-800)
+- dismissed: var(--color-surface) border pill
+- monitoring: amber tint (bg-amber-100 text-amber-800)
+
+Suggestion_text truncated to 80 chars with title attribute for full text on hover.
+
+---
+
+## Step 7 — Two additional API routes
+
+Add to server/routes/agents.js (or a dedicated suggestions route file if cleaner):
+
+GET /api/agents/high-intent-advisor/suggestions
+- requireAuth middleware
+- Returns all pending and monitoring suggestions for req.user.orgId
+- ORDER BY priority (high first), created_at DESC
+
+GET /api/agents/high-intent-advisor/suggestions/history  
+- requireAuth middleware
+- Returns acted_on and dismissed suggestions, limit 50, created_at DESC
+
+PATCH /api/agents/high-intent-advisor/suggestions/:id
+- requireAuth middleware
+- Accepts: { status, outcome_notes, acted_on_at }
+- Validates suggestion belongs to req.user.orgId before updating
+- Returns updated row
+
+---
+
+## Step 8 — App registration
+
+In client/src/App.jsx, add the route inside RequireAuth > AppShell:
+<Route path="/tools/high-intent-advisor" element={<HighIntentAdvisorPage />} />
+
+In client/src/config/tools.js, add:
+{
+  id: 'high-intent-advisor',
+  name: 'High Intent Advisor',
+  description: 'Daily suggestions for attracting high-intent customers based on your ad, analytics, and CRM data.',
+  icon: 'target',
+  path: '/tools/high-intent-advisor',
+  permission: 'org_admin'
+}
+
+---
+
+## Build sequence — follow this order exactly
+
+1. DB migration (Step 1) — verify table creates cleanly on startup
+2. Platform tools in platform.js (Step 2) — verify MCP server still initialises
+3. Agent files — tools.js first, then prompt.js, then index.js (Step 3)
+4. Route registration without cron (Step 4)
+5. AgentConfigService defaults (Step 5)
+6. API routes for suggestions (Step 7)
+7. UI page (Step 6)
+8. App registration (Step 8)
+
+Do not proceed to the next step if the current step has errors.
+
+---
+
+## What not to build in this session
+
+- Do not register the AgentScheduler cron (deferred to after manual QA)
+- Do not build a dedicated suggestions MCP server (tools go in platform.js)
+- Do not add a knowledge-base indexing step for suggestion history 
+  (the search_knowledge tool already covers agent_runs summaries)
+- Do not add any analytics or cost tracking beyond what createAgentRoute 
+  already handles
+- Do not modify any existing agent files
+
+---
+
+## Definition of done for this session
+
+- Server starts cleanly with agent_suggestions table present
+- POST /api/agents/high-intent-advisor/run returns a valid SSE stream
+- Agent completes a full three-phase run without errors
+- At least one suggestion row is written to agent_suggestions after a run
+- GET /api/agents/high-intent-advisor/suggestions returns the suggestion
+- UI page renders at /tools/high-intent-advisor with the suggestion visible
+- Mark acted on and dismiss actions update the row correctly
+- No modifications to any file in server/platform/
+- CHANGELOG.md updated with what was built, what was deferred, and what to test
+
+---
+
+## After the first successful manual run
+
+Do not do this in this session — note it for the next session:
+- Read the suggestions produced and assess quality honestly
+- Check that baseline_metrics contains the right fields for each category
+- Check that outcome_notes from the review phase are coherent
+- If output quality is good: add AgentScheduler cron registration
+- If output quality needs work: adjust Block 2 or Block 3 of the prompt 
+  and re-run before adding the cron

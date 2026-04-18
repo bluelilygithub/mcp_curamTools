@@ -68,6 +68,64 @@
 
 ---
 
+## 2026-04-19 — High Intent Advisor agent + suggestions UI
+
+### Built
+
+**DB migration**
+- `agent_suggestions` table with `id, org_id, run_id, slug, category, priority, suggestion_text, rationale, status, baseline_metrics, outcome_metrics, outcome_notes, acted_on_at, reviewed_at, created_at`
+- Indexes: `idx_agent_suggestions_org_status` (org_id, status, created_at DESC), `idx_agent_suggestions_run` (run_id)
+
+**Platform MCP server — 2 new tools (v1.1.0)**
+- `get_pending_suggestions` — returns pending/monitoring suggestions for the org ordered by priority
+- `update_suggestion_outcome` — updates outcome_metrics, outcome_notes, reviewed_at, and optionally status; org_id validated server-side
+
+**Agent: `server/agents/highIntentAdvisor/`**
+- `tools.js` — 14 tools: 5 Ads, 3 GA4, 2 WordPress CRM, 4 Platform/KB. `get_search_terms`, `get_budget_pacing`, `get_paid_bounced_sessions`, `get_enquiries`, `get_pending_suggestions`, `update_suggestion_outcome` all marked `cacheable: false`
+- `prompt.js` — three-phase system prompt: Phase 1 reviews prior suggestions via `get_pending_suggestions` + `update_suggestion_outcome`; Phase 2 gathers data across all sources; Phase 3 generates 3–7 suggestions in `<suggestion>` tag format
+- `index.js` — parses `<suggestion>` blocks from agent output, validates category/priority, INSERTs to `agent_suggestions`; emits phase boundary progress; returns plain-text summary
+
+**Route registration (`server/routes/agents.js`)**
+- `POST /api/agents/high-intent-advisor/run` via `createAgentRoute` (org_admin only)
+- `GET /api/agents/high-intent-advisor/suggestions` — pending/monitoring, priority-ordered
+- `GET /api/agents/high-intent-advisor/suggestions/history` — acted_on/dismissed, limit 50
+- `PATCH /api/agents/high-intent-advisor/suggestions/:id` — status, outcome_notes, acted_on_at; org_id validated
+- AgentScheduler cron registration deferred to after manual QA
+
+**AgentConfigService**
+- AGENT_DEFAULTS: `high-intent-advisor` — schedule `0 7 * * *` (inactive until cron registered)
+- ADMIN_DEFAULTS: enabled, max_tokens 4096, max_iterations 25, max_task_budget_aud 3.00, maxTokensHardLimit 6000
+- AGENT_MODEL_REQUIREMENTS: advanced tier
+
+**UI: `client/src/pages/tools/HighIntentAdvisorPage.jsx`**
+- Two tabs: Active Suggestions (grouped by priority with red/amber/grey dots) and Suggestion History (table)
+- Suggestion cards: category pill, priority dot, date, suggestion text, rationale, baseline_metrics row, outcome_notes
+- Inline dismiss with optional note textarea (no modal) + Mark acted on button
+- Run Advisor button — SSE stream with progress log, toast on completion
+- EmptyState for zero suggestions
+
+**App registration**
+- Route: `/tools/high-intent-advisor`
+- `tools.js` entry: org_admin only, icon: target
+- `api/client.js`: added `api.patch()` method (was missing)
+
+### Deferred
+- AgentScheduler cron registration (`0 7 * * *`) — add after manual QA confirms output quality
+- MCP-SERVERS.md not updated this session (add `get_pending_suggestions` and `update_suggestion_outcome` to the platform table next session)
+
+### What to test
+1. Server starts cleanly — `agent_suggestions` table present
+2. `POST /api/agents/high-intent-advisor/run` returns SSE stream; agent completes all three phases
+3. At least one `<suggestion>` row written to `agent_suggestions` after first run
+4. `GET /api/agents/high-intent-advisor/suggestions` returns the suggestion
+5. `/tools/high-intent-advisor` renders with Active Suggestions visible
+6. Mark acted on → row moves to history tab
+7. Dismiss (with and without note) → row moves to history tab
+8. Check baseline_metrics in suggestion cards contain meaningful numeric values
+9. Check outcome_notes from Phase 1 are coherent once there are prior suggestions
+
+---
+
 ## 2026-04-18 — Code audit + session-scoped tool result cache
 
 ### Built
