@@ -194,9 +194,12 @@ async function chat({ model, max_tokens, system, messages, tools }) {
   const geminiTools = convertTools(tools);
   if (geminiTools) body.tools = geminiTools;
 
+  // Handle both old format (gemini-2.0-flash) and new format (models/gemini-2.0-flash)
+  const modelPath = model.startsWith('models/') ? model : `models/${model}`;
+  
   const { status, body: responseBody } = await httpsPost(
     'generativelanguage.googleapis.com',
-    `/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`,
+    `/v1beta/${encodeURIComponent(modelPath)}:generateContent?key=${apiKey}`,
     body
   );
 
