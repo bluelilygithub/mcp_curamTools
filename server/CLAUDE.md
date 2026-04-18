@@ -1,5 +1,7 @@
 # CLAUDE.md — Project guardrails
 
+**Project Context:** This is an internal learning project for one organisation, built and maintained by a solo developer. These guardrails are written for AI-assisted development within that context. Read [PROJECT_IDENTITY.md](../PROJECT_IDENTITY.md) for the full context.
+
 Read this before making any change to the conversation agent, MCP servers, or agent prompts.
 
 ---

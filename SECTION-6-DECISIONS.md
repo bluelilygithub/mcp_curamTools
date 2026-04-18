@@ -1,5 +1,7 @@
 ## 6. Decisions Worth Preserving
 
+**Project Context:** Internal learning project for one organisation, solo developer. These decisions reflect the scale and context. See [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md).
+
 Every flag in this section represents a choice that is non-obvious, easy to get wrong in a future session, or likely to be revisited. The [DELIBERATE], [FROM VAULT], and [MERGED DECISION] labels indicate origin and confidence.
 
 ---

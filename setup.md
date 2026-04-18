@@ -1,5 +1,7 @@
 # MCP CuramTools — Setup Guide
 
+> **Project context:** This is an internal learning project for one organisation, built and maintained by a solo developer. Read [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md) for the full context before making architectural or security decisions.
+
 ## Port Architecture
 
 | Service | Port | Notes |

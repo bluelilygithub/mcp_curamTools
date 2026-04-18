@@ -1,5 +1,7 @@
 # MCP CuramTools — Claude Prompts Reference
 
+**Project Context:** This is an internal learning project for one organisation, built and maintained by a solo developer. Prompts and agents are built within this context. Read [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md) for the full context.
+
 This file records the prompts used to set up and develop the MCP CuramTools project. Each prompt is dated and labeled with its purpose.
 
 ---

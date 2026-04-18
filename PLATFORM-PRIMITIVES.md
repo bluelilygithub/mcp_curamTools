@@ -1,5 +1,8 @@
 # PLATFORM-PRIMITIVES.md
 
+## Project Context
+**This is an internal learning project for one organisation, built and maintained by a solo developer.** Platform primitives are designed for this context — reusable, simple, and solo-developer maintainable. Read [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md) for the full context.
+
 ## Foundational References
 - **TOOLSFORGE_README.md** — ToolsForge platform and agent feature inventory
 - **Learnings-ToolsForge.md** — ToolsForge technical patterns and implementation knowledge

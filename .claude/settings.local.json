@@ -49,7 +49,10 @@
       "Bash(pdftotext \"C:/Users/micha/Local Sites/mcp_curamTools/ai-visibility-report-15-04-2026.pdf\" -)",
       "Bash(node --check server/routes/mediaGen.js)",
       "Bash(node --check server/db.js)",
-      "Bash(node --check server/index.js)"
+      "Bash(node --check server/index.js)",
+      "Bash(sort -k6,7)",
+      "Bash(awk '{print $NF, $5, $6, $7}')",
+      "Bash(xargs -I{} basename {})"
     ]
   }
 }

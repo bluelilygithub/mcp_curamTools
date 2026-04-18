@@ -1,5 +1,7 @@
 ## 3. Component Patterns
 
+**Project Context:** Internal learning project for one organisation, solo developer. Design decisions reflect this context. See [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md).
+
 ### Buttons
 
 No dedicated `<Button>` component exists in either predecessor — all variants are composed inline. [DECISION REQUIRED — Curam-MCP should decide explicitly. See Annotation Required.]

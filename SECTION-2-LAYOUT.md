@@ -1,5 +1,7 @@
 ## 2. Layout & Structure
 
+**Project Context:** Internal learning project for one organisation, solo developer. Design decisions reflect this context. See [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md).
+
 ### Top-level shell
 
 The authenticated shell has three fixed layers: a top nav, a left sidebar anchored below it, and a scrolling main content area that fills the remainder. The outer container uses:

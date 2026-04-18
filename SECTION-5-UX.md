@@ -1,5 +1,7 @@
 ## 5. UX Patterns & Behaviours
 
+**Project Context:** Internal learning project for one organisation, solo developer. Design decisions reflect this context. See [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md).
+
 ### State management
 
 Three Zustand stores, all persisted to `localStorage`. Storage keys should be namespaced to avoid collisions with Vault or ToolsForge if they run on the same domain.

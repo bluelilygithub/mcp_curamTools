@@ -1,5 +1,7 @@
 ## 4. Interaction & Animation
 
+**Project Context:** Internal learning project for one organisation, solo developer. Design decisions reflect this context. See [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md).
+
 ### Transition conventions
 
 All explicit micro-interactions use 200ms: sidebar width (`transition: width 200ms ease`), mobile sidebar slide (`transition: transform 200ms ease`), sidebar chevron rotation (inline `transition: transform 200ms`). Tailwind utility classes (`transition-opacity`, `transition-all`) resolve to 150ms by Tailwind's default — a mild inconsistency in both predecessors that should be resolved in Curam-MCP by setting a custom default duration. [DECISION REQUIRED — see Annotation Required.]

@@ -1,5 +1,7 @@
 ## Annotation Required
 
+**Project Context:** This is an internal learning project for one organisation, built and maintained by a solo developer. Design decisions are made within this context. Read [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md) for the full context.
+
 Every point below was flagged during the merge process as requiring a human decision before UI work starts. Work through this list in sequence. Add your resolution and reasoning directly to each item, then the document is done.
 
 ---
