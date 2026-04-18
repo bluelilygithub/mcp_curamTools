@@ -84,16 +84,39 @@ function getClient() {
  * @returns {Promise<{ content, stop_reason, usage }>}
  */
 async function chat({ model, max_tokens, system, messages, tools, thinking }) {
-  // Wrap system prompt in a content block with cache_control.
-  // This enables Anthropic's prefix cache — the system prompt tokens are stored
-  // after the first call and served at 10% of normal price on subsequent calls
-  // within the 5-minute TTL.
-  //
-  // Only applied when the system prompt is long enough to be worth caching.
-  // Short prompts (< 1024 tokens) fall back to plain string format.
-  const systemParam = system && system.length >= CACHE_MIN_TOKENS
-    ? [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }]
-    : system;
+    // Handle system prompt - always convert to array format for Anthropic API
+  let systemParam = system;
+  
+  // If system is a string, convert to array format
+  if (typeof system === 'string') {
+    systemParam = [{ type: 'text', text: system }];
+    // Add cache_control for long prompts
+    if (system.length >= CACHE_MIN_TOKENS) {
+      systemParam[0].cache_control = { type: 'ephemeral' };
+    }
+  }
+  // If system is already an array, ensure it has proper structure
+  else if (Array.isArray(system)) {
+    // Check if it's already in the right format
+    const isValidArray = system.every(item => 
+      item && typeof item === 'object' && item.type === 'text' && item.text
+    );
+    if (!isValidArray) {
+      // Convert array of strings or mixed content to proper format
+      systemParam = system.map(item => {
+        if (typeof item === 'string') {
+          return { type: 'text', text: item };
+        } else if (item && typeof item === 'object' && item.text) {
+          return { type: 'text', text: item.text };
+        }
+        return { type: 'text', text: String(item) };
+      });
+    }
+  }
+  // If system is null/undefined, set to undefined (not empty array)
+  else if (system === null || system === undefined) {
+    systemParam = undefined;
+  }
 
   const apiParams = { model, max_tokens, system: systemParam, messages };
 

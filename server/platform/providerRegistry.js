@@ -21,10 +21,10 @@ const PROVIDERS = {
     modelPrefixes: ['claude-'],
     adapter:       'anthropic',
   },
-  google: {
+    google: {
     label:         'Google',
     envVar:        'GEMINI_API_KEY',
-    modelPrefixes: ['gemini-'],
+    modelPrefixes: ['gemini-', 'models/gemini-'],
     adapter:       'gemini',
   },
   openai: {
