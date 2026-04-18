@@ -338,7 +338,7 @@ class MCPRegistryClass extends EventEmitter {
       if (!command) return reject(new Error('stdio transport requires config.command'));
 
       const child = spawn(command, args, {
-        env: { ...process.env, ...env },
+        env: this._sanitizeEnvironment(env),
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
@@ -413,6 +413,37 @@ class MCPRegistryClass extends EventEmitter {
       };
       child.stdin.write(JSON.stringify(initMsg) + '\n');
     });
+  }
+
+  // ── Environment sanitization ──────────────────────────────────────────────
+
+  /**
+   * Sanitize environment variables before passing to child processes.
+   * Returns only safe variables that child processes might need.
+   */
+  _sanitizeEnvironment(extraEnv = {}) {
+    // Safe variables that child processes might need
+    const safeVars = [
+      'PATH', 'NODE_ENV', 'TZ', 'LANG', 'LC_ALL',
+      'NODE_PATH', 'HOME', 'USER', 'LOGNAME',
+      // Application-specific safe variables (MCP server credentials)
+      'WP_URL', 'WP_USER', 'WP_APP_PASSWORD', // WordPress MCP server
+      'GOOGLE_ADS_CLIENT_ID', 'GOOGLE_ADS_CLIENT_SECRET', // Google Ads
+      'GOOGLE_ANALYTICS_CLIENT_ID', 'GOOGLE_ANALYTICS_CLIENT_SECRET',
+      'ANTHROPIC_API_KEY', 'FAL_API_KEY',
+    ];
+    
+    const env = {};
+    safeVars.forEach(key => {
+      if (process.env[key] !== undefined) {
+        env[key] = process.env[key];
+      }
+    });
+    
+    // Add explicitly allowed extra env from server config
+    Object.assign(env, extraEnv);
+    
+    return env;
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

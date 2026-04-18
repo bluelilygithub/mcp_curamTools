@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { pool } = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
+const { createAuthRateLimiter } = require('../middleware/rateLimiter');
 const { acceptInvitation, getInvitation } = require('../services/InvitationService');
 const EmailService = require('../services/EmailService');
 
@@ -17,8 +18,11 @@ function generateToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+// Auth-specific rate limiter: 5 attempts per 15 minutes per IP:email
+const authLimiter = createAuthRateLimiter();
+
 // ── POST /api/auth/login ──────────────────────────────────────────────────
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required.' });
@@ -39,14 +43,40 @@ router.post('/login', async (req, res) => {
 
     const user = userRes.rows[0];
 
+    // Check if account is locked
+    if (user.locked_until && new Date(user.locked_until) > new Date()) {
+      return res.status(401).json({ 
+        error: 'Account is temporarily locked. Try again later.' 
+      });
+    }
+
     if (!user.is_active) {
       return res.status(401).json({ error: 'Account is not yet activated. Check your invitation email.' });
     }
 
     const valid = await bcrypt.compare(password, user.password_hash);
+    
     if (!valid) {
+      // Increment failed attempts and lock if threshold reached
+      await pool.query(`
+        UPDATE users 
+        SET login_attempts = COALESCE(login_attempts, 0) + 1,
+            locked_until = CASE 
+              WHEN COALESCE(login_attempts, 0) + 1 >= 5 THEN NOW() + INTERVAL '15 minutes'
+              ELSE locked_until
+            END
+        WHERE id = $1
+      `, [user.id]);
+      
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
+
+    // Successful login: reset attempts and clear lock
+    await pool.query(`
+      UPDATE users 
+      SET login_attempts = 0, locked_until = NULL 
+      WHERE id = $1
+    `, [user.id]);
 
     // Create session
     const token = generateToken();
@@ -92,7 +122,7 @@ router.post('/logout', requireAuth, async (req, res) => {
 });
 
 // ── POST /api/auth/register (invite-only) ────────────────────────────────
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   const { token, password } = req.body;
   if (!token || !password) {
     return res.status(400).json({ error: 'Invitation token and password are required.' });
@@ -103,6 +133,9 @@ router.post('/register', async (req, res) => {
 
   try {
     const { userId, email } = await acceptInvitation(token, password);
+
+    // Clear any existing lock for new/activated user
+    await pool.query('UPDATE users SET login_attempts = 0, locked_until = NULL WHERE id = $1', [userId]);
 
     // Create session immediately
     const sessionToken = generateToken();
@@ -216,7 +249,7 @@ router.post('/change-password', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Current password is incorrect.' });
     }
     const hash = await bcrypt.hash(newPassword, 12);
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, req.user.id]);
+    await pool.query('UPDATE users SET password_hash = $1, login_attempts = 0, locked_until = NULL WHERE id = $2', [hash, req.user.id]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to change password.' });
@@ -224,7 +257,7 @@ router.post('/change-password', requireAuth, async (req, res) => {
 });
 
 // ── POST /api/auth/forgot-password ────────────────────────────────────────
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', authLimiter, async (req, res) => {
   const { email } = req.body;
   // Always respond 200 to prevent email enumeration
   if (!email) return res.json({ ok: true });
@@ -261,7 +294,7 @@ router.post('/forgot-password', async (req, res) => {
 });
 
 // ── POST /api/auth/reset-password ─────────────────────────────────────────
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', authLimiter, async (req, res) => {
   const { token, password } = req.body;
   if (!token || !password) {
     return res.status(400).json({ error: 'Token and new password are required.' });
@@ -284,7 +317,7 @@ router.post('/reset-password', async (req, res) => {
     }
 
     const hash = await bcrypt.hash(password, 12);
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, userId]);
+    await pool.query('UPDATE users SET password_hash = $1, login_attempts = 0, locked_until = NULL WHERE id = $2', [hash, userId]);
 
     // Invalidate all active sessions
     await pool.query('DELETE FROM auth_sessions WHERE user_id = $1', [userId]);

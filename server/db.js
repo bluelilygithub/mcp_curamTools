@@ -269,6 +269,13 @@ async function initSchema() {
         ADD COLUMN IF NOT EXISTS default_model_id TEXT
     `);
 
+    // Idempotent: add login security columns to users
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS login_attempts INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS departments (
         id          SERIAL PRIMARY KEY,

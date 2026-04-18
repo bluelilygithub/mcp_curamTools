@@ -34,6 +34,9 @@ function createRateLimiter({ windowMs = 60_000, max = 20, keyFn } = {}) {
     const hits = (store.get(key) ?? []).filter((t) => t > cutoff);
 
     if (hits.length >= max) {
+      res.setHeader('X-RateLimit-Limit', max);
+      res.setHeader('X-RateLimit-Remaining', 0);
+      res.setHeader('X-RateLimit-Reset', new Date(now + windowMs).toISOString());
       return res.status(429).json({
         error: `Too many requests. Limit is ${max} per ${windowMs / 1000}s.`,
       });
@@ -41,8 +44,27 @@ function createRateLimiter({ windowMs = 60_000, max = 20, keyFn } = {}) {
 
     hits.push(now);
     store.set(key, hits);
+    
+    res.setHeader('X-RateLimit-Limit', max);
+    res.setHeader('X-RateLimit-Remaining', max - hits.length);
+    res.setHeader('X-RateLimit-Reset', new Date(now + windowMs).toISOString());
     next();
   };
 }
 
-module.exports = { createRateLimiter };
+/**
+ * Auth-specific rate limiter for login, register, password reset endpoints.
+ * Limits to 5 attempts per 15 minutes per IP:email combination.
+ */
+function createAuthRateLimiter() {
+  return createRateLimiter({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // 5 attempts per window
+    keyFn: (req) => {
+      const email = req.body?.email?.toLowerCase()?.trim() || 'unknown';
+      return `${req.ip}:${email}`;
+    },
+  });
+}
+
+module.exports = { createRateLimiter, createAuthRateLimiter };
