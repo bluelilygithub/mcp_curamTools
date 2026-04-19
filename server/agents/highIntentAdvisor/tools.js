@@ -3,7 +3,7 @@
 /**
  * High Intent Advisor — tool definitions.
  *
- * 14 tools across Google Ads, GA4, WordPress CRM, and Platform MCP servers.
+ * 15 tools across Google Ads, GA4, WordPress CRM, and Platform MCP servers.
  * The agent uses these tools across three phases: review, gather, generate.
  *
  * Required MCP servers:
@@ -235,6 +235,27 @@ const getReportHistoryTool = {
   },
 };
 
+const getSuggestionHistoryTool = {
+  name: 'get_suggestion_history',
+  description: 'Full history of all suggestions for this org (all statuses). Use in Phase 1 to identify patterns: what categories get acted on, what gets dismissed and why, and which suggestion types have not moved metrics. Essential for calibrating Phase 3 output.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      limit: { type: 'integer', description: 'Max rows. Default 100, max 200.' },
+    },
+    required: [],
+  },
+  cacheable: false,
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(input, context) {
+    const platform = await getPlatformServer(context.orgId);
+    return callMcpTool(context.orgId, platform, 'get_suggestion_history', {
+      org_id: context.orgId,
+      limit:  input.limit ?? 100,
+    });
+  },
+};
+
 const searchKnowledgeTool = {
   name: 'search_knowledge',
   description: 'Semantic search across indexed agent run summaries and documents. Use to find relevant prior analysis or context before generating a suggestion.',
@@ -272,6 +293,7 @@ const highIntentAdvisorTools = [
   getNotInterestedReasonsTool,
   getPendingSuggestionsTool,
   updateSuggestionOutcomeTool,
+  getSuggestionHistoryTool,
   getReportHistoryTool,
   searchKnowledgeTool,
 ];

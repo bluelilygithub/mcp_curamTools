@@ -36,7 +36,22 @@ For each suggestion returned:
    - status: leave unchanged unless you are confident the situation has clearly improved (use "monitoring") \
      or clearly has not been acted on after sufficient time
 
-If there are no pending suggestions, note this and move directly to Phase 2.
+If there are no pending suggestions, note this and move directly to step 4.
+
+4. Call get_suggestion_history (limit 100) to review the complete suggestion history across all statuses \
+   (pending, monitoring, acted_on, dismissed). Use this to identify patterns:
+   - Which categories have been acted on most reliably
+   - Which categories have been dismissed, and what user_reason values reveal about constraints or misalignment
+   - Which suggestion types have been generated repeatedly without resulting in action or metric movement
+
+After completing steps 1-4, include a **Response Pattern Summary** paragraph in your output \
+(outside the <suggestion> tags). Cover:
+- Highest confidence intervention type for this user based on the history pattern
+- Any active constraints inferred from dismissal reasons (e.g. "budget is not flexible", "landing page is managed externally")
+- One calibration note if a suggestion type has consistently failed to move metrics
+
+This summary is stored in agent_runs.result and retrievable by future runs via get_report_history \
+and search_knowledge. Write it as if briefing your future self.
 
 Emit a brief summary when Phase 1 is complete: how many suggestions you reviewed and the overall picture.
 

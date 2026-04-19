@@ -85,6 +85,18 @@ const TOOLS = [
     },
   },
   {
+    name: 'get_suggestion_history',
+    description: 'Returns the full history of suggestions for this org (all statuses: pending, monitoring, acted_on, dismissed), ordered by created_at DESC. Use in Phase 1 to identify patterns — what categories get acted on, what gets dismissed and why, and which suggestion types fail to move metrics.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        org_id: { type: 'number', description: 'Organisation ID to scope results.' },
+        limit:  { type: 'number', description: 'Max rows to return. Default 100, max 200.' },
+      },
+      required: ['org_id'],
+    },
+  },
+  {
     name: 'flag_prompt_for_review',
     description: 'Raise a flag on a prompt that needs admin review. Call this when you notice your own system prompt is outdated, references stale context, uses capabilities no longer available, or would benefit from an update. Flags are visible to administrators in the MCP Prompts page.',
     inputSchema: {
@@ -227,6 +239,23 @@ async function callTool(name, args = {}) {
       return { updated: true, suggestion_id };
     }
 
+    case 'get_suggestion_history': {
+      const { org_id, limit } = args;
+      if (!org_id) throw new Error('org_id is required');
+      const cap = Math.min(limit || 100, 200);
+      const { rows } = await pool.query(
+        `SELECT user_action, user_reason, outcome_notes, outcome_metrics,
+                baseline_metrics, created_at, acted_on_at, reviewed_at,
+                category, priority, suggestion_text, rationale, status
+         FROM agent_suggestions
+         WHERE org_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2`,
+        [org_id, cap]
+      );
+      return rows;
+    }
+
     case 'flag_prompt_for_review': {
       const { org_id, slug, reason } = args;
       if (!org_id || !slug || !reason) throw new Error('org_id, slug, and reason are required');
@@ -263,7 +292,7 @@ rl.on('line', async (line) => {
         respond(id, {
           protocolVersion: '2024-11-05',
           capabilities:    { tools: {} },
-          serverInfo:      { name: 'platform-mcp', version: '1.1.0' },
+          serverInfo:      { name: 'platform-mcp', version: '1.2.0' },
         });
         break;
       case 'notifications/initialized': break;

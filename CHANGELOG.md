@@ -68,6 +68,39 @@
 
 ---
 
+## 2026-04-19 — High Intent Advisor: user feedback capture + suggestion history tool
+
+### Built
+
+**DB migration**
+- `ALTER TABLE agent_suggestions ADD COLUMN IF NOT EXISTS user_action TEXT` — what action the user took when marking acted on
+- `ALTER TABLE agent_suggestions ADD COLUMN IF NOT EXISTS user_reason TEXT` — why the user dismissed a suggestion
+
+**Platform MCP server — 1 new tool (v1.2.0)**
+- `get_suggestion_history` — returns full suggestion history for the org (all statuses), ordered by created_at DESC, limit 100 default cap 200. `cacheable: false`. Returns `user_action, user_reason, outcome_notes, outcome_metrics, baseline_metrics, created_at, acted_on_at, reviewed_at` plus category/priority/suggestion_text/rationale/status.
+
+**Agent tools.js — 14 → 15 tools**
+- Added `getSuggestionHistoryTool` wrapping `get_suggestion_history`. `cacheable: false`. Injected `org_id` from `context.orgId` — not exposed to LLM.
+
+**PATCH route extended**
+- `PATCH /api/agents/high-intent-advisor/suggestions/:id` now accepts and writes `user_action` and `user_reason` via COALESCE SQL. Org validation unchanged.
+
+**UI — HighIntentAdvisorPage.jsx**
+- "Mark acted on" flow: now expands inline (like dismiss) with a textarea "What action did you take?" and Confirm/Cancel buttons. PATCH sends `{ status: 'acted_on', acted_on_at, user_action }`.
+- Dismiss flow: textarea now captures `user_reason` ("Why are you dismissing this?"). PATCH sends `{ status: 'dismissed', user_reason }`.
+- Both flows remove the card from the active list on success and show a toast.
+
+**prompt.js — Phase 1 updated**
+- Added step 4: call `get_suggestion_history` to review full history across all statuses
+- After completing steps 1–4, agent writes a **Response Pattern Summary** paragraph (outside `<suggestion>` tags) covering: highest confidence intervention type, active constraints from dismissal reasons, calibration note for suggestion types that haven't moved metrics. Stored in `agent_runs.result` for future retrieval via `get_report_history`.
+
+### Open / next
+- MCP-SERVERS.md platform table still missing `get_pending_suggestions`, `update_suggestion_outcome`, and now `get_suggestion_history` — update next session
+- AgentScheduler cron registration (`0 7 * * *`) — add after manual QA confirms output quality
+- History tab could show `user_action` and `user_reason` columns — deferred
+
+---
+
 ## 2026-04-19 — High Intent Advisor agent + suggestions UI
 
 ### Built

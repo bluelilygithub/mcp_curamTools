@@ -35,19 +35,21 @@ function MetricRow({ metrics }) {
 
 function SuggestionCard({ suggestion, onActedOn, onDismiss }) {
   const getIcon = useIcon();
-  const [dismissing, setDismissing] = useState(false);
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [dismissing, setDismissing]   = useState(false);
+  const [actingOn, setActingOn]       = useState(false);
+  const [userAction, setUserAction]   = useState('');
+  const [userReason, setUserReason]   = useState('');
+  const [busy, setBusy]               = useState(false);
 
-  async function handleActedOn() {
+  async function handleActedOnConfirm() {
     setBusy(true);
-    await onActedOn(suggestion.id);
+    await onActedOn(suggestion.id, userAction);
     setBusy(false);
   }
 
   async function handleDismissConfirm() {
     setBusy(true);
-    await onDismiss(suggestion.id, note);
+    await onDismiss(suggestion.id, userReason);
     setBusy(false);
   }
 
@@ -96,10 +98,10 @@ function SuggestionCard({ suggestion, onActedOn, onDismiss }) {
 
       {/* Action row */}
       <div className="flex items-center gap-3 pt-1 flex-wrap">
-        {!dismissing ? (
+        {!actingOn && !dismissing ? (
           <>
             <button
-              onClick={handleActedOn}
+              onClick={() => setActingOn(true)}
               disabled={busy}
               className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
               style={{
@@ -118,13 +120,46 @@ function SuggestionCard({ suggestion, onActedOn, onDismiss }) {
               Dismiss
             </button>
           </>
+        ) : actingOn ? (
+          <div className="w-full space-y-2">
+            <textarea
+              rows={2}
+              placeholder="What action did you take? (optional)"
+              value={userAction}
+              onChange={(e) => setUserAction(e.target.value)}
+              className="w-full text-xs rounded-lg border p-2 resize-none"
+              style={{
+                borderColor: 'var(--color-border)',
+                background: 'var(--color-bg)',
+                color: 'var(--color-text)',
+              }}
+            />
+            <div className="flex items-center gap-2 text-xs">
+              <button
+                onClick={handleActedOnConfirm}
+                disabled={busy}
+                className="px-3 py-1 rounded-lg font-medium border transition-colors"
+                style={{ borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
+              >
+                Confirm
+              </button>
+              <button
+                onClick={() => { setActingOn(false); setUserAction(''); }}
+                disabled={busy}
+                className="px-2 py-1 rounded"
+                style={{ color: 'var(--color-muted)' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="w-full space-y-2">
             <textarea
               rows={2}
-              placeholder="Optional note for the agent:"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
+              placeholder="Why are you dismissing this? (optional)"
+              value={userReason}
+              onChange={(e) => setUserReason(e.target.value)}
               className="w-full text-xs rounded-lg border p-2 resize-none"
               style={{
                 borderColor: 'var(--color-border)',
@@ -143,7 +178,7 @@ function SuggestionCard({ suggestion, onActedOn, onDismiss }) {
                 Yes
               </button>
               <button
-                onClick={() => { setDismissing(false); setNote(''); }}
+                onClick={() => { setDismissing(false); setUserReason(''); }}
                 disabled={busy}
                 className="px-2 py-1 rounded"
                 style={{ color: 'var(--color-muted)' }}
@@ -350,11 +385,12 @@ export default function HighIntentAdvisorPage() {
     }
   }
 
-  async function handleActedOn(id) {
+  async function handleActedOn(id, userAction) {
     try {
       await api.patch(`/agents/high-intent-advisor/suggestions/${id}`, {
         status: 'acted_on',
         acted_on_at: new Date().toISOString(),
+        user_action: userAction || null,
       });
       await loadSuggestions();
       await loadHistory();
@@ -364,11 +400,11 @@ export default function HighIntentAdvisorPage() {
     }
   }
 
-  async function handleDismiss(id, outcome_notes) {
+  async function handleDismiss(id, userReason) {
     try {
       await api.patch(`/agents/high-intent-advisor/suggestions/${id}`, {
         status: 'dismissed',
-        outcome_notes: outcome_notes || null,
+        user_reason: userReason || null,
       });
       await loadSuggestions();
       await loadHistory();

@@ -245,16 +245,19 @@ agentsRouter.get('/high-intent-advisor/suggestions/history', requireAuth, async 
 agentsRouter.patch('/high-intent-advisor/suggestions/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, outcome_notes, acted_on_at } = req.body;
+    const { status, outcome_notes, acted_on_at, user_action, user_reason } = req.body;
 
     const { rows } = await pool.query(
       `UPDATE agent_suggestions
        SET status        = COALESCE($1, status),
            outcome_notes = COALESCE($2, outcome_notes),
-           acted_on_at   = COALESCE($3, acted_on_at)
-       WHERE id = $4 AND org_id = $5
+           acted_on_at   = COALESCE($3, acted_on_at),
+           user_action   = COALESCE($4, user_action),
+           user_reason   = COALESCE($5, user_reason)
+       WHERE id = $6 AND org_id = $7
        RETURNING *`,
-      [status ?? null, outcome_notes ?? null, acted_on_at ?? null, id, req.user.orgId]
+      [status ?? null, outcome_notes ?? null, acted_on_at ?? null,
+       user_action ?? null, user_reason ?? null, id, req.user.orgId]
     );
 
     if (rows.length === 0) return res.status(404).json({ error: 'Suggestion not found.' });
