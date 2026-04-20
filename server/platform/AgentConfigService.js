@@ -61,7 +61,7 @@ const AGENT_DEFAULTS = {
 const ADMIN_DEFAULTS = {
   'google-ads-monitor': {
     enabled:              true,
-    model:                'claude-sonnet-4-6',
+    model:                null,   // null = use org default model
     max_tokens:           8192,
     max_iterations:       10,
     max_task_budget_aud:  2.00,
@@ -69,7 +69,7 @@ const ADMIN_DEFAULTS = {
   },
   'google-ads-freeform': {
     enabled:             true,
-    model:               'claude-sonnet-4-6',
+    model:               null,
     max_tokens:          8192,
     max_iterations:      12,
     max_task_budget_aud: 2.00,
@@ -77,7 +77,7 @@ const ADMIN_DEFAULTS = {
   },
   'google-ads-change-impact': {
     enabled:             true,
-    model:               'claude-sonnet-4-6',
+    model:               null,
     max_tokens:          8192,
     max_iterations:      10,
     max_task_budget_aud: 2.00,
@@ -85,7 +85,7 @@ const ADMIN_DEFAULTS = {
   },
   'google-ads-change-audit': {
     enabled:             true,
-    model:               'claude-sonnet-4-6',
+    model:               null,
     max_tokens:          8192,
     max_iterations:      15,   // higher — runs multiple before/after tool call pairs
     max_task_budget_aud: 3.00, // higher budget — multiple before/after query pairs per change
@@ -93,7 +93,7 @@ const ADMIN_DEFAULTS = {
   },
   'doc-extractor': {
     enabled:             true,
-    model:               'claude-sonnet-4-6',
+    model:               null,
     max_tokens:          4096, // 2048 was too low for complex multi-field documents
     max_task_budget_aud: 0.50, // single image, single call — low ceiling
     fallback_model:      null,
@@ -107,14 +107,14 @@ const ADMIN_DEFAULTS = {
   },
   'ai-visibility-monitor': {
     enabled:             true,
-    model:               'claude-sonnet-4-6',
+    model:               null,
     max_tokens:          8192,   // final narrative analysis call — 29 prompts needs headroom
     max_task_budget_aud: 3.00,   // covers 26 web search calls + 1 analysis call
     fallback_model:      null,
   },
   'high-intent-advisor': {
     enabled:             true,
-    model:               null,          // inherits org default
+    model:               null,
     max_tokens:          4096,
     max_iterations:      25,            // three phases with multiple tool calls each
     max_task_budget_aud: 3.00,
@@ -123,7 +123,7 @@ const ADMIN_DEFAULTS = {
   },
   _platform: {
     enabled: true,
-    model: 'claude-sonnet-4-6',
+    model: null,
     max_tokens: 4096,
     max_iterations: 10,
     max_task_budget_aud: 2.00,  // per-run AUD ceiling; null = unlimited
@@ -400,6 +400,33 @@ async function updateAdminConfig(slug, patch, updatedBy) {
     [orgId, slugToKey(slug), JSON.stringify(merged), updatedBy]
   );
   return merged;
+}
+
+// ── Org-level default model (system_settings key: 'default_model') ──────────
+// When an agent's admin config model is null, createAgentRoute resolves this.
+
+async function getOrgDefaultModel(orgId) {
+  try {
+    const res = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'default_model' LIMIT 1`,
+      [orgId]
+    );
+    return res.rows[0]?.value?.model_id ?? null;
+  } catch (err) {
+    console.error('[AgentConfigService] getOrgDefaultModel error:', err.message);
+    return null;
+  }
+}
+
+async function updateOrgDefaultModel(orgId, modelId, updatedBy) {
+  await pool.query(
+    `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+     VALUES ($1, 'default_model', $2, $3, NOW())
+     ON CONFLICT (org_id, key)
+     DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+    [orgId, JSON.stringify({ model_id: modelId }), updatedBy]
+  );
+  return modelId;
 }
 
 // ── Org-level company profile (system_settings key: 'company_profile') ──────
@@ -683,6 +710,8 @@ async function updateCustomProviders(orgId, providers, updatedBy) {
 }
 
 module.exports = {
+  getOrgDefaultModel,
+  updateOrgDefaultModel,
   getCompanyProfile,
   updateCompanyProfile,
   getAgentConfig,

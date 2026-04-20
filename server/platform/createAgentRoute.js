@@ -117,6 +117,11 @@ function createAgentRoute({ slug, runFn, requiredPermission }) {
       let adminConfig;
       try {
         adminConfig = await AgentConfigService.getAdminConfig(slug);
+        // Resolve org default model when no per-agent model is set
+        if (!adminConfig.model) {
+          const orgDefault = await AgentConfigService.getOrgDefaultModel(orgId);
+          if (orgDefault) adminConfig = { ...adminConfig, model: orgDefault };
+        }
       } catch (cfgErr) {
         emit('error', { error: 'Failed to load agent config' });
         await persistRun({ slug, orgId, status: 'error', error: cfgErr.message, runId });

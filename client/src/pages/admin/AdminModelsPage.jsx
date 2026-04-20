@@ -40,14 +40,16 @@ function Field({ label, hint, children }) {
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminModelsPage() {
-  const [models,      setModels]      = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [apiKeyOk,    setApiKeyOk]    = useState({});
-  const [saving,      setSaving]      = useState(false);
-  const [error,       setError]       = useState('');
-  const [success,     setSuccess]     = useState('');
-  const [editingId,   setEditingId]   = useState(null); // 'new' | model.id | null
-  const [form,        setForm]        = useState(EMPTY_FORM);
+  const [models,        setModels]        = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [apiKeyOk,      setApiKeyOk]      = useState({});
+  const [saving,        setSaving]        = useState(false);
+  const [error,         setError]         = useState('');
+  const [success,       setSuccess]       = useState('');
+  const [editingId,     setEditingId]     = useState(null); // 'new' | model.id | null
+  const [form,          setForm]          = useState(EMPTY_FORM);
+  const [defaultModel,  setDefaultModel]  = useState(null);
+  const [savingDefault, setSavingDefault] = useState(false);
   // testResults: { [modelId]: { status: 'testing'|'ok'|'error', latencyMs?, error? } }
   const [testResults, setTestResults] = useState({});
 
@@ -55,12 +57,26 @@ export default function AdminModelsPage() {
     Promise.all([
       api.get('/admin/models'),
       api.get('/admin/model-status'),
-    ]).then(([modelData, statusData]) => {
+      api.get('/admin/default-model'),
+    ]).then(([modelData, statusData, defaultData]) => {
       setModels(modelData);
       setApiKeyOk(statusData);
+      setDefaultModel(defaultData.model_id ?? '');
     }).catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  async function saveDefaultModel() {
+    setSavingDefault(true);
+    try {
+      await api.put('/admin/default-model', { model_id: defaultModel || null });
+      setSuccess('Default model saved.');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSavingDefault(false);
+    }
+  }
 
   // ── Persist ────────────────────────────────────────────────────────────────
 
@@ -196,6 +212,35 @@ export default function AdminModelsPage() {
 
       {error   && <InlineBanner type="error"   message={error}   onDismiss={() => setError('')}   className="mb-4" />}
       {success && <InlineBanner type="neutral" message={success} onDismiss={() => setSuccess('')} className="mb-4" />}
+
+      {/* Default model */}
+      {!loading && (
+        <div
+          className="rounded-2xl border p-4 mb-5 flex items-center gap-4 flex-wrap"
+          style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
+        >
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>Default model</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
+              Used by all agents unless overridden individually in Admin &rsaquo; Agents.
+            </p>
+          </div>
+          <select
+            value={defaultModel ?? ''}
+            onChange={(e) => setDefaultModel(e.target.value)}
+            className="px-3 py-2 rounded-xl border text-sm outline-none"
+            style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)', minWidth: 220 }}
+          >
+            <option value="">— No default set —</option>
+            {models.filter((m) => m.enabled).map((m) => (
+              <option key={m.id} value={m.id}>{m.name} ({m.id})</option>
+            ))}
+          </select>
+          <Button variant="primary" onClick={saveDefaultModel} disabled={savingDefault}>
+            {savingDefault ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      )}
 
       {/* API key status */}
       {Object.keys(apiKeyOk).length > 0 && (

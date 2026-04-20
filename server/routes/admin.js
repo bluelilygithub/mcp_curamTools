@@ -665,6 +665,27 @@ router.put('/settings', async (req, res) => {
   }
 });
 
+// ── Org default model ─────────────────────────────────────────────────────
+
+router.get('/default-model', async (req, res) => {
+  try {
+    const modelId = await AgentConfigService.getOrgDefaultModel(req.user.orgId);
+    res.json({ model_id: modelId });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load default model.' });
+  }
+});
+
+router.put('/default-model', async (req, res) => {
+  try {
+    const modelId = req.body.model_id ?? null;
+    await AgentConfigService.updateOrgDefaultModel(req.user.orgId, modelId, req.user.id);
+    res.json({ model_id: modelId });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update default model.' });
+  }
+});
+
 // ── Company Profile ───────────────────────────────────────────────────────
 
 router.get('/company-profile', async (req, res) => {
