@@ -14,6 +14,7 @@ import SearchTermsTable from './GoogleAdsMonitor/SearchTermsTable';
 import AISuggestionsPanel from './GoogleAdsMonitor/AISuggestionsPanel';
 import AgentDashboardCard from './GoogleAdsMonitor/AgentDashboardCard';
 import StrategicReviewCard from './GoogleAdsMonitor/StrategicReviewCard';
+import DaypartIntelligenceCard from './GoogleAdsMonitor/DaypartIntelligenceCard';
 import AiVisibilityTab from './GoogleAdsMonitor/AiVisibilityTab';
 
 const AGENT_SLUG = 'google-ads-monitor';
@@ -679,8 +680,18 @@ export default function GoogleAdsMonitorPage() {
             )}
           </div>
 
+          {/* ── Daypart Intelligence ─────────────────────────────────────── */}
+          <DaypartIntelligenceCard
+            startDate={startDate}
+            endDate={endDate}
+            expanded={openCard === 'daypart-intelligence'}
+            onToggle={() => toggleCard('daypart-intelligence')}
+            onContinueInConversation={null}
+          />
+
           {/* ── Sub-agent cards ──────────────────────────────────────────── */}
           {[
+            { slug: 'cost-per-booked-job',       title: 'Cost Per Booked Job', description: 'True campaign ROI — cross-references Ads spend with CRM close rates to reveal cost per booked job vs Google Ads reported CPA.' },
             { slug: 'google-ads-change-impact',  title: 'Change Impact',       description: 'Identifies what changed and narrates the performance effect of each change.' },
             { slug: 'google-ads-change-audit',   title: 'Change Audit',        description: 'Before/after metric comparison per change. Scores each change as Positive, Neutral, or Negative.' },
             { slug: 'ads-attribution-summary',   title: 'Attribution Summary', description: 'Connects ad spend, GA4 traffic, and WordPress enquiries — shows which campaigns are generating actual leads.' },

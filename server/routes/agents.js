@@ -159,6 +159,30 @@ agentsRouter.use(
   })
 );
 
+// ── Daypart Intelligence ──────────────────────────────────────────────────────
+const { runDaypartIntelligence } = require('../agents/daypartIntelligence');
+
+agentsRouter.use(
+  '/daypart-intelligence',
+  createAgentRoute({
+    slug:               'daypart-intelligence',
+    runFn:              runDaypartIntelligence,
+    requiredPermission: 'ads_operator',
+  })
+);
+
+// ── Cost Per Booked Job ───────────────────────────────────────────────────────
+const { runCostPerBookedJob } = require('../agents/costPerBookedJob');
+
+agentsRouter.use(
+  '/cost-per-booked-job',
+  createAgentRoute({
+    slug:               'cost-per-booked-job',
+    runFn:              runCostPerBookedJob,
+    requiredPermission: 'ads_operator',
+  })
+);
+
 // ── Lead Velocity ─────────────────────────────────────────────────────────────
 const { runLeadVelocity } = require('../agents/leadVelocity');
 
