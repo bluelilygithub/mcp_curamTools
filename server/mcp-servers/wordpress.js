@@ -268,6 +268,7 @@ async function callTool(name, args = {}) {
         LEFT JOIN (SELECT post_id, MAX(meta_value) AS meta_value FROM bqq_postmeta WHERE meta_key = 'search_term'     GROUP BY post_id) pm_st  ON p.ID = pm_st.post_id
         WHERE p.post_type = 'clientenquiry'
           AND p.post_status != 'trash'
+          AND pm_es.meta_value = 'not_interested'
       `;
       if (args.start_date) { sql += ` AND p.post_date >= ?`; params.push(args.start_date + ' 00:00:00'); }
       if (args.end_date)   { sql += ` AND p.post_date <= ?`; params.push(args.end_date   + ' 23:59:59'); }
