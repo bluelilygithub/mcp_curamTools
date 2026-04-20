@@ -62,6 +62,14 @@ const TOOLS = [
     path:        '/tools/high-intent-advisor',
     roles:       ['org_admin'],
   },
+  {
+    id:          'not-interested-report',
+    name:        'Not Interested Report',
+    description: 'Diagnoses why wrong-product and wrong-location leads are getting through. Separates ads targeting gaps from sales qualification failures using CRM call notes and Ads keyword data.',
+    icon:        'alert-circle',
+    path:        '/tools/not-interested-report',
+    roles:       ['org_admin'],
+  },
 ];
 
 /**

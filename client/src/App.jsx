@@ -32,6 +32,7 @@ import DiamondPlateDataPage      from './pages/tools/DiamondPlateDataPage';
 import DocExtractorPage          from './pages/tools/DocExtractorPage';
 import MediaGenPage              from './pages/tools/MediaGenPage';
 import HighIntentAdvisorPage     from './pages/tools/HighIntentAdvisorPage';
+import NotInterestedReportPage   from './pages/tools/NotInterestedReportPage';
 
 export default function App() {
   return (
@@ -56,6 +57,7 @@ export default function App() {
                 <Route path="/tools/doc-extractor"         element={<DocExtractorPage />} />
                 <Route path="/tools/media-gen"             element={<MediaGenPage />} />
                 <Route path="/tools/high-intent-advisor"   element={<HighIntentAdvisorPage />} />
+                <Route path="/tools/not-interested-report" element={<NotInterestedReportPage />} />
 
                 {/* Admin-only */}
                 <Route element={<RequireRole allowedRoles={['org_admin']} />}>

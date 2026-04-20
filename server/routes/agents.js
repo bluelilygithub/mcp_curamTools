@@ -213,6 +213,18 @@ AgentScheduler.register({
   runFn:    runAiVisibilityMonitor,
 });
 
+// ── Not Interested Report ─────────────────────────────────────────────────
+const { runNotInterestedReport } = require('../agents/notInterestedReport');
+
+agentsRouter.use(
+  '/not-interested-report',
+  createAgentRoute({
+    slug:               'not-interested-report',
+    runFn:              runNotInterestedReport,
+    requiredPermission: 'org_admin',
+  })
+);
+
 // ── High Intent Advisor ───────────────────────────────────────────────────
 const { runHighIntentAdvisor } = require('../agents/highIntentAdvisor');
 

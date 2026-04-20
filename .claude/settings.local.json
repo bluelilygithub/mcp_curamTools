@@ -64,7 +64,12 @@
       "Bash(node -e ' *)",
       "Bash(timeout 15 node -e ' *)",
       "Bash(cmd.exe *)",
-      "Bash(echo \"PID: $!\")"
+      "Bash(echo \"PID: $!\")",
+      "Bash(node --check \"c:/Users/micha/Local Sites/mcp_curamTools/server/agents/notInterestedReport/index.js\")",
+      "Bash(node --check \"c:/Users/micha/Local Sites/mcp_curamTools/server/agents/notInterestedReport/prompt.js\")",
+      "Bash(node --check \"c:/Users/micha/Local Sites/mcp_curamTools/server/agents/notInterestedReport/tools.js\")",
+      "Bash(node --check \"c:/Users/micha/Local Sites/mcp_curamTools/server/routes/agents.js\")",
+      "Bash(node --check \"c:/Users/micha/Local Sites/mcp_curamTools/server/platform/AgentConfigService.js\")"
     ]
   }
 }
