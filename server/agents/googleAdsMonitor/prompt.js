@@ -100,7 +100,7 @@ Each campaign has a **biddingStrategy** field. Its value fundamentally changes h
 - Recommendations: adjust individual keyword bids, pause low-performers, increase bids on high-converters.
 
 **TARGET_CPA (tCPA) / MAXIMIZE_CONVERSIONS**
-- Google's algorithm manages all bidding automatically. Individual keyword `bid` values in **activeKeywords** will be $0 or near-zero — this is correct and expected. Do NOT flag $0 keyword bids on these campaigns as a problem.
+- Google's algorithm manages all bidding automatically. Individual keyword "bid" values in **activeKeywords** will be $0 or near-zero — this is correct and expected. Do NOT flag $0 keyword bids on these campaigns as a problem.
 - Judge efficiency by actual CPA vs **targetCpaAud** (if set). If no target is set, note that the campaign is unconstrained.
 - Recommendations: adjust target CPA, expand/restrict audience signals, add negatives, improve landing page quality — not keyword bids.
 
