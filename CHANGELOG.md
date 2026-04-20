@@ -25,6 +25,62 @@
 
 ---
 
+## 2026-04-21 — Not Interested Report agent; platform pattern corrections; session-start guardrail update
+
+### Built
+
+**Not Interested Report agent (`not-interested-report`)**
+- Pre-fetch architecture — fetches all data in Node.js, passes to Claude in one call, no ReAct loop
+- Data sources: `wp_get_not_interested_reasons` (all-time CRM data), `wp_get_progress_details` (filtered in Node.js to not-interested lead IDs only), `ads_get_search_terms` + `ads_get_active_keywords` + `ads_get_campaign_performance` (90-day window)
+- CRM privacy applied pre-AI via `AgentConfigService.getCrmPrivacySettings()` — field exclusions stripped from records before they reach the prompt
+- Prompt structured around two diagnostic lenses per reason category: Ads Signal (which campaigns/keywords are producing wrong-fit leads) and Sales Signal (what the call notes reveal about rep qualification behaviour)
+- Output is prose analysis with a "Where to act" close — one paragraph for marketing, one for sales
+- `AgentConfigService` defaults: `max_tokens: 6000`, `max_task_budget_aud: 2.00`, standard tier
+- Route registered in `agents.js` via `createAgentRoute`, `org_admin` only, on-demand (no cron)
+- UI: `NotInterestedReportPage.jsx` — Run button, SSE progress log, `MarkdownRenderer` output, history sidebar, PDF export
+- Wired in `App.jsx` and `client/src/config/tools.js`
+
+**`auto-agent-instructions.txt` — mandatory reference read rule added**
+- Before writing any new agent: read `adsAttributionSummary/index.js` (canonical pre-fetch pattern)
+- Before writing any new frontend page: read `DiamondPlateDataPage.jsx` and `client/src/api/client.js`
+- Four specific rules added covering the pattern failures found this session (see below)
+
+### Fixed / discovered
+
+Four deviations from established platform patterns were introduced and then corrected during this session. They are documented here so the pattern is explicit.
+
+**1. Raw `fetch` used instead of `api.stream()` (auth failure)**
+- Root cause: wrote a raw `fetch()` with `credentials: 'include'` for the SSE run endpoint. This project uses Bearer tokens, not cookies. `api.stream()` in `client/src/api/client.js` reads the token from `useAuthStore` and attaches it as `Authorization: Bearer`.
+- Symptom: `{"error":"Authentication required."}` immediately on run.
+- Fix: replace raw `fetch` with `api.stream('/agents/not-interested-report/run', {})`.
+- Rule: `client/src/api/client.js` line 6 states explicitly — "Never use raw fetch('/api/...') for authenticated endpoints."
+
+**2. `api.get()` result read as `res.data` (history never loaded)**
+- Root cause: assumed Axios-style `{ data: [] }` response shape. `api.get()` calls `res.json()` and returns the parsed body directly — there is no wrapper object.
+- Symptom: history silently returned an empty array; `res.data` was `undefined`.
+- Fix: `const rows = (await api.get(...)) ?? []`.
+
+**3. SSE history row read as `run.summary` instead of `run.result?.summary`**
+- Root cause: history endpoint returns `agent_runs` rows where the full result JSONB is in the `result` column. Summary is `run.result?.summary`, not a top-level field.
+- Fix: updated history display, run selection, and initial load to use `run.result?.summary`.
+
+**4. Status comparison `=== 'success'` instead of `=== 'complete'`**
+- Root cause: `persistRun()` saves `status: 'complete'` on success. Comparison against `'success'` meant the status badge never showed the green success colour.
+- Fix: changed condition to `run.status === 'complete'`.
+
+**5. Missing `startDate`/`endDate` in `agentOrchestrator.run()` context spread**
+- Root cause: all other pre-fetch agents spread `{ ...context, startDate, endDate, toolSlug, customerId }` — these fields are present in every reference implementation. New agent omitted them.
+- Fix: added `startDate` and `endDate` to the context spread.
+
+### Open / next
+
+- MCP-SERVERS.md `platform.js` table still missing `get_pending_suggestions`, `update_suggestion_outcome`, and `get_suggestion_history` — carry-over from 2026-04-19
+- `not-interested-report` has not been run against live data yet — first run will reveal whether `wp_get_progress_details` returns sufficient note coverage for the not-interested lead IDs
+- `entry_date` in progress notes is known-unreliable (ACF UI bug) — prompt instructs Claude not to use it for timing analysis; verify this guidance holds in practice
+- AgentScheduler cron not registered — this report is on-demand only by design
+
+---
+
 ## 2026-04-16 — Media Generator: Save to S3 + cost estimation; Admin Providers fix
 
 ### Built

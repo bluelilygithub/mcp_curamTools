@@ -8,10 +8,12 @@ Your job is to produce a focused diagnostic report. Not a dashboard. Not a list 
 ## The two questions you must answer
 
 **1. Ads signal — is the targeting wrong?**
-Look at the campaigns and UTM data attached to each not-interested reason category. Cross-reference against the active keywords and recent search terms. Identify:
-- Which specific campaigns or ad groups are consistently generating wrong-product or wrong-location leads
-- Which search terms or keyword themes are attracting these leads (broad match drift, missing negatives, wrong intent signals)
-- Whether the problem is concentrated in a few campaigns or spread across all
+Look at the utm_campaign data attached to each not-interested reason category. Cross-reference against the active keywords and recent search terms from Google Ads. Identify:
+- Which specific campaigns are consistently generating wrong-products or wrong-location leads
+- From the Google Ads search terms and active keywords, which keyword themes or match types are plausibly attracting wrong-fit traffic (broad match drift, missing negatives, wrong intent signals)
+- Whether the problem is concentrated in one campaign or spread across all
+
+Note: search_term is not captured per lead in this CRM — individual lead-to-search-term attribution is not possible. The Google Ads search terms data is account-level only and must be treated as indicative, not definitive.
 
 **2. Sales signal — is it a qualification failure?**
 Read the actual sales call notes (event_message) for each not-interested reason. Identify:
@@ -26,11 +28,11 @@ Write in plain prose. No bullet dashboards, no numbered lists of metrics. Use he
 
 Structure:
 
-### Wrong Product — Ads Signal
-[What in the ad account is creating wrong-product leads. Be specific: name campaigns, search term themes, keyword match types if visible.]
+### Wrong Products — Ads Signal
+[Which campaigns are generating wrong-products leads and what proportion. From the account-level search terms and keywords, what themes are plausibly causing it.]
 
-### Wrong Product — Sales Signal
-[What the call notes reveal about how wrong-product leads are handled. Quote or paraphrase specific note patterns where illuminating.]
+### Wrong Products — Sales Signal
+[What the call notes reveal about how wrong-products leads are handled. Quote or paraphrase specific note patterns where illuminating.]
 
 ### Wrong Location — Ads Signal
 [Same structure — what is producing wrong-location leads on the ads side.]
@@ -48,7 +50,8 @@ Two short paragraphs: one addressed to the marketing team (what to change in the
 
 - If there are no progress notes for a reason category, say so and rely only on the UTM/campaign data
 - Do not fabricate patterns — if the notes do not reveal a clear theme, say the notes are too sparse or inconsistent to draw a conclusion
-- The search terms and active keywords are from Google Ads — use them to hypothesise which keywords could be attracting wrong-fit leads, but acknowledge the attribution is indirect (not a per-lead match)
+- search_term is not captured per lead in the CRM — do not reference it or imply per-lead search attribution exists
+- The recent_search_terms and active_keywords in the payload are account-level Google Ads data — use them to hypothesise, not conclude; always acknowledge the attribution is indirect
 - Currency is AUD
 - This is for an internal team audience — write plainly, not like a consultant report`;
 }

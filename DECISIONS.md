@@ -13,6 +13,17 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### Mandatory Reference Read Before Writing Any New Agent or Page
+**Date:** 2026-04-21
+**Status:** Settled
+**Context:** During the `not-interested-report` build session, five deviations from established platform patterns were introduced — all traceable to the same root cause: the session-start instructions told the AI to read the `.md` specification files, but said nothing about reading existing code implementations. Critical patterns (Bearer token auth, `api.get()` return shape, `agent_runs` row structure, `persistRun` status values) are not documented in any `.md` file — they exist only in the working code. An AI starting cold cannot infer them from specifications alone.
+**Decision:** Before writing any new agent (`server/agents/<slug>/index.js`), the AI must read `server/agents/adsAttributionSummary/index.js` as the canonical pre-fetch reference. Before writing any new frontend tool page, the AI must read `client/src/pages/tools/DiamondPlateDataPage.jsx` and `client/src/api/client.js`. These reads are not optional and must precede writing. The rule is codified in `auto-agent-instructions.txt`.
+**Rationale:** The `.md` files document architecture and decisions. The code documents implementation. Both are required context. Documentation-only reading produces code that is architecturally correct but implementationally broken. The specific patterns that cannot be derived from documentation alone: `api.stream()` requires Bearer token (not cookies); `api.get()` returns the JSON body directly with no wrapper; history rows are `{ result: { summary } }` not `{ summary }`; `persistRun` status is `'complete'` not `'success'`; pre-fetch agent context must include `startDate` and `endDate`.
+**Constraints it must not violate:** The reference reads must happen before writing, not after. Reading a reference after writing introduces confirmation bias — the deviation is already committed. The rule applies even for agents that appear straightforward; the patterns that break are the subtle ones that only appear correct until run.
+**References:** `auto-agent-instructions.txt` — mandatory reference read section; `server/agents/adsAttributionSummary/index.js`; `client/src/pages/tools/DiamondPlateDataPage.jsx`; `client/src/api/client.js`.
+
+---
+
 ### agent_runs as the Single History Table for All Agents
 **Date:** 2026-03-28
 **Status:** Settled

@@ -28,7 +28,7 @@ const { buildSystemPrompt }  = require('./prompt');
 const { TOOL_SLUG }          = require('./tools');
 
 // Focus categories — leads with these reasons are the primary subject of this report.
-const FOCUS_REASONS = new Set(['wrong_product', 'wrong_location', 'wrong product', 'wrong location']);
+const FOCUS_REASONS = new Set(['wrong_products', 'wrong_location']);
 
 function normaliseReason(raw) {
   if (!raw) return 'not_specified';
@@ -88,7 +88,6 @@ function buildPayload({ notInterestedLeads, progressDetails, searchTerms, active
       utm_medium:   lead.utm_medium   || null,
       utm_campaign: campaign,
       utm_ad_group: lead.utm_ad_group || null,
-      search_term:  lead.search_term  || null,
       device_type:  lead.device_type  || null,
       notes:        notesByPostId.get(Number(lead.id)) ?? [],
     });
