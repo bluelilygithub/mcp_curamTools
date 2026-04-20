@@ -5,7 +5,10 @@
  * to reveal the true cost per booked job, vs what Google Ads reports as CPA.
  *
  * Pre-fetch architecture: fetches Ads campaign performance and CRM enquiry_details in
- * parallel, computes per-campaign close rates and true CPAs in Node.js, calls Claude once.
+ * parallel. The two sides are kept independent — CRM outcomes by utm_campaign, Ads spend
+ * by campaign name — because utm_campaign values in tracking templates rarely match Ads
+ * campaign names exactly. Account-level cost per booked job is computed directly:
+ * total Ads spend / total CRM booked jobs (paid traffic).
  *
  * Returns { result: { summary, data: { charts, startDate, endDate } }, trace, tokensUsed }
  */
@@ -27,79 +30,69 @@ function round1(n) {
   return n !== null && !isNaN(n) ? Math.round(n * 10) / 10 : null;
 }
 
-function buildCampaignTable(campaigns, enquiries) {
-  // Group paid CRM enquiries by utm_campaign (case-insensitive)
+function buildCharts(campaigns, enquiries) {
+  // ── CRM side: outcomes by utm_campaign (paid traffic only) ────────────────
   const crmMap = {};
   for (const enq of enquiries) {
     if (enq.utm_medium !== 'cpc') continue;
-    const key = (enq.utm_campaign || '(no campaign)').toLowerCase().trim();
-    if (!crmMap[key]) crmMap[key] = { enquiries: 0, completed: 0, notInterested: 0, open: 0 };
+    const key = (enq.utm_campaign || '(no utm_campaign)').trim();
+    if (!crmMap[key]) crmMap[key] = { utmCampaign: key, enquiries: 0, completed: 0, notInterested: 0, open: 0 };
     crmMap[key].enquiries++;
-    if (WON_STATUS.has(enq.enquiry_status))  crmMap[key].completed++;
+    if (WON_STATUS.has(enq.enquiry_status))       crmMap[key].completed++;
     else if (LOST_STATUS.has(enq.enquiry_status)) crmMap[key].notInterested++;
-    else                                      crmMap[key].open++;
+    else                                           crmMap[key].open++;
   }
 
-  const matchedKeys = new Set();
+  const crmByUtmCampaign = Object.values(crmMap)
+    .sort((a, b) => b.enquiries - a.enquiries)
+    .map((r) => {
+      const terminal  = r.completed + r.notInterested;
+      const closeRate = terminal >= 3 ? round1((r.completed / terminal) * 100) : null;
+      return { ...r, terminal, closeRate };
+    });
 
-  const campaignTable = campaigns.map((c) => {
-    const key = c.name.toLowerCase().trim();
-    matchedKeys.add(key);
-    const crm = crmMap[key] || { enquiries: 0, completed: 0, notInterested: 0, open: 0 };
-    const terminal = crm.completed + crm.notInterested;
-    const closeRate       = terminal >= 3 ? round1((crm.completed / terminal) * 100) : null;
-    const costPerEnquiry  = crm.enquiries  > 0 ? round2(c.cost / crm.enquiries)  : null;
-    const costPerBookedJob = crm.completed > 0 ? round2(c.cost / crm.completed)  : null;
-    const adsCpa          = c.conversions  > 0 ? round2(c.cost / c.conversions)  : null;
+  // ── Ads side: spend and CPA by campaign name ──────────────────────────────
+  const adsCampaigns = campaigns.map((c) => ({
+    campaign:    c.name,
+    status:      c.status,
+    spend:       round2(c.cost),
+    impressions: c.impressions,
+    clicks:      c.clicks,
+    conversions: c.conversions,
+    adsCpa:      c.conversions > 0 ? round2(c.cost / c.conversions) : null,
+  })).sort((a, b) => b.spend - a.spend);
 
-    return {
-      campaign:         c.name,
-      adsSpend:         round2(c.cost),
-      adsCpa,
-      enquiries:        crm.enquiries,
-      completed:        crm.completed,
-      notInterested:    crm.notInterested,
-      open:             crm.open,
-      terminal,
-      closeRate,
-      costPerEnquiry,
-      costPerBookedJob,
-    };
-  });
+  // ── Account-level totals ──────────────────────────────────────────────────
+  const totalAdsSpend      = campaigns.reduce((s, c) => s + (c.cost       || 0), 0);
+  const totalAdsConversions = campaigns.reduce((s, c) => s + (c.conversions || 0), 0);
 
-  // UTM campaigns in CRM that did not match any Ads campaign name
-  const unmatchedCrmCampaigns = Object.entries(crmMap)
-    .filter(([key]) => key !== '(no campaign)' && !matchedKeys.has(key))
-    .map(([campaign, data]) => ({ campaign, ...data }));
+  const allCrmPaid     = Object.values(crmMap);
+  const totalEnquiries  = allCrmPaid.reduce((s, r) => s + r.enquiries,    0);
+  const totalCompleted  = allCrmPaid.reduce((s, r) => s + r.completed,    0);
+  const totalNotInt     = allCrmPaid.reduce((s, r) => s + r.notInterested, 0);
+  const totalTerminal   = totalCompleted + totalNotInt;
+  const totalOpen       = allCrmPaid.reduce((s, r) => s + r.open, 0);
 
-  // Account-level totals (Ads spend)
-  const totalSpend     = campaigns.reduce((s, c) => s + (c.cost || 0), 0);
-  const totalAdsCpaNum = campaigns.reduce((s, c) => s + (c.conversions || 0), 0);
-
-  // Account-level CRM totals (paid enquiries only)
-  const allPaid = Object.values(crmMap);
-  const totalEnquiries   = allPaid.reduce((s, r) => s + r.enquiries,    0);
-  const totalCompleted   = allPaid.reduce((s, r) => s + r.completed,    0);
-  const totalNotInt      = allPaid.reduce((s, r) => s + r.notInterested, 0);
-  const totalTerminal    = totalCompleted + totalNotInt;
-  const accountCloseRate = totalTerminal >= 3 ? round1((totalCompleted / totalTerminal) * 100) : null;
-  const accountCostPerEnquiry   = totalEnquiries > 0 ? round2(totalSpend / totalEnquiries)  : null;
-  const accountCostPerBookedJob = totalCompleted > 0 ? round2(totalSpend / totalCompleted)  : null;
-  const accountAdsCpa           = totalAdsCpaNum > 0 ? round2(totalSpend / totalAdsCpaNum)  : null;
+  const accountCloseRate        = totalTerminal >= 3 ? round1((totalCompleted / totalTerminal) * 100) : null;
+  const accountCostPerEnquiry   = totalEnquiries > 0  ? round2(totalAdsSpend / totalEnquiries)  : null;
+  const accountCostPerBookedJob = totalCompleted > 0   ? round2(totalAdsSpend / totalCompleted)  : null;
+  const accountAdsCpa           = totalAdsConversions > 0 ? round2(totalAdsSpend / totalAdsConversions) : null;
 
   const accountTotals = {
-    totalSpend:           round2(totalSpend),
-    totalEnquiries,
-    totalCompleted,
-    totalNotInterested:   totalNotInt,
+    totalAdsSpend:           round2(totalAdsSpend),
+    totalAdsConversions,
+    accountAdsCpa,
+    totalPaidEnquiries:      totalEnquiries,
+    totalBookedJobs:         totalCompleted,
+    totalNotInterested:      totalNotInt,
+    totalOpen,
     totalTerminal,
     accountCloseRate,
     accountCostPerEnquiry,
     accountCostPerBookedJob,
-    accountAdsCpa,
   };
 
-  return { campaignTable, unmatchedCrmCampaigns, accountTotals };
+  return { crmByUtmCampaign, adsCampaigns, accountTotals };
 }
 
 async function runCostPerBookedJob(context) {
@@ -151,24 +144,27 @@ async function runCostPerBookedJob(context) {
     }).catch((e) => { emit('CRM error: ' + e.message); return []; }),
   ]);
 
-  emit(`Fetched ${campaigns.length} campaigns and ${enquiries.length} CRM enquiries — computing true CPAs…`);
+  emit(`Fetched ${campaigns.length} Ads campaigns and ${enquiries.length} CRM enquiries`);
 
   if (!campaigns.length) throw new Error('No campaign data returned from Google Ads. Check the date range and Ads connection.');
 
-  const { campaignTable, unmatchedCrmCampaigns, accountTotals } = buildCampaignTable(campaigns, enquiries);
+  emit('Computing cost per booked job…');
 
-  emit(`Computed cost per booked job for ${campaignTable.length} campaigns`);
+  const charts = buildCharts(campaigns, enquiries);
+
+  emit(`Account close rate: ${charts.accountTotals.accountCloseRate ?? '—'}% · Cost per booked job: $${charts.accountTotals.accountCostPerBookedJob ?? '—'}`);
 
   const agentPayload = {
-    period:                  `${startDate} to ${endDate}`,
-    accountTotals,
-    campaignTable,
-    unmatchedCrmCampaigns,
+    period:            `${startDate} to ${endDate}`,
+    accountTotals:     charts.accountTotals,
+    adsCampaigns:      charts.adsCampaigns,
+    crmByUtmCampaign:  charts.crmByUtmCampaign,
     notes: [
-      'Close rate = completed / (completed + notinterested + cancelled). Open leads excluded.',
-      'For date ranges under 60 days, close rates are understated as open leads have not yet resolved.',
-      'UTM campaign attribution relies on tracking templates in Google Ads. Unmatched campaigns indicate a tracking gap.',
-      'cost_per_booked_job = adsSpend / completed (CRM booked jobs). adsCpa = adsSpend / Google Ads conversions (form fills / calls).',
+      'accountCostPerBookedJob = total Ads spend / total CRM booked jobs (paid traffic, utm_medium=cpc). This is the headline metric.',
+      'accountAdsCpa = total Ads spend / Google Ads-reported conversions (form fills / calls). This is what Google Ads shows.',
+      'closeRate = completed / (completed + notInterested + cancelled). Open leads excluded — understated for periods under 60 days.',
+      'The CRM and Ads sides cannot be joined per-campaign because utm_campaign values in tracking templates may differ from Ads campaign names. Both sides are shown independently.',
+      'If totalOpen is high relative to totalEnquiries, close rate will improve as those leads resolve.',
     ],
   };
 
@@ -190,13 +186,6 @@ async function runCostPerBookedJob(context) {
     onStep:        emit,
     context:       { ...context, startDate, endDate, toolSlug: TOOL_SLUG, customerId },
   });
-
-  // Build chart dataset for frontend rendering
-  const charts = {
-    campaignTable,
-    accountTotals,
-    unmatchedCrmCampaigns,
-  };
 
   return {
     result: {
