@@ -239,7 +239,10 @@ router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) =>
     };
 
     const { result, trace, iterations, tokensUsed } = await agentOrchestrator.run({
-      systemPrompt:        buildSystemPrompt(await AgentConfigService.getAgentConfig(orgId, TOOL_SLUG).catch(() => ({}))),
+      systemPrompt:        buildSystemPrompt(
+        await AgentConfigService.getAgentConfig(orgId, TOOL_SLUG).catch(() => ({})),
+        await AgentConfigService.getAgentConfig(orgId, 'google-ads-monitor').catch(() => ({})),
+      ),
       userMessage,
       conversationHistory: history,
       tools:               googleAdsConversationTools,

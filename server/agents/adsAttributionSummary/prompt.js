@@ -25,10 +25,26 @@ The crmSummary fields are pre-computed using consistent paid-identification logi
   - **cpcTagged**: subset with utm_medium = 'cpc' (full UTM tracking captured)
   - **gclidOnly**: has a gclid but no utm_medium tag — Google Ads clicks where UTM parameters were not captured by the tracking template. These ARE paid clicks; they are not organic.
 - **untracked**: no utm_medium and no gclid — origin unknown (direct, organic, referral, or Ads clicks that lost all tracking)
+- **allWon**: confirmed booked jobs (completed + assigned/invoiced status)
+- **allLost**: declined leads (notinterested + cancelled)
+- **allOpen**: leads still in progress — outcome unknown
+- **allTerminal**: allWon + allLost (leads with a known final outcome)
+- **allCloseRate**: allWon / allTerminal × 100 (null if fewer than 3 terminal leads)
+- **openLeadPct**: allOpen / total × 100 — proportion of leads still unresolved
 - **byStatus**: enquiry count per CRM status (new / contacted / emailed / assigned / completed / notinterested / cancelled)
 - **topSources**: top utm_source values by enquiry count
 - **topMediums**: top utm_medium values by enquiry count
 - **topCampaigns**: top utm_campaign values by enquiry count, with total and paid sub-counts
+
+**projection** (null if no expected close rate is configured):
+- **expectedCloseRate**: configured expected close rate as a percentage (e.g. 30.0 = 30%)
+- **avgJobValue**: configured average revenue per booked job (AUD) — null if not set
+- **projectedBookedJobs**: allWon + (allOpen × expectedCloseRate) — forward estimate of final booked jobs
+- **projectedCostPerBookedJob**: totalAdsSpend / projectedBookedJobs — projected cost per booked job
+- **estimatedRevenue**: projectedBookedJobs × avgJobValue — projected gross revenue (null if avgJobValue not configured)
+- **roas**: estimatedRevenue / totalAdsSpend — return on ad spend (null if avgJobValue not configured)
+- **breakEvenCpa**: avgJobValue × expectedCloseRate — maximum cost per enquiry at which the channel breaks even
+- **closeRateIsReliable**: true if openLeadPct < 25 (observed close rate is statistically meaningful)
 
 ## Attribution note — utm_campaign vs Ads campaign names
 
@@ -55,6 +71,9 @@ One sentence: date range, total ad spend, total sessions, total enquiries (use c
 - Untracked enquiries: crmSummary.untracked — note that these have unknown origin and may include Ads clicks that lost UTM parameters
 - Status breakdown: present crmSummary.byStatus as a concise list
 - Top utm_campaign values driving enquiries (from topCampaigns), with their total enquiry counts
+
+### Close Rate and Open Lead Lag
+If crmSummary.openLeadPct >= 25, flag that the observed close rate is understated — many leads are still progressing and their final outcome is not yet known. If projection data is available (projection is not null), state the projected cost per booked job and what assumption it is based on. If projection is null and openLeadPct is high, recommend re-running in 60-90 days for a reliable close rate.
 
 ### Key Observations
 2-4 bullet points. Each must make a specific, factual observation connecting two or more data sources. Examples:

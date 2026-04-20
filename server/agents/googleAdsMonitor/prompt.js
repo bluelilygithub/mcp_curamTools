@@ -35,12 +35,28 @@ function buildSystemPrompt(config = {}, customerVars = {}, companyProfile = {}) 
   const brandTerms     = config.brand_keywords
     ? config.brand_keywords.split(',').map((s) => s.trim()).filter(Boolean)
     : [];
+  const closeRatePct   = config.expected_close_rate
+    ? `${(parseFloat(config.expected_close_rate) * 100).toFixed(0)}%`
+    : null;
+  const avgJobValue    = config.average_job_value
+    ? parseFloat(config.average_job_value)
+    : null;
+  const avgJobValueFmt = avgJobValue ? `$${avgJobValue.toFixed(2)} AUD` : null;
 
-  const businessContextBlock = (targetCpa || monthlyBudget || brandTerms.length) ? `\
+  // Derived economics — only computed when both settings are present
+  const breakEvenCpa = avgJobValue && config.expected_close_rate
+    ? `$${(avgJobValue * parseFloat(config.expected_close_rate)).toFixed(2)} AUD`
+    : null;
+
+  const hasBusinessContext = targetCpa || monthlyBudget || brandTerms.length || closeRatePct || avgJobValueFmt;
+  const businessContextBlock = hasBusinessContext ? `\
 ## Business Targets
-${targetCpa      ? `- Target CPA: ${targetCpa} — flag any campaign or search term exceeding this.\n` : ''}\
-${monthlyBudget  ? `- Monthly budget: ${monthlyBudget} — use this for budget pacing analysis.\n` : ''}\
+${targetCpa        ? `- Target CPA: ${targetCpa} — flag any campaign or search term exceeding this.\n` : ''}\
+${monthlyBudget    ? `- Monthly budget: ${monthlyBudget} — use this for budget pacing analysis.\n` : ''}\
 ${brandTerms.length ? `- Brand keywords: ${brandTerms.join(', ')} — use these to split brand vs non-brand traffic in search term analysis.\n` : ''}\
+${closeRatePct     ? `- Expected close rate: ${closeRatePct} — use this to project booked jobs from enquiry volume (projected booked jobs = enquiries × ${closeRatePct}).\n` : ''}\
+${avgJobValueFmt   ? `- Average job value: ${avgJobValueFmt} — use this to estimate revenue and ROAS from campaign spend.\n` : ''}\
+${breakEvenCpa     ? `- Break-even cost per enquiry: ${breakEvenCpa} (job value × close rate) — a CPA below this means the channel is profitable at the expected close rate.\n` : ''}\
 ---
 
 ` : '';

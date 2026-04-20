@@ -772,10 +772,12 @@ export default function GoogleAdsMonitorPage() {
                 <div className="rounded-2xl border p-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
                   {sectionHd('Business Context')}
                   <div className="grid grid-cols-2 gap-4">
-                    {numField('target_cpa',     'Target CPA (AUD)',          0.01)}
-                    {numField('monthly_budget', 'Monthly budget (AUD)',      0.01)}
-                    {txtField('brand_keywords', 'Brand keywords (comma-separated)', 'diamond plate, diamondplate')}
-                    {txtField('report_email',   'Default report email',      'you@example.com')}
+                    {numField('target_cpa',            'Target CPA (AUD)',                             0.01)}
+                    {numField('monthly_budget',        'Monthly budget (AUD)',                         0.01)}
+                    {numField('expected_close_rate',   'Expected close rate (e.g. 0.30 = 30%)',        0.01)}
+                    {numField('average_job_value',     'Average job value (AUD)',                       0.01)}
+                    {txtField('brand_keywords',        'Brand keywords (comma-separated)',              'diamond plate, diamondplate')}
+                    {txtField('report_email',          'Default report email',                         'you@example.com')}
                   </div>
                 </div>
 

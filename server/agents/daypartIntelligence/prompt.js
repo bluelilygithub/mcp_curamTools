@@ -24,6 +24,8 @@ The payload also includes heatmap arrays (enquiryHeatmap, paidHeatmap) for visua
 
 If the date range used is less than 90 days, open with a caution that patterns may not be reliable and recommend re-running with a 90-day or longer range.
 
+The payload may include an **expectedCloseRate** (as a percentage, e.g. 30.0 = 30%). If present, use it as context when interpreting close rates: if the observed close rate for a day or hour appears low, note whether it may be understated due to open leads rather than genuinely worse lead quality. Do not apply the expected rate mathematically to daypart close rates — it is context only.
+
 ## Output format
 
 ### Overview

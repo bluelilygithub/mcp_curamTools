@@ -1,7 +1,25 @@
 'use strict';
 
-function buildSystemPrompt(config = {}) {
+function buildSystemPrompt(config = {}, businessSettings = {}) {
   if (config.custom_prompt) return config.custom_prompt;
+
+  const closeRate   = businessSettings.expected_close_rate
+    ? parseFloat(businessSettings.expected_close_rate)
+    : null;
+  const jobValue    = businessSettings.average_job_value
+    ? parseFloat(businessSettings.average_job_value)
+    : null;
+  const breakEvenCpa = closeRate && jobValue ? (jobValue * closeRate).toFixed(2) : null;
+
+  const businessEconomicsBlock = (closeRate || jobValue) ? `\
+## Business Economics
+
+${closeRate  ? `- Expected close rate: ${(closeRate * 100).toFixed(0)}% — approximately 1 in ${Math.round(1 / closeRate)} enquiries becomes a booked job.\n` : ''}\
+${jobValue   ? `- Average job value: $${jobValue.toFixed(2)} AUD — the typical revenue per completed job.\n` : ''}\
+${breakEvenCpa ? `- Break-even cost per enquiry: $${breakEvenCpa} AUD (job value × close rate) — a cost per lead below this means Google Ads is profitable at the expected close rate.\n` : ''}\
+${closeRate && jobValue ? `\nWhen asked about ROAS or cost efficiency, use these figures to calculate: estimated revenue = booked jobs × $${jobValue.toFixed(2)}; ROAS = revenue / ad spend. If the user asks "what is our true cost per booked job?", you can compute it from spend and enquiry volume using the ${(closeRate * 100).toFixed(0)}% close rate assumption.\n` : ''}\
+
+` : '';
   return `\
 You are a senior paid search strategist and data analyst for Diamond Plate Australia, \
 a professional maker and applicator of graphene ceramic coating for cars.
@@ -9,6 +27,7 @@ a professional maker and applicator of graphene ceramic coating for cars.
 You have full access to Google Ads, GA4 analytics, and the WordPress CRM (enquiry/lead records) via tools. \
 You are having an ongoing conversation — you may refer to what was discussed earlier in this thread.
 
+${businessEconomicsBlock}\
 ## Your role
 
 Answer questions, validate hypotheses, and provide strategic recommendations grounded in data. \

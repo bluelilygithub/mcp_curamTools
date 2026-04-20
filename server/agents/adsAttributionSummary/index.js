@@ -26,8 +26,12 @@ function topN(obj, n) {
     .map(([key, value]) => ({ key, value }));
 }
 
+const WON_STATUS  = new Set(['completed', 'assigned']);
+const LOST_STATUS = new Set(['notinterested', 'cancelled']);
+
 function buildCrmSummary(rawEnquiries) {
   let total = 0, paid = 0, cpcTagged = 0, gclidOnly = 0, untracked = 0;
+  let allWon = 0, allLost = 0;
 
   const byStatus      = {};
   const bySource      = {};
@@ -35,16 +39,19 @@ function buildCrmSummary(rawEnquiries) {
   const byUtmCampaign = {};
 
   for (const enq of rawEnquiries) {
-    const hasCpc     = enq.utm_medium === 'cpc';
-    const hasGclid   = enq.gclid && String(enq.gclid).trim() !== '';
-    const isPaid     = hasCpc || hasGclid;
+    const hasCpc      = enq.utm_medium === 'cpc';
+    const hasGclid    = enq.gclid && String(enq.gclid).trim() !== '';
+    const isPaid      = hasCpc || hasGclid;
     const isUntracked = !enq.utm_medium && !hasGclid;
 
     total++;
-    if (isPaid)            paid++;
-    if (hasCpc)            cpcTagged++;
+    if (isPaid)              paid++;
+    if (hasCpc)              cpcTagged++;
     if (hasGclid && !hasCpc) gclidOnly++;
-    if (isUntracked)       untracked++;
+    if (isUntracked)         untracked++;
+
+    if (WON_STATUS.has(enq.enquiry_status))  allWon++;
+    if (LOST_STATUS.has(enq.enquiry_status)) allLost++;
 
     const status = enq.enquiry_status || 'unknown';
     byStatus[status] = (byStatus[status] || 0) + 1;
@@ -60,6 +67,13 @@ function buildCrmSummary(rawEnquiries) {
     }
   }
 
+  const allTerminal = allWon + allLost;
+  const allOpen     = total - allTerminal;
+  const allCloseRate = allTerminal >= 3
+    ? Math.round((allWon / allTerminal) * 1000) / 10
+    : null;
+  const openLeadPct = total > 0 ? Math.round((allOpen / total) * 1000) / 10 : null;
+
   // Sort utm_campaign by total enquiries, top 15
   const topCampaigns = Object.entries(byUtmCampaign)
     .sort((a, b) => b[1].total - a[1].total)
@@ -72,6 +86,12 @@ function buildCrmSummary(rawEnquiries) {
     cpcTagged,
     gclidOnly,
     untracked,
+    allWon,
+    allLost,
+    allOpen,
+    allTerminal,
+    allCloseRate,
+    openLeadPct,
     byStatus,
     topSources:   topN(bySource,  8),
     topMediums:   topN(byMedium,  8),
@@ -122,16 +142,51 @@ async function runAdsAttributionSummary(context) {
 
   emit('Computing CRM attribution summary…');
 
-  const enquiries = Array.isArray(rawEnquiries) ? rawEnquiries : [];
+  const enquiries  = Array.isArray(rawEnquiries) ? rawEnquiries : [];
   const crmSummary = buildCrmSummary(enquiries);
 
   emit(`CRM: ${crmSummary.total} enquiries — ${crmSummary.paid} paid (${crmSummary.cpcTagged} cpc-tagged, ${crmSummary.gclidOnly} gclid-only), ${crmSummary.untracked} untracked`);
+
+  const monitorConfig     = await AgentConfigService.getAgentConfig(orgId, 'google-ads-monitor');
+  const rawRate           = monitorConfig?.expected_close_rate;
+  const expectedCloseRate = rawRate != null && !isNaN(parseFloat(rawRate)) ? parseFloat(rawRate) : null;
+  const rawJobValue       = monitorConfig?.average_job_value;
+  const avgJobValue       = rawJobValue != null && !isNaN(parseFloat(rawJobValue)) ? parseFloat(rawJobValue) : null;
+
+  let projection = null;
+  if (expectedCloseRate != null && crmSummary.allOpen > 0) {
+    const projectedWon  = Math.round(crmSummary.allWon + (crmSummary.allOpen * expectedCloseRate));
+    const totalAdsSpend = Array.isArray(campaignPerformance)
+      ? campaignPerformance.reduce((s, c) => s + (c.cost || 0), 0)
+      : null;
+    const projectedCostPerBookedJob = totalAdsSpend && projectedWon > 0
+      ? Math.round((totalAdsSpend / projectedWon) * 100) / 100
+      : null;
+    const estimatedRevenue = avgJobValue && projectedWon > 0
+      ? Math.round(projectedWon * avgJobValue * 100) / 100
+      : null;
+    projection = {
+      expectedCloseRate:        Math.round(expectedCloseRate * 1000) / 10,
+      avgJobValue:              avgJobValue ?? null,
+      projectedBookedJobs:      projectedWon,
+      projectedCostPerBookedJob,
+      estimatedRevenue,
+      roas:                     estimatedRevenue && totalAdsSpend > 0
+        ? Math.round((estimatedRevenue / totalAdsSpend) * 100) / 100
+        : null,
+      breakEvenCpa:             avgJobValue && expectedCloseRate
+        ? Math.round(avgJobValue * expectedCloseRate * 100) / 100
+        : null,
+      closeRateIsReliable:      crmSummary.openLeadPct !== null && crmSummary.openLeadPct < 25,
+    };
+  }
 
   const payload = {
     period: `${startDate} to ${endDate}`,
     campaignPerformance,
     sessionsOverview,
     crmSummary,
+    projection,
     crmNote: rawEnquiries?.error ? `CRM error: ${rawEnquiries.error}` : null,
   };
 

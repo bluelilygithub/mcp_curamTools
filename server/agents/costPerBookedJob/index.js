@@ -30,25 +30,25 @@ function round1(n) {
   return n !== null && !isNaN(n) ? Math.round(n * 10) / 10 : null;
 }
 
-function buildCharts(campaigns, enquiries) {
+function buildCharts(campaigns, enquiries, expectedCloseRate, avgJobValue) {
   // ── CRM: classify every enquiry, no medium filter ─────────────────────────
   let allEnquiries   = 0, allCompleted   = 0, allNotInt   = 0, allOpen   = 0;
   let paidEnquiries  = 0, paidCompleted  = 0, paidNotInt  = 0, paidOpen  = 0;
-  let untracked      = 0; // no utm_medium at all
+  let untracked      = 0;
 
-  const crmMap = {}; // utm_campaign → outcome bucket
+  const crmMap = {};
 
   for (const enq of enquiries) {
-    const isPaid      = enq.utm_medium === 'cpc';
+    const isPaid      = enq.utm_medium === 'cpc' || (enq.gclid && String(enq.gclid).trim() !== '');
     const isWon       = WON_STATUS.has(enq.enquiry_status);
     const isLost      = LOST_STATUS.has(enq.enquiry_status);
     const isOpen      = !isWon && !isLost;
-    const hasNoMedium = !enq.utm_medium || enq.utm_medium.trim() === '';
+    const hasNoMedium = !enq.utm_medium && !(enq.gclid && String(enq.gclid).trim() !== '');
 
     allEnquiries++;
-    if (isWon)  allCompleted++;
+    if (isWon)       allCompleted++;
     else if (isLost) allNotInt++;
-    else        allOpen++;
+    else             allOpen++;
 
     if (isPaid) {
       paidEnquiries++;
@@ -59,7 +59,6 @@ function buildCharts(campaigns, enquiries) {
 
     if (hasNoMedium) untracked++;
 
-    // Group by utm_campaign for the breakdown table (paid traffic only — meaningful context)
     if (isPaid) {
       const key = (enq.utm_campaign || '(no utm_campaign)').trim();
       if (!crmMap[key]) crmMap[key] = { utmCampaign: key, enquiries: 0, completed: 0, notInterested: 0, open: 0 };
@@ -75,8 +74,9 @@ function buildCharts(campaigns, enquiries) {
 
   const allCloseRate  = allTerminal  >= 3 ? round1((allCompleted  / allTerminal)  * 100) : null;
   const paidCloseRate = paidTerminal >= 3 ? round1((paidCompleted / paidTerminal) * 100) : null;
+  const openLeadPct   = allEnquiries > 0  ? round1((allOpen / allEnquiries) * 100)       : null;
 
-  // ── Ads side: spend and CPA by campaign name ──────────────────────────────
+  // ── Ads side ──────────────────────────────────────────────────────────────
   const adsCampaigns = campaigns.map((c) => ({
     campaign:    c.name,
     status:      c.status,
@@ -87,52 +87,83 @@ function buildCharts(campaigns, enquiries) {
     adsCpa:      c.conversions > 0 ? round2(c.cost / c.conversions) : null,
   })).sort((a, b) => b.spend - a.spend);
 
-  // ── CRM breakdown by utm_campaign (paid only) ─────────────────────────────
+  // ── CRM breakdown by utm_campaign ─────────────────────────────────────────
   const crmByUtmCampaign = Object.values(crmMap)
     .sort((a, b) => b.enquiries - a.enquiries)
     .map((r) => {
       const terminal  = r.completed + r.notInterested;
       const closeRate = terminal >= 3 ? round1((r.completed / terminal) * 100) : null;
-      return { ...r, terminal, closeRate };
+      // Projected booked jobs per campaign using expected close rate
+      const projectedCompleted = expectedCloseRate != null
+        ? Math.round(r.completed + (r.open * expectedCloseRate))
+        : null;
+      return { ...r, terminal, closeRate, projectedCompleted };
     });
 
-  // ── Account-level totals ──────────────────────────────────────────────────
+  // ── Account totals ────────────────────────────────────────────────────────
   const totalAdsSpend       = campaigns.reduce((s, c) => s + (c.cost        || 0), 0);
   const totalAdsConversions = campaigns.reduce((s, c) => s + (c.conversions || 0), 0);
   const accountAdsCpa       = totalAdsConversions > 0 ? round2(totalAdsSpend / totalAdsConversions) : null;
 
-  // Cost per booked job uses ALL CRM booked jobs as the denominator.
-  // This matches what the business owner sees in the CRM and is the most useful business metric.
-  // Some booked jobs may have come from organic/direct, so this slightly understates the true
-  // Google Ads-specific cost — but it reflects the business reality of total acquisition cost.
-  const accountCostPerBookedJob    = allCompleted > 0 ? round2(totalAdsSpend / allCompleted)   : null;
-  const accountCostPerEnquiry      = allEnquiries > 0 ? round2(totalAdsSpend / allEnquiries)   : null;
-  const paidCostPerBookedJob       = paidCompleted > 0 ? round2(totalAdsSpend / paidCompleted) : null;
+  const accountCostPerBookedJob = allCompleted > 0 ? round2(totalAdsSpend / allCompleted)   : null;
+  const accountCostPerEnquiry   = allEnquiries > 0 ? round2(totalAdsSpend / allEnquiries)   : null;
+  const paidCostPerBookedJob    = paidCompleted > 0 ? round2(totalAdsSpend / paidCompleted) : null;
+
+  // ── Projected totals (using expected close rate on open leads) ────────────
+  // Projection = confirmed booked jobs + (open leads × expected close rate)
+  // This is the best forward estimate when a large proportion of leads are still open.
+  let projectedBookedJobs        = null;
+  let projectedCostPerBookedJob  = null;
+  let closeRateIsReliable        = openLeadPct !== null && openLeadPct < 25;
+
+  if (expectedCloseRate != null && allOpen > 0) {
+    projectedBookedJobs       = Math.round(allCompleted + (allOpen * expectedCloseRate));
+    projectedCostPerBookedJob = projectedBookedJobs > 0
+      ? round2(totalAdsSpend / projectedBookedJobs)
+      : null;
+  }
 
   const accountTotals = {
-    // CRM totals (all sources — matches what business owner sees in CRM)
     allEnquiries,
     allCompleted,
-    allNotInterested:    allNotInt,
+    allNotInterested:     allNotInt,
     allOpen,
     allTerminal,
     allCloseRate,
-    // Paid attribution subset (utm_medium = cpc)
+    openLeadPct,
+    closeRateIsReliable,
     paidEnquiries,
     paidCompleted,
-    paidNotInterested:   paidNotInt,
+    paidNotInterested:    paidNotInt,
     paidOpen,
     paidTerminal,
     paidCloseRate,
-    untrackedEnquiries:  untracked,
-    // Ads metrics
-    totalAdsSpend:       round2(totalAdsSpend),
+    untrackedEnquiries:   untracked,
+    totalAdsSpend:        round2(totalAdsSpend),
     totalAdsConversions,
     accountAdsCpa,
-    // Cost per booked job — two views
-    accountCostPerBookedJob,    // Ads spend / all CRM booked jobs
-    paidCostPerBookedJob,       // Ads spend / paid-attributed CRM booked jobs only
+    accountCostPerBookedJob,
+    paidCostPerBookedJob,
     accountCostPerEnquiry,
+    // Projection fields (null if expectedCloseRate not configured)
+    expectedCloseRate:          expectedCloseRate != null ? round1(expectedCloseRate * 100) : null,
+    projectedBookedJobs,
+    projectedCostPerBookedJob,
+    // Revenue and ROAS (null if avgJobValue not configured)
+    avgJobValue:                avgJobValue != null ? round2(avgJobValue) : null,
+    estimatedRevenue:           (() => {
+      if (avgJobValue == null) return null;
+      const jobs = projectedBookedJobs ?? allCompleted;
+      return jobs > 0 ? round2(jobs * avgJobValue) : null;
+    })(),
+    roas: (() => {
+      if (avgJobValue == null || totalAdsSpend === 0) return null;
+      const jobs = projectedBookedJobs ?? allCompleted;
+      return jobs > 0 ? round2((jobs * avgJobValue) / totalAdsSpend) : null;
+    })(),
+    breakEvenCpa:               avgJobValue != null && expectedCloseRate != null
+      ? round2(avgJobValue * expectedCloseRate)
+      : null,
   };
 
   return { crmByUtmCampaign, adsCampaigns, accountTotals };
@@ -193,7 +224,13 @@ async function runCostPerBookedJob(context) {
 
   emit('Computing cost per booked job…');
 
-  const charts = buildCharts(campaigns, enquiries);
+  const monitorConfig     = await AgentConfigService.getAgentConfig(orgId, 'google-ads-monitor');
+  const rawRate           = monitorConfig?.expected_close_rate;
+  const expectedCloseRate = rawRate != null && !isNaN(parseFloat(rawRate)) ? parseFloat(rawRate) : null;
+  const rawJobValue       = monitorConfig?.average_job_value;
+  const avgJobValue       = rawJobValue != null && !isNaN(parseFloat(rawJobValue)) ? parseFloat(rawJobValue) : null;
+
+  const charts = buildCharts(campaigns, enquiries, expectedCloseRate, avgJobValue);
   const { accountTotals } = charts;
 
   emit(`All enquiries: ${accountTotals.allEnquiries} · Booked jobs: ${accountTotals.allCompleted} · Close rate: ${accountTotals.allCloseRate ?? '—'}% · Cost/booked job: $${accountTotals.accountCostPerBookedJob ?? '—'}`);

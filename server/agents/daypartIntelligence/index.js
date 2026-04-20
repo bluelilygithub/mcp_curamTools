@@ -196,8 +196,13 @@ async function runDaypartIntelligence(context) {
 
   emit(`Patterns computed: ${charts.summary_stats.totalEnquiries} enquiries, ${charts.summary_stats.totalPaid} paid`);
 
+  const monitorConfig     = await AgentConfigService.getAgentConfig(orgId, 'google-ads-monitor');
+  const rawRate           = monitorConfig?.expected_close_rate;
+  const expectedCloseRate = rawRate != null && !isNaN(parseFloat(rawRate)) ? parseFloat(rawRate) : null;
+
   const agentPayload = {
     period:             `${startDate} to ${endDate}`,
+    expectedCloseRate:  expectedCloseRate !== null ? Math.round(expectedCloseRate * 1000) / 10 : null,
     summary_stats:      charts.summary_stats,
     enquiryByDay:       charts.enquiryByDay,
     paidByDay:          charts.paidByDay,
