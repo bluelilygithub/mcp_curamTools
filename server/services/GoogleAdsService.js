@@ -312,9 +312,8 @@ class GoogleAdsService {
         metrics.auction_insight_search_absolute_top_impression_percentage,
         metrics.auction_insight_search_outranking_share,
         campaign.name
-      FROM campaign
-      WHERE campaign.status = 'ENABLED'
-        AND segments.date BETWEEN '${from}' AND '${to}'
+      FROM auction_insight
+      WHERE segments.date BETWEEN '${from}' AND '${to}'
       ORDER BY metrics.search_impression_share DESC
     `, customerId);
 
