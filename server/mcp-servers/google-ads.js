@@ -49,7 +49,7 @@ function resolveOptions(args) {
 const TOOLS = [
   {
     name:        'ads_get_campaign_performance',
-    description: 'Performance totals for every enabled Google Ads campaign over the date range. Returns id, name, status, monthly budget (AUD), impressions, clicks, cost (AUD), conversions, CTR, and average CPC.',
+    description: 'Performance totals for every enabled Google Ads campaign over the date range. Returns id, name, status, biddingStrategy, targetCpaAud, targetRoas, monthly budget (AUD), impressions, clicks, cost (AUD), conversions, CTR, and average CPC.',
     inputSchema: {
       type:       'object',
       properties: dateRangeProps,

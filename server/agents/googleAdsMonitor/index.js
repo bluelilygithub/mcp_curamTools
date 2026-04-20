@@ -42,14 +42,14 @@ async function runSingleCustomer(orgId, config, adminConfig, companyProfile, sta
 
   // ── Pre-fetch: all four sources in parallel ─────────────────────────────────
 
-  emit('Fetching campaign performance, daily trends, search terms, and GA4 data…');
+  emit('Fetching campaign performance, keywords, search terms, and GA4 data…');
 
   const [adsServer, gaServer] = await Promise.all([
     getAdsServer(orgId),
     getAnalyticsServer(orgId),
   ]);
 
-  const [campaignPerformance, dailyPerformance, searchTerms, sessionsOverview] = await Promise.all([
+  const [campaignPerformance, dailyPerformance, searchTerms, activeKeywords, sessionsOverview] = await Promise.all([
     callMcpTool(orgId, adsServer, 'ads_get_campaign_performance', {
       ...rangeArgs,
       customer_id: customerId ?? null,
@@ -60,6 +60,9 @@ async function runSingleCustomer(orgId, config, adminConfig, companyProfile, sta
     }).catch((e) => ({ error: e.message })),
     callMcpTool(orgId, adsServer, 'ads_get_search_terms', {
       ...rangeArgs,
+      customer_id: customerId ?? null,
+    }).catch((e) => ({ error: e.message })),
+    callMcpTool(orgId, adsServer, 'ads_get_active_keywords', {
       customer_id: customerId ?? null,
     }).catch((e) => ({ error: e.message })),
     callMcpTool(orgId, gaServer, 'ga4_get_sessions_overview', rangeArgs)
@@ -75,6 +78,7 @@ async function runSingleCustomer(orgId, config, adminConfig, companyProfile, sta
     campaignPerformance,
     dailyPerformance,
     searchTerms,
+    activeKeywords,
     sessionsOverview,
   };
 

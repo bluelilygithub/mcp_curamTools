@@ -110,6 +110,11 @@ class GoogleAdsService {
         campaign.id,
         campaign.name,
         campaign.status,
+        campaign.bidding_strategy_type,
+        campaign.target_cpa.target_cpa_micros,
+        campaign.target_roas.target_roas,
+        campaign.maximize_conversions.target_cpa_micros,
+        campaign.maximize_conversion_value.target_roas,
         campaign_budget.amount_micros,
         metrics.impressions,
         metrics.clicks,
@@ -122,18 +127,35 @@ class GoogleAdsService {
         AND segments.date BETWEEN '${from}' AND '${to}'
     `, customerId);
 
-    return results.map((r) => ({
-      id:          r.campaign?.id          ?? null,
-      name:        r.campaign?.name        ?? '',
-      status:      r.campaign?.status      ?? '',
-      budget:      parseInt(r.campaignBudget?.amountMicros ?? '0') / 1_000_000,
-      impressions: parseInt(r.metrics?.impressions         ?? '0'),
-      clicks:      parseInt(r.metrics?.clicks              ?? '0'),
-      cost:        parseInt(r.metrics?.costMicros          ?? '0') / 1_000_000,
-      conversions: parseFloat(r.metrics?.conversions       ?? '0'),
-      ctr:         parseFloat(r.metrics?.ctr               ?? '0'),
-      avgCpc:      parseInt(r.metrics?.averageCpc          ?? '0') / 1_000_000,
-    }));
+    return results.map((r) => {
+      const strategyType = r.campaign?.biddingStrategyType ?? 'UNKNOWN';
+
+      // Resolve target CPA in AUD — may come from tCPA or Max Conversions with target
+      const targetCpaMicros =
+        parseInt(r.campaign?.targetCpa?.targetCpaMicros ?? '0') ||
+        parseInt(r.campaign?.maximizeConversions?.targetCpaMicros ?? '0');
+
+      // Resolve target ROAS — may come from tROAS or Max Conversion Value with target
+      const targetRoas =
+        parseFloat(r.campaign?.targetRoas?.targetRoas ?? '0') ||
+        parseFloat(r.campaign?.maximizeConversionValue?.targetRoas ?? '0');
+
+      return {
+        id:             r.campaign?.id          ?? null,
+        name:           r.campaign?.name        ?? '',
+        status:         r.campaign?.status      ?? '',
+        biddingStrategy: strategyType,
+        targetCpaAud:   targetCpaMicros > 0 ? targetCpaMicros / 1_000_000 : null,
+        targetRoas:     targetRoas       > 0 ? targetRoas                  : null,
+        budget:         parseInt(r.campaignBudget?.amountMicros ?? '0') / 1_000_000,
+        impressions:    parseInt(r.metrics?.impressions         ?? '0'),
+        clicks:         parseInt(r.metrics?.clicks              ?? '0'),
+        cost:           parseInt(r.metrics?.costMicros          ?? '0') / 1_000_000,
+        conversions:    parseFloat(r.metrics?.conversions       ?? '0'),
+        ctr:            parseFloat(r.metrics?.ctr               ?? '0'),
+        avgCpc:         parseInt(r.metrics?.averageCpc          ?? '0') / 1_000_000,
+      };
+    });
   }
 
   /**
