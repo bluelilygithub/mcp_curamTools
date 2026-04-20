@@ -212,7 +212,7 @@ async function runNotInterestedReport(context) {
     maxTokens:     adminConfig.max_tokens     ?? 4096,
     fallbackModel: adminConfig.fallback_model ?? null,
     onStep:        emit,
-    context:       { ...context, toolSlug: TOOL_SLUG, customerId },
+    context:       { ...context, startDate, endDate, toolSlug: TOOL_SLUG, customerId },
   });
 
   return { result, trace, tokensUsed };

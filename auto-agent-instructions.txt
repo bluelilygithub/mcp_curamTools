@@ -1,6 +1,6 @@
-Architected comprehensive Claude Code prompt following established platform conventionsArchitected comprehensive Claude Code prompt following established platform conventionsYou are continuing development on MCP_curamTools.
+You are continuing development on MCP_curamTools.
 
-Before writing a single line of code, read every .md file in the project root. 
+Before writing a single line of code, read every .md file in the project root.
 They are your specification and take precedence over your defaults and assumptions.
 Do not proceed past this reading step until you have processed all of them.
 
@@ -12,6 +12,33 @@ CHANGELOG.md — read the last 3 entries to understand current state
 setup.md — port architecture and environment; do not get these wrong
 SECTION-2-LAYOUT.md through SECTION-6-DECISIONS.md — UI specification
 SECTION-ANNOTATION.md — unresolved UI decisions; do not introduce new ones
+
+---
+
+## Mandatory reference reads before writing any new code
+
+Before writing a new agent (server-side), read one complete working pre-fetch agent:
+  server/agents/adsAttributionSummary/index.js — the canonical pre-fetch pattern
+  server/agents/adsBounceAnalysis/index.js — simpler pre-fetch reference
+
+Before writing a new frontend page, read one complete working page of the same type:
+  client/src/pages/tools/DiamondPlateDataPage.jsx — SSE run + history + MarkdownRenderer
+  client/src/api/client.js — api.get() returns JSON directly (NOT .data wrapper)
+                             api.stream() sends Bearer token (never use raw fetch)
+
+These reads are not optional. The patterns in these files are NOT documented in the
+.md files — they live only in the code. Skipping them causes auth failures and broken
+UI that look like bugs but are actually pattern deviations.
+
+Specific rules derived from past failures:
+- NEVER use raw fetch() for authenticated endpoints — always api.stream() or api.get()
+- api.get() returns the parsed JSON body directly — there is no .data wrapper
+- Agent run history rows have shape { id, status, result, run_at } where result is
+  the JSONB object containing { summary, data, ... } — access as run.result?.summary
+- SSE result events have shape { type: 'result', data: { summary, data, ... } } —
+  access as ev.data?.summary, not ev.data directly
+- persistRun() saves status as 'complete' (not 'success') and 'error' (not 'failure')
+- Always spread { startDate, endDate } into the agentOrchestrator context object
 
 ---
 

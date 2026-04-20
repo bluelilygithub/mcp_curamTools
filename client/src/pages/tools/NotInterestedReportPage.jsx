@@ -32,7 +32,7 @@ function ProgressLog({ lines }) {
 }
 
 function HistoryRun({ run, onSelect, isSelected }) {
-  const summary = typeof run.summary === 'string' ? run.summary : '';
+  const summary = typeof run.result?.summary === 'string' ? run.result.summary : '';
   const preview = summary.slice(0, 120).replace(/[#*`]/g, '');
   return (
     <button
@@ -53,8 +53,8 @@ function HistoryRun({ run, onSelect, isSelected }) {
         <span
           className="text-xs px-2 py-0.5 rounded-full"
           style={{
-            background: run.status === 'success' ? 'var(--color-success-bg, #dcfce7)' : 'var(--color-error-bg, #fee2e2)',
-            color:      run.status === 'success' ? 'var(--color-success, #166534)'    : 'var(--color-error, #991b1b)',
+            background: run.status === 'complete' ? 'var(--color-success-bg, #dcfce7)' : 'var(--color-error-bg, #fee2e2)',
+            color:      run.status === 'complete' ? 'var(--color-success, #166534)'    : 'var(--color-error, #991b1b)',
           }}
         >
           {run.status}
@@ -81,12 +81,11 @@ export default function NotInterestedReportPage() {
 
   const loadHistory = useCallback(async () => {
     try {
-      const res = await api.get(`/agents/${AGENT_SLUG}/history`);
-      const rows = res.data ?? [];
+      const rows = (await api.get(`/agents/${AGENT_SLUG}/history`)) ?? [];
       setHistory(rows);
       if (rows.length > 0 && !selectedRun) {
         const first = rows[0];
-        const text = typeof first.summary === 'string' ? first.summary : '';
+        const text = typeof first.result?.summary === 'string' ? first.result.summary : '';
         setReportText(text);
         setSelectedRun(first);
       }
@@ -99,7 +98,7 @@ export default function NotInterestedReportPage() {
 
   function selectRun(run) {
     setSelectedRun(run);
-    const text = typeof run.summary === 'string' ? run.summary : '';
+    const text = typeof run.result?.summary === 'string' ? run.result.summary : '';
     setReportText(text);
   }
 
@@ -110,20 +109,9 @@ export default function NotInterestedReportPage() {
     setError('');
 
     try {
-      const response = await fetch('/api/agents/not-interested-report/run', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({}),
-      });
-
-      if (!response.ok) {
-        const msg = await response.text();
-        throw new Error(msg || `HTTP ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      const dec    = new TextDecoder();
+      const response = await api.stream(`/agents/${AGENT_SLUG}/run`, {});
+      const reader   = response.body.getReader();
+      const dec      = new TextDecoder();
       abortRef.current = reader;
       let buffer = '';
 
@@ -136,11 +124,11 @@ export default function NotInterestedReportPage() {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const raw = line.slice(6).trim();
-          if (raw === '[DONE]') break;
+          if (raw === '[DONE]') { setRunning(false); loadHistory(); return; }
           try {
             const ev = JSON.parse(raw);
             if (ev.type === 'progress') setProgressLines((p) => [...p, ev.text]);
-            if (ev.type === 'result')   setReportText(typeof ev.data === 'string' ? ev.data : JSON.stringify(ev.data));
+            if (ev.type === 'result')   setReportText(ev.data?.summary ?? '');
             if (ev.type === 'error')    setError(ev.error ?? 'Unknown error');
           } catch (_) { /* skip malformed */ }
         }
