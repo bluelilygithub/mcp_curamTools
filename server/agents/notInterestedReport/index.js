@@ -122,13 +122,17 @@ async function runNotInterestedReport(context) {
 
   const adminConfig = await AgentConfigService.getAdminConfig(TOOL_SLUG);
 
-  // Ads date range — default 90 days (more search term / keyword signal)
-  const days      = req?.body?.days ?? 90;
-  const end       = new Date();
-  const start     = new Date();
-  start.setDate(start.getDate() - days);
-  const startDate = start.toISOString().slice(0, 10);
-  const endDate   = end.toISOString().slice(0, 10);
+  // Ads date range — accept explicit dates from UI or fall back to days (default 90)
+  let startDate = req?.body?.startDate ?? null;
+  let endDate   = req?.body?.endDate   ?? null;
+  if (!startDate || !endDate) {
+    const days  = req?.body?.days ?? 90;
+    const end   = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - days);
+    startDate = start.toISOString().slice(0, 10);
+    endDate   = end.toISOString().slice(0, 10);
+  }
   const rangeArgs = { start_date: startDate, end_date: endDate };
 
   const customerId = req?.body?.customerId ?? null;

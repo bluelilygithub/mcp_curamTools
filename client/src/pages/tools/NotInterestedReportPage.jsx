@@ -1,264 +1,505 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+/**
+ * Not Interested Report — diagnostic analysis of wrong-products and wrong-location leads.
+ *
+ * Matches DiamondPlateDataPage layout and patterns exactly:
+ *  - Same date preset pills + date pickers in header row
+ *  - Same ProgressBar, RunHistory, ExportButtons components
+ *  - Same MarkdownRenderer inside rounded-2xl content block
+ *  - Export buttons inside the content block, below the report text
+ *  - Same api.stream() / api.get() usage — never raw fetch()
+ *
+ * Tabs: Report | History
+ */
+import { useState, useEffect } from 'react';
 import api from '../../api/client';
 import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
-import { exportPdf, exportText } from '../../utils/exportService';
+import InlineBanner from '../../components/ui/InlineBanner';
 import { fmtDate } from '../../utils/date';
+import { exportPdf, exportText } from '../../utils/exportService';
 
 const AGENT_SLUG = 'not-interested-report';
 
-const cardStyle = {
-  background:   'var(--color-surface)',
-  borderColor:  'var(--color-border)',
-  borderRadius: '1rem',
-  border:       '1px solid var(--color-border)',
-  padding:      '1.25rem',
+// ── Date helpers ──────────────────────────────────────────────────────────────
+
+function isoDate(d) { return d.toISOString().slice(0, 10); }
+
+function startOfWeek() {
+  const d   = new Date();
+  const day = d.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  d.setDate(d.getDate() - diff);
+  return isoDate(d);
+}
+
+function startOfMonth() {
+  const d = new Date();
+  return isoDate(new Date(d.getFullYear(), d.getMonth(), 1));
+}
+
+function startOfQuarter() {
+  const d = new Date();
+  const q = Math.floor(d.getMonth() / 3);
+  return isoDate(new Date(d.getFullYear(), q * 3, 1));
+}
+
+function startOfYear() {
+  return `${new Date().getFullYear()}-01-01`;
+}
+
+const PRESETS = [
+  { label: 'D',      key: 'd',      getRange: () => ({ start: isoDate(new Date()), end: isoDate(new Date()) }) },
+  { label: 'W',      key: 'w',      getRange: () => ({ start: startOfWeek(),        end: isoDate(new Date()) }) },
+  { label: 'M',      key: 'm',      getRange: () => ({ start: startOfMonth(),       end: isoDate(new Date()) }) },
+  { label: 'Qtr',    key: 'qtr',    getRange: () => ({ start: startOfQuarter(),     end: isoDate(new Date()) }) },
+  { label: 'Year',   key: 'year',   getRange: () => ({ start: startOfYear(),        end: isoDate(new Date()) }) },
+  { label: 'Custom', key: 'custom', getRange: null },
+];
+
+const DEFAULT_PRESET = PRESETS.find((p) => p.key === 'qtr');
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const inputStyle = {
+  padding: '0.4rem 0.6rem',
+  borderRadius: '0.5rem',
+  border: '1px solid var(--color-border)',
+  background: 'var(--color-bg)',
+  color: 'var(--color-text)',
+  fontSize: '0.875rem',
+  outline: 'none',
+  fontFamily: 'inherit',
 };
 
-function ProgressLog({ lines }) {
-  const endRef = useRef(null);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [lines]);
-  if (!lines.length) return null;
+// ── Progress bar ──────────────────────────────────────────────────────────────
+
+function ProgressBar({ lines }) {
   return (
-    <div style={{ ...cardStyle, borderColor: 'var(--color-primary)', marginBottom: '1rem' }}>
-      <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-primary)' }}>Running…</p>
-      <div className="space-y-1">
-        {lines.map((line, i) => (
-          <p key={i} className="text-xs font-mono" style={{ color: 'var(--color-muted)' }}>{line}</p>
-        ))}
+    <div
+      className="rounded-xl border p-4 mb-4"
+      style={{ borderColor: 'var(--color-primary)', background: 'var(--color-surface)' }}
+    >
+      <style>{`@keyframes _ni_slide { 0%{left:-45%} 100%{left:110%} }`}</style>
+      <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-text)' }}>
+        Fetching CRM and Ads data — this typically takes 30–60 seconds.
+        <span style={{ color: 'var(--color-muted)' }}> Please don't navigate away.</span>
+      </p>
+      <div style={{ position: 'relative', height: 4, borderRadius: 2, overflow: 'hidden', background: 'var(--color-border)' }}>
+        <div style={{
+          position: 'absolute', top: 0, height: '100%', width: '45%',
+          background: 'var(--color-primary)', borderRadius: 2,
+          animation: '_ni_slide 1.4s ease-in-out infinite',
+        }} />
       </div>
-      <div ref={endRef} />
+      {lines.length > 0 && (
+        <div className="mt-3 space-y-0.5">
+          {lines.slice(-4).map((l, i) => (
+            <p key={i} className="text-xs" style={{ color: 'var(--color-muted)' }}>
+              <span style={{ color: 'var(--color-primary)', marginRight: 6 }}>›</span>{l}
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function HistoryRun({ run, onSelect, isSelected }) {
-  const summary = typeof run.result?.summary === 'string' ? run.result.summary : '';
-  const preview = summary.slice(0, 120).replace(/[#*`]/g, '');
+// ── Run history table ─────────────────────────────────────────────────────────
+
+function RunHistory({ onLoad }) {
+  const [rows,     setRows]     = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [fetchErr, setFetchErr] = useState('');
+
+  useEffect(() => {
+    api.get(`/agents/${AGENT_SLUG}/history`)
+      .then(setRows)
+      .catch((e) => setFetchErr(e.message || 'Failed to load history'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading)  return <p className="text-sm py-4" style={{ color: 'var(--color-muted)' }}>Loading history…</p>;
+  if (fetchErr) return <p className="text-sm py-4" style={{ color: '#b91c1c' }}>Error: {fetchErr}</p>;
+  if (!rows.length) return <p className="text-sm py-4" style={{ color: 'var(--color-muted)' }}>No runs yet.</p>;
+
   return (
-    <button
-      onClick={() => onSelect(run)}
-      style={{
-        ...cardStyle,
-        width:        '100%',
-        textAlign:    'left',
-        cursor:       'pointer',
-        borderColor:  isSelected ? 'var(--color-primary)' : 'var(--color-border)',
-        opacity:      isSelected ? 1 : 0.8,
-      }}
-    >
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-xs font-semibold" style={{ color: 'var(--color-primary)' }}>
-          {fmtDate(run.run_at)}
-        </span>
-        <span
-          className="text-xs px-2 py-0.5 rounded-full"
-          style={{
-            background: run.status === 'complete' ? 'var(--color-success-bg, #dcfce7)' : 'var(--color-error-bg, #fee2e2)',
-            color:      run.status === 'complete' ? 'var(--color-success, #166534)'    : 'var(--color-error, #991b1b)',
-          }}
-        >
-          {run.status}
-        </span>
-      </div>
-      {preview && (
-        <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
-          {preview}{summary.length > 120 ? '…' : ''}
-        </p>
-      )}
-    </button>
+    <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+      <thead>
+        <tr style={{ background: 'var(--color-surface)' }}>
+          {['Date', 'Period', 'Status', ''].map((h) => (
+            <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider"
+              style={{ color: 'var(--color-muted)', borderBottom: '1px solid var(--color-border)' }}>
+              {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.id} style={{ borderTop: '1px solid var(--color-border)' }}>
+            <td className="px-3 py-2 text-xs" style={{ color: 'var(--color-muted)' }}>
+              {fmtDate(r.run_at)}
+            </td>
+            <td className="px-3 py-2 text-xs" style={{ color: 'var(--color-text)' }}>
+              {r.result?.startDate && r.result?.endDate
+                ? `${fmtDate(r.result.startDate)} – ${fmtDate(r.result.endDate)}`
+                : '—'}
+            </td>
+            <td className="px-3 py-2">
+              <span
+                className="text-xs font-semibold rounded px-2 py-0.5"
+                style={{
+                  background: r.status === 'complete' ? '#dcfce7' : r.status === 'error' ? '#fee2e2' : '#fef9c3',
+                  color:      r.status === 'complete' ? '#15803d' : r.status === 'error' ? '#b91c1c' : '#854d0e',
+                }}
+              >
+                {r.status}
+              </span>
+            </td>
+            <td className="px-3 py-2 text-right">
+              {r.status === 'complete' && r.result && (
+                <button
+                  onClick={() => onLoad(r.result)}
+                  className="text-xs rounded px-2.5 py-1 font-medium"
+                  style={{
+                    background: 'none',
+                    border: '1px solid var(--color-border)',
+                    color: 'var(--color-muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Load
+                </button>
+              )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
-export default function NotInterestedReportPage() {
-  const [running,       setRunning]       = useState(false);
-  const [progressLines, setProgressLines] = useState([]);
-  const [reportText,    setReportText]    = useState('');
-  const [history,       setHistory]       = useState([]);
-  const [selectedRun,   setSelectedRun]   = useState(null);
-  const [error,         setError]         = useState('');
-  const [exporting,     setExporting]     = useState(false);
-  const abortRef = useRef(null);
+// ── Export buttons ────────────────────────────────────────────────────────────
 
-  const loadHistory = useCallback(async () => {
-    try {
-      const rows = (await api.get(`/agents/${AGENT_SLUG}/history`)) ?? [];
-      setHistory(rows);
-      if (rows.length > 0 && !selectedRun) {
-        const first = rows[0];
-        const text = typeof first.result?.summary === 'string' ? first.result.summary : '';
-        setReportText(text);
-        setSelectedRun(first);
-      }
-    } catch (_e) {
-      // history is non-critical
-    }
-  }, [selectedRun]);
+const exportBtnStyle = {
+  padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 500,
+  fontFamily: 'inherit', borderRadius: '0.5rem', cursor: 'pointer',
+  border: '1px solid var(--color-border)',
+  background: 'transparent', color: 'var(--color-muted)',
+};
 
-  useEffect(() => { loadHistory(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+function ExportButtons({ onText, onPdf }) {
+  const [exporting, setExporting] = useState(false);
+  const [exportErr, setExportErr] = useState('');
 
-  function selectRun(run) {
-    setSelectedRun(run);
-    const text = typeof run.result?.summary === 'string' ? run.result.summary : '';
-    setReportText(text);
-  }
-
-  async function runReport() {
-    setRunning(true);
-    setProgressLines([]);
-    setReportText('');
-    setError('');
-
-    try {
-      const response = await api.stream(`/agents/${AGENT_SLUG}/run`, {});
-      const reader   = response.body.getReader();
-      const dec      = new TextDecoder();
-      abortRef.current = reader;
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += dec.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const raw = line.slice(6).trim();
-          if (raw === '[DONE]') { setRunning(false); loadHistory(); return; }
-          try {
-            const ev = JSON.parse(raw);
-            if (ev.type === 'progress') setProgressLines((p) => [...p, ev.text]);
-            if (ev.type === 'result')   setReportText(ev.data?.summary ?? '');
-            if (ev.type === 'error')    setError(ev.error ?? 'Unknown error');
-          } catch (_) { /* skip malformed */ }
-        }
-      }
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setRunning(false);
-      loadHistory();
-    }
-  }
-
-  async function handleExportPdf() {
-    if (!reportText) return;
+  async function handlePdf() {
     setExporting(true);
-    try {
-      await exportPdf({
-        content:  reportText,
-        title:    'Not Interested Report',
-        filename: `not-interested-report-${new Date().toISOString().slice(0, 10)}.pdf`,
-      });
-    } catch (_e) {
-      exportText({ content: reportText, filename: 'not-interested-report.txt' });
-    } finally {
-      setExporting(false);
-    }
+    setExportErr('');
+    try { await onPdf(); }
+    catch (e) { setExportErr(e.message || 'PDF export failed'); }
+    finally { setExporting(false); }
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="flex items-center gap-2">
+      <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Export:</span>
+      <button onClick={onText} style={exportBtnStyle}>Text</button>
+      <button onClick={handlePdf} disabled={exporting} style={{ ...exportBtnStyle, opacity: exporting ? 0.5 : 1 }}>
+        {exporting ? 'Generating…' : 'PDF'}
+      </button>
+      {exportErr && <span style={{ fontSize: '0.7rem', color: '#dc2626' }}>{exportErr}</span>}
+    </div>
+  );
+}
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+export default function NotInterestedReportPage() {
+  const initialRange = DEFAULT_PRESET.getRange();
+  const [startDate,    setStartDate]    = useState(initialRange.start);
+  const [endDate,      setEndDate]      = useState(initialRange.end);
+  const [activePreset, setActivePreset] = useState(DEFAULT_PRESET.key);
+  const [running,      setRunning]      = useState(false);
+  const [progress,     setProgress]     = useState([]);
+  const [error,        setError]        = useState('');
+  const [runError,     setRunError]     = useState('');
+  const [result,       setResult]       = useState(null);
+  const [activeTab,    setActiveTab]    = useState('report');
+
+  // Warn before leaving mid-run
+  useEffect(() => {
+    const handler = (e) => { if (running) { e.preventDefault(); e.returnValue = ''; } };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [running]);
+
+  // Load most recent completed run on mount
+  useEffect(() => {
+    api.get(`/agents/${AGENT_SLUG}/history`)
+      .then((rows) => {
+        const latest = rows?.find((r) => r.status === 'complete');
+        if (latest?.result && !result) setResult(latest.result);
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function applyPreset(preset) {
+    setActivePreset(preset.key);
+    if (preset.getRange) {
+      const { start, end } = preset.getRange();
+      setStartDate(start);
+      setEndDate(end);
+    }
+  }
+
+  function onDateChange(field, value) {
+    setActivePreset('custom');
+    if (field === 'start') setStartDate(value);
+    else setEndDate(value);
+  }
+
+  async function handleRun() {
+    if (new Date(startDate) > new Date(endDate)) {
+      setError('Start date must be before end date.');
+      return;
+    }
+    setRunning(true);
+    setProgress([]);
+    setError('');
+    setRunError('');
+
+    try {
+      const res     = await api.stream(`/agents/${AGENT_SLUG}/run`, { startDate, endDate });
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let resultReceived = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          console.warn('[NotInterested] stream closed by server. resultReceived:', resultReceived);
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]') {
+            setRunning(false);
+            setActiveTab('report');
+            return;
+          }
+          try {
+            const msg = JSON.parse(raw);
+            if (msg.type === 'progress') {
+              setProgress((p) => [...p, msg.text]);
+            } else if (msg.type === 'result') {
+              resultReceived = true;
+              if (!msg.data?.summary) {
+                console.error('[NotInterested] result received but summary is empty. Keys:', Object.keys(msg.data || {}));
+                setRunError('Run completed but the report summary was empty. Check the browser console and server logs.');
+              }
+              setResult(msg.data);
+              setActiveTab('report');
+            } else if (msg.type === 'error') {
+              console.error('[NotInterested] server error event:', msg.error);
+              setError(msg.error);
+              setRunError(msg.error);
+            }
+          } catch (parseErr) {
+            console.error('[NotInterested] failed to parse SSE line:', parseErr.message, '\nRaw (first 200):', raw.slice(0, 200));
+          }
+        }
+      }
+
+      if (!resultReceived) {
+        const msg = 'Stream ended without a result. The run may have crashed on the server — check Railway logs.';
+        console.error('[NotInterested]', msg);
+        setRunError(msg);
+      }
+    } catch (err) {
+      console.error('[NotInterested] stream error:', err.message);
+      setError(err.message);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const summary = result?.summary ?? '';
+
+  const tabBtn = (tab, label) => (
+    <button
+      key={tab}
+      onClick={() => setActiveTab(tab)}
+      style={{
+        padding: '0.35rem 0.85rem', fontSize: '0.8rem', fontWeight: 500,
+        fontFamily: 'inherit', borderRadius: '0.5rem', cursor: 'pointer', border: 'none',
+        background: activeTab === tab ? 'var(--color-primary)' : 'transparent',
+        color:      activeTab === tab ? '#fff' : 'var(--color-muted)',
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="p-5 max-w-7xl mx-auto" style={{ fontFamily: 'inherit' }}>
+
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text)' }}>
+          <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>
             Not Interested Report
           </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-muted)' }}>
-            Diagnoses why wrong-product and wrong-location leads are reaching the sales team.
-            Separates ads targeting problems from sales qualification failures.
+          <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>
+            Diagnoses why wrong-products and wrong-location leads are getting through — ads targeting gaps vs sales qualification failures.
           </p>
         </div>
-        <button
-          onClick={runReport}
-          disabled={running}
-          style={{
-            background:   running ? 'var(--color-muted)' : 'var(--color-primary)',
-            color:        '#fff',
-            border:       'none',
-            borderRadius: '0.5rem',
-            padding:      '0.5rem 1.25rem',
-            fontWeight:   600,
-            fontSize:     '0.875rem',
-            cursor:       running ? 'not-allowed' : 'pointer',
-            whiteSpace:   'nowrap',
-            flexShrink:   0,
-          }}
-        >
-          {running ? 'Running…' : 'Run Analysis'}
-        </button>
+
+        {/* Date controls */}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <div
+            className="flex gap-0.5 rounded-lg p-1"
+            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+          >
+            {PRESETS.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => applyPreset(p)}
+                style={{
+                  padding: '3px 9px', fontSize: 12, borderRadius: 6, border: 'none',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  background: activePreset === p.key ? 'var(--color-primary)' : 'transparent',
+                  color:      activePreset === p.key ? '#fff' : 'var(--color-muted)',
+                  fontWeight: activePreset === p.key ? 600 : 400,
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs" style={{ color: 'var(--color-muted)' }}>From</span>
+            <input
+              key={`start-${startDate}`}
+              type="date"
+              value={startDate}
+              max={endDate}
+              onChange={(e) => onDateChange('start', e.target.value)}
+              style={{ ...inputStyle, fontSize: '0.8rem' }}
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs" style={{ color: 'var(--color-muted)' }}>To</span>
+            <input
+              key={`end-${endDate}`}
+              type="date"
+              value={endDate}
+              min={startDate}
+              max={isoDate(new Date())}
+              onChange={(e) => onDateChange('end', e.target.value)}
+              style={{ ...inputStyle, fontSize: '0.8rem' }}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Error */}
-      {error && (
-        <div style={{ ...cardStyle, borderColor: 'var(--color-error, #ef4444)', color: 'var(--color-error, #ef4444)' }}>
-          <p className="text-sm font-semibold">Error</p>
-          <p className="text-sm">{error}</p>
+      {/* ── Tabs ───────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-1 mb-4">
+        {tabBtn('report',  'Report')}
+        {tabBtn('history', 'History')}
+      </div>
+
+      {/* ── Report tab ─────────────────────────────────────────────────── */}
+      {activeTab === 'report' && (
+        <div>
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              onClick={handleRun}
+              disabled={running}
+              style={{
+                padding: '0.4rem 1rem', fontSize: '0.875rem', fontWeight: 600,
+                fontFamily: 'inherit', borderRadius: '0.5rem', border: 'none',
+                background: running ? 'var(--color-border)' : 'var(--color-primary)',
+                color: '#fff', cursor: running ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {running ? 'Running…' : 'Run Report'}
+            </button>
+            <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+              Ads data uses date range above · CRM data is all-time · Typically 30–60 seconds
+            </span>
+          </div>
+
+          {error && (
+            <InlineBanner type="error" message={error} onDismiss={() => setError('')} className="mb-4" />
+          )}
+
+          {running && <ProgressBar lines={progress} />}
+
+          <div
+            className="rounded-2xl border p-5"
+            style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
+          >
+            {runError && !running && (
+              <div
+                className="rounded-xl p-4 mb-4"
+                style={{ background: '#fee2e2', border: '1px solid #fca5a5' }}
+              >
+                <p className="text-sm font-semibold mb-1" style={{ color: '#b91c1c' }}>Run failed</p>
+                <p className="text-sm" style={{ color: '#7f1d1d', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                  {runError}
+                </p>
+              </div>
+            )}
+            {!summary && !runError && !running && (
+              <p className="text-sm py-6 text-center" style={{ color: 'var(--color-muted)' }}>
+                Select a date range above and click <strong>Run Report</strong> to generate the diagnostic analysis.
+              </p>
+            )}
+            {summary && (
+              <>
+                <MarkdownRenderer text={summary} />
+                <div className="mt-4 flex items-center justify-between flex-wrap gap-2">
+                  <ExportButtons
+                    onText={() => {
+                      const period = `${result?.startDate ?? startDate} to ${result?.endDate ?? endDate}`;
+                      exportText({
+                        content:  `Not Interested Report — ${period}\n\n${summary}`,
+                        filename: `not-interested-report-${result?.startDate ?? startDate}-${result?.endDate ?? endDate}.txt`,
+                      });
+                    }}
+                    onPdf={async () => {
+                      const period = `${result?.startDate ?? startDate} – ${result?.endDate ?? endDate}`;
+                      await exportPdf({
+                        content:  summary,
+                        title:    `Not Interested Report · ${period}`,
+                        filename: `not-interested-report-${result?.startDate ?? startDate}-${result?.endDate ?? endDate}.pdf`,
+                      });
+                    }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Progress log */}
-      <ProgressLog lines={progressLines} />
-
-      {/* Main content — report + history side-by-side */}
-      <div className="flex gap-4 items-start">
-
-        {/* Report output */}
-        <div className="flex-1 min-w-0">
-          {reportText ? (
-            <div style={cardStyle}>
-              <div className="flex justify-between items-center mb-4">
-                <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
-                  {selectedRun ? `Run: ${fmtDate(selectedRun.run_at)}` : 'Latest Report'}
-                </p>
-                <button
-                  onClick={handleExportPdf}
-                  disabled={exporting}
-                  style={{
-                    background:   'transparent',
-                    border:       '1px solid var(--color-border)',
-                    borderRadius: '0.4rem',
-                    padding:      '0.3rem 0.75rem',
-                    fontSize:     '0.75rem',
-                    cursor:       exporting ? 'not-allowed' : 'pointer',
-                    color:        'var(--color-muted)',
-                  }}
-                >
-                  {exporting ? 'Exporting…' : 'Export PDF'}
-                </button>
-              </div>
-              <MarkdownRenderer content={reportText} />
-            </div>
-          ) : (
-            !running && (
-              <div style={{ ...cardStyle, textAlign: 'center', padding: '3rem' }}>
-                <p style={{ color: 'var(--color-muted)', fontSize: '0.875rem' }}>
-                  No report yet. Click "Run Analysis" to generate the first one.
-                </p>
-              </div>
-            )
-          )}
+      {/* ── History tab ─────────────────────────────────────────────────── */}
+      {activeTab === 'history' && (
+        <div
+          className="rounded-2xl border p-4"
+          style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
+        >
+          <RunHistory
+            onLoad={(r) => { setResult(r); setActiveTab('report'); }}
+          />
         </div>
-
-        {/* History sidebar */}
-        {history.length > 0 && (
-          <div className="w-64 flex-shrink-0 space-y-2">
-            <p className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>
-              Previous runs
-            </p>
-            {history.map((run) => (
-              <HistoryRun
-                key={run.id}
-                run={run}
-                onSelect={selectRun}
-                isSelected={selectedRun?.id === run.id}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      )}
 
     </div>
   );
