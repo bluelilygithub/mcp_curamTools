@@ -20,9 +20,10 @@ const { substitutePromptVars } = require('../../platform/substitutePromptVars');
 
 /**
  * @param {object} config
- * @param {object} [customerVars]  — { customer_name, customer_id } for {{variable}} substitution
+ * @param {object} [customerVars]    — { customer_name, customer_id } for {{variable}} substitution
+ * @param {object} [companyProfile]  — org-level company profile from system_settings
  */
-function buildSystemPrompt(config = {}, customerVars = {}) {
+function buildSystemPrompt(config = {}, customerVars = {}, companyProfile = {}) {
   const ctrPct  = ((config.ctr_low_threshold  ?? 0.03) * 100).toFixed(0);
   const wasted  = config.wasted_clicks_threshold   ?? 5;
   const impMin  = config.impressions_ctr_threshold ?? 100;
@@ -44,6 +45,24 @@ ${brandTerms.length ? `- Brand keywords: ${brandTerms.join(', ')} — use these 
 
 ` : '';
 
+  // Company profile block — injected first so all subsequent analysis is grounded in this context
+  const cp = companyProfile ?? {};
+  const profileLines = [
+    cp.company_name   && `- Company: ${cp.company_name}`,
+    cp.website        && `- Website: ${cp.website}`,
+    cp.industry       && `- Industry: ${cp.industry}`,
+    cp.business_type  && `- Business type: ${cp.business_type}`,
+    cp.primary_market && `- Primary market: ${cp.primary_market}`,
+    cp.primary_region && `- Primary region: ${cp.primary_region}`,
+    cp.serviced_regions && `- Serviced regions: ${cp.serviced_regions}`,
+    cp.currency       && `- Currency: ${cp.currency}`,
+    cp.business_description && `\n${cp.business_description}`,
+  ].filter(Boolean);
+
+  const companyProfileBlock = profileLines.length
+    ? `## Company Context\n${profileLines.join('\n')}\n---\n\n`
+    : '';
+
   const accountContext = buildAccountContext(
     config.intelligence_profile ?? null,
     'google-ads-monitor'
@@ -55,7 +74,7 @@ ${brandTerms.length ? `- Brand keywords: ${brandTerms.join(', ')} — use these 
     ? `\n\n## Operator Instructions\n${substitutePromptVars(config.custom_prompt, customerVars)}\n`
     : '';
 
-  return `${accountContextBlock}${businessContextBlock}\
+  return `${companyProfileBlock}${accountContextBlock}${businessContextBlock}\
 You are a Google Ads performance analyst for a digital marketing team. \
 Your role is to analyse campaign data, identify inefficiencies, and produce specific, \
 actionable recommendations that can be acted on immediately.

@@ -665,6 +665,26 @@ router.put('/settings', async (req, res) => {
   }
 });
 
+// ── Company Profile ───────────────────────────────────────────────────────
+
+router.get('/company-profile', async (req, res) => {
+  try {
+    const profile = await AgentConfigService.getCompanyProfile(req.user.orgId);
+    res.json(profile);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load company profile.' });
+  }
+});
+
+router.put('/company-profile', async (req, res) => {
+  try {
+    const updated = await AgentConfigService.updateCompanyProfile(req.user.orgId, req.body, req.user.id);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update company profile.' });
+  }
+});
+
 // ── Email Templates ───────────────────────────────────────────────────────
 
 router.get('/email-templates', async (req, res) => {

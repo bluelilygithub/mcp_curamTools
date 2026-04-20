@@ -402,6 +402,47 @@ async function updateAdminConfig(slug, patch, updatedBy) {
   return merged;
 }
 
+// ── Org-level company profile (system_settings key: 'company_profile') ──────
+
+const COMPANY_PROFILE_DEFAULTS = {
+  company_name:        '',
+  website:             '',
+  industry:            '',
+  primary_market:      '',
+  primary_region:      '',
+  serviced_regions:    '',
+  business_type:       '',
+  currency:            'AUD',
+  business_description: '',
+};
+
+async function getCompanyProfile(orgId) {
+  try {
+    const res = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'company_profile' LIMIT 1`,
+      [orgId]
+    );
+    if (res.rows.length === 0) return { ...COMPANY_PROFILE_DEFAULTS };
+    return { ...COMPANY_PROFILE_DEFAULTS, ...(res.rows[0].value || {}) };
+  } catch (err) {
+    console.error('[AgentConfigService] getCompanyProfile error:', err.message);
+    return { ...COMPANY_PROFILE_DEFAULTS };
+  }
+}
+
+async function updateCompanyProfile(orgId, patch, updatedBy) {
+  const current = await getCompanyProfile(orgId);
+  const merged = { ...current, ...patch };
+  await pool.query(
+    `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+     VALUES ($1, 'company_profile', $2, $3, NOW())
+     ON CONFLICT (org_id, key)
+     DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+    [orgId, JSON.stringify(merged), updatedBy]
+  );
+  return merged;
+}
+
 // ── Org-level platform budget (system_settings key: 'platform_budget') ──────
 
 const PLATFORM_BUDGET_DEFAULTS = {
@@ -642,6 +683,8 @@ async function updateCustomProviders(orgId, providers, updatedBy) {
 }
 
 module.exports = {
+  getCompanyProfile,
+  updateCompanyProfile,
   getAgentConfig,
   getAgentConfigMeta,
   updateAgentConfig,

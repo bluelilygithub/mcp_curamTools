@@ -33,7 +33,7 @@ const { getAdsServer, getAnalyticsServer, callMcpTool } = require('../../platfor
 const { buildSystemPrompt }  = require('./prompt');
 const { TOOL_SLUG }          = require('./tools');
 
-async function runSingleCustomer(orgId, config, adminConfig, startDate, endDate, customerId, emit, context) {
+async function runSingleCustomer(orgId, config, adminConfig, companyProfile, startDate, endDate, customerId, emit, context) {
   const customerVars = customerId
     ? { customer_id: customerId, customer_name: config.customer_name ?? customerId }
     : {};
@@ -84,7 +84,7 @@ async function runSingleCustomer(orgId, config, adminConfig, startDate, endDate,
     `\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``;
 
   const { result, trace, tokensUsed } = await agentOrchestrator.run({
-    systemPrompt:  buildSystemPrompt(config, customerVars),
+    systemPrompt:  buildSystemPrompt(config, customerVars, companyProfile),
     userMessage,
     tools:         [],
     maxIterations: 1,
@@ -123,13 +123,15 @@ async function runGoogleAdsMonitor(context) {
     endDate   = end.toISOString().slice(0, 10);
   }
 
+  const companyProfile = await AgentConfigService.getCompanyProfile(orgId);
+
   // HTTP run: single customer (explicit or default)
   if (!isScheduled) {
     const customerId = req?.body?.customerId ?? null;
     const customerConfig = customerId
       ? await AgentConfigService.getAgentConfigForCustomer(orgId, TOOL_SLUG, customerId)
       : config;
-    return runSingleCustomer(orgId, customerConfig, adminConfig, startDate, endDate, customerId, emit, context);
+    return runSingleCustomer(orgId, customerConfig, adminConfig, companyProfile, startDate, endDate, customerId, emit, context);
   }
 
   // Scheduled run: fan out across registered customers (if any)
@@ -146,7 +148,7 @@ async function runGoogleAdsMonitor(context) {
   }
 
   if (customers.length === 0) {
-    return runSingleCustomer(orgId, config, adminConfig, startDate, endDate, null, emit, context);
+    return runSingleCustomer(orgId, config, adminConfig, companyProfile, startDate, endDate, null, emit, context);
   }
 
   const results = [];
@@ -157,6 +159,7 @@ async function runGoogleAdsMonitor(context) {
         orgId,
         { ...customerConfig, customer_name: customer.customer_name },
         adminConfig,
+        companyProfile,
         startDate,
         endDate,
         customer.customer_id,
