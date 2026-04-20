@@ -32,71 +32,74 @@ export default function Sidebar({ mobileOpen, onClose }) {
 
   const SidebarContent = ({ collapsed, onLinkClick }) => (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Dashboard — no section label */}
-      <div className="pt-3">
-        <NavItem to="/dashboard" icon="dashboard" label="Dashboard" collapsed={collapsed} onClick={onLinkClick} />
+      {/* Scrollable nav area */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Dashboard — no section label */}
+        <div className="pt-3">
+          <NavItem to="/dashboard" icon="dashboard" label="Dashboard" collapsed={collapsed} onClick={onLinkClick} />
+        </div>
+
+        {/* Tools section */}
+        {tools.length > 0 && (
+          <div className="mt-2">
+            {!collapsed && (
+              <p
+                className="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-wider"
+                style={{ color: 'var(--color-muted)' }}
+              >
+                Tools
+              </p>
+            )}
+            {collapsed && <div className="pt-3" />}
+            {tools.map((tool) => (
+              <NavItem
+                key={tool.id}
+                to={tool.path}
+                icon={tool.icon}
+                label={tool.name}
+                collapsed={collapsed}
+                onClick={onLinkClick}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Admin section */}
+        {isAdmin && (
+          <div className="mt-2 pb-2">
+            {!collapsed && (
+              <p
+                className="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-wider"
+                style={{ color: 'var(--color-muted)' }}
+              >
+                Admin
+              </p>
+            )}
+            {collapsed && <div className="pt-3" />}
+            <NavItem to="/admin/users" icon="users" label="Users" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/models" icon="cpu" label="Models" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/providers" icon="globe" label="Providers" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/agents" icon="bot" label="Agents" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/settings" icon="settings" label="App Settings" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/email-templates" icon="mail" label="Email Templates" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/security" icon="shield" label="Security" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/logs" icon="activity" label="Logs" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/mcp-servers" icon="server" label="MCP Servers" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/mcp-resources" icon="layers" label="MCP Resources" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/prompts" icon="file-text" label="MCP Prompts" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/diagnostics" icon="zap" label="Diagnostics" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/sql" icon="database" label="SQL Console" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/departments" icon="bookmark" label="Departments" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/org-roles" icon="tag" label="Org Roles" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/data-privacy" icon="eye-off" label="Data Privacy" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/storage" icon="archive" label="File Storage" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/knowledge" icon="book-open" label="Knowledge Base" collapsed={collapsed} onClick={onLinkClick} />
+          </div>
+        )}
       </div>
 
-      {/* Tools section */}
-      {tools.length > 0 && (
-        <div className="mt-2">
-          {!collapsed && (
-            <p
-              className="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-wider"
-              style={{ color: 'var(--color-muted)' }}
-            >
-              Tools
-            </p>
-          )}
-          {collapsed && <div className="pt-3" />}
-          {tools.map((tool) => (
-            <NavItem
-              key={tool.id}
-              to={tool.path}
-              icon={tool.icon}
-              label={tool.name}
-              collapsed={collapsed}
-              onClick={onLinkClick}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Admin section */}
-      {isAdmin && (
-        <div className="mt-2">
-          {!collapsed && (
-            <p
-              className="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-wider"
-              style={{ color: 'var(--color-muted)' }}
-            >
-              Admin
-            </p>
-          )}
-          {collapsed && <div className="pt-3" />}
-          <NavItem to="/admin/users" icon="users" label="Users" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/models" icon="cpu" label="Models" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/providers" icon="globe" label="Providers" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/agents" icon="bot" label="Agents" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/settings" icon="settings" label="App Settings" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/email-templates" icon="mail" label="Email Templates" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/security" icon="shield" label="Security" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/logs" icon="activity" label="Logs" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/mcp-servers" icon="server" label="MCP Servers" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/mcp-resources" icon="layers" label="MCP Resources" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/prompts" icon="file-text" label="MCP Prompts" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/diagnostics" icon="zap" label="Diagnostics" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/sql" icon="database" label="SQL Console" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/departments" icon="bookmark" label="Departments" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/org-roles" icon="tag" label="Org Roles" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/data-privacy" icon="eye-off" label="Data Privacy" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/storage" icon="archive" label="File Storage" collapsed={collapsed} onClick={onLinkClick} />
-          <NavItem to="/admin/knowledge" icon="book-open" label="Knowledge Base" collapsed={collapsed} onClick={onLinkClick} />
-        </div>
-      )}
-
-      {/* Footer — settings + collapse toggle */}
-      <div className="mt-auto" style={{ borderTop: '1px solid var(--color-border)' }}>
+      {/* Footer — pinned at bottom */}
+      <div style={{ borderTop: '1px solid var(--color-border)' }}>
         <NavItem to="/settings" icon="settings" label="Settings" collapsed={collapsed} onClick={onLinkClick} />
 
         {/* Collapse toggle — desktop only */}

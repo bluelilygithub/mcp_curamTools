@@ -21,6 +21,19 @@ const PROFILE_DEFAULTS = {
   currency: 'AUD', business_description: '',
 };
 
+const inputStyle = { background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' };
+const inputClass = 'w-full px-3 py-2.5 rounded-xl border text-sm outline-none';
+
+function Field({ label, hint, children }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>{label}</label>
+      {children}
+      {hint && <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>{hint}</p>}
+    </div>
+  );
+}
+
 export default function AdminAppSettingsPage() {
   const [settings, setSettings] = useState({ app_name: '', timezone: 'Australia/Sydney', allowed_file_types: [] });
   const [profile, setProfile] = useState(PROFILE_DEFAULTS);
@@ -67,17 +80,6 @@ export default function AdminAppSettingsPage() {
       setSavingProfile(false);
     }
   }
-
-  const Field = ({ label, hint, children }) => (
-    <div>
-      <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>{label}</label>
-      {children}
-      {hint && <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>{hint}</p>}
-    </div>
-  );
-
-  const inputStyle = { background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' };
-  const inputClass = 'w-full px-3 py-2.5 rounded-xl border text-sm outline-none';
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-8">
