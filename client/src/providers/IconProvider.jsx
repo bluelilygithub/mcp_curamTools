@@ -41,6 +41,7 @@ import {
   Activity,
   BarChart2,
   LineChart,
+  Target,
   Bot,
   Cpu,
   Zap,
@@ -113,9 +114,11 @@ const semanticMap = {
 
   // Status
   error: AlertCircle,
+  'alert-circle': AlertCircle,
   warning: AlertTriangle,
   info: Info,
   loading: Loader2,
+  loader: Loader2,
   success: CheckCircle,
   'x-circle': XCircle,
   'check-circle': CheckCircle,
@@ -135,6 +138,7 @@ const semanticMap = {
   'bar-chart': BarChart2,
   'line-chart': LineChart,
   'trending-up': TrendingUp,
+  target: Target,
   database: Database,
 
   // AI & platform
