@@ -4,13 +4,13 @@
  * Ads Attribution Summary agent — pre-fetch architecture.
  *
  * WHY PRE-FETCH: All three data sources (campaign performance, GA4 sessions,
- * WordPress enquiries) are fetched unconditionally every run. The ReAct loop
- * added quadratic token cost for a fixed, predictable sequence.
+ * WordPress enquiries) are fetched unconditionally every run.
  *
- * Pre-fetch pulls all three sources in parallel in Node.js, passes the complete
- * dataset to Claude in a single message, no tools, no loop.
- *
- * Estimated cost: ~$0.05–$0.10 per run (vs $0.20–$0.50 with ReAct).
+ * CRM enquiries are pre-computed in Node.js before Claude sees them, using
+ * consistent paid-identification logic: utm_medium = 'cpc' OR gclid present.
+ * This matches the business reality — enquiries with a gclid but no utm_medium
+ * are Google Ads clicks where the UTM parameters were not captured (tracking gap).
+ * Raw enquiry records are not passed to Claude; only pre-computed aggregates are.
  */
 
 const { agentOrchestrator }  = require('../../platform/AgentOrchestrator');
@@ -18,6 +18,66 @@ const AgentConfigService     = require('../../platform/AgentConfigService');
 const { getAdsServer, getAnalyticsServer, getWordPressServer, callMcpTool } = require('../../platform/mcpTools');
 const { buildSystemPrompt }  = require('./prompt');
 const { TOOL_SLUG }          = require('./tools');
+
+function topN(obj, n) {
+  return Object.entries(obj)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([key, value]) => ({ key, value }));
+}
+
+function buildCrmSummary(rawEnquiries) {
+  let total = 0, paid = 0, cpcTagged = 0, gclidOnly = 0, untracked = 0;
+
+  const byStatus      = {};
+  const bySource      = {};
+  const byMedium      = {};
+  const byUtmCampaign = {};
+
+  for (const enq of rawEnquiries) {
+    const hasCpc     = enq.utm_medium === 'cpc';
+    const hasGclid   = enq.gclid && String(enq.gclid).trim() !== '';
+    const isPaid     = hasCpc || hasGclid;
+    const isUntracked = !enq.utm_medium && !hasGclid;
+
+    total++;
+    if (isPaid)            paid++;
+    if (hasCpc)            cpcTagged++;
+    if (hasGclid && !hasCpc) gclidOnly++;
+    if (isUntracked)       untracked++;
+
+    const status = enq.enquiry_status || 'unknown';
+    byStatus[status] = (byStatus[status] || 0) + 1;
+
+    if (enq.utm_source) bySource[enq.utm_source] = (bySource[enq.utm_source] || 0) + 1;
+    if (enq.utm_medium) byMedium[enq.utm_medium] = (byMedium[enq.utm_medium] || 0) + 1;
+
+    if (enq.utm_campaign) {
+      const k = enq.utm_campaign;
+      if (!byUtmCampaign[k]) byUtmCampaign[k] = { total: 0, paid: 0 };
+      byUtmCampaign[k].total++;
+      if (isPaid) byUtmCampaign[k].paid++;
+    }
+  }
+
+  // Sort utm_campaign by total enquiries, top 15
+  const topCampaigns = Object.entries(byUtmCampaign)
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 15)
+    .map(([campaign, counts]) => ({ campaign, ...counts }));
+
+  return {
+    total,
+    paid,
+    cpcTagged,
+    gclidOnly,
+    untracked,
+    byStatus,
+    topSources:   topN(bySource,  8),
+    topMediums:   topN(byMedium,  8),
+    topCampaigns,
+  };
+}
 
 async function runAdsAttributionSummary(context) {
   const { orgId, req, emit } = context;
@@ -39,8 +99,6 @@ async function runAdsAttributionSummary(context) {
   const customerId = req?.body?.customerId ?? null;
   const rangeArgs  = { start_date: startDate, end_date: endDate };
 
-  // ── Pre-fetch: all three sources in parallel ──────────────────────────────────
-
   emit('Fetching campaign performance, GA4 sessions, and CRM enquiries…');
 
   const [adsServer, gaServer, wpServer] = await Promise.all([
@@ -49,7 +107,7 @@ async function runAdsAttributionSummary(context) {
     getWordPressServer(orgId),
   ]);
 
-  const [campaignPerformance, sessionsOverview, enquiries] = await Promise.all([
+  const [campaignPerformance, sessionsOverview, rawEnquiries] = await Promise.all([
     callMcpTool(orgId, adsServer, 'ads_get_campaign_performance', {
       ...rangeArgs,
       customer_id: customerId ?? null,
@@ -57,35 +115,40 @@ async function runAdsAttributionSummary(context) {
     callMcpTool(orgId, gaServer, 'ga4_get_sessions_overview', rangeArgs)
       .catch((e) => ({ error: e.message })),
     callMcpTool(orgId, wpServer, 'wp_get_enquiries', {
-      per_page:   200,
-      start_date: startDate,
-      end_date:   endDate,
+      ...rangeArgs,
+      limit: 1000,
     }).catch((e) => ({ error: e.message })),
   ]);
 
-  // ── Single Claude call — no tools, no loop ────────────────────────────────────
+  emit('Computing CRM attribution summary…');
 
-  emit('Building attribution summary…');
+  const enquiries = Array.isArray(rawEnquiries) ? rawEnquiries : [];
+  const crmSummary = buildCrmSummary(enquiries);
+
+  emit(`CRM: ${crmSummary.total} enquiries — ${crmSummary.paid} paid (${crmSummary.cpcTagged} cpc-tagged, ${crmSummary.gclidOnly} gclid-only), ${crmSummary.untracked} untracked`);
 
   const payload = {
     period: `${startDate} to ${endDate}`,
     campaignPerformance,
     sessionsOverview,
-    enquiries,
+    crmSummary,
+    crmNote: rawEnquiries?.error ? `CRM error: ${rawEnquiries.error}` : null,
   };
 
   const userMessage =
     `Produce an attribution summary for the period ${startDate} to ${endDate}. ` +
-    `All data has been pre-fetched below. Write the cross-channel summary as instructed.\n\n` +
+    `All data has been pre-fetched and CRM aggregates pre-computed below. Write the cross-channel summary as instructed.\n\n` +
     `\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``;
+
+  emit('Building attribution summary…');
 
   const { result, trace, tokensUsed } = await agentOrchestrator.run({
     systemPrompt:  buildSystemPrompt(),
     userMessage,
     tools:         [],
     maxIterations: 1,
-    model:         adminConfig.model      ?? 'claude-sonnet-4-6',
-    maxTokens:     adminConfig.max_tokens ?? 4096,
+    model:         adminConfig.model          ?? 'claude-sonnet-4-6',
+    maxTokens:     adminConfig.max_tokens     ?? 4096,
     fallbackModel: adminConfig.fallback_model ?? null,
     onStep:        emit,
     context:       { ...context, startDate, endDate, toolSlug: TOOL_SLUG, customerId },

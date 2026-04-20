@@ -8,7 +8,7 @@ function buildSystemPrompt(config = {}) {
 All data has been pre-computed from the WordPress CRM. The payload contains:
 - summary_stats: total enquiries, paid enquiries, overall close rate, date range used
 - enquiryByDay: total enquiries by day of week (Sun-Sat)
-- paidByDay: paid (Google Ads cpc) enquiries by day of week
+- paidByDay: paid (Google Ads — utm_medium=cpc OR gclid present) enquiries by day of week
 - enquiryByHour: total enquiries by hour of day (0-23)
 - paidByHour: paid enquiries by hour of day
 - closeRateByDay: close rate and volume for each day of week (terminal leads only)

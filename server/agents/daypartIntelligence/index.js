@@ -83,7 +83,7 @@ function buildCharts(enquiries) {
 
     const day    = DAYS[dt.getDay()];
     const hour   = dt.getHours();
-    const isPaid = enq.utm_medium === 'cpc';
+    const isPaid = enq.utm_medium === 'cpc' || (enq.gclid && String(enq.gclid).trim() !== '');
     const isWon  = WON_STATUS.has(enq.enquiry_status);
     const isLost = LOST_STATUS.has(enq.enquiry_status);
     const isTerminal = isWon || isLost;

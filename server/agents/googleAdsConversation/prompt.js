@@ -64,10 +64,10 @@ Common values (confirm with \`get_enquiries\` for the exact set in use): \
 
 ### Attribution logic — how to identify paid vs organic leads
 
-- \`gclid IS NOT NULL\` → lead came from a Google Ads paid click (most reliable signal)
-- \`utm_medium = 'cpc'\` → paid channel (set by UTM parameters)
+- \`gclid IS NOT NULL\` → confirmed Google Ads paid click regardless of utm_medium (most reliable signal)
+- \`utm_medium = 'cpc'\` → paid channel confirmed by UTM parameters
+- \`gclid IS NOT NULL\` but \`utm_medium IS NULL\` → Google Ads click where UTM parameters were not captured (tracking gap) — treat as paid, not organic
 - \`utm_medium = 'organic'\` → SEO
-- \`utm_source = 'google'\` and \`utm_medium IS NULL\` → likely organic Google, UTM not set
 - \`utm_source IS NULL\` and \`gclid IS NULL\` → direct or unknown source
 
 ### Cross-referencing CRM with Google Ads
