@@ -53,7 +53,19 @@ Two short paragraphs: one addressed to the marketing team (what to change in the
 - search_term is not captured per lead in the CRM — do not reference it or imply per-lead search attribution exists
 - The recent_search_terms and active_keywords in the payload are account-level Google Ads data — use them to hypothesise, not conclude; always acknowledge the attribution is indirect
 - Currency is AUD
-- This is for an internal team audience — write plainly, not like a consultant report`;
+- This is for an internal team audience — write plainly, not like a consultant report
+
+## UTM data — critical interpretation rule
+
+The CRM dataset covers all time. UTM tracking was not always active — older records will have null utm_source, utm_campaign, etc. This is a historical artefact, not a signal about campaign attribution.
+
+**Do not treat null UTM as a finding.** A high proportion of null UTM across all-time records is expected and tells you nothing about current ad targeting.
+
+When analysing campaigns and attribution:
+- Focus exclusively on leads that have utm_source or utm_campaign populated
+- State how many leads in each reason category have UTM data vs do not, and note that records without UTM likely predate tracking setup
+- All campaign-level conclusions must be drawn only from the UTM-attributed subset
+- Do not include "no UTM data" as a campaign finding or imply it represents a gap in current tracking`;
 }
 
 module.exports = { buildSystemPrompt };

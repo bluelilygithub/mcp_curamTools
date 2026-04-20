@@ -79,6 +79,13 @@ const AGENTS = [
     usedIn: 'GoogleAdsMonitorPage → Dashboard tab → Competitor Keywords card. Requires Standard Google Ads API access.',
     purpose: 'Analyses the account\'s current keyword set versus competitor keyword sets. Surfaces high-value gaps, graphene-specific emerging opportunities, and location-based terms with meaningful Australian search volume.',
   },
+  {
+    slug: 'not-interested-report',
+    title: 'Not Interested Report',
+    description: 'Diagnoses why wrong-products and wrong-location leads get through — ads targeting gaps vs sales qualification failures.',
+    usedIn: 'NotInterestedReportPage (/tools/not-interested-report). Run on demand.',
+    purpose: 'Pre-fetches all not-interested CRM leads (all time), filters to wrong_products and wrong_location categories, attaches progress notes (call records), and cross-references with Google Ads search terms, active keywords, and campaign performance. Produces two diagnostic lenses per reason category: Ads Signal (which campaigns/keywords attract wrong-fit traffic) and Sales Signal (what call notes reveal about qualification behaviour). CRM records without UTM data are treated as pre-tracking-era records and excluded from attribution analysis.',
+  },
 ];
 
 // ── Shared styles ─────────────────────────────────────────────────────────────

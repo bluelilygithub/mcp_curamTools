@@ -96,14 +96,17 @@ function buildPayload({ notInterestedLeads, progressDetails, searchTerms, active
   // Sort by_campaign into top-n array for readability
   const reasonSummary = {};
   for (const [reason, group] of Object.entries(byReason)) {
+    const leadsWithUtm = group.leads.filter((l) => l.utm_source || l.utm_campaign);
     reasonSummary[reason] = {
-      total:           group.total,
-      leads_with_notes: group.leads.filter((l) => l.notes.length > 0).length,
-      top_campaigns:   Object.entries(group.by_campaign)
+      total:                group.total,
+      leads_with_utm:       leadsWithUtm.length,
+      leads_without_utm:    group.total - leadsWithUtm.length,
+      leads_with_notes:     group.leads.filter((l) => l.notes.length > 0).length,
+      top_campaigns:        Object.entries(group.by_campaign)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 10)
         .map(([campaign, count]) => ({ campaign, count })),
-      leads:           group.leads,
+      leads:                group.leads,
     };
   }
 
