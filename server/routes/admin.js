@@ -853,11 +853,11 @@ const { logUsage } = require('../services/UsageLogger');
 const AUD_PER_USD_SQL = 1.55;
 
 /**
- * Resolves the best enabled model for the org.
- * Priority: (1) org default model if set + enabled, (2) first enabled advanced tier,
- * (3) first enabled model, (4) hardcoded Sonnet fallback.
+ * Resolves the best model for the org.
+ * Priority: (1) explicit modelId override, (2) org default model (even if not in ai_models —
+ * supports custom providers), (3) first enabled advanced tier, (4) first enabled model,
+ * (5) hardcoded Sonnet fallback.
  * Returns { id, inputPricePer1M, outputPricePer1M }.
- * Pass modelId to override (e.g. user-selected from UI) — still validated against enabled list.
  */
 async function getDefaultModel(orgId, modelId = null) {
   const [modelsRow, defaultRow] = await Promise.all([
@@ -871,10 +871,14 @@ async function getDefaultModel(orgId, modelId = null) {
   if (modelId) {
     const match = enabled.find((m) => m.id === modelId);
     if (match) return match;
+    // UI-selected model not in ai_models list (e.g. custom provider) — use it with unknown pricing
+    return { id: modelId, inputPricePer1M: 0, outputPricePer1M: 0 };
   }
   if (orgDefaultId) {
     const match = enabled.find((m) => m.id === orgDefaultId);
     if (match) return match;
+    // Org default not in ai_models list (e.g. custom provider) — still honor it
+    return { id: orgDefaultId, inputPricePer1M: 0, outputPricePer1M: 0 };
   }
   return (
     enabled.find((m) => m.tier === 'advanced') ??
@@ -948,16 +952,18 @@ router.post('/sql', async (req, res) => {
 
 router.post('/sql/nlp', async (req, res) => {
   const { getProvider } = require('../platform/AgentOrchestrator');
+  const { getCustomProviders } = require('../platform/AgentConfigService');
   const { question, allowWrite = false, modelId = null } = req.body;
   if (!question?.trim()) return res.status(400).json({ error: 'No question provided.' });
 
   try {
-    const [schema, modelDef] = await Promise.all([
+    const [schema, modelDef, customProviders] = await Promise.all([
       getDbSchema(),
       getDefaultModel(req.user.orgId, modelId),
+      getCustomProviders(req.user.orgId),
     ]);
 
-    const provider = getProvider(modelDef.id);
+    const provider = getProvider(modelDef.id, customProviders);
 
     const response = await provider.chat({
       model: modelDef.id,
@@ -993,7 +999,7 @@ ${question}`,
     const data = await execSql(generatedSql, allowWrite, req.user.email);
 
     // Generate a plain-English answer for read-aloud (always Haiku — fast/cheap, one sentence)
-    const answerProvider = getProvider('claude-haiku-4-5-20251001');
+    const answerProvider = getProvider('claude-haiku-4-5-20251001', customProviders);
     const resultSummary = data.rows.length === 0
       ? 'The query returned no results.'
       : JSON.stringify(data.rows.slice(0, 20));
