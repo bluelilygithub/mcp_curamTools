@@ -998,21 +998,26 @@ ${question}`,
 
     const data = await execSql(generatedSql, allowWrite, req.user.email);
 
-    // Generate a plain-English answer for read-aloud (always Haiku — fast/cheap, one sentence)
-    const answerProvider = getProvider('claude-haiku-4-5-20251001', customProviders);
-    const resultSummary = data.rows.length === 0
-      ? 'The query returned no results.'
-      : JSON.stringify(data.rows.slice(0, 20));
-    const answerResponse = await answerProvider.chat({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
-      system: null,
-      messages: [{
-        role: 'user',
-        content: `Question: ${question}\n\nSQL results: ${resultSummary}\n\nAnswer the question in 1–2 plain English sentences based on the results. No markdown, no SQL.`,
-      }],
-    });
-    const answer = answerResponse.content[0]?.text?.trim() ?? '';
+    // Generate a plain-English answer for read-aloud using the same model — wrapped in
+    // try/catch so a provider error here never kills the SQL results already retrieved.
+    let answer = '';
+    try {
+      const resultSummary = data.rows.length === 0
+        ? 'The query returned no results.'
+        : JSON.stringify(data.rows.slice(0, 20));
+      const answerResponse = await provider.chat({
+        model: modelDef.id,
+        max_tokens: 256,
+        system: null,
+        messages: [{
+          role: 'user',
+          content: `Question: ${question}\n\nSQL results: ${resultSummary}\n\nAnswer the question in 1–2 plain English sentences based on the results. No markdown, no SQL.`,
+        }],
+      });
+      answer = answerResponse.content[0]?.text?.trim() ?? '';
+    } catch (answerErr) {
+      console.warn(`[SQL Console NLP] Answer generation failed (${modelDef.id}):`, answerErr.message);
+    }
 
     res.json({ ...data, generatedSql, modelId: modelDef.id, tokensUsed, costAud, answer });
   } catch (err) {
