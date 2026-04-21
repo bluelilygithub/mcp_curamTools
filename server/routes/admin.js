@@ -957,34 +957,35 @@ router.post('/sql/nlp', async (req, res) => {
   if (!question?.trim()) return res.status(400).json({ error: 'No question provided.' });
 
   try {
-    const [schema, modelDef, customProviders] = await Promise.all([
+    const { buildSystemPrompt } = require('../agents/sqlNlp/prompt');
+
+    const [schema, modelDef, customProviders, sqlNlpConfig] = await Promise.all([
       getDbSchema(),
       getDefaultModel(req.user.orgId, modelId),
       getCustomProviders(req.user.orgId),
+      AgentConfigService.getAdminConfig('sql-nlp').catch(() => ({})),
     ]);
 
     const provider = getProvider(modelDef.id, customProviders);
+    const instructions = buildSystemPrompt(sqlNlpConfig);
 
     const response = await provider.chat({
       model: modelDef.id,
-      max_tokens: 2048,
+      max_tokens: 8192,
       system: null,
       messages: [{
         role: 'user',
-        content: `You are a PostgreSQL expert. Given the database schema below, write a single SQL query to answer the question.
-
-Return ONLY the raw SQL query — no explanation, no markdown, no code fences. The query must be valid PostgreSQL.
-
-## Schema
-${schema}
-
-## Question
-${question}`,
+        content: `${instructions}\n\n## Schema\n${schema}\n\n## Question\n${question}`,
       }],
     });
 
     const generatedSql = response.content[0]?.text?.trim() ?? '';
     if (!generatedSql) throw new Error('Model returned an empty response.');
+
+    if (generatedSql.startsWith('-- CANNOT_ANSWER:')) {
+      const reason = generatedSql.replace('-- CANNOT_ANSWER:', '').trim();
+      return res.json({ cannotAnswer: true, reason });
+    }
 
     // Log usage to usage_logs
     const tokensUsed = { input: response.usage.input_tokens, output: response.usage.output_tokens };

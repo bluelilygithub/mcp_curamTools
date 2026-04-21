@@ -15,10 +15,11 @@ const SQL_PLACEHOLDER = `-- Examples:
 -- SELECT slug, status, run_at FROM agent_runs ORDER BY run_at DESC LIMIT 50;
 -- SELECT key, value FROM system_settings WHERE org_id = 1;`;
 
-const NLP_PLACEHOLDER = `Ask anything about the database…
+const NLP_PLACEHOLDER = `Ask about the platform admin database…
 e.g. "Show me the last 10 agent runs with their status and cost"
-e.g. "How many users are in each organisation?"
-e.g. "Which agents have been run today?"`;
+e.g. "How many users are registered?"
+e.g. "Which agents have been run today?"
+Note: CRM/WordPress enquiry data is not in this database — use the Conversation Agent for that.`;
 
 function ResultsTable({ results, readAloudText = '' }) {
   const hasRows = results?.rows?.length > 0;
@@ -110,6 +111,7 @@ export default function AdminSqlPage() {
   const [generatedSql, setGeneratedSql] = useState('');
   const [nlpMeta, setNlpMeta]       = useState(null); // { modelId, tokensUsed, costAud }
   const [nlpAnswer, setNlpAnswer]   = useState('');
+  const [nlpCannotAnswer, setNlpCannotAnswer] = useState('');
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState('');
   const [allowWrite, setAllowWrite] = useState(false);
@@ -139,6 +141,7 @@ export default function AdminSqlPage() {
     setGeneratedSql('');
     setNlpMeta(null);
     setNlpAnswer('');
+    setNlpCannotAnswer('');
     setError('');
   }
 
@@ -169,6 +172,10 @@ export default function AdminSqlPage() {
     reset();
     try {
       const data = await api.post('/admin/sql/nlp', { question: q, allowWrite, modelId: selectedModel || null });
+      if (data.cannotAnswer) {
+        setNlpCannotAnswer(data.reason ?? 'This question cannot be answered from the platform database.');
+        return;
+      }
       setGeneratedSql(data.generatedSql ?? '');
       setNlpAnswer(data.answer ?? '');
       if (data.modelId) setNlpMeta({ modelId: data.modelId, tokensUsed: data.tokensUsed, costAud: data.costAud });
@@ -361,6 +368,13 @@ export default function AdminSqlPage() {
       )}
 
       {error && <InlineBanner type="error" message={error} onDismiss={() => setError('')} />}
+      {nlpCannotAnswer && (
+        <InlineBanner
+          type="warning"
+          message={`${nlpCannotAnswer} Use the Conversation Agent to query CRM and WordPress data.`}
+          onDismiss={() => setNlpCannotAnswer('')}
+        />
+      )}
 
       {/* Results */}
       {results && <ResultsTable results={results} readAloudText={mode === 'nlp' ? nlpAnswer : ''} />}

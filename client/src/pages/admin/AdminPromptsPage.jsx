@@ -86,6 +86,13 @@ const AGENTS = [
     usedIn: 'NotInterestedReportPage (/tools/not-interested-report). Run on demand.',
     purpose: 'Pre-fetches all not-interested CRM leads (all time), filters to wrong_products and wrong_location categories, attaches progress notes (call records), and cross-references with Google Ads search terms, active keywords, and campaign performance. Produces two diagnostic lenses per reason category: Ads Signal (which campaigns/keywords attract wrong-fit traffic) and Sales Signal (what call notes reveal about qualification behaviour). CRM records without UTM data are treated as pre-tracking-era records and excluded from attribution analysis.',
   },
+  {
+    slug: 'sql-nlp',
+    title: 'SQL Console — NLP',
+    description: 'Translates natural language questions into PostgreSQL queries against the platform admin database.',
+    usedIn: 'Admin › SQL Console → NLP tab.',
+    purpose: 'Receives the question and the live database schema, returns a single valid PostgreSQL query. Returns -- CANNOT_ANSWER: <reason> when the question requires data not present in the platform database (e.g. WordPress/CRM enquiry data). Schema and question are always injected at runtime after the instructions — include {{schema}} and {{question}} placeholders if writing a fully custom prompt, or omit them to have them appended automatically.',
+  },
 ];
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
