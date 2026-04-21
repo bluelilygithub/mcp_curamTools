@@ -254,21 +254,18 @@ async function callTool(name, args = {}) {
           pm_dev.meta_value AS device_type,
           pm_st.meta_value  AS search_term
         FROM bqq_posts p
-        INNER JOIN (
-          SELECT post_id, MAX(meta_value) AS meta_value
-          FROM bqq_postmeta
-          WHERE meta_key = 'reason_not_interested' AND meta_value != ''
-          GROUP BY post_id
-        ) pm_r ON p.ID = pm_r.post_id
-        LEFT JOIN (SELECT post_id, MAX(meta_value) AS meta_value FROM bqq_postmeta WHERE meta_key = 'enquiry_status'  GROUP BY post_id) pm_es  ON p.ID = pm_es.post_id
-        LEFT JOIN (SELECT post_id, MAX(meta_value) AS meta_value FROM bqq_postmeta WHERE meta_key = 'utm_source'      GROUP BY post_id) pm_src ON p.ID = pm_src.post_id
-        LEFT JOIN (SELECT post_id, MAX(meta_value) AS meta_value FROM bqq_postmeta WHERE meta_key = 'utm_campaign'    GROUP BY post_id) pm_cmp ON p.ID = pm_cmp.post_id
-        LEFT JOIN (SELECT post_id, MAX(meta_value) AS meta_value FROM bqq_postmeta WHERE meta_key = 'utm_medium'      GROUP BY post_id) pm_med ON p.ID = pm_med.post_id
-        LEFT JOIN (SELECT post_id, MAX(meta_value) AS meta_value FROM bqq_postmeta WHERE meta_key = 'device_type'     GROUP BY post_id) pm_dev ON p.ID = pm_dev.post_id
-        LEFT JOIN (SELECT post_id, MAX(meta_value) AS meta_value FROM bqq_postmeta WHERE meta_key = 'search_term'     GROUP BY post_id) pm_st  ON p.ID = pm_st.post_id
+        LEFT JOIN bqq_postmeta pm_es  ON p.ID = pm_es.post_id  AND pm_es.meta_key  = 'enquiry_status'
+        LEFT JOIN bqq_postmeta pm_r   ON p.ID = pm_r.post_id   AND pm_r.meta_key   = 'reason_not_interested'
+        LEFT JOIN bqq_postmeta pm_src ON p.ID = pm_src.post_id AND pm_src.meta_key = 'utm_source'
+        LEFT JOIN bqq_postmeta pm_cmp ON p.ID = pm_cmp.post_id AND pm_cmp.meta_key = 'utm_campaign'
+        LEFT JOIN bqq_postmeta pm_med ON p.ID = pm_med.post_id AND pm_med.meta_key = 'utm_medium'
+        LEFT JOIN bqq_postmeta pm_dev ON p.ID = pm_dev.post_id AND pm_dev.meta_key = 'device_type'
+        LEFT JOIN bqq_postmeta pm_st  ON p.ID = pm_st.post_id  AND pm_st.meta_key  = 'search_term'
         WHERE p.post_type = 'clientenquiry'
           AND p.post_status != 'trash'
-          AND pm_es.meta_value = 'not_interested'
+          AND pm_es.meta_value = 'notinterested'
+          AND pm_r.meta_value IS NOT NULL
+          AND pm_r.meta_value != ''
       `;
       if (args.start_date) { sql += ` AND p.post_date >= ?`; params.push(args.start_date + ' 00:00:00'); }
       if (args.end_date)   { sql += ` AND p.post_date <= ?`; params.push(args.end_date   + ' 23:59:59'); }
