@@ -947,7 +947,7 @@ router.post('/sql', async (req, res) => {
 });
 
 router.post('/sql/nlp', async (req, res) => {
-  const Anthropic = require('@anthropic-ai/sdk');
+  const { getProvider } = require('../platform/AgentOrchestrator');
   const { question, allowWrite = false, modelId = null } = req.body;
   if (!question?.trim()) return res.status(400).json({ error: 'No question provided.' });
 
@@ -957,11 +957,12 @@ router.post('/sql/nlp', async (req, res) => {
       getDefaultModel(req.user.orgId, modelId),
     ]);
 
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const provider = getProvider(modelDef.id);
 
-    const message = await anthropic.messages.create({
+    const response = await provider.chat({
       model: modelDef.id,
       max_tokens: 1024,
+      system: null,
       messages: [{
         role: 'user',
         content: `You are a PostgreSQL expert. Given the database schema below, write a single SQL query to answer the question.
@@ -976,11 +977,11 @@ ${question}`,
       }],
     });
 
-    const generatedSql = message.content[0]?.text?.trim() ?? '';
-    if (!generatedSql) throw new Error('Claude returned an empty response.');
+    const generatedSql = response.content[0]?.text?.trim() ?? '';
+    if (!generatedSql) throw new Error('Model returned an empty response.');
 
     // Log usage to usage_logs
-    const tokensUsed = { input: message.usage.input_tokens, output: message.usage.output_tokens };
+    const tokensUsed = { input: response.usage.input_tokens, output: response.usage.output_tokens };
     const costAud = (
       tokensUsed.input  * (modelDef.inputPricePer1M  / 1_000_000) +
       tokensUsed.output * (modelDef.outputPricePer1M / 1_000_000)
@@ -991,19 +992,21 @@ ${question}`,
 
     const data = await execSql(generatedSql, allowWrite, req.user.email);
 
-    // Generate a plain-English answer for read-aloud
+    // Generate a plain-English answer for read-aloud (always Haiku — fast/cheap, one sentence)
+    const answerProvider = getProvider('claude-haiku-4-5-20251001');
     const resultSummary = data.rows.length === 0
       ? 'The query returned no results.'
-      : JSON.stringify(data.rows.slice(0, 20)); // cap rows sent to Claude
-    const answerMsg = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001', // fast + cheap for a one-sentence answer
+      : JSON.stringify(data.rows.slice(0, 20));
+    const answerResponse = await answerProvider.chat({
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 256,
+      system: null,
       messages: [{
         role: 'user',
         content: `Question: ${question}\n\nSQL results: ${resultSummary}\n\nAnswer the question in 1–2 plain English sentences based on the results. No markdown, no SQL.`,
       }],
     });
-    const answer = answerMsg.content[0]?.text?.trim() ?? '';
+    const answer = answerResponse.content[0]?.text?.trim() ?? '';
 
     res.json({ ...data, generatedSql, modelId: modelDef.id, tokensUsed, costAud, answer });
   } catch (err) {
