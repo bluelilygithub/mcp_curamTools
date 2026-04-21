@@ -432,6 +432,9 @@ export default function DocExtractorPage() {
               {availableModels.map((m) => (
                 <option key={m.id} value={m.id}>{m.name ?? m.id}</option>
               ))}
+              {modelOverride && !availableModels.some((m) => m.id === modelOverride) && (
+                <option value={modelOverride}>{modelOverride}</option>
+              )}
             </select>
           </div>
         )}

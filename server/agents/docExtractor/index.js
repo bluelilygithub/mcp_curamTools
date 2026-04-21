@@ -192,7 +192,7 @@ async function convertPdfToImages(pdfBuffer, maxPages = DEFAULT_MAX_PDF_PAGES, d
  * @param {string} [params.instructions]  Optional user-supplied focus instructions
  * @returns {Promise<{ document_type, fields, tokensUsed }>}
  */
-async function extractFromImage({ imageBuffer, mimeType, model, maxTokens, pageContext, instructions }) {
+async function extractFromImage({ imageBuffer, mimeType, model, maxTokens, pageContext, instructions, customProviders = [] }) {
   const base64 = imageBuffer.toString('base64');
 
   let userText = pageContext
@@ -205,8 +205,8 @@ async function extractFromImage({ imageBuffer, mimeType, model, maxTokens, pageC
     userText += `\n\n[USER FOCUS] ${safe}`;
   }
 
-  // Route to the correct provider based on model ID prefix
-  const provider = getProvider(model);
+  // Route to the correct provider based on model ID prefix + org custom providers
+  const provider = getProvider(model, customProviders);
 
   const response = await provider.chat({
     model,
@@ -377,13 +377,11 @@ function mergePageResults(pageResults, model) {
  * @param {number} [params.pdfDpi]        Rasterisation DPI: 100 | 150 | 200 (admin-configurable)
  * @returns {Promise<{ document_type, fields, page_count, model, tokensUsed }>}
  */
-async function runDocExtraction({ imageBuffer, mimeType, model = 'claude-sonnet-4-6', maxTokens = 4096, instructions, maxPdfPages = DEFAULT_MAX_PDF_PAGES, pdfDpi = DEFAULT_PDF_DPI }) {
+async function runDocExtraction({ imageBuffer, mimeType, model = 'claude-sonnet-4-6', maxTokens = 4096, instructions, maxPdfPages = DEFAULT_MAX_PDF_PAGES, pdfDpi = DEFAULT_PDF_DPI, customProviders = [] }) {
   if (mimeType === 'application/pdf') {
     const pageBuffers = await convertPdfToImages(imageBuffer, maxPdfPages, pdfDpi);
     const total = pageBuffers.length;
 
-    // Process pages in parallel batches — faster than sequential, bounded to avoid
-    // hammering the API with all pages simultaneously
     const pageResults = await inBatches(
       pageBuffers,
       (buf, idx) => extractFromImage({
@@ -391,8 +389,8 @@ async function runDocExtraction({ imageBuffer, mimeType, model = 'claude-sonnet-
         mimeType:     'image/png',
         model,
         maxTokens,
+        customProviders,
         pageContext:  total > 1 ? `page ${idx + 1} of ${total}` : null,
-        // Only inject user instructions on the first page — headers appear there
         instructions: idx === 0 ? instructions : null,
       }),
       PDF_PAGE_CONCURRENCY
@@ -402,7 +400,7 @@ async function runDocExtraction({ imageBuffer, mimeType, model = 'claude-sonnet-
   }
 
   // Single image
-  const result = await extractFromImage({ imageBuffer, mimeType, model, maxTokens, instructions });
+  const result = await extractFromImage({ imageBuffer, mimeType, model, maxTokens, instructions, customProviders });
   return {
     ...result,
     page_count:       1,

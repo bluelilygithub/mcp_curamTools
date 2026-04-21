@@ -352,30 +352,60 @@ const provider = getProvider(modelId, customProviders);
 ```
 Never import a provider (Anthropic, Gemini) directly — always go through `getProvider`.
 
+**Agents that call a model via a helper function** (e.g. `docExtractor`):
+If your agent has its own `run*` function (not `agentOrchestrator.run`), load `customProviders` in the route and pass as a parameter through the call chain:
+```js
+// route layer
+const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
+const result = await runDocExtraction({ model, customProviders, ... });
+
+// agent helper
+async function runDocExtraction({ model, customProviders = [], ... }) {
+  const provider = getProvider(model, customProviders);
+  ...
+}
+```
+Always pass customProviders — never call `getProvider(model)` with one argument in a route or agent context.
+
 ### Model selector — frontend pattern
 
-All pages with a model dropdown use:
-1. `GET /admin/models` — returns `ai_models` from `system_settings` (may be Claude-only)
-2. `GET /admin/default-model` — returns `{ model_id }` (org default; may be custom provider not in the list)
+**`ai_models` is a display list, not the routing list.** `providerRegistry.PROVIDERS` handles routing via hardcoded prefixes (`claude-`, `deepseek-`, `gpt-`, `gemini-`, etc.). A model routes correctly without being in `ai_models`. Never restrict model selection to only what's in `ai_models`.
 
-**Initialisation rule:** always set `selectedModel` to the org default directly — do NOT fall back to the first Claude model if the default isn't in the list:
+**Setting the org default (`AdminModelsPage.jsx`):**
+Use `<input list="...">` + `<datalist>`, NOT a plain `<select>`. The datalist suggests models from `ai_models` but accepts any model ID the user types — the only way to set a model that's in the provider registry but not in `ai_models` (e.g. `deepseek-reasoner`, `gpt-4o`).
+
+```jsx
+<input list="default-model-datalist" value={defaultModel ?? ''} onChange={...} />
+<datalist id="default-model-datalist">
+  {models.filter((m) => m.enabled).map((m) => (
+    <option key={m.id} value={m.id}>{m.name}</option>
+  ))}
+</datalist>
+```
+
+**Consuming the org default in other pages** (SQL console NLP, agent selectors, etc.):
+1. `GET /admin/models` — returns `ai_models` (may be Claude-only)
+2. `GET /admin/default-model` — returns `{ model_id }` (org default; may not be in `ai_models`)
+
+Always set `selectedModel` to the org default directly — never fall back to the first Claude model if the default is not in the list:
 ```js
+const preferred = defaultModel?.model_id;
 if (preferred) {
-  setSelectedModel(preferred);  // use org default as-is, even if not in ai_models
+  setSelectedModel(preferred);   // use org default as-is even if not in ai_models
 } else {
   const match = enabled.find((m) => m.tier === 'advanced') ?? enabled[0];
   if (match) setSelectedModel(match.id);
 }
 ```
 
-**Dropdown fallback option:** if `selectedModel` is not in the list (custom provider, deepseek, gemini), still show it:
+Always add a fallback `<option>` for the currently selected model if it's not in the list:
 ```jsx
 {selectedModel && !models.some((m) => m.id === selectedModel) && (
   <option value={selectedModel}>{selectedModel}</option>
 )}
 ```
 
-This is the same pattern used in `AdminAgentsPage.jsx`. Failure to follow this causes the selector to silently override the org default with a Claude model, routing all calls to Anthropic regardless of configuration.
+**Failure mode:** a plain `<select>` restricted to `ai_models` silently overrides the org default with a Claude model whenever the configured default isn't in the list — routing all calls to Anthropic regardless of configuration.
 
 ### Google models — env var
 
@@ -476,6 +506,12 @@ UI: Admin › Token Usage (`/admin/usage`). Period selector: 7d / 30d / 90d.
 ---
 
 ## Rules learned through pain
+
+**Model selector `<select>` restricted to `ai_models` silently routes everything to Anthropic.**
+`ai_models` is a display list. The routing list is `providerRegistry.PROVIDERS` (hardcoded prefixes). A model like `deepseek-reasoner` routes via `deepseek-` prefix without being in `ai_models`. A plain `<select>` that only lists `ai_models` will fall back to the first Claude model whenever the org default (e.g. deepseek, gpt-4o) isn't in that list — overriding the configured default silently on every request. Use `<input list>` + `<datalist>` for the org default field. Always add a fallback `<option>` for the current value in any other model selector.
+
+**Always pass `customProviders` to `getProvider` — never call `getProvider(model)` alone.**
+`getProvider(model)` only checks the hardcoded registry + env var convention. Custom providers registered in Admin > Providers are loaded from the DB and must be passed explicitly: `getProvider(model, customProviders)`. Missing this causes custom-provider models to fall through to the Anthropic fallback. `AgentOrchestrator.run()` handles this internally — any code that calls `getProvider` directly must load and pass `customProviders`.
 
 **Do not cut from the exported tool array without auditing the MCP server it calls.**
 The definition may still exist in tools.js but the agent cannot use it if it's not exported.

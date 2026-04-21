@@ -225,17 +225,24 @@ export default function AdminModelsPage() {
               Used by all agents unless overridden individually in Admin &rsaquo; Agents.
             </p>
           </div>
-          <select
-            value={defaultModel ?? ''}
-            onChange={(e) => setDefaultModel(e.target.value)}
-            className="px-3 py-2 rounded-xl border text-sm outline-none"
-            style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)', minWidth: 220 }}
-          >
-            <option value="">— No default set —</option>
-            {models.filter((m) => m.enabled).map((m) => (
-              <option key={m.id} value={m.id}>{m.name} ({m.id})</option>
-            ))}
-          </select>
+          <div className="flex flex-col gap-1" style={{ minWidth: 260 }}>
+            <input
+              list="default-model-datalist"
+              value={defaultModel ?? ''}
+              onChange={(e) => setDefaultModel(e.target.value)}
+              placeholder="Type or select a model ID…"
+              className="px-3 py-2 rounded-xl border text-sm outline-none font-mono"
+              style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)', width: '100%' }}
+            />
+            <datalist id="default-model-datalist">
+              {models.filter((m) => m.enabled).map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </datalist>
+            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+              Any model ID — not limited to this list. Clear to remove default.
+            </p>
+          </div>
           <Button variant="primary" onClick={saveDefaultModel} disabled={savingDefault}>
             {savingDefault ? 'Saving…' : 'Save'}
           </Button>

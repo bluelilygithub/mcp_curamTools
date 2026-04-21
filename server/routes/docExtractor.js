@@ -127,11 +127,14 @@ router.post(
       model = requested;
     }
 
-    // ── Budget check + privacy settings + storage — load once before the batch ─
-    const dailyOrgSpendAud = await getDailyOrgSpendAud(orgId);
-    const { excluded_field_names: excludedFields = [] } =
-      await AgentConfigService.getExtractionPrivacySettings(orgId);
-    const storageSettings = await AgentConfigService.getStorageSettings(orgId);
+    // ── Budget check + privacy settings + storage + custom providers — load once ─
+    const [dailyOrgSpendAud, { excluded_field_names: excludedFields = [] }, storageSettings, customProviders] =
+      await Promise.all([
+        getDailyOrgSpendAud(orgId),
+        AgentConfigService.getExtractionPrivacySettings(orgId),
+        AgentConfigService.getStorageSettings(orgId),
+        AgentConfigService.getCustomProviders(orgId).catch(() => []),
+      ]);
 
     // ── Sanitise and cap input fields at the platform boundary ────────────
     const batchLabel   = (req.body.label        || '').trim().slice(0, MAX_LABEL_LEN)        || null;
@@ -176,6 +179,7 @@ router.post(
           instructions,
           maxPdfPages:  adminConfig.max_pdf_pages ?? 10,
           pdfDpi:       adminConfig.pdf_dpi       ?? 150,
+          customProviders,
         });
 
         // ── Privacy exclusions — strip declared fields before DB save ──────
