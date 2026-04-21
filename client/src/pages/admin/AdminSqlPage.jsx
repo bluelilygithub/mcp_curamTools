@@ -125,8 +125,12 @@ export default function AdminSqlPage() {
       const enabled = (modelList ?? []).filter((m) => m.enabled);
       setModels(enabled);
       const preferred = defaultModel?.model_id;
-      const match = enabled.find((m) => m.id === preferred) ?? enabled.find((m) => m.tier === 'advanced') ?? enabled[0];
-      if (match) setSelectedModel(match.id);
+      if (preferred) {
+        setSelectedModel(preferred);
+      } else {
+        const match = enabled.find((m) => m.tier === 'advanced') ?? enabled[0];
+        if (match) setSelectedModel(match.id);
+      }
     }).catch(() => {});
   }, []);
 
@@ -331,6 +335,9 @@ export default function AdminSqlPage() {
                   {models.map((m) => (
                     <option key={m.id} value={m.id}>{m.name ?? m.id}</option>
                   ))}
+                  {selectedModel && !models.some((m) => m.id === selectedModel) && (
+                    <option value={selectedModel}>{selectedModel}</option>
+                  )}
                 </select>
               )}
               <span className="text-xs" style={{ color: 'var(--color-muted)' }}>

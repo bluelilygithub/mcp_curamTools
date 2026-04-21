@@ -326,6 +326,57 @@ to `agentOrchestrator.run()`. Set via Admin > Agents "Fallback Model" dropdown.
 - If fallback also fails: throws a combined error naming both models
 - Errors on iteration 2+ do not trigger fallback (messages array is provider-specific at that point)
 
+### Model resolution — server side
+
+**`createAgentRoute` pattern (canonical):**
+```js
+adminConfig = await AgentConfigService.getAdminConfig(slug);
+if (!adminConfig.model) {
+  const orgDefault = await AgentConfigService.getOrgDefaultModel(orgId);
+  if (orgDefault) adminConfig = { ...adminConfig, model: orgDefault };
+}
+// pass adminConfig.model to agentOrchestrator.run()
+```
+`AgentOrchestrator` loads custom providers internally (`getCustomProviders(orgId)`) and calls `getProvider(model, customProviders)`.
+
+**Non-agent routes that call a model directly** (e.g. SQL NLP console):
+```js
+const { getProvider }        = require('../platform/AgentOrchestrator');
+const { getCustomProviders, getOrgDefaultModel } = require('../platform/AgentConfigService');
+
+const [modelId, customProviders] = await Promise.all([
+  getOrgDefaultModel(orgId),
+  getCustomProviders(orgId),
+]);
+const provider = getProvider(modelId, customProviders);
+```
+Never import a provider (Anthropic, Gemini) directly — always go through `getProvider`.
+
+### Model selector — frontend pattern
+
+All pages with a model dropdown use:
+1. `GET /admin/models` — returns `ai_models` from `system_settings` (may be Claude-only)
+2. `GET /admin/default-model` — returns `{ model_id }` (org default; may be custom provider not in the list)
+
+**Initialisation rule:** always set `selectedModel` to the org default directly — do NOT fall back to the first Claude model if the default isn't in the list:
+```js
+if (preferred) {
+  setSelectedModel(preferred);  // use org default as-is, even if not in ai_models
+} else {
+  const match = enabled.find((m) => m.tier === 'advanced') ?? enabled[0];
+  if (match) setSelectedModel(match.id);
+}
+```
+
+**Dropdown fallback option:** if `selectedModel` is not in the list (custom provider, deepseek, gemini), still show it:
+```jsx
+{selectedModel && !models.some((m) => m.id === selectedModel) && (
+  <option value={selectedModel}>{selectedModel}</option>
+)}
+```
+
+This is the same pattern used in `AdminAgentsPage.jsx`. Failure to follow this causes the selector to silently override the org default with a Claude model, routing all calls to Anthropic regardless of configuration.
+
 ### Google models — env var
 
 `GEMINI_API_KEY` — required for Gemini model tests in Admin > Models.
