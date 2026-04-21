@@ -89,55 +89,64 @@ function parseHHMM(str) {
   return { h: h || 0, m: m || 0 };
 }
 
-function fmt12(h, m) {
+function fmt12(date) {
+  const h    = date.getHours();
+  const m    = date.getMinutes();
   const ampm = h >= 12 ? 'pm' : 'am';
   const h12  = h % 12 || 12;
   return `${h12}:${String(m).padStart(2, '0')}${ampm}`;
 }
 
+function fmtDuration(mins) {
+  if (mins >= 60) {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  }
+  return `${mins}m`;
+}
+
 function computeWindows(dailyStart) {
-  const now    = new Date();
-  const { h, m } = parseHHMM(dailyStart);
+  const now        = new Date();
+  const { h, m }  = parseHHMM(dailyStart);
+  const windowMs   = SESSION_MINS * 60_000;
 
-  // 5-hour window
-  const startMs  = new Date(now);
-  startMs.setHours(h, m, 0, 0);
-  const endMs    = new Date(startMs.getTime() + SESSION_MINS * 60_000);
-  const elapsedMs = now - startMs;
-  const pct5h    = Math.max(0, elapsedMs) / (SESSION_MINS * 60_000);
+  // First window anchor for today
+  const firstStart = new Date(now);
+  firstStart.setHours(h, m, 0, 0);
 
-  let sessionLabel, sessionSub;
-  if (now < startMs) {
-    const minsUntil = Math.ceil((startMs - now) / 60_000);
-    sessionLabel = `Starts in ${minsUntil}m`;
-    sessionSub   = `Session begins at ${fmt12(h, m)}`;
-  } else if (pct5h >= 1) {
-    sessionLabel = 'Window reset';
-    sessionSub   = `Started ${fmt12(h, m)} · reset ${fmt12(h + SESSION_HOURS, m)}`;
+  // 5-hour window — find which window we're currently in
+  let pct5h, sessionLabel, sessionSub;
+
+  if (now < firstStart) {
+    const minsUntil = Math.ceil((firstStart - now) / 60_000);
+    pct5h        = 0;
+    sessionLabel = `Starts in ${fmtDuration(minsUntil)}`;
+    sessionSub   = `First session begins at ${fmt12(firstStart)}`;
   } else {
-    const minsLeft = Math.ceil((endMs - now) / 60_000);
-    const resetH   = (h + SESSION_HOURS) % 24;
-    sessionLabel   = `${minsLeft}m remaining`;
-    sessionSub     = `Resets at ${fmt12(resetH, m)}`;
+    const elapsed      = now - firstStart;
+    const winIdx       = Math.floor(elapsed / windowMs);
+    const winStart     = new Date(firstStart.getTime() + winIdx * windowMs);
+    const winEnd       = new Date(winStart.getTime() + windowMs);
+    const elapsedInWin = now - winStart;
+
+    pct5h = elapsedInWin / windowMs;
+
+    const minsLeft = Math.ceil((winEnd - now) / 60_000);
+    sessionLabel   = `${fmtDuration(minsLeft)} remaining`;
+    sessionSub     = `Window ${winIdx + 1} · Resets at ${fmt12(winEnd)}`;
   }
 
   // Weekly window — ISO week Mon=0 … Sun=6
-  const dow       = (now.getDay() + 6) % 7; // Mon=0, Sun=6
+  const dow       = (now.getDay() + 6) % 7;
   const dayFrac   = (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
   const pctWeek   = (dow + dayFrac) / WEEK_DAYS;
   const daysLeft  = WEEK_DAYS - dow - 1;
   const weekDay   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][dow];
-  const weekLabel = `${daysLeft}d remaining`;
+  const weekLabel = daysLeft > 0 ? `${daysLeft}d remaining` : 'Last day of week';
   const weekSub   = `${weekDay} — day ${dow + 1} of 7`;
 
-  return {
-    pct5h:    Math.min(pct5h, 1),
-    sessionLabel,
-    sessionSub,
-    pctWeek,
-    weekLabel,
-    weekSub,
-  };
+  return { pct5h, sessionLabel, sessionSub, pctWeek, weekLabel, weekSub };
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────
