@@ -1083,7 +1083,8 @@ router.put('/crm-privacy', async (req, res) => {
 // PUT  /admin/claude-session-config — updates daily_start, timezone
 
 const CLAUDE_SESSION_DEFAULTS = {
-  daily_start: '06:00', // HH:MM — browser local time the 5-hour window begins
+  daily_start:       '06:00', // HH:MM — browser local time the 5-hour window begins
+  weekly_start_day:  1,       // JS day index: 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat
 };
 
 router.get('/claude-session-config', async (req, res) => {
@@ -1106,7 +1107,8 @@ router.put('/claude-session-config', async (req, res) => {
     );
     const existing = { ...CLAUDE_SESSION_DEFAULTS, ...(current.rows[0]?.value ?? {}) };
     const patch    = {};
-    if (typeof req.body.daily_start === 'string') patch.daily_start = req.body.daily_start.trim();
+    if (typeof req.body.daily_start      === 'string') patch.daily_start      = req.body.daily_start.trim();
+    if (typeof req.body.weekly_start_day === 'number') patch.weekly_start_day = req.body.weekly_start_day;
     const merged = { ...existing, ...patch };
     await pool.query(
       `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)

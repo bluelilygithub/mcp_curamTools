@@ -106,9 +106,10 @@ function fmtDuration(mins) {
   return `${mins}m`;
 }
 
-function computeWindows(dailyStart) {
+function computeWindows(cfg) {
+  const timeStr    = (typeof cfg === 'object' && cfg !== null) ? (cfg.daily_start ?? '06:00') : (cfg ?? '06:00');
   const now        = new Date();
-  const { h, m }  = parseHHMM(dailyStart);
+  const { h, m }  = parseHHMM(timeStr);
   const windowMs   = SESSION_MINS * 60_000;
 
   // First window anchor for today
@@ -137,31 +138,45 @@ function computeWindows(dailyStart) {
     sessionSub     = `Window ${winIdx + 1} · Resets at ${fmt12(winEnd)}`;
   }
 
-  // Weekly window — ISO week Mon=0 … Sun=6
-  const dow       = (now.getDay() + 6) % 7;
-  const dayFrac   = (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
-  const pctWeek   = (dow + dayFrac) / WEEK_DAYS;
-  const daysLeft  = WEEK_DAYS - dow - 1;
-  const weekDay   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][dow];
-  const weekLabel = daysLeft > 0 ? `${daysLeft}d remaining` : 'Last day of week';
-  const weekSub   = `${weekDay} — day ${dow + 1} of 7`;
+  // Weekly window — days elapsed since configured start day
+  const DAY_NAMES  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const startDay   = (typeof cfg === 'object' && cfg !== null) ? (cfg.weekly_start_day ?? 1) : 1;
+  const dow        = (now.getDay() - startDay + 7) % 7; // 0 = it's the start day
+  const dayFrac    = (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
+  const pctWeek    = (dow + dayFrac) / WEEK_DAYS;
+  const daysLeft   = WEEK_DAYS - dow - 1;
+  const weekDay    = DAY_NAMES[now.getDay()];
+  const startName  = DAY_NAMES[startDay];
+  const weekLabel  = daysLeft > 0 ? `${daysLeft}d remaining` : 'Last day of week';
+  const weekSub    = `${weekDay} — day ${dow + 1} of 7 (resets ${startName})`;
 
   return { pct5h, sessionLabel, sessionSub, pctWeek, weekLabel, weekSub };
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────
 
+const DAY_OPTIONS = [
+  { value: 0, label: 'Sunday' },
+  { value: 1, label: 'Monday' },
+  { value: 2, label: 'Tuesday' },
+  { value: 3, label: 'Wednesday' },
+  { value: 4, label: 'Thursday' },
+  { value: 5, label: 'Friday' },
+  { value: 6, label: 'Saturday' },
+];
+
 export default function AdminClaudeSessionPage() {
-  const [config,   setConfig]   = useState(null);
-  const [windows,  setWindows]  = useState(null);
-  const [start,    setStart]    = useState('06:00');
-  const [loading,  setLoading]  = useState(true);
-  const [saving,   setSaving]   = useState(false);
-  const [success,  setSuccess]  = useState('');
-  const [error,    setError]    = useState('');
+  const [config,     setConfig]     = useState(null);
+  const [windows,    setWindows]    = useState(null);
+  const [start,      setStart]      = useState('06:00');
+  const [weeklyDay,  setWeeklyDay]  = useState(1);
+  const [loading,    setLoading]    = useState(true);
+  const [saving,     setSaving]     = useState(false);
+  const [success,    setSuccess]    = useState('');
+  const [error,      setError]      = useState('');
 
   const refresh = useCallback((cfg) => {
-    setWindows(computeWindows(cfg?.daily_start ?? '06:00'));
+    setWindows(computeWindows(cfg));
   }, []);
 
   useEffect(() => {
@@ -169,6 +184,7 @@ export default function AdminClaudeSessionPage() {
       .then((cfg) => {
         setConfig(cfg);
         setStart(cfg.daily_start ?? '06:00');
+        setWeeklyDay(cfg.weekly_start_day ?? 1);
         refresh(cfg);
       })
       .catch((e) => setError(e.message))
@@ -182,13 +198,17 @@ export default function AdminClaudeSessionPage() {
     return () => clearInterval(id);
   }, [config, refresh]);
 
+  function livePreview(newStart, newWeeklyDay) {
+    setWindows(computeWindows({ daily_start: newStart, weekly_start_day: newWeeklyDay }));
+  }
+
   async function save(e) {
     e.preventDefault();
     setSaving(true);
     setSuccess('');
     setError('');
     try {
-      const updated = await api.put('/admin/claude-session-config', { daily_start: start });
+      const updated = await api.put('/admin/claude-session-config', { daily_start: start, weekly_start_day: weeklyDay });
       setConfig(updated);
       refresh(updated);
       setSuccess('Saved. Gauges updated.');
@@ -305,13 +325,35 @@ export default function AdminClaudeSessionPage() {
                   value={start}
                   onChange={(e) => {
                     setStart(e.target.value);
-                    setWindows(computeWindows({ daily_start: e.target.value }));
+                    livePreview(e.target.value, weeklyDay);
                   }}
                   className="rounded-xl px-3 py-2 text-sm outline-none"
                   style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}
                 />
                 <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
                   Time you typically start your first Claude Code session. The 5-hour gauge counts from here.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+                  Weekly window resets on
+                </label>
+                <select
+                  value={weeklyDay}
+                  onChange={(e) => {
+                    const d = Number(e.target.value);
+                    setWeeklyDay(d);
+                    livePreview(start, d);
+                  }}
+                  className="rounded-xl px-3 py-2 text-sm outline-none"
+                  style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}
+                >
+                  {DAY_OPTIONS.map(({ value, label }) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+                <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+                  Day your Claude Code weekly cap resets. Drives the weekly gauge.
                 </p>
               </div>
               <div className="flex justify-end">

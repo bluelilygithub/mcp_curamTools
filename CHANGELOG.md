@@ -147,8 +147,36 @@
 - Gauges are 100% client-side — no server involvement at runtime. Server only stores the configured start time.
 - Weekly gauge uses ISO week (Mon = day 1). Anthropic's actual weekly reset day is unknown — this is a reasonable approximation.
 
+### Fixed / discovered (follow-up)
+- **Window chaining bug** — original implementation only tracked the first 5-hour window of the day. After 11am the gauge showed 100% and stayed there. Fixed: `Math.floor(elapsed / windowMs)` finds the current window index; windows chain indefinitely (6am→11am→4pm→9pm→…). At 6:15pm with 6am start: window 3, 4pm→9pm, 45% used, "2h 45m remaining".
+- `fmt12()` refactored to accept a `Date` object (avoids manual hour arithmetic that broke across midnight)
+- `fmtDuration()` helper added — shows `2h 45m` for durations ≥ 60 min instead of `165m`
+
 ### Open / next
-- Actual Claude Code weekly reset day may not align with Monday — no way to query this from the platform; user can manually note their week-start if needed
+- Actual Claude Code weekly reset day may not align with Monday — configurable via settings (see follow-up entry below)
+
+---
+
+## 2026-04-21 — Claude Sessions: configurable weekly reset day
+
+### Built
+
+**Configurable `weekly_start_day`** — Claude Sessions page
+- `CLAUDE_SESSION_DEFAULTS` in `admin.js` updated: `{ daily_start: '06:00', weekly_start_day: 1 }` (1 = Monday)
+- PUT route validates `weekly_start_day` is a number (0–6) when present
+- `computeWindows(cfg)` refactored: accepts full config object `{ daily_start, weekly_start_day }` — previously accepted a bare string which broke the weekly day lookup
+- `AdminClaudeSessionPage.jsx` updated:
+  - `weeklyDay` state (default 1) populated from loaded config
+  - `livePreview(start, day)` helper — updates gauges immediately on any input change
+  - Day-of-week `<select>` dropdown added to settings form (Sun–Sat, 0–6)
+  - Save payload now includes `weekly_start_day`
+  - All `computeWindows` call sites pass full config object
+
+### Fixed / discovered
+- `parseHHMM` was receiving the full config object instead of the time string after the signature change — fixed by extracting `cfg.daily_start` inside `computeWindows` before calling `parseHHMM`
+
+### Open / next
+- All prior open items carry forward
 
 ---
 
