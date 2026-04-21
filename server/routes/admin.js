@@ -854,16 +854,28 @@ const AUD_PER_USD_SQL = 1.55;
 
 /**
  * Resolves the best enabled model for the org.
- * Prefers 'advanced' tier; falls back to first enabled, then Sonnet default.
+ * Priority: (1) org default model if set + enabled, (2) first enabled advanced tier,
+ * (3) first enabled model, (4) hardcoded Sonnet fallback.
  * Returns { id, inputPricePer1M, outputPricePer1M }.
+ * Pass modelId to override (e.g. user-selected from UI) — still validated against enabled list.
  */
-async function getDefaultModel(orgId) {
-  const r = await pool.query(
-    `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'ai_models' LIMIT 1`,
-    [orgId]
-  );
-  const models = Array.isArray(r.rows[0]?.value) ? r.rows[0].value : MODEL_DEFAULTS;
+async function getDefaultModel(orgId, modelId = null) {
+  const [modelsRow, defaultRow] = await Promise.all([
+    pool.query(`SELECT value FROM system_settings WHERE org_id = $1 AND key = 'ai_models' LIMIT 1`, [orgId]),
+    pool.query(`SELECT value FROM system_settings WHERE org_id = $1 AND key = 'default_model' LIMIT 1`, [orgId]),
+  ]);
+  const models  = Array.isArray(modelsRow.rows[0]?.value) ? modelsRow.rows[0].value : MODEL_DEFAULTS;
   const enabled = models.filter((m) => m.enabled);
+  const orgDefaultId = defaultRow.rows[0]?.value?.model_id ?? null;
+
+  if (modelId) {
+    const match = enabled.find((m) => m.id === modelId);
+    if (match) return match;
+  }
+  if (orgDefaultId) {
+    const match = enabled.find((m) => m.id === orgDefaultId);
+    if (match) return match;
+  }
   return (
     enabled.find((m) => m.tier === 'advanced') ??
     enabled[0] ??
@@ -936,13 +948,13 @@ router.post('/sql', async (req, res) => {
 
 router.post('/sql/nlp', async (req, res) => {
   const Anthropic = require('@anthropic-ai/sdk');
-  const { question, allowWrite = false } = req.body;
+  const { question, allowWrite = false, modelId = null } = req.body;
   if (!question?.trim()) return res.status(400).json({ error: 'No question provided.' });
 
   try {
     const [schema, modelDef] = await Promise.all([
       getDbSchema(),
-      getDefaultModel(req.user.orgId),
+      getDefaultModel(req.user.orgId, modelId),
     ]);
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });

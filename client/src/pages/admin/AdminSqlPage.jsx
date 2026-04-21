@@ -3,7 +3,7 @@
  * SQL mode: direct query execution.
  * NLP mode: natural language → Claude generates SQL → executes it.
  */
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import api from '../../api/client';
 import Button from '../../components/ui/Button';
 import InlineBanner from '../../components/ui/InlineBanner';
@@ -113,7 +113,22 @@ export default function AdminSqlPage() {
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState('');
   const [allowWrite, setAllowWrite] = useState(false);
+  const [models, setModels]         = useState([]);
+  const [selectedModel, setSelectedModel] = useState('');
   const textareaRef = useRef(null);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/admin/models'),
+      api.get('/admin/default-model'),
+    ]).then(([modelList, defaultModel]) => {
+      const enabled = (modelList ?? []).filter((m) => m.enabled);
+      setModels(enabled);
+      const preferred = defaultModel?.model_id;
+      const match = enabled.find((m) => m.id === preferred) ?? enabled.find((m) => m.tier === 'advanced') ?? enabled[0];
+      if (match) setSelectedModel(match.id);
+    }).catch(() => {});
+  }, []);
 
   function reset() {
     setResults(null);
@@ -149,7 +164,7 @@ export default function AdminSqlPage() {
     setLoading(true);
     reset();
     try {
-      const data = await api.post('/admin/sql/nlp', { question: q, allowWrite });
+      const data = await api.post('/admin/sql/nlp', { question: q, allowWrite, modelId: selectedModel || null });
       setGeneratedSql(data.generatedSql ?? '');
       setNlpAnswer(data.answer ?? '');
       if (data.modelId) setNlpMeta({ modelId: data.modelId, tokensUsed: data.tokensUsed, costAud: data.costAud });
@@ -289,8 +304,8 @@ export default function AdminSqlPage() {
               borderBottom: '1px solid var(--color-border)',
             }}
           />
-          <div className="flex items-center justify-between px-4 py-2" style={{ background: 'var(--color-surface)' }}>
-            <div className="flex items-center gap-1">
+          <div className="flex items-center justify-between px-4 py-2 flex-wrap gap-2" style={{ background: 'var(--color-surface)' }}>
+            <div className="flex items-center gap-2 flex-wrap">
               <MicButton
                 onResult={(t) => setQuestion((q) => {
                   const base = q.replace(/\s*\[.*?\]$/, '').trim();
@@ -301,8 +316,25 @@ export default function AdminSqlPage() {
                   return base ? base + ' [' + t + ']' : '[' + t + ']';
                 })}
               />
+              {models.length > 0 && (
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className="text-xs px-2 py-1 rounded-lg border outline-none"
+                  style={{
+                    background: 'var(--color-bg)',
+                    color: 'var(--color-text)',
+                    borderColor: 'var(--color-border)',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {models.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name ?? m.id}</option>
+                  ))}
+                </select>
+              )}
               <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
-                Claude reads your schema and generates SQL — Ctrl+Enter to run
+                Ctrl+Enter to run
               </span>
             </div>
             <div className="flex items-center gap-2">

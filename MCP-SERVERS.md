@@ -91,13 +91,16 @@ All servers are registered in Admin > MCP Servers and connect via stdio (local p
 
 ---
 
-## platform.js — 4 tools
+## platform.js — 7 tools
 
 | Tool | Description | Data Shape | When to Use |
 |---|---|---|---|
 | `list_report_agents` | Lists all agent slugs that have stored report history, with their run counts and most recent run date. | `[{slug, run_count, last_run, total_cost_aud}]` | Call this first to discover what historical data is available. |
 | `get_report_history` | Fetches historical report runs for a specific agent. Returns the full summary text and key metadata. | `[{id, run_at, start_date, end_date, cost_aud, summary}]` | To analyse trends, compare periods, or answer questions about what past reports found. |
 | `search_report_history` | Full-text search across all stored report summaries by topic or keyword. Returns matching runs with relevant excerpts. | `[{id, slug, run_at, start_date, end_date, summary}]` | To find reports that mentioned a specific topic, campaign, keyword, or issue. |
+| `get_pending_suggestions` | Returns all `agent_suggestions` rows with status `pending` or `monitoring` for this org, ordered by priority (high first) then created_at DESC. | `[{id, category, priority, suggestion_text, rationale, status, baseline_metrics, outcome_notes, created_at, reviewed_at}]` | Used by High Intent Advisor (Phase 1) to review its own prior suggestions before generating new ones. `cacheable: false`. |
+| `update_suggestion_outcome` | Updates `outcome_metrics`, `outcome_notes`, `reviewed_at`, and optionally `status` on an `agent_suggestions` row. Org-scoped — must match suggestion's org. | `{updated: true, suggestion_id}` | Used by High Intent Advisor (Phase 1) to record whether a past suggestion moved the needle. `cacheable: false`. |
+| `get_suggestion_history` | Returns full suggestion history for this org (all statuses: pending, monitoring, acted_on, dismissed), ordered by created_at DESC. Limit default 100, max 200. | `[{user_action, user_reason, outcome_notes, outcome_metrics, baseline_metrics, created_at, acted_on_at, reviewed_at, category, priority, suggestion_text, rationale, status}]` | Used by High Intent Advisor (Phase 1) to identify patterns — what gets acted on, what gets dismissed and why, which suggestion types fail to move metrics. `cacheable: false`. |
 | `flag_prompt_for_review` | Raise a flag on a prompt that needs admin review. | `{flagged: true, slug, reason}` | **Not wired to conversation agent** — call when you notice your own system prompt is outdated or references stale context. |
 
 ---
@@ -152,7 +155,7 @@ Device data is available in **all three systems** — never tell the user device
 
 ## Conversation Agent — Tool Count: 23
 
-The conversation agent (`googleAdsConversation`) wires tools from: google-ads, google-analytics, wordpress, platform, knowledge-base. Current exported count: 23.
+The conversation agent (`googleAdsConversation`) wires tools from: google-ads (9), google-analytics (5), wordpress (5 — excludes `wp_get_server_ip`), platform (4 — excludes `get_pending_suggestions`, `update_suggestion_outcome`, `get_suggestion_history`, `flag_prompt_for_review`), knowledge-base (2 — excludes `add_document`). Current exported count: 23.
 
 **Cost Optimization:** Tool schema overhead is fixed per turn. Re-fetching across turns is the actual cost driver. Do not cut tools to reduce cost — focus on reducing re-fetches through caching and intelligent tool selection.
 
