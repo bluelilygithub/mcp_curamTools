@@ -136,7 +136,9 @@ function convertResponse(oaiBody, label) {
   const msg    = choice.message;
   const content = [];
 
-  if (msg?.content) content.push({ type: 'text', text: msg.content });
+  const textContent = (msg?.content != null && msg.content !== '') ? msg.content
+    : (msg?.reasoning_content ?? null);
+  if (textContent) content.push({ type: 'text', text: textContent });
 
   if (msg?.tool_calls?.length) {
     for (const tc of msg.tool_calls) {

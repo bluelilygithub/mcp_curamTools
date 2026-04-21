@@ -967,7 +967,7 @@ router.post('/sql/nlp', async (req, res) => {
 
     const response = await provider.chat({
       model: modelDef.id,
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: null,
       messages: [{
         role: 'user',
