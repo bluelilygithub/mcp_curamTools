@@ -1313,4 +1313,130 @@ router.post('/diagnostics', async (req, res) => {
   res.json(results);
 });
 
+// ── Usage Stats ───────────────────────────────────────────────────────────
+//
+// GET /admin/usage-stats?days=30
+// Aggregated token and cost data for the org. days: 7 | 30 | 90 (default 30).
+
+const AUD_PER_USD_STATS   = 1.55;
+const CACHE_READ_PRICE_USD  = 0.30 / 1_000_000;  // per token
+const NORMAL_INPUT_PRICE_USD = 3.00 / 1_000_000; // per token
+
+router.get('/usage-stats', async (req, res) => {
+  const days  = Math.min(Math.max(parseInt(req.query.days ?? '30', 10), 1), 90);
+  const orgId = req.user.orgId;
+
+  try {
+    const interval = `${days} days`;
+
+    const [totalsRes, byModelRes, byToolRes, dailyRes] = await Promise.all([
+      pool.query(
+        `SELECT
+           COUNT(*)::int                                       AS runs,
+           COALESCE(SUM(input_tokens),          0)::bigint    AS input_tokens,
+           COALESCE(SUM(output_tokens),         0)::bigint    AS output_tokens,
+           COALESCE(SUM(cache_read_tokens),     0)::bigint    AS cache_read_tokens,
+           COALESCE(SUM(cache_creation_tokens), 0)::bigint    AS cache_creation_tokens,
+           COALESCE(SUM(cost_aud),              0)::numeric   AS cost_aud
+         FROM usage_logs
+         WHERE org_id = $1 AND created_at >= NOW() - $2::INTERVAL`,
+        [orgId, interval]
+      ),
+      pool.query(
+        `SELECT
+           COALESCE(model_id, 'unknown')                      AS model_id,
+           COUNT(*)::int                                       AS runs,
+           COALESCE(SUM(input_tokens),          0)::bigint    AS input_tokens,
+           COALESCE(SUM(output_tokens),         0)::bigint    AS output_tokens,
+           COALESCE(SUM(cache_read_tokens),     0)::bigint    AS cache_read_tokens,
+           COALESCE(SUM(cache_creation_tokens), 0)::bigint    AS cache_creation_tokens,
+           COALESCE(SUM(cost_aud),              0)::numeric   AS cost_aud
+         FROM usage_logs
+         WHERE org_id = $1 AND created_at >= NOW() - $2::INTERVAL
+         GROUP BY model_id
+         ORDER BY cost_aud DESC`,
+        [orgId, interval]
+      ),
+      pool.query(
+        `SELECT
+           COALESCE(tool_slug, 'unknown')                     AS tool_slug,
+           COUNT(*)::int                                       AS runs,
+           COALESCE(SUM(input_tokens),          0)::bigint    AS input_tokens,
+           COALESCE(SUM(output_tokens),         0)::bigint    AS output_tokens,
+           COALESCE(SUM(cache_read_tokens),     0)::bigint    AS cache_read_tokens,
+           COALESCE(SUM(cache_creation_tokens), 0)::bigint    AS cache_creation_tokens,
+           COALESCE(SUM(cost_aud),              0)::numeric   AS cost_aud
+         FROM usage_logs
+         WHERE org_id = $1 AND created_at >= NOW() - $2::INTERVAL
+         GROUP BY tool_slug
+         ORDER BY cost_aud DESC`,
+        [orgId, interval]
+      ),
+      pool.query(
+        `SELECT
+           DATE(created_at AT TIME ZONE 'Australia/Brisbane') AS day,
+           COUNT(*)::int                                       AS runs,
+           COALESCE(SUM(input_tokens + output_tokens +
+                        cache_read_tokens + cache_creation_tokens), 0)::bigint AS total_tokens,
+           COALESCE(SUM(cost_aud), 0)::numeric                AS cost_aud
+         FROM usage_logs
+         WHERE org_id = $1 AND created_at >= NOW() - $2::INTERVAL
+         GROUP BY day
+         ORDER BY day ASC`,
+        [orgId, interval]
+      ),
+    ]);
+
+    const t = totalsRes.rows[0];
+    const cacheRead    = Number(t.cache_read_tokens);
+    const totalInput   = Number(t.input_tokens) + Number(t.cache_read_tokens) + Number(t.cache_creation_tokens);
+    const cacheHitRate = totalInput > 0 ? cacheRead / totalInput : 0;
+
+    // Tokens served from cache would have cost NORMAL_INPUT_PRICE_USD each without caching
+    const savingsUsd = cacheRead * (NORMAL_INPUT_PRICE_USD - CACHE_READ_PRICE_USD);
+    const savingsAud = savingsUsd * AUD_PER_USD_STATS;
+
+    res.json({
+      days,
+      totals: {
+        runs:                  Number(t.runs),
+        input_tokens:          Number(t.input_tokens),
+        output_tokens:         Number(t.output_tokens),
+        cache_read_tokens:     cacheRead,
+        cache_creation_tokens: Number(t.cache_creation_tokens),
+        cost_aud:              Number(t.cost_aud),
+        cache_hit_rate:        cacheHitRate,
+        cache_savings_aud:     savingsAud,
+      },
+      by_model: byModelRes.rows.map((r) => ({
+        model_id:              r.model_id,
+        runs:                  Number(r.runs),
+        input_tokens:          Number(r.input_tokens),
+        output_tokens:         Number(r.output_tokens),
+        cache_read_tokens:     Number(r.cache_read_tokens),
+        cache_creation_tokens: Number(r.cache_creation_tokens),
+        cost_aud:              Number(r.cost_aud),
+      })),
+      by_tool: byToolRes.rows.map((r) => ({
+        tool_slug:             r.tool_slug,
+        runs:                  Number(r.runs),
+        input_tokens:          Number(r.input_tokens),
+        output_tokens:         Number(r.output_tokens),
+        cache_read_tokens:     Number(r.cache_read_tokens),
+        cache_creation_tokens: Number(r.cache_creation_tokens),
+        cost_aud:              Number(r.cost_aud),
+      })),
+      daily: dailyRes.rows.map((r) => ({
+        day:          r.day,
+        runs:         Number(r.runs),
+        total_tokens: Number(r.total_tokens),
+        cost_aud:     Number(r.cost_aud),
+      })),
+    });
+  } catch (err) {
+    console.error('[usage-stats]', err.message);
+    res.status(500).json({ error: 'Failed to load usage stats.' });
+  }
+});
+
 module.exports = router;

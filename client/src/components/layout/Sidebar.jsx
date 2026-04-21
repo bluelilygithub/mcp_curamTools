@@ -83,6 +83,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
             <NavItem to="/admin/settings" icon="settings" label="App Settings" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/email-templates" icon="mail" label="Email Templates" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/security" icon="shield" label="Security" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/usage" icon="trending-up" label="Token Usage" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/logs" icon="activity" label="Logs" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/mcp-servers" icon="server" label="MCP Servers" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/mcp-resources" icon="layers" label="MCP Resources" collapsed={collapsed} onClick={onLinkClick} />

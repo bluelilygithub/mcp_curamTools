@@ -48,6 +48,30 @@ Internal helpers exported from this file:
 
 ---
 
+### UsageLogger
+**Type:** Service
+**Location:** `server/services/UsageLogger.js`
+**What it does:** Writes one row to `usage_logs` after each completed agent run or conversation turn. Captures all token types including prompt cache tokens, and stores cost in AUD directly.
+**Interface:**
+```js
+await logUsage({ orgId, userId, slug, modelId, tokensUsed, costAud })
+// tokensUsed: { input, output, cacheRead, cacheWrite } — from AgentOrchestrator
+// costAud: number — from CostGuardService.computeCostAud(tokensUsed)
+```
+`cost_usd` is derived internally as `costAud / 1.55`. `cost_aud` is the source of truth.
+
+**Analytics endpoint:** `GET /api/admin/usage-stats?days=7|30|90` returns aggregated totals, per-model, per-tool, and daily breakdowns. Cache savings estimated at `cache_read_tokens × $2.70/1M USD × 1.55`.
+
+**UI:** Admin › Token Usage (`/admin/usage`) — `AdminUsagePage.jsx`.
+
+**Callers:** `createAgentRoute` (all SSE agents), `routes/conversation.js` (each turn), `routes/admin.js` (NLP SQL). Called fire-and-forget — errors are logged but never rethrow.
+
+**Known gap:** `routes/docExtractor.js` passes `{ input, output }` only — `cacheRead`/`cacheWrite` are missing from doc extraction rows.
+
+**Reuse contract:** Call after a successful run. Pass the full `tokensUsed` object from `AgentOrchestrator` — do not construct a partial object. Always use `??` not `||` for token fields (null must not silently become 0 when the orchestrator returns a real 0).
+
+---
+
 ### AgentScheduler.register
 **Type:** Cron
 **Location:** `server/platform/AgentScheduler.js`

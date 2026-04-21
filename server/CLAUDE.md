@@ -6,6 +6,20 @@ Read this before making any change to the conversation agent, MCP servers, or ag
 
 ---
 
+## AI session setup — Caveman mode
+
+This project uses the **caveman Claude Code plugin** for AI-assisted development sessions. It reduces token usage ~75% by dropping articles, filler words, and pleasantries while preserving all technical substance.
+
+**Status:** Auto-activates via `UserPromptSubmit` hook in `~/.claude/settings.json`. Statusline badge shows `[CAVEMAN]` when active.
+
+**Levels:** `full` (default) — drops articles/filler, fragments OK, short synonyms. Switch with `/caveman lite|full|ultra`.
+
+**Disable:** type `stop caveman` or `normal mode` in the prompt.
+
+**Why it matters:** ReAct loops and multi-turn sessions reprocess the full system prompt every iteration. Shorter inputs = direct cost reduction on every agent run during development.
+
+---
+
 ## ⚠ PII and data privacy — mandatory for any tool that handles user data
 
 **This platform has a built-in Data Privacy system. It must be used. It is not optional.**
@@ -349,6 +363,49 @@ exportText({ content: someText, filename: 'export.txt' });
 ### Why this matters
 
 Browser `window.print()` loses all formatting, is browser-dependent, and requires user interaction. The server-side service produces identical, fully-formatted PDFs with selectable text and page numbers regardless of browser or OS. It is reusable across every tool in the platform with a two-line import.
+
+---
+
+## Token usage tracking
+
+`usage_logs` table captures every agent run and conversation turn. All callers go through `services/UsageLogger.js`.
+
+### Schema (current)
+
+| Column | Type | Notes |
+|---|---|---|
+| `org_id` | INTEGER | FK organizations |
+| `user_id` | INTEGER | FK users (nullable) |
+| `tool_slug` | TEXT | Agent identifier |
+| `model_id` | TEXT | Model used |
+| `input_tokens` | INTEGER | Normal input tokens |
+| `output_tokens` | INTEGER | Output tokens |
+| `cache_read_tokens` | INTEGER | Tokens served from Anthropic prompt cache |
+| `cache_creation_tokens` | INTEGER | Tokens written to prompt cache |
+| `cost_usd` | NUMERIC(10,6) | Derived: `cost_aud / 1.55` |
+| `cost_aud` | NUMERIC(10,6) | Source of truth for cost |
+| `created_at` | TIMESTAMPTZ | |
+
+`tokensUsed` shape from `AgentOrchestrator`: `{ input, output, cacheRead, cacheWrite }`.
+
+### Where logUsage is called
+
+- `platform/createAgentRoute.js` — all SSE report agents (fire-and-forget, non-fatal)
+- `routes/conversation.js` — every conversation turn
+- `routes/admin.js` (NLP SQL) — natural language SQL queries
+- `routes/docExtractor.js` — doc extraction runs (currently passes `{ input, output }` only — known gap)
+
+### Analytics endpoint
+
+`GET /api/admin/usage-stats?days=7|30|90` (admin-only) — returns:
+- `totals`: runs, all token counts, `cost_aud`, `cache_hit_rate`, `cache_savings_aud`
+- `by_model[]`: per-model breakdown
+- `by_tool[]`: per-agent breakdown
+- `daily[]`: daily cost + token totals for the period
+
+Cache savings estimate: `cache_read_tokens × ($3.00 − $0.30) / 1M × 1.55 AUD`.
+
+UI: Admin › Token Usage (`/admin/usage`). Period selector: 7d / 30d / 90d.
 
 ---
 

@@ -25,6 +25,38 @@
 
 ---
 
+## 2026-04-21 — Token usage dashboard; UsageLogger cache token capture; caveman mode
+
+### Built
+
+**Token usage tracking — full pipeline**
+- `usage_logs` extended: 3 new columns via idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in `db.js` — `cache_read_tokens INTEGER DEFAULT 0`, `cache_creation_tokens INTEGER DEFAULT 0`, `cost_aud NUMERIC(10,6) DEFAULT 0`
+- `UsageLogger.js` updated to persist all 4 token types (`input`, `output`, `cacheRead`, `cacheWrite` from `AgentOrchestrator.tokensUsed`) plus direct AUD cost — no change to callers in `createAgentRoute.js` or `conversation.js`
+- `GET /admin/usage-stats?days=7|30|90` — new endpoint in `routes/admin.js`; returns: totals (runs, all token types, cost AUD, cache hit rate, estimated cache savings AUD), `by_model[]`, `by_tool[]`, `daily[]`. Cache savings estimated as `cache_read_tokens × ($3.00 − $0.30) / 1M × AUD_PER_USD`
+
+**Admin › Token Usage page**
+- `AdminUsagePage.jsx` — 4 summary cards (total cost AUD, total tokens, cache hit rate, est. savings), CSS bar chart for daily cost trend, by-model table, by-agent/tool table
+- Period selector: 7d / 30d / 90d tab strip — re-fetches on change
+- No new npm dependencies — pure CSS bars using `var(--color-primary)` and `var(--color-border)`
+- Wired in `App.jsx` (`/admin/usage`) and `Sidebar.jsx` (between Diagnostics and Logs, `trending-up` icon, label "Token Usage")
+
+**AI session setup — Caveman mode**
+- This session used the **caveman Claude Code plugin** (full mode) — drops articles/filler, keeps all technical substance, ~75% token reduction
+- Activate at session start: plugin auto-activates via `UserPromptSubmit` hook in `settings.json`
+- Status badge in Claude Code statusline shows `[CAVEMAN]` when active
+- To disable: type `stop caveman` or `normal mode` in the prompt
+
+### Fixed / discovered
+- Historical `usage_logs` rows will show `0` for cache token columns and `cost_aud` — only runs after this deployment are fully populated. `cost_usd` is the reliable historical cost field.
+- `logUsage` already received `cacheRead`/`cacheWrite` in `tokensUsed` from the orchestrator — they were captured but never stored. No orchestrator changes needed.
+
+### Open / next
+- `docExtractor` route calls `logUsage` with `{ input, output }` only — should pass full `tokensUsed` object (noted in 2026-04-18 open items too)
+- `usage_logs` `cost_usd` column is now redundant with `cost_aud` — could be cleaned up later, but harmless to keep
+- Daily chart timezone is hardcoded to `Australia/Brisbane` — acceptable for single-org deployment
+
+---
+
 ## 2026-04-21 — Not Interested Report agent; platform pattern corrections; session-start guardrail update
 
 ### Built

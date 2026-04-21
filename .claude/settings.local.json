@@ -69,7 +69,9 @@
       "Bash(node --check \"c:/Users/micha/Local Sites/mcp_curamTools/server/agents/notInterestedReport/prompt.js\")",
       "Bash(node --check \"c:/Users/micha/Local Sites/mcp_curamTools/server/agents/notInterestedReport/tools.js\")",
       "Bash(node --check \"c:/Users/micha/Local Sites/mcp_curamTools/server/routes/agents.js\")",
-      "Bash(node --check \"c:/Users/micha/Local Sites/mcp_curamTools/server/platform/AgentConfigService.js\")"
+      "Bash(node --check \"c:/Users/micha/Local Sites/mcp_curamTools/server/platform/AgentConfigService.js\")",
+      "Bash(gh repo *)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

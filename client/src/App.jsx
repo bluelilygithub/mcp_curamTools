@@ -27,6 +27,7 @@ import AdminDataPrivacyPage from './pages/admin/AdminDataPrivacyPage';
 import AdminStoragePage from './pages/admin/AdminStoragePage';
 import AdminKnowledgePage from './pages/admin/AdminKnowledgePage';
 import AdminProvidersPage from './pages/admin/AdminProvidersPage';
+import AdminUsagePage from './pages/admin/AdminUsagePage';
 import GoogleAdsMonitorPage      from './pages/tools/GoogleAdsMonitorPage';
 import DiamondPlateDataPage      from './pages/tools/DiamondPlateDataPage';
 import DocExtractorPage          from './pages/tools/DocExtractorPage';
@@ -80,6 +81,7 @@ export default function App() {
                   <Route path="/admin/storage" element={<AdminStoragePage />} />
                   <Route path="/admin/knowledge" element={<AdminKnowledgePage />} />
                   <Route path="/admin/providers" element={<AdminProvidersPage />} />
+                  <Route path="/admin/usage" element={<AdminUsagePage />} />
                 </Route>
               </Route>
             </Route>

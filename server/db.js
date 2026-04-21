@@ -191,6 +191,11 @@ async function initSchema() {
         ON usage_logs(org_id, created_at DESC)
     `);
 
+    // Columns added after initial schema — idempotent on existing deployments
+    await client.query(`ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS cache_read_tokens     INTEGER      DEFAULT 0`);
+    await client.query(`ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS cache_creation_tokens INTEGER      DEFAULT 0`);
+    await client.query(`ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS cost_aud              NUMERIC(10,6) DEFAULT 0`);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS email_templates (
         id         SERIAL PRIMARY KEY,

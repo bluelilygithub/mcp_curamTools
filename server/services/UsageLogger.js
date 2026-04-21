@@ -1,7 +1,3 @@
-/**
- * UsageLogger — writes one row to usage_logs after each completed agent run.
- * Called from createAgentRoute on the success path only.
- */
 const { pool } = require('../db');
 
 const AUD_PER_USD = 1.55;
@@ -21,16 +17,22 @@ async function logUsage({ orgId, userId, slug, modelId, tokensUsed = {}, costAud
   const costUsd = costAud / AUD_PER_USD;
 
   await pool.query(
-    `INSERT INTO usage_logs (org_id, user_id, tool_slug, model_id, input_tokens, output_tokens, cost_usd)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    `INSERT INTO usage_logs
+       (org_id, user_id, tool_slug, model_id,
+        input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+        cost_usd, cost_aud)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       orgId,
       userId,
       slug,
       modelId || null,
-      tokensUsed.input  || 0,
-      tokensUsed.output || 0,
+      tokensUsed.input      ?? 0,
+      tokensUsed.output     ?? 0,
+      tokensUsed.cacheRead  ?? 0,
+      tokensUsed.cacheWrite ?? 0,
       costUsd,
+      costAud,
     ]
   );
 }
