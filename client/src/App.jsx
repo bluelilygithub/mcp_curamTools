@@ -28,6 +28,7 @@ import AdminStoragePage from './pages/admin/AdminStoragePage';
 import AdminKnowledgePage from './pages/admin/AdminKnowledgePage';
 import AdminProvidersPage from './pages/admin/AdminProvidersPage';
 import AdminUsagePage from './pages/admin/AdminUsagePage';
+import AdminClaudeSessionPage from './pages/admin/AdminClaudeSessionPage';
 import GoogleAdsMonitorPage      from './pages/tools/GoogleAdsMonitorPage';
 import DiamondPlateDataPage      from './pages/tools/DiamondPlateDataPage';
 import DocExtractorPage          from './pages/tools/DocExtractorPage';
@@ -82,6 +83,7 @@ export default function App() {
                   <Route path="/admin/knowledge" element={<AdminKnowledgePage />} />
                   <Route path="/admin/providers" element={<AdminProvidersPage />} />
                   <Route path="/admin/usage" element={<AdminUsagePage />} />
+                  <Route path="/admin/claude-sessions" element={<AdminClaudeSessionPage />} />
                 </Route>
               </Route>
             </Route>

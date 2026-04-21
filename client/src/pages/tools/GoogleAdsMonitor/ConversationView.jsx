@@ -270,6 +270,16 @@ export default function ConversationView({
     if (reportText) setReportVisible(true);
   }, [reportText]);
 
+  // Keep Anthropic prompt cache warm — fires every 270s while view is mounted.
+  // Prevents the 5-min TTL expiring between user messages; saves the cache write
+  // premium (~$0.025 AUD) on the next turn after an idle gap.
+  useEffect(() => {
+    const id = setInterval(() => {
+      api.post('/conversation/keep-warm', {}).catch(() => {});
+    }, 270_000);
+    return () => clearInterval(id);
+  }, []);
+
   async function loadConversations() {
     try {
       const rows = await api.get('/conversation');

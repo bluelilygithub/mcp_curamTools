@@ -18,6 +18,19 @@ This project uses the **caveman Claude Code plugin** for AI-assisted development
 
 **Why it matters:** ReAct loops and multi-turn sessions reprocess the full system prompt every iteration. Shorter inputs = direct cost reduction on every agent run during development.
 
+### Claude Code usage limits (accurate model)
+
+Two independent windows govern Claude Code access:
+
+- **5-hour window** — starts from your **first message** in a session, not from when you hit the limit. Exhausting it at 10:30am when you started at 6:00am means the reset is at 11:00am (30 min away), not 5 hours away.
+- **Weekly cap** — sits on top of the 5-hour window. If the weekly cap is exhausted, waiting 5 hours does not restore access — must wait for the 7-day window to reset.
+
+Check current status at any time: `/usage` in the Claude Code terminal.
+
+**Pinging Claude does not reset either limit.** Both are consumption-based time windows — no action resets them early.
+
+**Visual tracker:** Admin › Claude Sessions (`/admin/claude-sessions`) — two SVG donut gauges showing position in the 5-hour and weekly windows. Configurable daily start time (default 06:00). Gauges use browser `new Date()` — no timezone config needed.
+
 ---
 
 ## ⚠ PII and data privacy — mandatory for any tool that handles user data
@@ -151,6 +164,8 @@ For the conversation agent, if a user sends messages within 5 minutes of each ot
 iteration of every turn reads the system prompt from cache. Active conversations are almost
 entirely served from cache on the system prompt. The cache is keyed on the exact token
 sequence, so any change to the system prompt invalidates it.
+
+**Keep-warm:** `POST /api/conversation/keep-warm` — called every 270s by `ConversationView.jsx` while mounted. Makes a 1-token call with the exact same system prompt + tools to reset the TTL. Cost: ~$0.002 AUD/ping (cache read). Not logged to `usage_logs`. See `setup.md → Prompt Cache Keep-Warm`.
 
 **What IS cached (both implemented):**
 - System prompt — wrapped in a content block with `cache_control`

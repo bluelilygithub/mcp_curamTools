@@ -4,6 +4,28 @@ import InlineBanner from '../../components/ui/InlineBanner';
 
 const PERIODS = [7, 30, 90];
 
+const WARNING_STYLES = {
+  critical: { bg: 'var(--color-error-subtle, #fef2f2)', border: '#ef4444', text: '#b91c1c', icon: '🔴' },
+  warning:  { bg: 'var(--color-warning-subtle, #fffbeb)', border: '#f59e0b', text: '#92400e', icon: '⚠️' },
+  info:     { bg: 'var(--color-info-subtle, #eff6ff)',    border: '#3b82f6', text: '#1e40af', icon: 'ℹ️' },
+};
+
+function WarningBanner({ warning }) {
+  const s = WARNING_STYLES[warning.severity] ?? WARNING_STYLES.info;
+  return (
+    <div
+      className="rounded-xl px-4 py-3 flex gap-3 text-sm"
+      style={{ background: s.bg, border: `1px solid ${s.border}` }}
+    >
+      <span>{s.icon}</span>
+      <div>
+        <span className="font-semibold" style={{ color: s.text }}>{warning.title} — </span>
+        <span style={{ color: s.text }}>{warning.detail}</span>
+      </div>
+    </div>
+  );
+}
+
 function fmtAud(val) {
   const n = Number(val ?? 0);
   return `$${n.toFixed(4)}`;
@@ -129,16 +151,23 @@ function DailyChart({ daily }) {
 }
 
 export default function AdminUsagePage() {
-  const [days,    setDays]    = useState(30);
-  const [data,    setData]    = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState('');
+  const [days,     setDays]     = useState(30);
+  const [data,     setData]     = useState(null);
+  const [warnings, setWarnings] = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState('');
 
   useEffect(() => {
     setLoading(true);
     setError('');
-    api.get(`/admin/usage-stats?days=${days}`)
-      .then(setData)
+    Promise.all([
+      api.get(`/admin/usage-stats?days=${days}`),
+      api.get('/admin/usage-warnings'),
+    ])
+      .then(([stats, warn]) => {
+        setData(stats);
+        setWarnings(warn.warnings ?? []);
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [days]);
@@ -185,6 +214,13 @@ export default function AdminUsagePage() {
         <p className="text-sm" style={{ color: 'var(--color-muted)' }}>Loading…</p>
       ) : (
         <>
+          {/* Warnings */}
+          {warnings.length > 0 && (
+            <div className="space-y-2">
+              {warnings.map((w, i) => <WarningBanner key={i} warning={w} />)}
+            </div>
+          )}
+
           {/* Summary cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard

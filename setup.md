@@ -195,6 +195,49 @@ GOOGLE_GA4_PROPERTY_ID       # numeric property ID only, no 'properties/' prefix
 
 ---
 
+## Claude Code Session Tracker
+
+Admin › Claude Sessions (`/admin/claude-sessions`) provides two visual gauges tracking your position in Claude Code's usage windows:
+
+| Gauge | What it shows |
+|---|---|
+| 5-hour window | Time elapsed since configured daily start → minutes until reset |
+| Weekly window | ISO week progress (Mon–Sun) → days remaining |
+
+**Configuration:** set your typical daily coding start time (default 06:00) in the settings form. The 5-hour gauge counts from that time each day.
+
+**How it works:** pure client-side JavaScript (`new Date()`). No Claude Code API access — this is a time-based reference only. Browser local time is used automatically — no timezone config needed.
+
+**Accuracy note:** The 5-hour window starts from your *first message*, not from a fixed clock time. The gauge is an approximation based on your configured start — if you start later than usual, the actual reset will be later than shown.
+
+Check real status anytime: `/usage` in the Claude Code terminal.
+
+---
+
+## Prompt Cache Keep-Warm
+
+The conversation agent's Anthropic prompt cache (system prompt + tool schemas, ~6,800 tokens) has a **5-minute TTL**. If a user pauses mid-conversation, the cache expires and the next message pays the cache write premium (~$0.025 AUD) instead of the read rate (~$0.002 AUD).
+
+**This is handled automatically — no configuration required.**
+
+`ConversationView.jsx` runs a `setInterval` (270 seconds) while the conversation view is mounted. Every 4.5 minutes it calls:
+
+```
+POST /api/conversation/keep-warm
+```
+
+The server builds the exact same system prompt and tool array used by real conversation turns, makes a 1-token call to Anthropic, and returns `{ ok, cacheRead, cacheWrite }`. The cache TTL resets on each hit.
+
+**Cost:** ~$0.002 AUD per ping (cache read). Over an 8-hour session: ~$0.23 AUD. Payback: one avoided cache write ($0.025) after a 5-min idle gap.
+
+**What is cached:** system prompt (~3,500 tokens) + tool schemas (~3,300 tokens) = ~6,800 tokens per call.
+
+**Not logged to `usage_logs`** — infrastructure call, not a user-initiated run. Check `[conversation:keep-warm]` in server logs to verify cache hits.
+
+**If you add a new conversation agent:** create a matching `/keep-warm` endpoint in its route file using the same pattern in `routes/conversation.js`, and add the 270s interval to its view component.
+
+---
+
 ## Adding a New Agent
 
 1. Create `server/agents/<slug>/index.js` — exports `run<Name>(context)`

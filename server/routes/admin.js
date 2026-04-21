@@ -1077,6 +1077,49 @@ router.put('/crm-privacy', async (req, res) => {
   }
 });
 
+// ── Claude Session Config ─────────────────────────────────────────────────
+//
+// GET  /admin/claude-session-config — returns claude_session_config for the org
+// PUT  /admin/claude-session-config — updates daily_start, timezone
+
+const CLAUDE_SESSION_DEFAULTS = {
+  daily_start: '06:00', // HH:MM — browser local time the 5-hour window begins
+};
+
+router.get('/claude-session-config', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'claude_session_config' LIMIT 1`,
+      [req.user.orgId]
+    );
+    res.json({ ...CLAUDE_SESSION_DEFAULTS, ...(r.rows[0]?.value ?? {}) });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load Claude session config.' });
+  }
+});
+
+router.put('/claude-session-config', async (req, res) => {
+  try {
+    const current = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'claude_session_config' LIMIT 1`,
+      [req.user.orgId]
+    );
+    const existing = { ...CLAUDE_SESSION_DEFAULTS, ...(current.rows[0]?.value ?? {}) };
+    const patch    = {};
+    if (typeof req.body.daily_start === 'string') patch.daily_start = req.body.daily_start.trim();
+    const merged = { ...existing, ...patch };
+    await pool.query(
+      `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+       VALUES ($1, 'claude_session_config', $2, $3, NOW())
+       ON CONFLICT (org_id, key) DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+      [req.user.orgId, JSON.stringify(merged), req.user.id]
+    );
+    res.json(merged);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update Claude session config.' });
+  }
+});
+
 // ── Storage Settings ──────────────────────────────────────────────────────
 //
 // GET  /admin/storage-settings — returns current storage_settings for the org
@@ -1311,6 +1354,182 @@ router.post('/diagnostics', async (req, res) => {
 
   console.log(`[Diagnostics] Run by ${req.user.email} — ${results.filter(r => r.ok).length}/${results.length} passed`);
   res.json(results);
+});
+
+// ── Usage Warnings ────────────────────────────────────────────────────────
+//
+// GET /admin/usage-warnings
+// Computes proactive warnings from usage_logs. Returns warnings[].
+// Checks: budget pace, agent over budget, cache health, cost spike,
+//         stale agents, overkill model tier.
+
+router.get('/usage-warnings', async (req, res) => {
+  const orgId = req.user.orgId;
+
+  try {
+    const [
+      budgetSettings,
+      daily7dRes,
+      cacheRes,
+      spikeRes,
+      slugCostRes,
+      staleRes,
+      modelUsageRes,
+      modelsRow,
+    ] = await Promise.all([
+      AgentConfigService.getOrgBudgetSettings(orgId),
+
+      pool.query(
+        `SELECT DATE(created_at AT TIME ZONE 'Australia/Brisbane') AS day,
+                COALESCE(SUM(cost_aud), 0)::numeric AS cost_aud
+           FROM usage_logs
+          WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '7 days'
+          GROUP BY day`,
+        [orgId]
+      ),
+
+      pool.query(
+        `SELECT COUNT(*)::int AS runs,
+                COALESCE(SUM(cache_read_tokens), 0)::bigint AS cache_read,
+                COALESCE(SUM(input_tokens + cache_read_tokens + cache_creation_tokens), 0)::bigint AS total_input
+           FROM usage_logs
+          WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '7 days'`,
+        [orgId]
+      ),
+
+      pool.query(
+        `SELECT COALESCE(AVG(daily_cost), 0)::numeric AS avg_daily,
+                COALESCE(MAX(CASE WHEN day = CURRENT_DATE - 1 THEN daily_cost END), 0)::numeric AS yesterday
+           FROM (
+             SELECT DATE(created_at AT TIME ZONE 'Australia/Brisbane') AS day,
+                    SUM(cost_aud) AS daily_cost
+               FROM usage_logs
+              WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '30 days'
+              GROUP BY day
+           ) t`,
+        [orgId]
+      ),
+
+      pool.query(
+        `SELECT tool_slug,
+                COUNT(*)::int AS runs,
+                AVG(cost_aud)::numeric AS avg_cost
+           FROM usage_logs
+          WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '30 days'
+          GROUP BY tool_slug
+         HAVING COUNT(*) >= 2`,
+        [orgId]
+      ),
+
+      pool.query(
+        `SELECT DISTINCT tool_slug
+           FROM usage_logs
+          WHERE org_id = $1
+            AND created_at >= NOW() - INTERVAL '14 days'
+            AND tool_slug NOT IN (
+              SELECT DISTINCT tool_slug FROM usage_logs
+               WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '3 days'
+            )`,
+        [orgId]
+      ),
+
+      pool.query(
+        `SELECT tool_slug, model_id, COUNT(*)::int AS runs
+           FROM usage_logs
+          WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '30 days'
+            AND model_id IS NOT NULL AND tool_slug IS NOT NULL
+          GROUP BY tool_slug, model_id`,
+        [orgId]
+      ),
+
+      pool.query(
+        `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'ai_models' LIMIT 1`,
+        [orgId]
+      ),
+    ]);
+
+    const warnings = [];
+
+    // 1. Budget pace
+    const maxDaily = budgetSettings.max_daily_org_budget_aud;
+    if (maxDaily != null && daily7dRes.rows.length > 0) {
+      const avg = daily7dRes.rows.reduce((s, r) => s + Number(r.cost_aud), 0) / daily7dRes.rows.length;
+      const pct = avg / maxDaily;
+      if (pct >= 1.0) {
+        warnings.push({ type: 'budget_pace', severity: 'critical', title: 'Daily budget exceeded', detail: `7-day avg $${avg.toFixed(4)} AUD/day exceeds $${maxDaily.toFixed(2)} limit.` });
+      } else if (pct >= 0.8) {
+        warnings.push({ type: 'budget_pace', severity: 'warning', title: 'Approaching daily budget', detail: `7-day avg $${avg.toFixed(4)} AUD/day is ${Math.round(pct * 100)}% of $${maxDaily.toFixed(2)} daily limit.` });
+      }
+    }
+
+    // 2. Agent over budget
+    if (slugCostRes.rows.length > 0) {
+      const configs = await Promise.all(
+        slugCostRes.rows.map((r) =>
+          AgentConfigService.getAdminConfig(r.tool_slug).then((cfg) => ({ slug: r.tool_slug, cfg, row: r }))
+        )
+      );
+      for (const { slug, cfg, row } of configs) {
+        const limit = cfg.max_task_budget_aud;
+        if (!limit) continue;
+        const avg = Number(row.avg_cost);
+        const pct = avg / limit;
+        if (pct >= 0.9) {
+          warnings.push({
+            type:     'agent_over_budget',
+            severity: pct >= 1.0 ? 'critical' : 'warning',
+            title:    `${slug}: high avg run cost`,
+            detail:   `Avg $${avg.toFixed(4)} AUD/run is ${Math.round(pct * 100)}% of $${limit.toFixed(2)} limit (${row.runs} runs, last 30 days).`,
+          });
+        }
+      }
+    }
+
+    // 3. Cache health
+    const cr = cacheRes.rows[0];
+    if (cr && Number(cr.runs) >= 5) {
+      const hitRate = Number(cr.total_input) > 0 ? Number(cr.cache_read) / Number(cr.total_input) : 0;
+      if (hitRate < 0.15) {
+        warnings.push({ type: 'cache_health', severity: 'warning', title: 'Low cache hit rate', detail: `${(hitRate * 100).toFixed(1)}% over last 7 days. Check if system prompts contain dynamic content that breaks the cache key.` });
+      }
+    }
+
+    // 4. Cost spike
+    const sr = spikeRes.rows[0];
+    if (sr) {
+      const avg = Number(sr.avg_daily);
+      const yday = Number(sr.yesterday);
+      if (avg > 0.001 && yday > avg * 2.5) {
+        warnings.push({ type: 'spike', severity: 'warning', title: 'Cost spike yesterday', detail: `Yesterday $${yday.toFixed(4)} AUD was ${(yday / avg).toFixed(1)}× the 30-day daily avg ($${avg.toFixed(4)} AUD).` });
+      }
+    }
+
+    // 5. Stale agents
+    if (staleRes.rows.length > 0) {
+      const slugs = staleRes.rows.map((r) => r.tool_slug).join(', ');
+      warnings.push({ type: 'stale_agent', severity: 'info', title: 'Agent(s) inactive 3+ days', detail: `Ran in last 14 days but not last 3: ${slugs}.` });
+    }
+
+    // 6. Overkill model
+    const allModels = Array.isArray(modelsRow.rows[0]?.value) ? modelsRow.rows[0].value : MODEL_DEFAULTS;
+    const modelTierMap = Object.fromEntries(allModels.map((m) => [m.id, m.tier]));
+    const TIER_RANK    = { standard: 0, advanced: 1 };
+    const { AGENT_MODEL_REQUIREMENTS } = AgentConfigService;
+
+    for (const { tool_slug, model_id, runs } of modelUsageRes.rows) {
+      const modelTier = modelTierMap[model_id];
+      const agentReq  = AGENT_MODEL_REQUIREMENTS[tool_slug];
+      if (!modelTier || !agentReq) continue;
+      if ((TIER_RANK[modelTier] ?? 0) > (TIER_RANK[agentReq.tier] ?? 0)) {
+        warnings.push({ type: 'overkill_model', severity: 'info', title: `${tool_slug}: overkill model`, detail: `Using ${model_id} (${modelTier}) for ${runs} runs — agent only requires ${agentReq.tier}. Cheaper model available in Admin › Agents.` });
+      }
+    }
+
+    res.json({ warnings });
+  } catch (err) {
+    console.error('[usage-warnings]', err.message);
+    res.status(500).json({ error: 'Failed to compute usage warnings.' });
+  }
 });
 
 // ── Usage Stats ───────────────────────────────────────────────────────────

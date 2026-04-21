@@ -325,4 +325,62 @@ router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) =>
   done();
 });
 
+// ── Cache keep-warm ───────────────────────────────────────────────────────
+//
+// POST /api/conversation/keep-warm
+// Makes a 1-token call with the exact system prompt + tools used by the
+// conversation agent. Resets the Anthropic prompt cache TTL (5 min) so the
+// next real message finds the cache warm rather than paying the write premium.
+//
+// Called by the client every 270s while ConversationView is mounted.
+// Not logged to usage_logs — cost is ~$0.002 AUD per call (cache read).
+
+router.post('/keep-warm', requireAuth, async (req, res) => {
+  const { orgId } = req.user;
+  try {
+    const adminConfig = await AgentConfigService.getAdminConfig(TOOL_SLUG).catch(() => ({}));
+    if (adminConfig.enabled === false) {
+      return res.json({ ok: false, reason: 'agent disabled' });
+    }
+
+    const [agentConfig, monitorConfig] = await Promise.all([
+      AgentConfigService.getAgentConfig(orgId, TOOL_SLUG).catch(() => ({})),
+      AgentConfigService.getAgentConfig(orgId, 'google-ads-monitor').catch(() => ({})),
+    ]);
+
+    const systemPrompt = buildSystemPrompt(agentConfig, monitorConfig);
+    const model        = adminConfig.model ?? 'claude-sonnet-4-6';
+
+    // Mirror AgentOrchestrator: strip execute + meta fields before sending to provider
+    const providerTools = googleAdsConversationTools.map(
+      ({ execute: _e, requiredPermissions: _p, toolSlug: _s, cacheable: _c, ...schema }) => schema
+    );
+
+    const { getProvider } = require('../platform/AgentOrchestrator');
+    const response = await getProvider(model).chat({
+      model,
+      max_tokens: 1,
+      system:     systemPrompt,
+      tools:      providerTools,
+      messages:   [{ role: 'user', content: 'ping' }],
+    });
+
+    const usage = response.usage ?? {};
+    console.log('[conversation:keep-warm]', JSON.stringify({
+      orgId,
+      cacheRead:  usage.cache_read_input_tokens     ?? 0,
+      cacheWrite: usage.cache_creation_input_tokens ?? 0,
+    }));
+
+    res.json({
+      ok:         true,
+      cacheRead:  usage.cache_read_input_tokens     ?? 0,
+      cacheWrite: usage.cache_creation_input_tokens ?? 0,
+    });
+  } catch (err) {
+    console.error('[conversation:keep-warm]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

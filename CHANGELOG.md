@@ -57,6 +57,101 @@
 
 ---
 
+## 2026-04-21 — Token usage warnings; proactive cost and health alerts on usage page
+
+### Built
+
+**`GET /admin/usage-warnings` endpoint**
+- 8 parallel queries, 6 independent warning checks, returns `{ warnings: [{ type, severity, title, detail }] }`
+- Severity levels: `critical` (red), `warning` (amber), `info` (blue)
+
+| Check | Logic | Severity |
+|---|---|---|
+| Budget pace | 7-day avg daily spend ≥ 80% / 100% of `max_daily_org_budget_aud` | warning / critical |
+| Agent over budget | Per-slug avg run cost ≥ 90% of agent's `max_task_budget_aud` (from `getAdminConfig`) | warning / critical |
+| Cache health | Cache hit rate < 15% over last 7 days (min 5 runs to avoid noise) | warning |
+| Cost spike | Yesterday's spend > 2.5× 30-day daily average | warning |
+| Stale agents | Ran in last 14 days but not last 3 days | info |
+| Overkill model | Model tier > agent's declared tier in `AGENT_MODEL_REQUIREMENTS` | info |
+
+- Agent over budget uses `Promise.all` across unique slugs — N parallel `getAdminConfig` calls, not N sequential
+- Overkill model check uses `ai_models` from `system_settings` (with `MODEL_DEFAULTS` fallback) for model tier lookup; cross-referenced against `AGENT_MODEL_REQUIREMENTS` exported from `AgentConfigService`
+
+**`AdminUsagePage.jsx` — warnings display**
+- Both `usage-stats` and `usage-warnings` fetched in a single `Promise.all` on load and period change
+- Colour-coded banners rendered above stat cards: red (critical), amber (warning), blue (info)
+- Non-dismissable — persist until the underlying condition clears
+
+### Fixed / discovered
+- Budget pace warning skipped when `max_daily_org_budget_aud` is `null` (unlimited) — no false positives for orgs without a budget set
+- Stale agent check uses 14-day look-back (not 30-day) to avoid flagging agents that are intentionally infrequent
+
+### Open / next
+- All open items from prior session carry forward
+- Budget pace warning has no monthly projection — only compares against daily limit; a `max_monthly_budget_aud` field would enable richer projection (not yet in schema)
+
+---
+
+## 2026-04-21 — Prompt cache keep-warm; ConversationView 270s interval
+
+### Built
+
+**`POST /api/conversation/keep-warm`** (`routes/conversation.js`)
+- Loads the same `agentConfig` + `adminConfig` as a real conversation turn
+- Builds system prompt via `buildSystemPrompt(agentConfig, monitorConfig)` — exact same token sequence
+- Strips `execute`/`requiredPermissions`/`toolSlug`/`cacheable` from tools (mirrors `AgentOrchestrator`)
+- Calls `provider.chat({ max_tokens: 1, system, tools, messages: [{ role: 'user', content: 'ping' }] })`
+- `anthropic.js` provider adds `cache_control: { type: 'ephemeral' }` to system prompt and last tool automatically — cache key matches real calls exactly
+- Returns `{ ok, cacheRead, cacheWrite }`, logs to console, **not** written to `usage_logs`
+- Cost per ping: ~$0.002 AUD (cache read); ~$0.025 AUD on first call (cache write)
+
+**`ConversationView.jsx` — keep-warm interval**
+- `useEffect` with empty deps: `setInterval(270_000)` fires every 4.5 min while view is mounted
+- Calls `api.post('/conversation/keep-warm', {})` — silent failure (`.catch(() => {})`)
+- `clearInterval` on unmount — stops when user navigates away
+
+**Documentation**
+- `setup.md` — new "Prompt Cache Keep-Warm" section: cost breakdown, what's cached, pattern for new agents
+- `server/CLAUDE.md` — keep-warm note added to prompt caching section
+
+### Fixed / discovered
+- Cache key depends on exact token sequence — keep-warm MUST use same `buildSystemPrompt()` call, same tools array, same `cache_control` placement. Anything different = separate cache entry = no benefit.
+- `POST /keep-warm` placed after all `POST /:id/*` routes — no Express route conflict (different literal paths)
+
+### Open / next
+- Keep-warm only covers the conversation agent — other agents with ReAct loops (high-intent-advisor) could benefit but are not frequently used interactively
+
+---
+
+## 2026-04-21 — Claude Sessions page; 5-hour and weekly usage window gauges
+
+### Built
+
+**`/admin/claude-sessions`** — new admin page ("Claude Sessions", clock icon in sidebar)
+- Two SVG donut gauges, purely client-side time math, auto-refresh every 30s
+- **5-hour wheel**: `(now − daily_start_time) / 300min` → shows minutes remaining + reset time (e.g. "42m remaining · Resets at 11:00am")
+- **Weekly wheel**: ISO week progress Mon→Sun → shows day N of 7 + days remaining
+- Gauge colours: green < 65%, amber 65–85%, red > 85%
+- Info cards explain 5-hour vs weekly cap mechanics; `/usage` terminal command referenced
+
+**Settings**
+- Configurable daily start time (time picker, default 06:00)
+- Stored in `system_settings` key `claude_session_config` — `{ daily_start: 'HH:MM' }`
+- Changing the time picker updates gauges live before saving
+- `GET/PUT /admin/claude-session-config` routes in `admin.js`
+
+**Timezone removed**
+- `timezone` field was added to config then removed — browser `new Date()` already uses local time; explicit timezone config was unused and misleading
+
+### Fixed / discovered
+- Gauges are 100% client-side — no server involvement at runtime. Server only stores the configured start time.
+- Weekly gauge uses ISO week (Mon = day 1). Anthropic's actual weekly reset day is unknown — this is a reasonable approximation.
+
+### Open / next
+- Actual Claude Code weekly reset day may not align with Monday — no way to query this from the platform; user can manually note their week-start if needed
+
+---
+
 ## 2026-04-21 — Not Interested Report agent; platform pattern corrections; session-start guardrail update
 
 ### Built
