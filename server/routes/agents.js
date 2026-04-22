@@ -123,6 +123,18 @@ agentsRouter.use(
   })
 );
 
+// ── Keyword Opportunity ───────────────────────────────────────────────────
+const { runKeywordOpportunity } = require('../agents/keywordOpportunity');
+
+agentsRouter.use(
+  '/keyword-opportunity',
+  createAgentRoute({
+    slug:               'keyword-opportunity',
+    runFn:              runKeywordOpportunity,
+    requiredPermission: 'ads_operator',
+  })
+);
+
 // ── Ads Copy Gate ─────────────────────────────────────────────────────────
 const { runAdsCopyGate } = require('../agents/adsCopyGate');
 

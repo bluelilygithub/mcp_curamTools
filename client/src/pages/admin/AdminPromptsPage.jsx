@@ -87,6 +87,13 @@ const AGENTS = [
     purpose: 'Pre-fetches all not-interested CRM leads (all time), filters to wrong_products and wrong_location categories, attaches progress notes (call records), and cross-references with Google Ads search terms, active keywords, and campaign performance. Produces two diagnostic lenses per reason category: Ads Signal (which campaigns/keywords attract wrong-fit traffic) and Sales Signal (what call notes reveal about qualification behaviour). CRM records without UTM data are treated as pre-tracking-era records and excluded from attribution analysis.',
   },
   {
+    slug: 'keyword-opportunity',
+    title: 'Keyword Opportunity',
+    description: 'Multi-source keyword research — 150-keyword master list, competitor gap table, and Quick Wins.',
+    usedIn: 'GoogleAdsMonitorPage → Dashboard tab → Keyword Opportunity card. Run on demand.',
+    purpose: 'Phase 1 pre-fetches 5 MCP sources in parallel: active keywords, 90-day search terms, campaign structure (Google Ads), GA4 traffic sources, and CRM enquiries (12 months, limit 1000). Phase 2 runs one Anthropic web_search_20250305 call per configured competitor (sequential, AU geo-targeted) to identify what each competitor offers and targets. Single Claude analysis call produces 4 sections: Summary (counts), Keyword Opportunity Table (max 150 keywords, top 30 flagged HIGH PRIORITY, sorted by volume), Competitor Keyword Gaps (table with competitor source), and Quick Wins (min 10 high-volume transactional READY keywords with no new infrastructure needed). Budget set higher than pure pre-fetch agents due to web search cost per competitor.',
+  },
+  {
     slug: 'ads-copy-gate',
     title: 'Copy Gate',
     description: 'QA gate review of the Copy Playbook — blocks, holds, independent character recounts, sequencing conflicts, editorial flags, and a confirmed go-list.',

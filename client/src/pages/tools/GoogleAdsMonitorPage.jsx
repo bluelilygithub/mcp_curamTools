@@ -155,6 +155,7 @@ const ALL_AGENT_SLUGS = [
   { slug: 'ads-copy-diagnostic',         label: 'Copy Diagnostic' },
   { slug: 'ads-copy-playbook',           label: 'Copy Playbook' },
   { slug: 'ads-copy-gate',              label: 'Copy Gate' },
+  { slug: 'keyword-opportunity',        label: 'Keyword Opportunity' },
 ];
 
 function AllAgentsHistory({ onDiscuss }) {
@@ -723,6 +724,7 @@ export default function GoogleAdsMonitorPage() {
             { slug: 'ads-copy-diagnostic',       title: 'Copy Diagnostic',     description: 'Formal ad copy audit — reviews every active RSA ad\'s headlines, descriptions, asset performance ratings, quality score components, and search term alignment. Flags Poor-rated assets and copy that ignores Diamond Plate\'s differentiators.' },
             { slug: 'ads-copy-playbook', title: 'Copy Playbook', description: 'Prescriptive optimization playbook — paste-ready headline and description replacements, negative keyword list, asset pinning strategy, wasted spend summary, NSW ad group structural fix, and 30-day monitoring plan. Reads the Diagnostic Report automatically.', prerequisiteSlug: 'ads-copy-diagnostic', prerequisiteTitle: 'Copy Diagnostic' },
             { slug: 'ads-copy-gate', title: 'Copy Gate', description: 'QA gate review of the Copy Playbook before any changes go live — independent character recounts, immediate blocks, holds, sequencing conflicts, editorial approval flags, and a confirmed go-list of every action cleared for implementation. Reads the Playbook automatically.', prerequisiteSlug: 'ads-copy-playbook', prerequisiteTitle: 'Copy Playbook' },
+            { slug: 'keyword-opportunity', title: 'Keyword Opportunity', description: 'Multi-source keyword research — combines active Google Ads keywords, 90-day search terms, CRM enquiry phrases (12m), GA4 traffic sources, and live web searches on each configured competitor. Produces a 150-keyword master list, competitor gap table, and a Quick Wins list of high-volume transactional keywords ready to add today.' },
           ].map(({ slug, title, description, prerequisiteSlug, prerequisiteTitle }) => (
             <AgentDashboardCard
               key={slug}
