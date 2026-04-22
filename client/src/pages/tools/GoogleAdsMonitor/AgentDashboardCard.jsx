@@ -57,7 +57,7 @@ function printContent(title, text) {
   win.print();
 }
 
-export default function AgentDashboardCard({ slug, title, description, startDate, endDate, expanded, onToggle, onContinueInConversation }) {
+export default function AgentDashboardCard({ slug, title, description, startDate, endDate, expanded, onToggle, onContinueInConversation, prerequisiteSlug, prerequisiteTitle }) {
   const [runs,           setRuns]           = useState([]);   // all complete runs, newest first
   const [runIndex,       setRunIndex]       = useState(0);    // 0 = most recent
   const [running,        setRunning]        = useState(false);
@@ -70,6 +70,8 @@ export default function AgentDashboardCard({ slug, title, description, startDate
   const [emailError,     setEmailError]     = useState('');
   const [recentRunModal, setRecentRunModal] = useState(false);
   const [recentRunMeta,  setRecentRunMeta]  = useState(null); // { hoursAgo, sameRange }
+  const [prereqModal,    setPrereqModal]    = useState(false);
+  const [prereqMeta,     setPrereqMeta]     = useState(null); // { state: 'none'|'old', daysAgo }
 
   useEffect(() => { loadHistory(); }, [slug]);
 
@@ -87,10 +89,30 @@ export default function AgentDashboardCard({ slug, title, description, startDate
   const result     = currentRun?.result ?? null;
   const summary    = result?.summary ?? '';
 
-  function handleRunClick() {
+  async function handleRunClick() {
+    // 1. Prerequisite check — does a required prior report exist?
+    if (prerequisiteSlug) {
+      try {
+        const prereqRows = await api.get(`/agents/${prerequisiteSlug}/history`);
+        const latestPrereq = (prereqRows ?? []).find((r) => r.status === 'complete');
+        if (!latestPrereq) {
+          setPrereqMeta({ state: 'none' });
+          setPrereqModal(true);
+          return;
+        }
+        const prereqDaysAgo = (Date.now() - new Date(latestPrereq.run_at).getTime()) / 86_400_000;
+        if (prereqDaysAgo > 7) {
+          setPrereqMeta({ state: 'old', daysAgo: Math.round(prereqDaysAgo) });
+          setPrereqModal(true);
+          return;
+        }
+      } catch { /* non-fatal — proceed */ }
+    }
+
+    // 2. Recent-run check
     if (!runs.length) { handleRun(); return; }
-    const latest   = runs[0];
-    const hoursAgo = (Date.now() - new Date(latest.run_at).getTime()) / 3_600_000;
+    const latest    = runs[0];
+    const hoursAgo  = (Date.now() - new Date(latest.run_at).getTime()) / 3_600_000;
     const sameRange = latest.result?.startDate === startDate && latest.result?.endDate === endDate;
     if (hoursAgo < 6 || sameRange) {
       setRecentRunMeta({ hoursAgo, sameRange });
@@ -326,6 +348,37 @@ export default function AgentDashboardCard({ slug, title, description, startDate
           <p style={{ fontSize: 13, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
             No results yet — click "Run now" to generate this report.
           </p>
+        </div>
+      )}
+
+      {/* ── Prerequisite warning modal ──────────────────────────────────── */}
+      {prereqModal && prereqMeta && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.45)',
+        }} onClick={() => setPrereqModal(false)}>
+          <div style={{
+            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+            borderRadius: 16, padding: 24, width: 420, fontFamily: 'inherit',
+          }} onClick={(e) => e.stopPropagation()}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 8 }}>
+              {prereqMeta.state === 'none' ? 'Run the diagnostic first' : 'Diagnostic report is outdated'}
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 16, lineHeight: 1.55 }}>
+              {prereqMeta.state === 'none'
+                ? `The ${title} reads the ${prerequisiteTitle ?? 'prerequisite report'} as its primary input — findings, warranty errors, asset ratings, and copy issues are taken directly from that report rather than re-diagnosed. No ${prerequisiteTitle ?? 'prerequisite'} run was found for this account. Run that report first to get accurate, specific recommendations.`
+                : `The ${title} reads the ${prerequisiteTitle ?? 'prerequisite report'} as its primary input. The last ${prerequisiteTitle ?? 'prerequisite'} run was ${prereqMeta.daysAgo} day${prereqMeta.daysAgo === 1 ? '' : 's'} ago — recommendations may reference stale findings. Consider running an updated ${prerequisiteTitle ?? 'diagnostic'} first.`
+              }
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button variant="secondary" onClick={() => setPrereqModal(false)}>
+                {prereqMeta.state === 'none' ? 'Cancel — run diagnostic first' : 'Cancel — update diagnostic first'}
+              </Button>
+              <Button variant="primary" onClick={() => { setPrereqModal(false); handleRun(); }}>
+                Run anyway
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -68,7 +68,7 @@ Produce exactly these 8 sections. Total word count under 2,000 words — brevity
 Ranked list of all required actions. Maximum 15 items.
 
 Format each item as one line:
-[PRIORITY #] [TIMEFRAME] | [Ad Group] | [Action] | [Est. time]
+[PRIORITY #] [TIMEFRAME] | [Ad Group] | [Action] | [Est. time] | [QS IMPACT]
 
 Timeframes:
 - TODAY: errors, typos, factual misstatements (10-year → 12-year), disapproval risks
@@ -77,6 +77,15 @@ Timeframes:
 
 Rank TODAY by severity. Rank THIS WEEK by estimated CPA impact. Rank THIS MONTH by estimated volume impact.
 Follow each item with one line: Rationale: [one sentence].
+
+QS IMPACT labels — use exactly one per TODAY or THIS WEEK item:
+- [+2 QS or more]: strong evidence from BELOW_AVERAGE adRelevance or landingPage scores on high-volume keywords
+- [+1 QS]: moderate evidence; single component improvement expected
+- [CTR lift only]: no QS component directly addressed but click behaviour likely to improve
+- [No measurable QS impact]: error or copy fix with no relevance signal attached (typo, warranty number fix)
+- [INSUFFICIENT DATA]: diagnostic data does not provide a basis for estimating QS impact
+
+Do not estimate without a data basis from the diagnostic. THIS MONTH items: omit QS IMPACT field entirely.
 
 ### Wasted Spend Summary
 Single table from search term data:
@@ -103,6 +112,7 @@ Rules:
 - Every "10 Year" or "10-Year" headline → replace with exact "12-Year" equivalent
 - Flag any replacement needing Google editorial approval as [APPROVAL REQUIRED]
 - Replacements must be paste-ready — formatted exactly as they appear in Google Ads
+- Replacements must not contain escape characters or pipe characters (|) — plain text only
 
 ### Description Replacements
 Table of every description with errors, incomplete sentences, repetitive "near you" language, warranty errors, or jargon:
@@ -116,6 +126,7 @@ Rules:
 - No description may end mid-sentence
 - "Near me" / "near you" maximum once per RSA across all four descriptions combined
 - Replacements must be paste-ready
+- Replacements must not contain escape characters or pipe characters (|) — plain text only
 
 ### Asset Pinning
 For each RSA, pinning strategy:
@@ -128,12 +139,28 @@ Rules:
 - H2 pin: conversion driver (warranty, price, or mobile)
 - H3: unpinned — let Google test
 - Flag any current pin locking a weak or incorrect headline as [UNPIN REQUIRED]
+- Flag any recommended pin that depends on a headline replacement being completed first as [PIN AFTER REPLACE — Priority N] where N is the corresponding Priority Action number
 
 ### Negative Keywords
-Consolidated list across all ad groups:
+Consolidated list across all ad groups. Before recommending any negative keyword, apply these three checks in order.
 
-| Keyword | Match Type | Apply To | Rationale |
-|---|---|---|---|
+CHECK 1 — CONVERSION HISTORY: Pull from search term data for the report period. Has this term or a close variant converted even once?
+- If YES: recommend Phrase Match only. Add note: "Flag for reassessment after 30 days before considering Broad Match."
+- If NO conversions but 3+ clicks: recommend Phrase Match only. Add note: "Monitor for 2 weeks before adding."
+- If zero clicks and zero conversions: Broad Match is acceptable.
+
+CHECK 2 — CONSIDERATION STAGE: Is this an informational query with commercial intent that better copy could convert? (e.g. "is ceramic coating worth it", "do new cars need ceramic coating")
+- If YES: label [COPY FIRST]. Do not add as negative until the relevant description improvement from the Priority List is confirmed live and has run for 2 weeks. State which Priority item must be completed first.
+- If purely informational with no commercial signal: label [SAFE TO EXCLUDE].
+
+CHECK 3 — BROAD MATCH SAFETY: Does this term share a root with any keyword that has converted in the account?
+- If YES: downgrade to Phrase Match and label [BROAD MATCH RISK].
+- If NO: Broad Match is acceptable.
+
+Output table:
+
+| Keyword | Conversion History | Consideration Stage | Broad Match Safe | Final Match Type | Notes |
+|---|---|---|---|---|---|
 
 Categories to cover:
 - Off-category terms (tinting, wraps, interior cleaning, detailing, spray)
@@ -167,6 +194,15 @@ Each item is one line. No explanation unless essential.
 - Replacements are paste-ready — formatted exactly as they appear in Google Ads.
 - Where a recommendation requires a new landing page: flag [LANDING PAGE REQUIRED] and place in THIS MONTH.
 - Under 2,000 words total. Cut ruthlessly.
+
+## Sequencing
+
+For every recommendation in this report, state whether it is safe to action independently or depends on another action being completed first. Use these exact labels:
+- [PIN AFTER REPLACE — Priority N]: any pinning recommendation that requires a headline replacement to be completed first
+- [NEGATIVE AFTER COPY — Priority N]: any negative keyword that requires a copy improvement to be live first
+- [STRUCTURAL AFTER DATA]: any structural change that requires landing page performance to be confirmed
+
+For each sequencing dependency, add one sentence stating what happens if the sequencing is ignored (e.g. "Pinning an unreplaced headline locks in the factual error and may suppress ad strength recovery").
 ${customPromptBlock}
 Before finalising any recommendation, verify it against the declared account baselines in the Account Intelligence Profile above.`;
 }

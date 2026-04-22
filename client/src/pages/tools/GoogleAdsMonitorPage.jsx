@@ -720,13 +720,15 @@ export default function GoogleAdsMonitorPage() {
             { slug: 'auction-insights',          title: 'Auction Insights',    description: 'Which competitors are bidding in the same auctions — impression share, top-of-page rate, and where Diamond Plate is losing visibility.' },
             { slug: 'competitor-keyword-intel',  title: 'Competitor Keywords', description: 'Keyword gaps for Diamond Plate Australia — what competitors are targeting that we are not. Requires Standard API access.' },
             { slug: 'ads-copy-diagnostic',       title: 'Copy Diagnostic',     description: 'Formal ad copy audit — reviews every active RSA ad\'s headlines, descriptions, asset performance ratings, quality score components, and search term alignment. Flags Poor-rated assets and copy that ignores Diamond Plate\'s differentiators.' },
-            { slug: 'ads-copy-playbook',         title: 'Copy Playbook',       description: 'Prescriptive optimization playbook — paste-ready headline and description replacements, negative keyword list, asset pinning strategy, wasted spend summary, NSW ad group structural fix, and 30-day monitoring plan. Reads the Diagnostic Report automatically.' },
-          ].map(({ slug, title, description }) => (
+            { slug: 'ads-copy-playbook', title: 'Copy Playbook', description: 'Prescriptive optimization playbook — paste-ready headline and description replacements, negative keyword list, asset pinning strategy, wasted spend summary, NSW ad group structural fix, and 30-day monitoring plan. Reads the Diagnostic Report automatically.', prerequisiteSlug: 'ads-copy-diagnostic', prerequisiteTitle: 'Copy Diagnostic' },
+          ].map(({ slug, title, description, prerequisiteSlug, prerequisiteTitle }) => (
             <AgentDashboardCard
               key={slug}
               slug={slug}
               title={title}
               description={description}
+              prerequisiteSlug={prerequisiteSlug}
+              prerequisiteTitle={prerequisiteTitle}
               startDate={startDate}
               endDate={endDate}
               expanded={openCard === slug}
