@@ -37,6 +37,41 @@ function Field({ label, hint, children }) {
   );
 }
 
+// ── Inactive default modal ────────────────────────────────────────────────────
+
+function InactiveDefaultModal({ modelName, onDismiss }) {
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      onClick={onDismiss}
+    >
+      <div
+        style={{
+          background: 'var(--color-surface)', borderRadius: '1rem',
+          border: '1px solid #fca5a5', padding: '2rem', maxWidth: 420, width: '90%',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚠️</div>
+        <h2 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+          Default model is inactive
+        </h2>
+        <p style={{ fontSize: '0.875rem', color: 'var(--color-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+          <strong style={{ color: 'var(--color-text)' }}>{modelName}</strong> is set as the default model but is
+          currently <strong style={{ color: '#991b1b' }}>disabled</strong>. Agents using the default will fail until
+          you select an active model.
+        </p>
+        <Button variant="primary" onClick={onDismiss}>Got it — I'll fix this</Button>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminModelsPage() {
@@ -50,6 +85,7 @@ export default function AdminModelsPage() {
   const [form,          setForm]          = useState(EMPTY_FORM);
   const [defaultModel,  setDefaultModel]  = useState(null);
   const [savingDefault, setSavingDefault] = useState(false);
+  const [inactiveDefaultModal, setInactiveDefaultModal] = useState(null); // null | model name string
   // testResults: { [modelId]: { status: 'testing'|'ok'|'error', latencyMs?, error? } }
   const [testResults, setTestResults] = useState({});
 
@@ -61,7 +97,15 @@ export default function AdminModelsPage() {
     ]).then(([modelData, statusData, defaultData]) => {
       setModels(modelData);
       setApiKeyOk(statusData);
-      setDefaultModel(defaultData.model_id ?? '');
+      const defId = defaultData.model_id ?? '';
+      setDefaultModel(defId);
+      // Warn immediately if the persisted default is already inactive
+      if (defId) {
+        const defModel = modelData.find((m) => m.id === defId);
+        if (defModel && !defModel.enabled) {
+          setInactiveDefaultModal(defModel.name || defId);
+        }
+      }
     }).catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -187,10 +231,23 @@ export default function AdminModelsPage() {
     color: 'var(--color-text)', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box',
   };
 
+  // ── Derived: active models for the default dropdown ───────────────────────
+
+  const activeModels = models.filter((m) => m.enabled);
+  const defaultIsInactive = defaultModel && !activeModels.some((m) => m.id === defaultModel);
+  const defaultModelObj = models.find((m) => m.id === defaultModel);
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
+
+      {inactiveDefaultModal && (
+        <InactiveDefaultModal
+          modelName={inactiveDefaultModal}
+          onDismiss={() => setInactiveDefaultModal(null)}
+        />
+      )}
 
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
@@ -217,31 +274,45 @@ export default function AdminModelsPage() {
       {!loading && (
         <div
           className="rounded-2xl border p-4 mb-5 flex items-center gap-4 flex-wrap"
-          style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
+          style={{
+            background: 'var(--color-surface)',
+            borderColor: defaultIsInactive ? '#fca5a5' : 'var(--color-border)',
+          }}
         >
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>Default model</p>
             <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
               Used by all agents unless overridden individually in Admin &rsaquo; Agents.
             </p>
+            {defaultIsInactive && (
+              <p className="text-xs mt-1 font-medium" style={{ color: '#991b1b' }}>
+                ⚠ Current default is inactive — select an active model.
+              </p>
+            )}
           </div>
-          <div className="flex flex-col gap-1" style={{ minWidth: 260 }}>
-            <input
-              list="default-model-datalist"
+          <div style={{ minWidth: 260 }}>
+            <select
               value={defaultModel ?? ''}
               onChange={(e) => setDefaultModel(e.target.value)}
-              placeholder="Type or select a model ID…"
               className="px-3 py-2 rounded-xl border text-sm outline-none font-mono"
-              style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)', width: '100%' }}
-            />
-            <datalist id="default-model-datalist">
-              {models.filter((m) => m.enabled).map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
+              style={{
+                background: 'var(--color-bg)',
+                borderColor: defaultIsInactive ? '#fca5a5' : 'var(--color-border)',
+                color: 'var(--color-text)',
+                width: '100%',
+              }}
+            >
+              <option value="">— No default —</option>
+              {/* Show inactive default as disabled option so user can see what's set */}
+              {defaultIsInactive && defaultModelObj && (
+                <option value={defaultModelObj.id} disabled style={{ color: '#991b1b' }}>
+                  ⚠ {defaultModelObj.name} (inactive)
+                </option>
+              )}
+              {activeModels.map((m) => (
+                <option key={m.id} value={m.id}>{m.name} — {m.id}</option>
               ))}
-            </datalist>
-            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
-              Any model ID — not limited to this list. Clear to remove default.
-            </p>
+            </select>
           </div>
           <Button variant="primary" onClick={saveDefaultModel} disabled={savingDefault}>
             {savingDefault ? 'Saving…' : 'Save'}
@@ -374,6 +445,7 @@ export default function AdminModelsPage() {
             models.map((m, i) => {
               const tier = TIER_META[m.tier] ?? TIER_META.advanced;
               const test = testResults[m.id];
+              const isCurrentDefault = m.id === defaultModel;
               return (
                 <div
                   key={m.id}
@@ -394,6 +466,14 @@ export default function AdminModelsPage() {
                         >
                           {m.tier}
                         </span>
+                        {isCurrentDefault && (
+                          <span
+                            className="text-xs px-2 py-0.5 rounded-full font-medium"
+                            style={{ background: 'rgba(37,99,235,0.1)', color: '#2563eb' }}
+                          >
+                            default
+                          </span>
+                        )}
                         {m.tagline && (
                           <span className="text-xs" style={{ color: 'var(--color-muted)' }}>{m.tagline}</span>
                         )}
@@ -412,8 +492,12 @@ export default function AdminModelsPage() {
                     {/* Toggle enabled */}
                     <button
                       onClick={async () => {
+                        const willDisable = m.enabled;
                         const updated = models.map((x) => x.id === m.id ? { ...x, enabled: !x.enabled } : x);
                         await persist(updated, m.enabled ? 'Model disabled.' : 'Model enabled.');
+                        if (willDisable && isCurrentDefault) {
+                          setInactiveDefaultModal(m.name || m.id);
+                        }
                       }}
                       className="relative inline-flex h-5 w-9 rounded-full transition-all flex-shrink-0"
                       style={{ background: m.enabled ? 'var(--color-primary)' : 'var(--color-border)' }}
