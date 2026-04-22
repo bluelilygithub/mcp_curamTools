@@ -102,11 +102,15 @@ Follow with one sentence: what adding these as negative keywords would do to bud
 ### Headline Replacements
 Table of every headline rated Poor, containing a factual error, or flagged as generic:
 
-| Ad Group | Ad ID | Current Headline | Issue | Replacement Headline | Rationale |
-|---|---|---|---|---|---|
+| Ad Group | Ad ID | Current Headline | Issue | Replacement Headline | Char Count | Status |
+|---|---|---|---|---|---|---|
 
 Rules:
-- Replacement headlines must be 30 characters or fewer
+- Replacement headlines must be 30 characters or fewer — count every character including spaces, hyphens, ampersands, and punctuation
+- Do not include any headline you have not counted. If uncertain of the count, provide a shorter alternative and label it [SHORTENED FOR SAFETY]
+- If replacement is 28–30 characters: label [VERIFY IN UI] — character rendering can vary by font
+- If replacement is 27 characters or fewer: label [CONFIRMED SAFE]
+- If a draft replacement exceeds 30 characters: do not include it — provide a confirmed-safe alternative of 30 characters or fewer instead
 - No unsubstantiated superlatives (Best, #1, Australia's Leading)
 - Prioritise claims in this order: CSIRO, 12-year warranty, 9H+, Australian-made, graphene
 - Every "10 Year" or "10-Year" headline → replace with exact "12-Year" equivalent
