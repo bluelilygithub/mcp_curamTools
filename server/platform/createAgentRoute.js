@@ -204,6 +204,7 @@ function createAgentRoute({ slug, runFn, requiredPermission }) {
           suggestions,
           tokensUsed: tokensUsed ?? {},
           costAud:   taskCostAud,
+          model:     adminConfig.model ?? null,
           startDate: req.body.startDate ?? null,
           endDate:   req.body.endDate   ?? null,
           progressLog,

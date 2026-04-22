@@ -8,6 +8,7 @@ import useAuthStore from '../../stores/authStore';
 import Button from '../../components/ui/Button';
 import InlineBanner from '../../components/ui/InlineBanner';
 import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
+import { exportPdf } from '../../utils/exportService';
 import LineChart from '../../components/charts/LineChart';
 import CampaignPerformanceTable from './GoogleAdsMonitor/CampaignPerformanceTable';
 import SearchTermsTable from './GoogleAdsMonitor/SearchTermsTable';
@@ -158,11 +159,46 @@ const ALL_AGENT_SLUGS = [
   { slug: 'keyword-opportunity',        label: 'Keyword Opportunity' },
 ];
 
-function AllAgentsHistory({ onDiscuss }) {
+function AllAgentsHistory({ onDiscuss, userEmail }) {
   const [grouped,    setGrouped]    = useState({});   // { slug: [run, …] }
   const [loading,    setLoading]    = useState(true);
   const [openSlug,   setOpenSlug]   = useState(null);
   const [openRunId,  setOpenRunId]  = useState(null);
+  const [copiedId,   setCopiedId]   = useState(null);
+  const [emailState, setEmailState] = useState(null); // { run, label, to } | null
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailError,   setEmailError]   = useState('');
+
+  async function handleHistoryEmail(slug, run, to) {
+    setEmailSending(true);
+    setEmailError('');
+    try {
+      await api.post(`/agents/${slug}/email`, {
+        to,
+        result:    run.result,
+        startDate: run.result?.startDate ?? null,
+        endDate:   run.result?.endDate   ?? null,
+      });
+      setEmailState(null);
+    } catch (e) {
+      setEmailError(e.message);
+    } finally {
+      setEmailSending(false);
+    }
+  }
+
+  async function handleHistoryPdf(label, run) {
+    const summary = run.result?.summary ?? '';
+    if (!summary) return;
+    const dateLabel = run.result?.startDate && run.result?.endDate
+      ? `${fmtDate(run.result.startDate)} – ${fmtDate(run.result.endDate)}`
+      : fmtDate(run.run_at);
+    await exportPdf({
+      content:  summary,
+      title:    `${label} — ${dateLabel}`,
+      filename: `${label.toLowerCase().replace(/\s+/g, '-')}-${run.result?.startDate ?? fmtDate(run.run_at)}.pdf`,
+    });
+  }
 
   useEffect(() => {
     async function load() {
@@ -237,6 +273,8 @@ function AllAgentsHistory({ onDiscuss }) {
                   const isRunOpen = openRunId === run.id;
                   const summary   = run.result?.summary ?? '';
 
+                  const modelId = run.result?.model ?? null;
+
                   return (
                     <div key={run.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                       {/* Run row */}
@@ -257,6 +295,11 @@ function AllAgentsHistory({ onDiscuss }) {
                           {tokens != null && (
                             <span style={{ fontSize: 11, color: 'var(--color-muted)', marginLeft: 8, fontFamily: 'inherit' }}>
                               · {fmtNum(tokens)} tok
+                            </span>
+                          )}
+                          {modelId && (
+                            <span style={{ fontSize: 11, color: 'var(--color-muted)', marginLeft: 8, fontFamily: 'monospace' }}>
+                              · {modelId}
                             </span>
                           )}
                         </button>
@@ -289,8 +332,36 @@ function AllAgentsHistory({ onDiscuss }) {
 
                       {/* Expanded summary */}
                       {isRunOpen && summary && (
-                        <div style={{ padding: '16px', borderTop: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
-                          <MarkdownRenderer text={summary} />
+                        <div style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
+                          {/* Export action bar */}
+                          <div style={{ display: 'flex', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--color-border)', flexWrap: 'wrap' }}>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(summary).then(() => {
+                                  setCopiedId(run.id);
+                                  setTimeout(() => setCopiedId(null), 2000);
+                                });
+                              }}
+                              style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'inherit', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-muted)', cursor: 'pointer' }}
+                            >
+                              {copiedId === run.id ? 'Copied!' : 'Copy'}
+                            </button>
+                            <button
+                              onClick={() => handleHistoryPdf(label, run)}
+                              style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'inherit', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-muted)', cursor: 'pointer' }}
+                            >
+                              Print / PDF
+                            </button>
+                            <button
+                              onClick={() => setEmailState({ slug, run, label, to: userEmail ?? '' })}
+                              style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'inherit', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-muted)', cursor: 'pointer' }}
+                            >
+                              Email
+                            </button>
+                          </div>
+                          <div style={{ padding: '16px' }}>
+                            <MarkdownRenderer text={summary} />
+                          </div>
                         </div>
                       )}
                     </div>
@@ -302,6 +373,39 @@ function AllAgentsHistory({ onDiscuss }) {
           </div>
         );
       })}
+
+      {/* Email modal for history items */}
+      {emailState && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.45)',
+        }} onClick={() => { setEmailState(null); setEmailError(''); }}>
+          <div style={{
+            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+            borderRadius: 16, padding: 24, width: 360, fontFamily: 'inherit',
+          }} onClick={(e) => e.stopPropagation()}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 4 }}>Email report</p>
+            <p style={{ fontSize: 12, color: 'var(--color-muted)', marginBottom: 12 }}>{emailState.label}</p>
+            {emailError && <p style={{ fontSize: 12, color: '#991b1b', marginBottom: 8 }}>{emailError}</p>}
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--color-muted)', marginBottom: 4 }}>Send to</label>
+            <input
+              type="email"
+              value={emailState.to}
+              onChange={(e) => setEmailState((s) => ({ ...s, to: e.target.value }))}
+              placeholder="recipient@example.com"
+              style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', marginBottom: 16 }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button variant="primary"
+                onClick={() => handleHistoryEmail(emailState.slug, emailState.run, emailState.to)}
+                disabled={emailSending || !emailState.to}>
+                {emailSending ? 'Sending…' : 'Send report'}
+              </Button>
+              <Button variant="secondary" onClick={() => { setEmailState(null); setEmailError(''); }}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -545,6 +649,19 @@ export default function GoogleAdsMonitorPage() {
           <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)', fontFamily: 'inherit' }}>
             AI-powered campaign analysis, search intent, and budget pacing.
           </p>
+          {(() => {
+            const latest = history.find((r) => r.status === 'complete');
+            if (!latest) return null;
+            const runDate = new Date(latest.run_at).toLocaleString('en-AU', {
+              day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+            });
+            const model = latest.result?.model ?? null;
+            return (
+              <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)', fontFamily: 'inherit', opacity: 0.75 }}>
+                Last run: {runDate}{model ? <> · <span style={{ fontFamily: 'monospace' }}>{model}</span></> : ''}
+              </p>
+            );
+          })()}
         </div>
 
         {/* Date controls */}
@@ -757,7 +874,7 @@ export default function GoogleAdsMonitorPage() {
 
       {/* ── History ────────────────────────────────────────────────────── */}
       {activeTab === 'history' && (
-        <AllAgentsHistory onDiscuss={null} />
+        <AllAgentsHistory onDiscuss={null} userEmail={config?.report_email || user?.email || ''} />
       )}
 
       {/* ── Settings ───────────────────────────────────────────────────── */}
