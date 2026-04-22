@@ -86,6 +86,8 @@ Conditions that trigger a hold:
 - Structural changes labelled [STRUCTURAL AFTER DATA]
 - Any [COPY FIRST] negative where the dependent copy improvement is a THIS WEEK or THIS MONTH item
 
+For every [COPY FIRST] hold: confirm the priority number referenced in Report 2 matches the ad group where that negative keyword appeared in the search term data. If the priority item references a different ad group than the one where the search term was seen, flag it as [PRIORITY REFERENCE ERROR] and state the correct ad group and the correct priority number.
+
 Format:
 | Item | Hold Reason | Condition to Release |
 
