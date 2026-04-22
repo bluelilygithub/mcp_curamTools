@@ -87,6 +87,13 @@ const AGENTS = [
     purpose: 'Pre-fetches all not-interested CRM leads (all time), filters to wrong_products and wrong_location categories, attaches progress notes (call records), and cross-references with Google Ads search terms, active keywords, and campaign performance. Produces two diagnostic lenses per reason category: Ads Signal (which campaigns/keywords attract wrong-fit traffic) and Sales Signal (what call notes reveal about qualification behaviour). CRM records without UTM data are treated as pre-tracking-era records and excluded from attribution analysis.',
   },
   {
+    slug: 'ads-copy-diagnostic',
+    title: 'Copy Diagnostic',
+    description: 'Formal ad copy audit — RSA headlines, descriptions, asset performance ratings, Quality Score components, search term alignment.',
+    usedIn: 'GoogleAdsMonitorPage → Dashboard tab → Copy Diagnostic card. Run on demand.',
+    purpose: 'Pre-fetches 7 data sources in parallel: all enabled RSA ads (headlines + descriptions), asset performance labels (BEST/GOOD/LOW/POOR) per asset, ad group performance metrics, top 20 search terms per ad group, keyword Quality Score components, GA4 landing page performance, and GA4 paid bounce sessions. Produces 6 sections: Summary, Campaign and Ad Group Review (per ad), Search Term Alignment Audit (per ad group), Competitive Copy Gap, Recommendations, and a Priority Action List of exactly 10 items ranked by urgency across three tiers (Fix Today / Fix This Week / Fix This Month).',
+  },
+  {
     slug: 'sql-nlp',
     title: 'SQL Console — NLP',
     description: 'Translates natural language questions into PostgreSQL queries against the platform admin database.',

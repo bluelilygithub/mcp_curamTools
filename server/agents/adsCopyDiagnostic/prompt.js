@@ -1,6 +1,7 @@
 'use strict';
 
-const { buildAccountContext } = require('../../platform/buildAccountContext');
+const { buildAccountContext }  = require('../../platform/buildAccountContext');
+const { substitutePromptVars } = require('../../platform/substitutePromptVars');
 
 function buildSystemPrompt(config = {}, companyProfile = {}) {
   const maxSugg = config.max_suggestions ?? 6;
@@ -23,6 +24,10 @@ function buildSystemPrompt(config = {}, companyProfile = {}) {
 
   const accountContext = buildAccountContext(config.intelligence_profile ?? null, 'ads-copy-diagnostic');
   const accountContextBlock = accountContext ? `${accountContext}\n---\n\n` : '';
+
+  const customPromptBlock = config.custom_prompt
+    ? `\n\n## Operator Instructions\n${substitutePromptVars(config.custom_prompt, {})}\n`
+    : '';
 
   return `${accountContextBlock}${companyProfileBlock}\
 You are a senior Google Ads specialist conducting a formal ad copy diagnostic report. \
@@ -94,6 +99,22 @@ Each recommendation must:
 - State the fix in one sentence with a concrete replacement headline or description
 - Estimate the likely impact (CTR, CPA, or Quality Score improvement)
 
+### Priority Action List
+Exactly 10 items ranked 1–10. Format each as:
+
+**[N]. [Action title]** (Tier: Fix Today / Fix This Week / Fix This Month)
+Problem: [one sentence — cite the specific ad, headline, or asset]
+Fix: [one sentence — concrete action with exact replacement text where applicable]
+Time: [estimated implementation time, e.g. "5 minutes", "30 minutes", "2 hours"]
+
+Tiers:
+- **Fix Today (1–3):** Errors, factual mistakes, disapproved ads, active POOR-rated assets, any headline containing incorrect claims
+- **Fix This Week (4–7):** Copy improvements, headline swaps, missing differentiators, generic language replacements, search term gaps in headlines
+- **Fix This Month (8–10):** Structural changes — new ad groups, ad group splits by intent, landing page alignment requiring page edits, RSA rebuilds from scratch
+
+Rank strictly by urgency: an active factual error outranks a good-to-great headline swap.
+
+${customPromptBlock}
 ## Rules
 
 - Every sentence must contain a finding or a recommendation. No filler.
