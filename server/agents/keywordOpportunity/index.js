@@ -95,12 +95,13 @@ async function runKeywordOpportunity(context) {
     ? competitorSettings.competitors
     : DEFAULT_COMPETITORS;
 
-  const [activeKeywords, searchTerms, campaignPerformance, trafficSources, enquiries] = await Promise.all([
+  const [activeKeywords, searchTerms, campaignPerformance, trafficSources, enquiries, negativeKeywords] = await Promise.all([
     callMcpTool(orgId, adsServer, 'ads_get_active_keywords',      { ...cidArgs }).catch((e) => ({ error: e.message })),
     callMcpTool(orgId, adsServer, 'ads_get_search_terms',         { ...rangeArgs, ...cidArgs }).catch((e) => ({ error: e.message })),
     callMcpTool(orgId, adsServer, 'ads_get_campaign_performance', { ...rangeArgs, ...cidArgs }).catch((e) => ({ error: e.message })),
     callMcpTool(orgId, gaServer,  'ga4_get_traffic_sources',      rangeArgs).catch((e) => ({ error: e.message })),
     callMcpTool(orgId, wpServer,  'wp_get_enquiries',             { limit: 1000, start_date: oneYearAgo, end_date: today }).catch((e) => ({ error: e.message })),
+    callMcpTool(orgId, adsServer, 'ads_get_negative_keywords',    { ...cidArgs }).catch((e) => ({ error: e.message })),
   ]);
 
   // ── Phase 2: web search per competitor (sequential) ────────────────────────
@@ -128,6 +129,7 @@ async function runKeywordOpportunity(context) {
   const payload = {
     period:              `${ninetyDaysAgo} to ${today} (Ads/GA4); ${oneYearAgo} to ${today} (CRM)`,
     activeKeywords,
+    negativeKeywords,
     searchTerms,
     campaignPerformance,
     trafficSources,

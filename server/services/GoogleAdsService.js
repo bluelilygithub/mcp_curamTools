@@ -617,6 +617,52 @@ class GoogleAdsService {
   }
 
   /**
+   * Returns all negative keywords: shared negative keyword lists + campaign-level negatives.
+   * @param {string|null} [customerId]
+   */
+  async getNegativeKeywords(customerId = null) {
+    const [sharedRows, campaignRows] = await Promise.all([
+      this._search(`
+        SELECT
+          shared_set.name,
+          shared_criterion.keyword.text,
+          shared_criterion.keyword.match_type
+        FROM shared_criterion
+        WHERE shared_set.type = 'NEGATIVE_KEYWORDS'
+          AND shared_criterion.type = 'KEYWORD'
+      `, customerId).catch(() => []),
+      this._search(`
+        SELECT
+          campaign.name,
+          campaign_criterion.keyword.text,
+          campaign_criterion.keyword.match_type
+        FROM campaign_criterion
+        WHERE campaign_criterion.negative = TRUE
+          AND campaign_criterion.type = 'KEYWORD'
+          AND campaign.status != 'REMOVED'
+      `, customerId).catch(() => []),
+    ]);
+
+    const sharedLists = {};
+    for (const r of sharedRows) {
+      const listName = r.sharedSet?.name ?? 'Unnamed List';
+      if (!sharedLists[listName]) sharedLists[listName] = [];
+      sharedLists[listName].push({
+        text:      r.sharedCriterion?.keyword?.text      ?? '',
+        matchType: r.sharedCriterion?.keyword?.matchType ?? '',
+      });
+    }
+
+    const campaignNegatives = campaignRows.map((r) => ({
+      campaign:  r.campaign?.name                            ?? '',
+      text:      r.campaignCriterion?.keyword?.text          ?? '',
+      matchType: r.campaignCriterion?.keyword?.matchType     ?? '',
+    }));
+
+    return { sharedLists, campaignNegatives };
+  }
+
+  /**
    * Returns recent change history events (bid/budget/status changes, ad edits).
    * @param {number|{startDate,endDate}} [options=7]
    * @param {string|null} [customerId]

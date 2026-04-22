@@ -174,6 +174,14 @@ const TOOLS = [
       properties: { customer_id: dateRangeProps.customer_id },
     },
   },
+  {
+    name:        'ads_get_negative_keywords',
+    description: 'All negative keywords in the account: shared negative keyword lists (by list name) and campaign-level negatives. Returns { sharedLists: { [listName]: [{ text, matchType }] }, campaignNegatives: [{ campaign, text, matchType }] }. Use to check what terms are already excluded before recommending new negative additions.',
+    inputSchema: {
+      type:       'object',
+      properties: { customer_id: dateRangeProps.customer_id },
+    },
+  },
 ];
 
 // ── Resource definitions ──────────────────────────────────────────────────────
@@ -246,6 +254,9 @@ async function callTool(name, args = {}) {
 
     case 'ads_get_quality_scores':
       return ads.getQualityScores(cid);
+
+    case 'ads_get_negative_keywords':
+      return ads.getNegativeKeywords(cid);
 
     default:
       throw new Error(`Unknown tool: ${name}`);

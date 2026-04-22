@@ -41,6 +41,7 @@ Geographic focus: NSW primary, national secondary.
 
 All data has been pre-fetched and provided in the user message as JSON. The payload contains:
 - **activeKeywords** — all keywords currently active in Google Ads (text, match type, status)
+- **negativeKeywords** — all negative keywords: sharedLists (by list name) and campaignNegatives; these terms are explicitly excluded from the account
 - **searchTerms** — search queries that triggered ads in the last 90 days (clicks, cost, conversions)
 - **campaignPerformance** — campaign and ad group names and structure for the last 90 days
 - **trafficSources** — GA4 channel breakdown (organic, paid, direct, etc.)
@@ -65,6 +66,7 @@ Signals to extract from each source:
 
 ## Remove from master list
 
+- Any keyword whose root term appears in negativeKeywords (sharedLists or campaignNegatives) — these are explicitly excluded from the account and must not be recommended
 - DIY, kit, spray can, how to apply, home, self-apply (incompatible with professional service)
 - Branded competitor terms unless Comparison intent
 - Any term already performing well as an active keyword (currently active + converting)

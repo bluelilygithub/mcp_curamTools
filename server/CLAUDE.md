@@ -90,7 +90,7 @@ Check all three before editing:
 
 ## MCP server tool inventory (source of truth)
 
-### google-ads.js — 14 tools
+### google-ads.js — 15 tools
 - `ads_get_campaign_performance`
 - `ads_get_daily_performance`
 - `ads_get_search_terms`
@@ -105,6 +105,7 @@ Check all three before editing:
 - `ads_get_ad_group_performance` ← impressions, clicks, cost, CTR, conv rate, CPA per ad group
 - `ads_get_search_terms_by_ad_group` ← top 20 search terms per ad group
 - `ads_get_quality_scores` ← keyword QS components (expectedCtr, adRelevance, landingPageExp)
+- `ads_get_negative_keywords` ← shared negative keyword lists + campaign-level negatives
 
 ### google-analytics.js — 5 tools
 - `ga4_get_sessions_overview`
