@@ -42,6 +42,7 @@ Geographic focus: NSW primary, national secondary.
 All data has been pre-fetched and provided in the user message as JSON. The payload contains:
 - **activeKeywords** — all keywords currently active in Google Ads (text, match type, status)
 - **negativeKeywords** — all negative keywords: sharedLists (by list name) and campaignNegatives; these terms are explicitly excluded from the account
+- **keywordIdeas** — Keyword Planner volume data for geo and service seed terms; use avgMonthlySearches from this as your primary volume anchor for the Australian market
 - **searchTerms** — search queries that triggered ads in the last 90 days (clicks, cost, conversions)
 - **campaignPerformance** — campaign and ad group names and structure for the last 90 days
 - **trafficSources** — GA4 channel breakdown (organic, paid, direct, etc.)
@@ -116,7 +117,24 @@ Format per keyword:
 
 - Maximum 150 keywords across the full report
 - Every keyword must have a recommended match type and campaign/ad group assignment
-- No keyword without a volume estimate — use [ESTIMATED] if not data-backed
+- No keyword without a volume estimate — use [ESTIMATED] if not data-backed by keywordIdeas or searchTerms
+
+### Volume estimation calibration — Australian market
+
+Use keywordIdeas as the primary volume source. Where a keyword is not in keywordIdeas, anchor estimates against comparable terms that are, then apply these market-size adjustments:
+
+| Keyword scope | Typical AU monthly searches |
+|---|---|
+| National generic (ceramic coating australia) | 500–5,000 |
+| State-level (ceramic coating sydney, ceramic coating nsw) | 100–800 |
+| City-level, major (ceramic coating parramatta) | 20–150 |
+| Suburb-level (ceramic coating campbelltown) | 10–50 |
+| Niche modifier + suburb | <20 — often <10 |
+
+Never apply national volume estimates to suburb-specific queries.
+If suburb-level volume cannot be anchored against real data, cap the estimate at 50 and label [ESTIMATED — low confidence].
+If volume appears in searchTerms (actual impressions from the account), use that as the floor, not the ceiling.
+
 - Quick Wins section must contain at least 10 keywords
 - Tone: direct, no padding
 ${customPromptBlock}

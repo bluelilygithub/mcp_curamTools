@@ -95,13 +95,28 @@ async function runKeywordOpportunity(context) {
     ? competitorSettings.competitors
     : DEFAULT_COMPETITORS;
 
-  const [activeKeywords, searchTerms, campaignPerformance, trafficSources, enquiries, negativeKeywords] = await Promise.all([
+  // Geo + service seed keywords — gives Keyword Planner volume anchors for estimate calibration
+  const GEO_SEED_KEYWORDS = [
+    'ceramic coating australia',
+    'ceramic coating sydney',
+    'ceramic coating nsw',
+    'graphene ceramic coating australia',
+    'paint protection film australia',
+    'paint protection sydney',
+    'ceramic coating cost australia',
+    'professional ceramic coating',
+    'mobile ceramic coating sydney',
+    'graphene coating car australia',
+  ];
+
+  const [activeKeywords, searchTerms, campaignPerformance, trafficSources, enquiries, negativeKeywords, keywordIdeas] = await Promise.all([
     callMcpTool(orgId, adsServer, 'ads_get_active_keywords',      { ...cidArgs }).catch((e) => ({ error: e.message })),
     callMcpTool(orgId, adsServer, 'ads_get_search_terms',         { ...rangeArgs, ...cidArgs }).catch((e) => ({ error: e.message })),
     callMcpTool(orgId, adsServer, 'ads_get_campaign_performance', { ...rangeArgs, ...cidArgs }).catch((e) => ({ error: e.message })),
     callMcpTool(orgId, gaServer,  'ga4_get_traffic_sources',      rangeArgs).catch((e) => ({ error: e.message })),
     callMcpTool(orgId, wpServer,  'wp_get_enquiries',             { limit: 1000, start_date: oneYearAgo, end_date: today }).catch((e) => ({ error: e.message })),
     callMcpTool(orgId, adsServer, 'ads_get_negative_keywords',    { ...cidArgs }).catch((e) => ({ error: e.message })),
+    callMcpTool(orgId, adsServer, 'ads_generate_keyword_ideas',   { keywords: GEO_SEED_KEYWORDS, customer_id: customerId ?? null }).catch((e) => ({ error: e.message })),
   ]);
 
   // ── Phase 2: web search per competitor (sequential) ────────────────────────
@@ -130,6 +145,7 @@ async function runKeywordOpportunity(context) {
     period:              `${ninetyDaysAgo} to ${today} (Ads/GA4); ${oneYearAgo} to ${today} (CRM)`,
     activeKeywords,
     negativeKeywords,
+    keywordIdeas,
     searchTerms,
     campaignPerformance,
     trafficSources,
