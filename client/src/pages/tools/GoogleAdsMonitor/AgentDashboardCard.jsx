@@ -188,6 +188,62 @@ export default function AgentDashboardCard({ slug, title, description, startDate
     }
   }
 
+  function handleKeywordExport() {
+    const keywords = new Map(); // lowercased text → { keyword, matchType }
+
+    let section = null;
+    for (const line of summary.split('\n')) {
+      const t = line.trim();
+
+      // Section detection
+      if (/^#{1,3}\s*2\.|keyword opportunity table/i.test(t)) { section = 'opportunity'; continue; }
+      if (/^#{1,3}\s*3\.|competitor keyword gap/i.test(t))    { section = 'gaps';        continue; }
+      if (/^#{1,3}\s*4\.|quick wins/i.test(t))                { section = null;          continue; }
+
+      if (!section || !t.startsWith('|')) continue;
+
+      const cols = t.split('|').map((c) => c.trim()).filter(Boolean);
+
+      if (section === 'opportunity' && cols.length >= 6) {
+        if (/^(-+|Priority)$/i.test(cols[0]) || cols[1] === 'Keyword') continue;
+        const kw        = cols[1].replace(/\[HIGH PRIORITY\]/gi, '').trim();
+        const matchType = cols[5].toUpperCase().trim();
+        if (kw && !/^-+$/.test(kw) && matchType !== 'MATCH TYPE') {
+          keywords.set(kw.toLowerCase(), { keyword: kw, matchType });
+        }
+      }
+
+      if (section === 'gaps' && cols.length >= 5) {
+        if (/^(-+|Keyword)$/i.test(cols[0])) continue;
+        const kw        = cols[0].trim();
+        const matchType = cols[4].toUpperCase().trim();
+        if (kw && !/^-+$/.test(kw) && matchType !== 'MATCH TYPE' && !keywords.has(kw.toLowerCase())) {
+          keywords.set(kw.toLowerCase(), { keyword: kw, matchType });
+        }
+      }
+    }
+
+    if (keywords.size === 0) {
+      alert('No keywords found in the report to export. Ensure the report has been run successfully.');
+      return;
+    }
+
+    const lines = [];
+    for (const { keyword, matchType } of keywords.values()) {
+      if (matchType === 'PHRASE')      lines.push(`"${keyword}"`);
+      else if (matchType === 'EXACT')  lines.push(`[${keyword}]`);
+      else                             lines.push(keyword); // BROAD
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `keywords-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function handleDiscuss() {
     if (!onContinueInConversation || !summary) return;
     const dateLabel = result?.startDate && result?.endDate
@@ -308,6 +364,9 @@ export default function AgentDashboardCard({ slug, title, description, startDate
                 style={{ ...actionBtnStyle, color: 'var(--color-primary)', borderColor: 'var(--color-primary)' }}>
                 Discuss
               </button>
+            )}
+            {slug === 'keyword-opportunity' && (
+              <button onClick={handleKeywordExport} style={actionBtnStyle}>Export Keywords</button>
             )}
 
             {/* History navigation */}
