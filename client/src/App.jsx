@@ -25,6 +25,7 @@ import AdminOrgRolesPage from './pages/admin/AdminOrgRolesPage';
 import AdminCrmPrivacyPage from './pages/admin/AdminCrmPrivacyPage';
 import AdminDataPrivacyPage from './pages/admin/AdminDataPrivacyPage';
 import AdminStoragePage from './pages/admin/AdminStoragePage';
+import AdminCompetitorsPage from './pages/admin/AdminCompetitorsPage';
 import AdminKnowledgePage from './pages/admin/AdminKnowledgePage';
 import AdminProvidersPage from './pages/admin/AdminProvidersPage';
 import AdminUsagePage from './pages/admin/AdminUsagePage';
@@ -80,6 +81,7 @@ export default function App() {
                   <Route path="/admin/crm-privacy" element={<AdminCrmPrivacyPage />} />
                   <Route path="/admin/data-privacy" element={<AdminDataPrivacyPage />} />
                   <Route path="/admin/storage" element={<AdminStoragePage />} />
+                  <Route path="/admin/competitors" element={<AdminCompetitorsPage />} />
                   <Route path="/admin/knowledge" element={<AdminKnowledgePage />} />
                   <Route path="/admin/providers" element={<AdminProvidersPage />} />
                   <Route path="/admin/usage" element={<AdminUsagePage />} />

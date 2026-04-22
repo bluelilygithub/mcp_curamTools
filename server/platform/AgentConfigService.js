@@ -676,6 +676,47 @@ async function updateCrmPrivacySettings(orgId, patch, updatedBy) {
 // AWS credentials stay as env vars (secrets); bucket/region live here because
 // admins may reasonably change them without a redeploy.
 
+// ── Competitor Settings ────────────────────────────────────────────────────
+
+const COMPETITOR_SETTINGS_DEFAULTS = {
+  competitors: [],
+};
+
+/**
+ * Returns org-level competitor list.
+ * competitors: [{ name: string, url: string, notes?: string }]
+ * Shared across competitor-keyword-intel, ai-visibility-monitor, and keyword-opportunity.
+ */
+async function getCompetitorSettings(orgId) {
+  try {
+    const res = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'competitor_settings' LIMIT 1`,
+      [orgId]
+    );
+    if (res.rows.length === 0) return { ...COMPETITOR_SETTINGS_DEFAULTS };
+    return { ...COMPETITOR_SETTINGS_DEFAULTS, ...(res.rows[0].value || {}) };
+  } catch (err) {
+    console.error('[AgentConfigService] getCompetitorSettings error:', err.message);
+    return { ...COMPETITOR_SETTINGS_DEFAULTS };
+  }
+}
+
+/**
+ * Saves org-level competitor list.
+ */
+async function updateCompetitorSettings(orgId, patch, updatedBy) {
+  const current = await getCompetitorSettings(orgId);
+  const merged  = { ...current, ...patch };
+  await pool.query(
+    `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+     VALUES ($1, 'competitor_settings', $2, $3, NOW())
+     ON CONFLICT (org_id, key)
+     DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+    [orgId, JSON.stringify(merged), updatedBy]
+  );
+  return merged;
+}
+
 const STORAGE_SETTINGS_DEFAULTS = {
   enabled:           false,
   default_behaviour: 'do_not_store', // 'store_original' | 'store_redacted' | 'do_not_store'
@@ -769,6 +810,8 @@ module.exports = {
   updateExtractionPrivacySettings,
   getCrmPrivacySettings,
   updateCrmPrivacySettings,
+  getCompetitorSettings,
+  updateCompetitorSettings,
   getStorageSettings,
   updateStorageSettings,
   getCustomProviders,

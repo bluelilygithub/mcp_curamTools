@@ -27,17 +27,11 @@ const DEFAULT_COMPETITORS = [
 
 async function loadCompetitors(orgId) {
   try {
-    const monitorConfig = await AgentConfigService.getAgentConfig(orgId, 'google-ads-monitor');
-    const raw = (monitorConfig.competitor_urls ?? '').trim();
-    if (!raw) return DEFAULT_COMPETITORS;
-    return raw
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((url) => ({
-        name: new URL(url).hostname.replace(/^www\./, ''),
-        url,
-      }));
+    const settings = await AgentConfigService.getCompetitorSettings(orgId);
+    if (Array.isArray(settings.competitors) && settings.competitors.length > 0) {
+      return settings.competitors;
+    }
+    return DEFAULT_COMPETITORS;
   } catch {
     return DEFAULT_COMPETITORS;
   }

@@ -211,11 +211,15 @@ async function runAiVisibilityMonitor(context) {
 
   const model = (adminConfig.model) || 'claude-sonnet-4-6';
 
-  // ── Resolve competitor list from config (falls back to built-in defaults) ──
+  // ── Resolve competitor list from global settings (falls back to built-in defaults) ──
 
-  const competitors = (Array.isArray(config.competitors) && config.competitors.length > 0)
-    ? config.competitors
-    : DEFAULT_COMPETITORS;
+  let competitors = DEFAULT_COMPETITORS;
+  try {
+    const competitorSettings = await AgentConfigService.getCompetitorSettings(orgId);
+    if (Array.isArray(competitorSettings.competitors) && competitorSettings.competitors.length > 0) {
+      competitors = competitorSettings.competitors;
+    }
+  } catch { /* non-fatal — use defaults */ }
 
   // ── Seed defaults and load active prompts ─────────────────────────────────
 

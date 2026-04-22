@@ -1149,6 +1149,45 @@ router.put('/claude-session-config', async (req, res) => {
   }
 });
 
+// ── Competitor Settings ───────────────────────────────────────────────────
+//
+// GET  /admin/competitors — returns org competitor list
+// PUT  /admin/competitors — replaces competitor list (max 10)
+
+router.get('/competitors', async (req, res) => {
+  try {
+    const settings = await AgentConfigService.getCompetitorSettings(req.user.orgId);
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load competitor settings.' });
+  }
+});
+
+router.put('/competitors', async (req, res) => {
+  try {
+    const raw = req.body.competitors;
+    if (!Array.isArray(raw)) return res.status(400).json({ error: 'competitors must be an array.' });
+
+    const competitors = raw
+      .slice(0, 10)
+      .map((c) => ({
+        name:  (c.name  || '').trim().slice(0, 100),
+        url:   (c.url   || '').trim().slice(0, 300),
+        notes: (c.notes || '').trim().slice(0, 200) || undefined,
+      }))
+      .filter((c) => c.name && c.url);
+
+    const updated = await AgentConfigService.updateCompetitorSettings(
+      req.user.orgId,
+      { competitors },
+      req.user.id
+    );
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update competitor settings.' });
+  }
+});
+
 // ── Storage Settings ──────────────────────────────────────────────────────
 //
 // GET  /admin/storage-settings — returns current storage_settings for the org

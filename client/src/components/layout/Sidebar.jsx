@@ -96,6 +96,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
             <NavItem to="/admin/data-privacy" icon="eye-off" label="Data Privacy" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/storage" icon="archive" label="File Storage" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/knowledge" icon="book-open" label="Knowledge Base" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/competitors" icon="target" label="Competitors" collapsed={collapsed} onClick={onLinkClick} />
           </div>
         )}
       </div>
