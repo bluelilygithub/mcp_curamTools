@@ -154,6 +154,7 @@ const ALL_AGENT_SLUGS = [
   { slug: 'google-ads-strategic-review', label: 'Strategic Review' },
   { slug: 'ads-copy-diagnostic',         label: 'Copy Diagnostic' },
   { slug: 'ads-copy-playbook',           label: 'Copy Playbook' },
+  { slug: 'ads-copy-gate',              label: 'Copy Gate' },
 ];
 
 function AllAgentsHistory({ onDiscuss }) {
@@ -721,6 +722,7 @@ export default function GoogleAdsMonitorPage() {
             { slug: 'competitor-keyword-intel',  title: 'Competitor Keywords', description: 'Keyword gaps for Diamond Plate Australia — what competitors are targeting that we are not. Requires Standard API access.' },
             { slug: 'ads-copy-diagnostic',       title: 'Copy Diagnostic',     description: 'Formal ad copy audit — reviews every active RSA ad\'s headlines, descriptions, asset performance ratings, quality score components, and search term alignment. Flags Poor-rated assets and copy that ignores Diamond Plate\'s differentiators.' },
             { slug: 'ads-copy-playbook', title: 'Copy Playbook', description: 'Prescriptive optimization playbook — paste-ready headline and description replacements, negative keyword list, asset pinning strategy, wasted spend summary, NSW ad group structural fix, and 30-day monitoring plan. Reads the Diagnostic Report automatically.', prerequisiteSlug: 'ads-copy-diagnostic', prerequisiteTitle: 'Copy Diagnostic' },
+            { slug: 'ads-copy-gate', title: 'Copy Gate', description: 'QA gate review of the Copy Playbook before any changes go live — independent character recounts, immediate blocks, holds, sequencing conflicts, editorial approval flags, and a confirmed go-list of every action cleared for implementation. Reads the Playbook automatically.', prerequisiteSlug: 'ads-copy-playbook', prerequisiteTitle: 'Copy Playbook' },
           ].map(({ slug, title, description, prerequisiteSlug, prerequisiteTitle }) => (
             <AgentDashboardCard
               key={slug}

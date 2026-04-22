@@ -123,6 +123,18 @@ agentsRouter.use(
   })
 );
 
+// ── Ads Copy Gate ─────────────────────────────────────────────────────────
+const { runAdsCopyGate } = require('../agents/adsCopyGate');
+
+agentsRouter.use(
+  '/ads-copy-gate',
+  createAgentRoute({
+    slug:               'ads-copy-gate',
+    runFn:              runAdsCopyGate,
+    requiredPermission: 'ads_operator',
+  })
+);
+
 // ── Ads Copy Playbook ─────────────────────────────────────────────────────
 const { runAdsCopyPlaybook } = require('../agents/adsCopyPlaybook');
 

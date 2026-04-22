@@ -87,6 +87,13 @@ const AGENTS = [
     purpose: 'Pre-fetches all not-interested CRM leads (all time), filters to wrong_products and wrong_location categories, attaches progress notes (call records), and cross-references with Google Ads search terms, active keywords, and campaign performance. Produces two diagnostic lenses per reason category: Ads Signal (which campaigns/keywords attract wrong-fit traffic) and Sales Signal (what call notes reveal about qualification behaviour). CRM records without UTM data are treated as pre-tracking-era records and excluded from attribution analysis.',
   },
   {
+    slug: 'ads-copy-gate',
+    title: 'Copy Gate',
+    description: 'QA gate review of the Copy Playbook — blocks, holds, independent character recounts, sequencing conflicts, editorial flags, and a confirmed go-list.',
+    usedIn: 'GoogleAdsMonitorPage → Dashboard tab → Copy Gate card. Run after Copy Playbook.',
+    purpose: 'Report 3 in the copy audit workflow. Reads the latest ads-copy-playbook and ads-copy-diagnostic run results from the database — no MCP tool calls. Produces 7 gate sections: (1) Immediate Blocks — recommendations that must not be actioned as written, (2) Holds — correct in principle but conditions unmet, (3) Character Count Verification — independent recount of all replacement headlines, (4) Sequencing Conflicts — implementation order issues not flagged in Report 2, (5) Editorial Approval Flags — copy likely to require Google review, (6) Confirmed Go-List — every cleared action paste-ready for the implementer, (7) Summary Verdict — 3 sentences. Under 1,000 words. Every item is cleared, held, or blocked — no ambiguity.',
+  },
+  {
     slug: 'ads-copy-playbook',
     title: 'Copy Playbook',
     description: 'Prescriptive optimization playbook — paste-ready replacements, negative keywords, asset pinning, wasted spend table, NSW structural fix, 30-day monitoring plan.',

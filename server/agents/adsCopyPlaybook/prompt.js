@@ -125,7 +125,10 @@ Table of every description with errors, incomplete sentences, repetitive "near y
 |---|---|---|---|---|---|
 
 Rules:
-- Maximum 90 characters per replacement description
+- Maximum 90 characters per replacement description — count every character including spaces, hyphens, ampersands, and punctuation
+- Do not include any description you have not counted. If a draft exceeds 90 characters: do not include it — shorten and recount before adding
+- The Chars column must state the exact character count for every replacement
+- If replacement is 85–90 characters: append [VERIFY IN UI] to the Chars column value
 - Each replacement must contain at least one verified differentiator
 - No description may end mid-sentence
 - "Near me" / "near you" maximum once per RSA across all four descriptions combined
