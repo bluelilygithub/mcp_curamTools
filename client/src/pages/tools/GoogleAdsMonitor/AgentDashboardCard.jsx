@@ -58,16 +58,18 @@ function printContent(title, text) {
 }
 
 export default function AgentDashboardCard({ slug, title, description, startDate, endDate, expanded, onToggle, onContinueInConversation }) {
-  const [runs,         setRuns]         = useState([]);   // all complete runs, newest first
-  const [runIndex,     setRunIndex]     = useState(0);    // 0 = most recent
-  const [running,      setRunning]      = useState(false);
-  const [lines,        setLines]        = useState([]);
-  const [error,        setError]        = useState('');
-  const [copied,       setCopied]       = useState(false);
-  const [emailModal,   setEmailModal]   = useState(false);
-  const [emailTo,      setEmailTo]      = useState('');
-  const [emailSending, setEmailSending] = useState(false);
-  const [emailError,   setEmailError]   = useState('');
+  const [runs,           setRuns]           = useState([]);   // all complete runs, newest first
+  const [runIndex,       setRunIndex]       = useState(0);    // 0 = most recent
+  const [running,        setRunning]        = useState(false);
+  const [lines,          setLines]          = useState([]);
+  const [error,          setError]          = useState('');
+  const [copied,         setCopied]         = useState(false);
+  const [emailModal,     setEmailModal]     = useState(false);
+  const [emailTo,        setEmailTo]        = useState('');
+  const [emailSending,   setEmailSending]   = useState(false);
+  const [emailError,     setEmailError]     = useState('');
+  const [recentRunModal, setRecentRunModal] = useState(false);
+  const [recentRunMeta,  setRecentRunMeta]  = useState(null); // { hoursAgo, sameRange }
 
   useEffect(() => { loadHistory(); }, [slug]);
 
@@ -85,7 +87,21 @@ export default function AgentDashboardCard({ slug, title, description, startDate
   const result     = currentRun?.result ?? null;
   const summary    = result?.summary ?? '';
 
+  function handleRunClick() {
+    if (!runs.length) { handleRun(); return; }
+    const latest   = runs[0];
+    const hoursAgo = (Date.now() - new Date(latest.run_at).getTime()) / 3_600_000;
+    const sameRange = latest.result?.startDate === startDate && latest.result?.endDate === endDate;
+    if (hoursAgo < 6 || sameRange) {
+      setRecentRunMeta({ hoursAgo, sameRange });
+      setRecentRunModal(true);
+    } else {
+      handleRun();
+    }
+  }
+
   async function handleRun() {
+    setRecentRunModal(false);
     setRunning(true);
     setLines([]);
     setError('');
@@ -215,7 +231,7 @@ export default function AgentDashboardCard({ slug, title, description, startDate
             </p>
           </button>
 
-          <Button variant="primary" onClick={handleRun} disabled={running}
+          <Button variant="primary" onClick={handleRunClick} disabled={running}
             style={{ flexShrink: 0, fontSize: 12, padding: '5px 14px' }}>
             {running ? 'Running…' : 'Run now'}
           </Button>
@@ -310,6 +326,43 @@ export default function AgentDashboardCard({ slug, title, description, startDate
           <p style={{ fontSize: 13, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
             No results yet — click "Run now" to generate this report.
           </p>
+        </div>
+      )}
+
+      {/* ── Recent-run warning modal ────────────────────────────────────── */}
+      {recentRunModal && recentRunMeta && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.45)',
+        }} onClick={() => setRecentRunModal(false)}>
+          <div style={{
+            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+            borderRadius: 16, padding: 24, width: 400, fontFamily: 'inherit',
+          }} onClick={(e) => e.stopPropagation()}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 8 }}>
+              Report already available
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 16, lineHeight: 1.55 }}>
+              {recentRunMeta.sameRange
+                ? `A ${title} report for this exact date range is already in history.`
+                : `A ${title} report was run ${recentRunMeta.hoursAgo < 1
+                    ? 'less than an hour ago'
+                    : `${Math.round(recentRunMeta.hoursAgo)} hour${Math.round(recentRunMeta.hoursAgo) === 1 ? '' : 's'} ago`}.`
+              }
+              {' '}Google Ads data is 24-hour delayed — running again is unlikely to surface new insights.
+              Review the existing report first, or run if the period has changed.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button variant="primary" onClick={() => {
+                setRecentRunModal(false);
+                setRunIndex(0);
+                if (!expanded && onToggle) onToggle();
+              }}>
+                View existing report
+              </Button>
+              <Button variant="secondary" onClick={handleRun}>Run anyway</Button>
+            </div>
+          </div>
         </div>
       )}
 

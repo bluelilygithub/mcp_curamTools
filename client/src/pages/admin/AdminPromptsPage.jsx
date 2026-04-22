@@ -87,6 +87,13 @@ const AGENTS = [
     purpose: 'Pre-fetches all not-interested CRM leads (all time), filters to wrong_products and wrong_location categories, attaches progress notes (call records), and cross-references with Google Ads search terms, active keywords, and campaign performance. Produces two diagnostic lenses per reason category: Ads Signal (which campaigns/keywords attract wrong-fit traffic) and Sales Signal (what call notes reveal about qualification behaviour). CRM records without UTM data are treated as pre-tracking-era records and excluded from attribution analysis.',
   },
   {
+    slug: 'ads-copy-playbook',
+    title: 'Copy Playbook',
+    description: 'Prescriptive optimization playbook — paste-ready replacements, negative keywords, asset pinning, wasted spend table, NSW structural fix, 30-day monitoring plan.',
+    usedIn: 'GoogleAdsMonitorPage → Dashboard tab → Copy Playbook card. Run after Copy Diagnostic.',
+    purpose: 'Report 2 in the copy audit workflow. Reads the latest ads-copy-diagnostic run result from the database as confirmed diagnostic input — does not re-diagnose. Pre-fetches fresh RSA ad copy, asset performance labels, search terms by ad group, and quality scores. Produces 8 structured sections: Priority Action List (≤15 items, TODAY/THIS WEEK/THIS MONTH), Wasted Spend Summary table, Headline Replacements table (30-char limit, paste-ready), Description Replacements table (90-char limit), Asset Pinning recommendations, Negative Keyword list, NSW Ad Group structural analysis (Option A vs B with recommendation), and a 4-week Monitoring Plan. Total output under 2,000 words.',
+  },
+  {
     slug: 'ads-copy-diagnostic',
     title: 'Copy Diagnostic',
     description: 'Formal ad copy audit — RSA headlines, descriptions, asset performance ratings, Quality Score components, search term alignment.',

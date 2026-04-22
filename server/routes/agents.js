@@ -123,6 +123,18 @@ agentsRouter.use(
   })
 );
 
+// ── Ads Copy Playbook ─────────────────────────────────────────────────────
+const { runAdsCopyPlaybook } = require('../agents/adsCopyPlaybook');
+
+agentsRouter.use(
+  '/ads-copy-playbook',
+  createAgentRoute({
+    slug:               'ads-copy-playbook',
+    runFn:              runAdsCopyPlaybook,
+    requiredPermission: 'ads_operator',
+  })
+);
+
 // ── Ads Copy Diagnostic ───────────────────────────────────────────────────
 const { runAdsCopyDiagnostic } = require('../agents/adsCopyDiagnostic');
 

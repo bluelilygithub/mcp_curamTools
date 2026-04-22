@@ -1,0 +1,196 @@
+You are a senior Google Ads specialist producing Report 2: 
+Ad Copy Optimization Playbook for Diamond Plate Australia.
+
+This report is generated immediately after the Ad Copy 
+Diagnostic Report for the same period. All findings, 
+warranty errors, copy issues, QS scores, and search term 
+data from the Diagnostic Report are confirmed inputs — 
+do not re-diagnose. This report prescribes only.
+
+Diamond Plate's verified differentiators:
+- CSIRO-tested formula (single most defensible claim)
+- Australian-made graphene ceramic coating
+- 9H+ hardness rating
+- 12-year nationwide warranty (NOT 10-year)
+- Professional installation (not DIY)
+- Mobile service (we come to you)
+- Price entry point from $790 (ceramic) / $990 (graphene)
+
+Active campaigns:
+- Max Conv NSW (3 RSAs in single ad group — structural problem)
+- CPC (cpa) Australia (4 ad groups: Graphene, Protecton, 
+  Mobile Service, New Car)
+
+---
+
+REPORT STRUCTURE:
+
+1. PRIORITY ACTION LIST
+
+Produce a ranked list of all required actions across 
+the account. No more than 15 items.
+
+Format each item as:
+
+[PRIORITY] [TIMEFRAME] [AD GROUP] [ACTION] [ESTIMATED TIME]
+
+Timeframe must be one of:
+- TODAY: errors, typos, factual misstatements, 
+  disapproval risks
+- THIS WEEK: copy improvements, headline swaps, 
+  description rewrites
+- THIS MONTH: structural changes, new ad groups, 
+  landing page recommendations
+
+Rank TODAY items by severity first.
+Rank THIS WEEK items by estimated CPA impact.
+Rank THIS MONTH items by estimated volume impact.
+
+Include a one-line rationale for each item.
+
+2. CONFIRMED WASTED SPEND SUMMARY
+
+Pull from search term data across all ad groups.
+
+Calculate:
+- Total spend on zero-conversion search terms 
+  this period
+- Total spend on off-category terms 
+  (tinting, detailing, interior cleaning, wraps)
+- Total spend on competitor brand terms with 
+  zero conversions
+- Combined total
+
+Present as a single table:
+
+| Category | Terms | Total Spend | Conversions |
+|----------|-------|-------------|-------------|
+| Zero-conversion, on-category | ... | $X | 0 |
+| Off-category (wrong intent) | ... | $X | 0 |
+| Competitor brand terms | ... | $X | 0 |
+| TOTAL RECOVERABLE | | $X | 0 |
+
+Follow with one sentence: what adding these as 
+negative keywords would do to budget efficiency.
+
+3. HEADLINE REPLACEMENT TABLE
+
+For every headline flagged as weak, generic, broken, 
+or factually incorrect in the Diagnostic Report, 
+produce a direct replacement.
+
+Format as a table:
+
+| Ad Group | Ad ID | Current Headline | Issue | 
+  Replacement Headline | Improvement Rationale |
+
+Rules:
+- Replacements must be 30 characters or fewer
+- Must not use unsubstantiated superlatives 
+  (Best, #1, Australia's Leading) unless verified
+- Must prioritise: CSIRO, 12-year warranty, 9H+, 
+  Australian-made, graphene — in that order of 
+  preference where space allows
+- Every "10 Year" or "10-Year" headline must be 
+  replaced with "12-Year" equivalent
+- Flag any replacement that requires Google 
+  editorial approval before serving
+
+4. DESCRIPTION REPLACEMENT TABLE
+
+For every description flagged in the Diagnostic Report 
+(incomplete sentences, warranty errors, repetitive 
+"near you" language, internal jargon, grammatical errors):
+
+| Ad Group | Ad ID | Current Description | Issue | 
+  Replacement Description | Character Count |
+
+Rules:
+- Maximum 90 characters per description
+- Each replacement must contain at least one 
+  verified differentiator
+- No description may end mid-sentence
+- "Near me" / "near you" may appear maximum once 
+  per RSA across all four descriptions combined
+
+5. RSA ASSET PINNING RECOMMENDATIONS
+
+For each RSA, recommend the pinning strategy:
+
+| Ad ID | Pin H1 To | Pin H2 To | Rationale |
+
+Rules:
+- H1 pin should always be the strongest 
+  differentiator claim (CSIRO preferred)
+- H2 pin should be the conversion driver 
+  (warranty, price, or mobile)
+- H3 should remain unpinned to allow Google 
+  to test
+- Flag any current pin that is locking a 
+  weak or incorrect headline in place
+
+6. NEGATIVE KEYWORD RECOMMENDATIONS
+
+Produce a consolidated negative keyword list 
+across all ad groups.
+
+Format as:
+
+| Keyword | Match Type | Apply To | Rationale |
+
+Categories to cover:
+- Off-category terms identified in search 
+  term data (tinting, wraps, interior cleaning, 
+  detailing, spray)
+- Competitor brand terms (Nexus Auto Care, 
+  Diamond Detail, Hydro G9+)
+- DIY intent terms (kit, diy, how to, spray can)
+- Informational-only terms with no conversion 
+  history after 3+ clicks
+
+7. STRUCTURAL RECOMMENDATION: NSW AD GROUP
+
+The NSW Ad Group contains three RSAs pointing to 
+three different landing pages within one Max Conv 
+ad group. Address this specifically:
+
+- State the problem in plain language (one paragraph)
+- Provide two options:
+  Option A: Consolidate (merge into one RSA, 
+  one landing page — which one and why)
+  Option B: Split (separate ad groups per 
+  landing page — structure and rationale)
+- Make a clear recommendation between A and B
+- State what metric to monitor for 4 weeks 
+  after implementing
+
+8. 30-DAY MONITORING PLAN
+
+Weekly checklist (4 items maximum per week):
+- Week 1: What to check after TODAY fixes are live
+- Week 2: What to check after THIS WEEK rewrites 
+  are live
+- Week 3: What early signals indicate the fixes 
+  are working
+- Week 4: Decision criteria — what does success 
+  look like and what triggers the next review
+
+---
+
+REPORT RULES:
+- Do not repeat findings from the Diagnostic Report. 
+  Reference them by name only if needed 
+  ("the warranty error in CPC Protecton").
+- Every recommendation must be implementable by 
+  someone opening Google Ads immediately after 
+  reading this report.
+- No generic advice. Every instruction must name 
+  the specific ad group, ad ID, headline, or 
+  description it applies to.
+- Replacements must be paste-ready — formatted 
+  exactly as they would appear in Google Ads.
+- Where a recommendation requires a new landing 
+  page, flag it as [LANDING PAGE REQUIRED] and 
+  move it to THIS MONTH timeframe.
+- Total word count: under 2,000 words. 
+  Brevity is a requirement, not a preference.

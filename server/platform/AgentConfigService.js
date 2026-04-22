@@ -46,6 +46,9 @@ const AGENT_DEFAULTS = {
     lookback_days:   30,
     max_suggestions: 6,
   },
+  'ads-copy-playbook': {
+    lookback_days: 30,
+  },
   'high-intent-advisor': {
     schedule: '0 7 * * *', // 7am UTC = 5pm AEST; not active until cron registered
   },
@@ -140,6 +143,13 @@ const ADMIN_DEFAULTS = {
     max_task_budget_aud: 1.50,
     fallback_model:      null,
   },
+  'ads-copy-playbook': {
+    enabled:             true,
+    model:               null,
+    max_tokens:          8192,          // 8 structured tables + 2,000-word limit keeps output tight
+    max_task_budget_aud: 1.50,
+    fallback_model:      null,
+  },
   _platform: {
     enabled: true,
     model: null,
@@ -168,6 +178,7 @@ const AGENT_MODEL_REQUIREMENTS = {
   'ads-attribution-summary':     { tier: 'standard', reason: 'Brief structured summary from pre-fetched data' },
   'ads-bounce-analysis':         { tier: 'standard', reason: 'Structured bounce report from pre-fetched data' },
   'ads-copy-diagnostic':         { tier: 'advanced', reason: 'Multi-section ad copy audit across campaigns, ad groups, and search term alignment' },
+  'ads-copy-playbook':           { tier: 'advanced', reason: 'Prescriptive 8-section playbook with paste-ready replacements, tables, and structural recommendations' },
   'auction-insights':            { tier: 'standard', reason: 'Structured competitive metrics report' },
   'diamondplate-data':           { tier: 'advanced', reason: 'Cross-source CRM lead intelligence with channel, device, and conversion analysis' },
   'search-term-intelligence':    { tier: 'advanced', reason: 'Cross-source analysis joining Ads search terms, GA4 bounce data, and CRM lead outcomes' },

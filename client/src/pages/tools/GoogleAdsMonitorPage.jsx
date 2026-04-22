@@ -153,6 +153,7 @@ const ALL_AGENT_SLUGS = [
   { slug: 'competitor-keyword-intel', label: 'Competitor Keywords' },
   { slug: 'google-ads-strategic-review', label: 'Strategic Review' },
   { slug: 'ads-copy-diagnostic',         label: 'Copy Diagnostic' },
+  { slug: 'ads-copy-playbook',           label: 'Copy Playbook' },
 ];
 
 function AllAgentsHistory({ onDiscuss }) {
@@ -329,9 +330,11 @@ export default function GoogleAdsMonitorPage() {
   const [cfgSuccess, setCfgSuccess] = useState('');
   const [activeTab,  setActiveTab]  = useState(initialTab);
   const [openCard,   setOpenCard]   = useState(null);
-  const [emailModal, setEmailModal] = useState(false);
-  const [emailSending, setEmailSending] = useState(false);
-  const [monitorCopied, setMonitorCopied] = useState(false);
+  const [emailModal,     setEmailModal]     = useState(false);
+  const [emailSending,   setEmailSending]   = useState(false);
+  const [monitorCopied,  setMonitorCopied]  = useState(false);
+  const [recentRunModal, setRecentRunModal] = useState(false);
+  const [recentRunMeta,  setRecentRunMeta]  = useState(null);
 
   // Warn before leaving while a run is in progress
   useEffect(() => {
@@ -376,7 +379,23 @@ export default function GoogleAdsMonitorPage() {
 
   // ── Run ───────────────────────────────────────────────────────────────────
 
+  function handleRunClick() {
+    if (new Date(startDate) > new Date(endDate)) { setError('Start date must be before end date.'); return; }
+    const latest = history.find((r) => r.status === 'complete');
+    if (latest) {
+      const hoursAgo  = (Date.now() - new Date(latest.run_at).getTime()) / 3_600_000;
+      const sameRange = latest.result?.startDate === startDate && latest.result?.endDate === endDate;
+      if (hoursAgo < 6 || sameRange) {
+        setRecentRunMeta({ hoursAgo, sameRange });
+        setRecentRunModal(true);
+        return;
+      }
+    }
+    handleRun();
+  }
+
   async function handleRun() {
+    setRecentRunModal(false);
     if (new Date(startDate) > new Date(endDate)) {
       setError('Start date must be before end date.');
       return;
@@ -616,7 +635,7 @@ export default function GoogleAdsMonitorPage() {
                     }
                   </p>
                 </button>
-                <Button variant="primary" onClick={handleRun} disabled={running}
+                <Button variant="primary" onClick={handleRunClick} disabled={running}
                   style={{ flexShrink: 0, fontSize: 12, padding: '5px 14px' }}>
                   {running ? 'Running…' : 'Run now'}
                 </Button>
@@ -701,6 +720,7 @@ export default function GoogleAdsMonitorPage() {
             { slug: 'auction-insights',          title: 'Auction Insights',    description: 'Which competitors are bidding in the same auctions — impression share, top-of-page rate, and where Diamond Plate is losing visibility.' },
             { slug: 'competitor-keyword-intel',  title: 'Competitor Keywords', description: 'Keyword gaps for Diamond Plate Australia — what competitors are targeting that we are not. Requires Standard API access.' },
             { slug: 'ads-copy-diagnostic',       title: 'Copy Diagnostic',     description: 'Formal ad copy audit — reviews every active RSA ad\'s headlines, descriptions, asset performance ratings, quality score components, and search term alignment. Flags Poor-rated assets and copy that ignores Diamond Plate\'s differentiators.' },
+            { slug: 'ads-copy-playbook',         title: 'Copy Playbook',       description: 'Prescriptive optimization playbook — paste-ready headline and description replacements, negative keyword list, asset pinning strategy, wasted spend summary, NSW ad group structural fix, and 30-day monitoring plan. Reads the Diagnostic Report automatically.' },
           ].map(({ slug, title, description }) => (
             <AgentDashboardCard
               key={slug}
@@ -824,6 +844,42 @@ export default function GoogleAdsMonitorPage() {
               </>
             );
           })()}
+        </div>
+      )}
+
+      {/* ── Recent-run warning modal ────────────────────────────────────── */}
+      {recentRunModal && recentRunMeta && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.45)',
+        }} onClick={() => setRecentRunModal(false)}>
+          <div style={{
+            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+            borderRadius: 16, padding: 24, width: 400, fontFamily: 'inherit',
+          }} onClick={(e) => e.stopPropagation()}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 8 }}>
+              Report already available
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 16, lineHeight: 1.55 }}>
+              {recentRunMeta.sameRange
+                ? 'A Google Ads Monitor report for this exact date range is already in history.'
+                : `A Google Ads Monitor report was run ${recentRunMeta.hoursAgo < 1
+                    ? 'less than an hour ago'
+                    : `${Math.round(recentRunMeta.hoursAgo)} hour${Math.round(recentRunMeta.hoursAgo) === 1 ? '' : 's'} ago`}.`
+              }
+              {' '}Google Ads data is 24-hour delayed — running again is unlikely to surface new insights.
+              Review the existing report first, or run if the period has changed.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button variant="primary" onClick={() => {
+                setRecentRunModal(false);
+                setActiveTab('history');
+              }}>
+                View history
+              </Button>
+              <Button variant="secondary" onClick={handleRun}>Run anyway</Button>
+            </div>
+          </div>
         </div>
       )}
 
