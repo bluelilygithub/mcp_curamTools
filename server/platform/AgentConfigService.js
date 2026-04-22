@@ -686,6 +686,9 @@ const COMPETITOR_SETTINGS_DEFAULTS = {
  * Returns org-level competitor list.
  * competitors: [{ name: string, url: string, notes?: string }]
  * Shared across competitor-keyword-intel, ai-visibility-monitor, and keyword-opportunity.
+ *
+ * Auto-migration: if competitor_settings has never been saved, seeds from the
+ * legacy ai-visibility-monitor agent_configs competitors array on first access.
  */
 async function getCompetitorSettings(orgId) {
   try {
@@ -693,8 +696,28 @@ async function getCompetitorSettings(orgId) {
       `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'competitor_settings' LIMIT 1`,
       [orgId]
     );
-    if (res.rows.length === 0) return { ...COMPETITOR_SETTINGS_DEFAULTS };
-    return { ...COMPETITOR_SETTINGS_DEFAULTS, ...(res.rows[0].value || {}) };
+    if (res.rows.length > 0) {
+      return { ...COMPETITOR_SETTINGS_DEFAULTS, ...(res.rows[0].value || {}) };
+    }
+
+    // First access — attempt one-time migration from ai-visibility-monitor agent config
+    try {
+      const aiConfig = await getAgentConfig(orgId, 'ai-visibility-monitor');
+      if (Array.isArray(aiConfig.competitors) && aiConfig.competitors.length > 0) {
+        const migrated = { competitors: aiConfig.competitors };
+        await pool.query(
+          `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+           VALUES ($1, 'competitor_settings', $2, NULL, NOW())
+           ON CONFLICT (org_id, key)
+           DO UPDATE SET value = $2, updated_at = NOW()`,
+          [orgId, JSON.stringify(migrated)]
+        );
+        console.log(`[AgentConfigService] Migrated ${aiConfig.competitors.length} competitors from ai-visibility-monitor to competitor_settings for org ${orgId}`);
+        return { ...COMPETITOR_SETTINGS_DEFAULTS, ...migrated };
+      }
+    } catch { /* migration is best-effort */ }
+
+    return { ...COMPETITOR_SETTINGS_DEFAULTS };
   } catch (err) {
     console.error('[AgentConfigService] getCompetitorSettings error:', err.message);
     return { ...COMPETITOR_SETTINGS_DEFAULTS };
