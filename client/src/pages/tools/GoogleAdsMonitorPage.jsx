@@ -152,6 +152,7 @@ const ALL_AGENT_SLUGS = [
   { slug: 'auction-insights',         label: 'Auction Insights' },
   { slug: 'competitor-keyword-intel', label: 'Competitor Keywords' },
   { slug: 'google-ads-strategic-review', label: 'Strategic Review' },
+  { slug: 'ads-copy-diagnostic',         label: 'Copy Diagnostic' },
 ];
 
 function AllAgentsHistory({ onDiscuss }) {
@@ -699,6 +700,7 @@ export default function GoogleAdsMonitorPage() {
             { slug: 'search-term-intelligence',  title: 'Search Term Intelligence', description: 'Cross-references Ads search terms with CRM lead outcomes — surfaces terms that bounce and terms that generate not-interested leads.' },
             { slug: 'auction-insights',          title: 'Auction Insights',    description: 'Which competitors are bidding in the same auctions — impression share, top-of-page rate, and where Diamond Plate is losing visibility.' },
             { slug: 'competitor-keyword-intel',  title: 'Competitor Keywords', description: 'Keyword gaps for Diamond Plate Australia — what competitors are targeting that we are not. Requires Standard API access.' },
+            { slug: 'ads-copy-diagnostic',       title: 'Copy Diagnostic',     description: 'Formal ad copy audit — reviews every active RSA ad\'s headlines, descriptions, asset performance ratings, quality score components, and search term alignment. Flags Poor-rated assets and copy that ignores Diamond Plate\'s differentiators.' },
           ].map(({ slug, title, description }) => (
             <AgentDashboardCard
               key={slug}

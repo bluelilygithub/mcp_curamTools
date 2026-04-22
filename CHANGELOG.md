@@ -25,6 +25,76 @@
 
 ---
 
+## 2026-04-22 — SQL Console NLP: multi-provider model routing; configurable prompt; reasoning model support
+
+### Built
+
+**SQL Console NLP — full multi-provider model routing (7-attempt fix)**
+
+Root cause chain that took 7 attempts to fully resolve:
+1. Route called `new Anthropic()` directly → fixed to `getProvider()`
+2. `getDefaultModel()` ignored org default when not in `ai_models` → fixed fallback return
+3. `getProvider()` called without `customProviders` → added `getCustomProviders(orgId)` load
+4. Frontend `useEffect` fell back to first Claude model when org default not in `ai_models` → fixed initialization to use org default as-is
+5. `AdminModelsPage.jsx` `<select>` restricted to `ai_models` silently overrode org default → changed to `<input list>` + `<datalist>`
+6. Answer generation step still hardcoded to `claude-haiku-4-5-20251001` → fixed to use same `provider` + `modelDef.id`, wrapped in `try/catch`
+7. `deepseek-reasoner` returned empty `content` (reasoning-only response) → `openai-compatible.js` `reasoning_content` fallback
+
+**`server/platform/providers/openai-compatible.js` — reasoning model fix**
+- `convertResponse` had truthy-check bug: `if (msg?.content)` silently dropped empty-string content
+- Fixed: explicit `!= null && !== ''` check; falls back to `msg?.reasoning_content` if content is null/empty
+- Affects all OpenAI-compatible providers: deepseek, openai, groq, mistral, xai
+- `deepseek-reasoner` uses chain-of-thought — sometimes returns `content: null` with full answer in `reasoning_content`
+
+**SQL Console NLP — schema context and cannotAnswer path**
+- `max_tokens` bumped to 8192 (reasoning models use tokens for internal chain-of-thought before producing SQL)
+- Prompt now explains this is platform admin DB only — WordPress CRM data (enquiries, leads) is NOT here
+- If model cannot answer from schema: returns `-- CANNOT_ANSWER: <reason>` comment
+- Route detects the pattern, returns `{ cannotAnswer: true, reason }` (HTTP 200, not error)
+- Frontend: amber warning banner with "Use the Conversation Agent" guidance; error banner suppressed
+
+**SQL NLP prompt — configurable via Admin › MCP Prompts**
+- New `server/agents/sqlNlp/prompt.js` — `buildSystemPrompt(config)` returns `custom_prompt` if set, else built-in instructions
+- `preview-prompt` endpoint picks it up automatically via kebab→camelCase slug convention (`sql-nlp` → `sqlNlp`)
+- Route loads `AgentConfigService.getAdminConfig('sql-nlp')` and calls `buildSystemPrompt(config)` — schema + question always appended at runtime
+- `sql-nlp` added to `AGENTS` array in `AdminPromptsPage.jsx` — now visible and editable in Admin › MCP Prompts
+
+**`AdminModelsPage.jsx` — org default model field**
+- Changed from `<select>` (restricted to `ai_models`) to `<input list>` + `<datalist>`
+- Allows typing any model ID (e.g. `deepseek-reasoner`, `gpt-4o`) not present in `ai_models`
+- Documented in `server/CLAUDE.md` as required pattern for org default model selector
+
+**`docExtractor` — `customProviders` threading**
+- `extractFromImage` and `runDocExtraction` both accept `customProviders = []`
+- Route loads `getCustomProviders(orgId)` and passes through the call chain
+- `getProvider(model, customProviders)` — never single-arg in a route context
+
+**`server/CLAUDE.md` — model resolution documented**
+- "Model resolution — server side" section: `createAgentRoute` pattern, non-agent routes pattern, helper-function agent pattern
+- "Model selector — frontend pattern" section: `<input list>` rule, initialization rule, fallback option rule
+- Two "Rules learned through pain" entries: `<select>`/`ai_models` silent override trap; single-arg `getProvider` trap
+
+### Fixed / discovered
+
+- `ai_models` is a display list, NOT the routing list. `providerRegistry.PROVIDERS` handles routing via hardcoded prefixes. A model routes correctly without being in `ai_models`. Any selector restricted to `ai_models` silently overrides custom org defaults.
+- JS default parameters do not fire when the argument is `null` — only `undefined`. `adminConfig.max_tokens ?? 4096` is always correct; bare `adminConfig.max_tokens` passes `null` through.
+- `deepseek-reasoner` with `max_tokens: 1024` exhausted the budget mid-reasoning — output was truncated to prose instead of SQL. 8192 gives sufficient headroom.
+- Platform SQL console queries the **platform PostgreSQL DB** (organisations, users, agents, usage_logs, system_settings). WordPress CRM (enquiries, leads, bqq_posts) is MySQL-only, accessible via conversation agent MCP tools.
+
+### Open / next
+
+- `docExtractor` `logUsage` still passes `{ input, output }` only — should pass full `tokensUsed` with `cacheRead`/`cacheWrite`
+- Gemini URL double-prefix bug in `providers/gemini.js` (stub — throws until implemented)
+- `purpose` field not injected into doc extraction prompt (noted in CLAUDE.md as known gap)
+- Phase 2.1 — tool grouping + cross-source routing guidance
+- Phase 2.2 — resource permissions wired to access checks
+- Phase 3.1 — MCP Prompts Primitive
+- Phase 3.2 — Sampling implementation
+- Phase 4.1 — parallel tool execution in AgentOrchestrator
+- `not-interested-report` not yet run against live data
+
+---
+
 ## 2026-04-21 — Token usage dashboard; UsageLogger cache token capture; caveman mode
 
 ### Built

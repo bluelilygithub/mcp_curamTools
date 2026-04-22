@@ -90,7 +90,7 @@ Check all three before editing:
 
 ## MCP server tool inventory (source of truth)
 
-### google-ads.js — 9 tools
+### google-ads.js — 14 tools
 - `ads_get_campaign_performance`
 - `ads_get_daily_performance`
 - `ads_get_search_terms`
@@ -100,6 +100,11 @@ Check all three before editing:
 - `ads_get_impression_share_by_campaign`
 - `ads_get_active_keywords`
 - `ads_get_change_history`
+- `ads_get_ad_group_ads` ← RSA headlines, descriptions, ad strength per ad group
+- `ads_get_ad_asset_performance` ← asset performance labels (BEST/GOOD/LOW/POOR) per asset
+- `ads_get_ad_group_performance` ← impressions, clicks, cost, CTR, conv rate, CPA per ad group
+- `ads_get_search_terms_by_ad_group` ← top 20 search terms per ad group
+- `ads_get_quality_scores` ← keyword QS components (expectedCtr, adRelevance, landingPageExp)
 
 ### google-analytics.js — 5 tools
 - `ga4_get_sessions_overview`
@@ -512,6 +517,12 @@ UI: Admin › Token Usage (`/admin/usage`). Period selector: 7d / 30d / 90d.
 
 **Always pass `customProviders` to `getProvider` — never call `getProvider(model)` alone.**
 `getProvider(model)` only checks the hardcoded registry + env var convention. Custom providers registered in Admin > Providers are loaded from the DB and must be passed explicitly: `getProvider(model, customProviders)`. Missing this causes custom-provider models to fall through to the Anthropic fallback. `AgentOrchestrator.run()` handles this internally — any code that calls `getProvider` directly must load and pass `customProviders`.
+
+**Reasoning models (`deepseek-reasoner`, `o1`, `o3`) return `reasoning_content` alongside `content` — `content` may be `null`.**
+`openai-compatible.js` `convertResponse` handles this: if `msg.content` is null or empty string, it falls back to `msg.reasoning_content`. The original truthy-check (`if (msg?.content)`) silently dropped empty-string content. The fix uses `!= null && !== ''` before the fallback. Consequence for `max_tokens`: reasoning tokens count toward the total on some providers — use 8192+ for reasoning models doing SQL generation or other text-output tasks, not 1024.
+
+**SQL Console NLP prompt is configurable via Admin › MCP Prompts.**
+The built-in instructions live in `server/agents/sqlNlp/prompt.js` (`buildSystemPrompt(config)`). The `preview-prompt` endpoint loads it automatically via the kebab→camelCase slug convention. To override: go to Admin › MCP Prompts → "SQL Console — NLP" → edit and save. The schema and question are always appended at runtime after the instructions — a custom prompt only needs to cover the instructions/context block.
 
 **Do not cut from the exported tool array without auditing the MCP server it calls.**
 The definition may still exist in tools.js but the agent cannot use it if it's not exported.

@@ -71,7 +71,13 @@
       "Bash(node --check \"c:/Users/micha/Local Sites/mcp_curamTools/server/routes/agents.js\")",
       "Bash(node --check \"c:/Users/micha/Local Sites/mcp_curamTools/server/platform/AgentConfigService.js\")",
       "Bash(gh repo *)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(node --check \"/c/Users/micha/local sites/mcp_curamtools/server/services/GoogleAdsService.js\")",
+      "Bash(node --check \"/c/Users/micha/local sites/mcp_curamtools/server/mcp-servers/google-ads.js\")",
+      "Bash(node --check \"/c/Users/micha/local sites/mcp_curamtools/server/agents/adsCopyDiagnostic/index.js\")",
+      "Bash(node --check \"/c/Users/micha/local sites/mcp_curamtools/server/agents/adsCopyDiagnostic/prompt.js\")",
+      "Bash(node --check \"/c/Users/micha/local sites/mcp_curamtools/server/routes/agents.js\")",
+      "Bash(node --check \"/c/Users/micha/local sites/mcp_curamtools/server/platform/AgentConfigService.js\")"
     ]
   }
 }

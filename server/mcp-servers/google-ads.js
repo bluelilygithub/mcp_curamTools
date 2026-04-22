@@ -134,6 +134,46 @@ const TOOLS = [
       properties: dateRangeProps,
     },
   },
+  {
+    name:        'ads_get_ad_group_ads',
+    description: 'All enabled RSA ads per campaign and ad group. Returns campaign, adGroup, adId, adStrength (EXCELLENT/GOOD/AVERAGE/POOR/UNSPECIFIED), finalUrls, headlines (text + pinnedField), descriptions (text + pinnedField). Use for ad copy analysis and copy diagnostic reports.',
+    inputSchema: {
+      type:       'object',
+      properties: { customer_id: dateRangeProps.customer_id },
+    },
+  },
+  {
+    name:        'ads_get_ad_asset_performance',
+    description: 'Asset performance labels for every active RSA asset from the Google Ads asset view. Returns campaign, adGroup, adId, fieldType (HEADLINE/DESCRIPTION), performanceLabel (BEST/GOOD/LOW/POOR/UNRATED/LEARNING), pinnedField, and text. Use to identify which specific headlines and descriptions are rated Poor and should be replaced.',
+    inputSchema: {
+      type:       'object',
+      properties: { customer_id: dateRangeProps.customer_id },
+    },
+  },
+  {
+    name:        'ads_get_ad_group_performance',
+    description: 'Performance metrics per ad group for the date range: campaign, adGroup, impressions, clicks, cost (AUD), conversions, CTR, avgCpc (AUD), convRate, cpa (AUD). Use for ad group-level performance analysis in copy diagnostic and attribution reports.',
+    inputSchema: {
+      type:       'object',
+      properties: dateRangeProps,
+    },
+  },
+  {
+    name:        'ads_get_search_terms_by_ad_group',
+    description: 'Top 20 actual user search queries per ad group, ordered by clicks DESC. Returns array of { campaign, adGroup, terms: [{ term, status, impressions, clicks, cost, conversions, ctr }] }. Use for copy alignment audits to check whether top search terms appear in ad headlines.',
+    inputSchema: {
+      type:       'object',
+      properties: dateRangeProps,
+    },
+  },
+  {
+    name:        'ads_get_quality_scores',
+    description: 'Keyword Quality Score components per ad group keyword: qualityScore (1–10), expectedCtr (BELOW_AVERAGE/AVERAGE/ABOVE_AVERAGE), adRelevance, landingPageExp. Use for copy diagnostic reports to identify which ad groups have poor Ad Relevance QS components.',
+    inputSchema: {
+      type:       'object',
+      properties: { customer_id: dateRangeProps.customer_id },
+    },
+  },
 ];
 
 // ── Resource definitions ──────────────────────────────────────────────────────
@@ -191,6 +231,21 @@ async function callTool(name, args = {}) {
 
     case 'ads_get_change_history':
       return ads.getChangeHistory(resolveOptions(args), cid);
+
+    case 'ads_get_ad_group_ads':
+      return ads.getAdGroupAds(cid);
+
+    case 'ads_get_ad_asset_performance':
+      return ads.getAdAssetPerformance(cid);
+
+    case 'ads_get_ad_group_performance':
+      return ads.getAdGroupPerformance(resolveOptions(args), cid);
+
+    case 'ads_get_search_terms_by_ad_group':
+      return ads.getSearchTermsByAdGroup(resolveOptions(args), cid);
+
+    case 'ads_get_quality_scores':
+      return ads.getQualityScores(cid);
 
     default:
       throw new Error(`Unknown tool: ${name}`);

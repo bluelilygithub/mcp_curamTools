@@ -123,6 +123,18 @@ agentsRouter.use(
   })
 );
 
+// ── Ads Copy Diagnostic ───────────────────────────────────────────────────
+const { runAdsCopyDiagnostic } = require('../agents/adsCopyDiagnostic');
+
+agentsRouter.use(
+  '/ads-copy-diagnostic',
+  createAgentRoute({
+    slug:               'ads-copy-diagnostic',
+    runFn:              runAdsCopyDiagnostic,
+    requiredPermission: 'ads_operator',
+  })
+);
+
 // ── Ads Attribution Summary ───────────────────────────────────────────────
 const { runAdsAttributionSummary } = require('../agents/adsAttributionSummary');
 

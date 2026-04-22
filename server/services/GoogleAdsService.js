@@ -410,6 +410,213 @@ class GoogleAdsService {
   }
 
   /**
+   * Returns all enabled RSA ads with headlines, descriptions, ad strength, and final URLs.
+   * @param {string|null} [customerId]
+   */
+  async getAdGroupAds(customerId = null) {
+    const results = await this._search(`
+      SELECT
+        campaign.id,
+        campaign.name,
+        ad_group.id,
+        ad_group.name,
+        ad_group_ad.ad.id,
+        ad_group_ad.ad.responsive_search_ad.headlines,
+        ad_group_ad.ad.responsive_search_ad.descriptions,
+        ad_group_ad.ad.final_urls,
+        ad_group_ad.status,
+        ad_group_ad.ad_strength
+      FROM ad_group_ad
+      WHERE campaign.status = 'ENABLED'
+        AND ad_group.status = 'ENABLED'
+        AND ad_group_ad.status = 'ENABLED'
+        AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'
+      ORDER BY campaign.name, ad_group.name
+    `, customerId);
+
+    return results.map((r) => ({
+      campaignId:   r.campaign?.id   ?? '',
+      campaign:     r.campaign?.name ?? '',
+      adGroupId:    r.adGroup?.id    ?? '',
+      adGroup:      r.adGroup?.name  ?? '',
+      adId:         r.adGroupAd?.ad?.id ?? '',
+      adStrength:   r.adGroupAd?.adStrength ?? 'UNSPECIFIED',
+      finalUrls:    r.adGroupAd?.ad?.finalUrls ?? [],
+      headlines:    (r.adGroupAd?.ad?.responsiveSearchAd?.headlines ?? []).map((h) => ({
+        text:        h.text ?? '',
+        pinnedField: h.pinnedField ?? null,
+      })),
+      descriptions: (r.adGroupAd?.ad?.responsiveSearchAd?.descriptions ?? []).map((d) => ({
+        text:        d.text ?? '',
+        pinnedField: d.pinnedField ?? null,
+      })),
+    }));
+  }
+
+  /**
+   * Returns asset performance labels for enabled RSA ad assets.
+   * Joins ad_group_ad_asset_view with asset to get text + performance label.
+   * @param {string|null} [customerId]
+   */
+  async getAdAssetPerformance(customerId = null) {
+    const results = await this._search(`
+      SELECT
+        campaign.name,
+        ad_group.name,
+        ad_group_ad.ad.id,
+        ad_group_ad_asset_view.field_type,
+        ad_group_ad_asset_view.performance_label,
+        ad_group_ad_asset_view.pinned_field,
+        ad_group_ad_asset_view.enabled,
+        asset.text_asset.text
+      FROM ad_group_ad_asset_view
+      WHERE campaign.status = 'ENABLED'
+        AND ad_group.status = 'ENABLED'
+        AND ad_group_ad.status = 'ENABLED'
+      ORDER BY campaign.name, ad_group.name
+    `, customerId);
+
+    return results
+      .filter((r) => r.adGroupAdAssetView?.enabled !== false)
+      .map((r) => ({
+        campaign:         r.campaign?.name ?? '',
+        adGroup:          r.adGroup?.name  ?? '',
+        adId:             r.adGroupAd?.ad?.id ?? '',
+        fieldType:        r.adGroupAdAssetView?.fieldType        ?? '',
+        performanceLabel: r.adGroupAdAssetView?.performanceLabel ?? 'UNSPECIFIED',
+        pinnedField:      r.adGroupAdAssetView?.pinnedField      ?? null,
+        text:             r.asset?.textAsset?.text               ?? '',
+      }));
+  }
+
+  /**
+   * Returns performance metrics per ad group (impressions, clicks, cost, conversions, CTR, conv rate, CPA).
+   * @param {number|{startDate,endDate}} [options=30]
+   * @param {string|null} [customerId]
+   */
+  async getAdGroupPerformance(options = 30, customerId = null) {
+    const { from, to } = resolveRange(options);
+
+    const results = await this._search(`
+      SELECT
+        campaign.name,
+        ad_group.name,
+        ad_group.status,
+        metrics.impressions,
+        metrics.clicks,
+        metrics.cost_micros,
+        metrics.conversions,
+        metrics.ctr,
+        metrics.average_cpc,
+        metrics.conversions_from_interactions_rate,
+        metrics.cost_per_conversion
+      FROM ad_group
+      WHERE campaign.status = 'ENABLED'
+        AND ad_group.status = 'ENABLED'
+        AND segments.date BETWEEN '${from}' AND '${to}'
+      ORDER BY metrics.impressions DESC
+    `, customerId);
+
+    return results.map((r) => ({
+      campaign:    r.campaign?.name  ?? '',
+      adGroup:     r.adGroup?.name   ?? '',
+      impressions: parseInt(r.metrics?.impressions ?? '0'),
+      clicks:      parseInt(r.metrics?.clicks ?? '0'),
+      cost:        parseInt(r.metrics?.costMicros ?? '0') / 1_000_000,
+      conversions: parseFloat(r.metrics?.conversions ?? '0'),
+      ctr:         parseFloat(r.metrics?.ctr ?? '0'),
+      avgCpc:      parseInt(r.metrics?.averageCpc ?? '0') / 1_000_000,
+      convRate:    parseFloat(r.metrics?.conversionsFromInteractionsRate ?? '0'),
+      cpa:         parseInt(r.metrics?.costPerConversion ?? '0') / 1_000_000,
+    }));
+  }
+
+  /**
+   * Returns top search terms grouped by ad group — up to 20 per ad group.
+   * @param {number|{startDate,endDate}} [options=30]
+   * @param {string|null} [customerId]
+   */
+  async getSearchTermsByAdGroup(options = 30, customerId = null) {
+    const { from, to } = resolveRange(options);
+
+    const results = await this._search(`
+      SELECT
+        campaign.name,
+        ad_group.name,
+        search_term_view.search_term,
+        search_term_view.status,
+        metrics.impressions,
+        metrics.clicks,
+        metrics.cost_micros,
+        metrics.conversions,
+        metrics.ctr
+      FROM search_term_view
+      WHERE campaign.status = 'ENABLED'
+        AND ad_group.status = 'ENABLED'
+        AND segments.date BETWEEN '${from}' AND '${to}'
+      ORDER BY metrics.clicks DESC
+      LIMIT 1000
+    `, customerId);
+
+    // Group by campaign + ad group, keep top 20 per group
+    const groups = {};
+    for (const r of results) {
+      const key = `${r.campaign?.name ?? ''}|||${r.adGroup?.name ?? ''}`;
+      if (!groups[key]) groups[key] = { campaign: r.campaign?.name ?? '', adGroup: r.adGroup?.name ?? '', terms: [] };
+      if (groups[key].terms.length < 20) {
+        groups[key].terms.push({
+          term:        r.searchTermView?.searchTerm ?? '',
+          status:      r.searchTermView?.status     ?? '',
+          impressions: parseInt(r.metrics?.impressions ?? '0'),
+          clicks:      parseInt(r.metrics?.clicks ?? '0'),
+          cost:        parseInt(r.metrics?.costMicros ?? '0') / 1_000_000,
+          conversions: parseFloat(r.metrics?.conversions ?? '0'),
+          ctr:         parseFloat(r.metrics?.ctr ?? '0'),
+        });
+      }
+    }
+    return Object.values(groups);
+  }
+
+  /**
+   * Returns keyword quality scores with QS components per ad group.
+   * Components: searchPredictedCtr, creativeQualityScore, postClickQualityScore
+   * Values: BELOW_AVERAGE, AVERAGE, ABOVE_AVERAGE
+   * @param {string|null} [customerId]
+   */
+  async getQualityScores(customerId = null) {
+    const results = await this._search(`
+      SELECT
+        campaign.name,
+        ad_group.name,
+        ad_group_criterion.keyword.text,
+        ad_group_criterion.keyword.match_type,
+        ad_group_criterion.quality_info.quality_score,
+        ad_group_criterion.quality_info.creative_quality_score,
+        ad_group_criterion.quality_info.post_click_quality_score,
+        ad_group_criterion.quality_info.search_predicted_ctr
+      FROM ad_group_criterion
+      WHERE ad_group_criterion.type = 'KEYWORD'
+        AND ad_group_criterion.status = 'ENABLED'
+        AND campaign.status = 'ENABLED'
+        AND ad_group.status = 'ENABLED'
+      ORDER BY campaign.name, ad_group.name
+      LIMIT 500
+    `, customerId);
+
+    return results.map((r) => ({
+      campaign:          r.campaign?.name                                        ?? '',
+      adGroup:           r.adGroup?.name                                         ?? '',
+      keyword:           r.adGroupCriterion?.keyword?.text                       ?? '',
+      matchType:         r.adGroupCriterion?.keyword?.matchType                  ?? '',
+      qualityScore:      r.adGroupCriterion?.qualityInfo?.qualityScore           ?? null,
+      expectedCtr:       r.adGroupCriterion?.qualityInfo?.searchPredictedCtr     ?? 'UNKNOWN',
+      adRelevance:       r.adGroupCriterion?.qualityInfo?.creativeQualityScore   ?? 'UNKNOWN',
+      landingPageExp:    r.adGroupCriterion?.qualityInfo?.postClickQualityScore  ?? 'UNKNOWN',
+    }));
+  }
+
+  /**
    * Returns recent change history events (bid/budget/status changes, ad edits).
    * @param {number|{startDate,endDate}} [options=7]
    * @param {string|null} [customerId]
