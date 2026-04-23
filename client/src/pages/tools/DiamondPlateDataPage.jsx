@@ -13,6 +13,7 @@ import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
 import InlineBanner from '../../components/ui/InlineBanner';
 import ConversationView from './GoogleAdsMonitor/ConversationView';
 import VelocityDashboard from './DiamondPlate/VelocityDashboard';
+import GeoHeatmapTab from './DiamondPlate/GeoHeatmapTab';
 import { fmtDate } from '../../utils/date';
 import { exportPdf, exportText } from '../../utils/exportService';
 
@@ -565,6 +566,7 @@ export default function DiamondPlateDataPage() {
         {tabBtn('report',        'Report')}
         {tabBtn('velocity',      'Velocity')}
         {tabBtn('search-terms',  'Search Terms')}
+        {tabBtn('geo-map',       'Geo Map')}
         {tabBtn('conversation',  'Conversation')}
         {tabBtn('history',       'History')}
       </div>
@@ -883,6 +885,11 @@ export default function DiamondPlateDataPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* ── Geo Map ────────────────────────────────────────────────────── */}
+      {activeTab === 'geo-map' && (
+        <GeoHeatmapTab startDate={startDate} endDate={endDate} />
       )}
 
       {/* ── Conversation ───────────────────────────────────────────────── */}

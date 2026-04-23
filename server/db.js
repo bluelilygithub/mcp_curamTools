@@ -582,6 +582,17 @@ async function initSchema() {
     await client.query(`ALTER TABLE agent_suggestions ADD COLUMN IF NOT EXISTS user_action TEXT`);
     await client.query(`ALTER TABLE agent_suggestions ADD COLUMN IF NOT EXISTS user_reason TEXT`);
 
+    // ── Geocode cache (Nominatim) ──────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS geocode_cache (
+        id          SERIAL      PRIMARY KEY,
+        query       TEXT        NOT NULL UNIQUE,
+        lat         NUMERIC(10, 7),
+        lng         NUMERIC(10, 7),
+        created_at  TIMESTAMPTZ DEFAULT now()
+      )
+    `);
+
     await client.query('COMMIT');
 
     // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)

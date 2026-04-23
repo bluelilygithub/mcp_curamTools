@@ -285,6 +285,18 @@ agentsRouter.use(
   })
 );
 
+// ── Geo Heatmap ───────────────────────────────────────────────────────────
+const { runGeoHeatmap } = require('../agents/geoHeatmap');
+
+agentsRouter.use(
+  '/geo-heatmap',
+  createAgentRoute({
+    slug:               'geo-heatmap',
+    runFn:              runGeoHeatmap,
+    requiredPermission: 'org_member',
+  })
+);
+
 // ── High Intent Advisor ───────────────────────────────────────────────────
 const { runHighIntentAdvisor } = require('../agents/highIntentAdvisor');
 

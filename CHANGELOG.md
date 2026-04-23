@@ -25,6 +25,35 @@
 
 ---
 
+## 2026-04-23 — Geo Heatmap: geographic lead intelligence map for DiamondPlate Data
+
+### Built
+
+**Geo Heatmap — new tab in DiamondPlate Data**
+- New `geo-heatmap` agent (`server/agents/geoHeatmap/index.js`) — pre-fetch pattern (1 Claude call, `maxIterations: 1`).
+- Fetches up to 3000 CRM enquiries via `wp_get_enquiries`; buckets into `notInterested` (reason_not_interested set) vs `active` (all other statuses).
+- Geocodes unique suburb/postcode pairs via Nominatim (`nominatim.openstreetmap.org`) with 1 req/sec rate limiting.
+- Geocode results cached in new `geocode_cache` table (idempotent migration in `db.js`). First run geocodes everything; subsequent runs serve from cache (near-instant).
+- Returns `{ summary, data: { locations, notInterestedTotal, activeTotal, geocodedCount, skippedCount } }`.
+- `server/agents/geoHeatmap/prompt.js` — geographic analysis prompt with `buildSystemPrompt(config)` / custom_prompt support.
+- Route registered in `agents.js` as `/geo-heatmap`, `requiredPermission: 'org_member'`.
+- `AgentConfigService.js`: AGENT_DEFAULTS, ADMIN_DEFAULTS (`max_tokens: 2048`, `max_task_budget_aud: 0.50`), AGENT_MODEL_REQUIREMENTS (standard tier).
+
+**Geo Heatmap — client UI (`GeoHeatmapTab.jsx`)**
+- New `client/src/pages/tools/DiamondPlate/GeoHeatmapTab.jsx` — Leaflet map with CircleMarkers.
+- Packages: `leaflet@^1.9.4` + `react-leaflet@^5.0.0` (installed with `--legacy-peer-deps`).
+- Toggle between Not Interested (red) / Active Leads (green) datasets. Marker radius = log-scaled by count (4–20px).
+- Summary pills: totals + geocoded count. MapContainer centred on Australia (`-27, 133.8`, zoom 4).
+- Tooltip per marker: suburb + postcode + count.
+- AI observations rendered below map via `MarkdownRenderer`.
+- Auto-loads most recent completed run on mount.
+- New **Geo Map** tab added to `DiamondPlateDataPage.jsx` between Search Terms and Conversation.
+
+### Open / next
+- Ads Setup Architect: model resolution fix; AU market + negative keyword risk prompt; MCP Prompts wiring (separate entry below)
+
+---
+
 ## 2026-04-23 — Ads Setup Architect: model resolution fix; AU market + negative keyword risk prompt; MCP Prompts wiring
 
 ### Fixed

@@ -56,6 +56,7 @@ const AGENT_DEFAULTS = {
   },
   'not-interested-report': {},
   'ads-setup-architect': {},
+  'geo-heatmap': {},
   'ai-visibility-monitor': {
     // Structured competitor list — each entry has a display name and optional URL.
     // Stored as JSONB; the agent uses the names for mention detection in AI responses.
@@ -139,6 +140,13 @@ const ADMIN_DEFAULTS = {
     max_task_budget_aud: 2.00,
     fallback_model:      null,
   },
+  'geo-heatmap': {
+    enabled:             true,
+    model:               null,
+    max_tokens:          2048,
+    max_task_budget_aud: 0.50,
+    fallback_model:      null,
+  },
   'ads-setup-architect': {
     enabled:             true,
     model:               null,
@@ -213,6 +221,7 @@ const AGENT_MODEL_REQUIREMENTS = {
   'doc-extractor':               { tier: 'advanced', reason: 'Vision extraction quality scales with model capability — Sonnet handles complex layouts, poor scans, and dense forms significantly better than Haiku' },
   'high-intent-advisor':         { tier: 'advanced', reason: 'Three-phase cross-source analysis with ReAct loop — requires strong reasoning to connect Ads, GA4, and CRM signals into actionable suggestions' },
   'not-interested-report':       { tier: 'advanced', reason: 'Cross-source narrative analysis joining CRM not-interested reasons, sales call notes, and Ads keyword/search term data' },
+  'geo-heatmap':                 { tier: 'standard', reason: 'Single analysis call on pre-fetched geocoded lead data' },
   _platform:                     { tier: 'advanced', reason: 'Default for unrecognised agents' },
 };
 
