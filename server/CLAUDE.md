@@ -71,6 +71,16 @@ if (excludedFields.length > 0) {
 
 **Never save first and strip later.** Excluded values must never reach the database.
 
+**API:** `GET /admin/data-privacy` → `{ extraction: { excluded_field_names }, crm: { excluded_fields } }`. `PUT /admin/data-privacy` accepts either or both sections. Legacy `GET/PUT /admin/crm-privacy` kept.
+
+**CRM bypass:** `enquiry_field_check` and `find_meta_key` are discovery tools — intentionally bypass CRM exclusions so admins can inspect the full field set. Do not add exclusion logic to these tools.
+
+### Do not
+
+- Apply extraction privacy AFTER saving to DB — excluded values must never reach the database
+- Apply CRM privacy in the MCP server — it must stay in the tool execute layer so discovery tools work
+- Hardcode field names — that's what the admin UI is for
+
 ### Reference implementations
 
 - `routes/docExtractor.js` — extraction privacy applied post-AI, pre-DB-save
@@ -586,76 +596,6 @@ Passing a string (email) into an integer foreign key column causes a PostgreSQL 
 maxTokens: adminConfig.max_tokens ?? 4096  // correct
 maxTokens: adminConfig.max_tokens          // wrong — null passes through
 ```
-
----
-
-## Data Privacy — universal field exclusion pattern
-
-Admin > Data Privacy (`/admin/data-privacy`) — unified page for all field-level privacy controls.
-
-### Two independent stores
-
-**`extraction_privacy`** (key in `system_settings`)
-- Strips declared field names from AI extraction results **after** the AI runs, **before** saving to DB
-- Sensitive values are never persisted — the exclusion is permanent for that run
-- Applied universally in the route layer: any tool returning `fields: [{ name, value }]` applies this
-- Field names are snake_case as returned by the AI (e.g. `tax_file_number`, `bank_account_number`)
-- Service: `AgentConfigService.getExtractionPrivacySettings(orgId)` / `updateExtractionPrivacySettings`
-- Route enforcement: `routes/docExtractor.js` — after `runDocExtraction`, before the DB INSERT
-
-**`crm_privacy`** (key in `system_settings`)
-- Strips declared field names from CRM data **before** it reaches the LLM (pre-AI)
-- WordPress data is not modified — only what the AI sees is filtered
-- Applied at the tool execute layer: `agents/googleAdsConversation/tools.js` → `applyFieldExclusions()`
-- Field names are WordPress ACF `meta_key` names (e.g. `email`, `phone`)
-- Service: `AgentConfigService.getCrmPrivacySettings(orgId)` / `updateCrmPrivacySettings`
-
-### API
-
-- `GET /admin/data-privacy` — returns `{ extraction: { excluded_field_names }, crm: { excluded_fields } }`
-- `PUT /admin/data-privacy` — accepts either or both sections in one call
-- `GET/PUT /admin/crm-privacy` — legacy endpoints kept for backwards compatibility
-
-### Extending to a new tool
-
-Any new tool that returns structured field data should apply extraction privacy at the route layer:
-```js
-const { excluded_field_names: excludedFields = [] } =
-  await AgentConfigService.getExtractionPrivacySettings(orgId);
-if (excludedFields.length > 0) {
-  const excludedSet = new Set(excludedFields);
-  result.fields = result.fields.filter((f) => !excludedSet.has(f.name));
-}
-```
-Load the settings once per request (before any batch loop), not per-item.
-
-### Do not
-
-- Apply extraction privacy AFTER saving to DB — the point is that excluded values are never stored
-- Apply CRM privacy in the MCP server — it must stay in the tool layer so the admin can still use discovery tools
-- Hardcode field names — that's what the admin UI is for
-
----
-
-## CRM field exclusions — admin-configurable PII filter
-
-Admin > CRM Privacy (`/admin/crm-privacy`) lets org admins declare ACF `meta_key` names
-to exclude from LLM access. Stored in `system_settings` under key `crm_privacy` (per-org JSONB).
-
-**Where enforced:** tool execute layer in `agents/googleAdsConversation/tools.js`.
-`applyFieldExclusions()` strips declared fields from `get_enquiries` and `get_not_interested_reasons`
-results before Claude sees them.
-
-**Bypass:** `enquiry_field_check` and `find_meta_key` are discovery tools — they bypass exclusions
-intentionally so the admin can inspect the full field set. Do not add exclusion logic to these.
-
-**Service layer:** `AgentConfigService.getCrmPrivacySettings(orgId)` /
-`updateCrmPrivacySettings(orgId, patch, updatedBy)` — follows the same pattern as `getOrgBudgetSettings`.
-
-**Do not:**
-- Add exclusion logic to the WordPress MCP server (`mcp-servers/wordpress.js`) — the MCP server is dumb
-- Hardcode field names in tools.js — that's what the admin UI is for
-- Apply exclusions in `enquiry_field_check` or `find_meta_key`
 
 ---
 

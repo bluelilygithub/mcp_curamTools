@@ -80,7 +80,8 @@
       "Bash(node --check \"/c/Users/micha/local sites/mcp_curamtools/server/platform/AgentConfigService.js\")",
       "Bash(node --check \"/c/Users/micha/local sites/mcp_curamtools/client/src/pages/tools/GoogleAdsMonitor/AgentDashboardCard.jsx\")",
       "Bash(node --check \"/c/Users/micha/local sites/mcp_curamtools/server/agents/adsCopyPlaybook/index.js\")",
-      "Bash(node --check \"/c/Users/micha/local sites/mcp_curamtools/server/agents/adsCopyPlaybook/prompt.js\")"
+      "Bash(node --check \"/c/Users/micha/local sites/mcp_curamtools/server/agents/adsCopyPlaybook/prompt.js\")",
+      "Bash(rm *)"
     ]
   }
 }
