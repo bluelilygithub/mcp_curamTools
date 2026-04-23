@@ -16,11 +16,11 @@ Look at the utm_campaign data attached to each not-interested reason category. C
 Note: search_term is not captured per lead in this CRM — individual lead-to-search-term attribution is not possible. The Google Ads search terms data is account-level only and must be treated as indicative, not definitive.
 
 **2. Negative keyword coverage — what is already blocked, and what is missing?**
-The payload includes `negative_keywords` with two sub-keys:
-- `sharedLists` — the shared negative keyword lists applied account-wide (object keyed by list name; each entry is `[{ text, matchType }]`)
-- `campaignNegatives` — negatives added directly to individual campaigns (`[{ campaign, text, matchType }]`)
+The payload includes a "negative_keywords" field with two sub-keys:
+- "sharedLists" — the shared negative keyword lists applied account-wide (object keyed by list name; each entry is an array of { text, matchType } objects)
+- "campaignNegatives" — negatives added directly to individual campaigns (array of { campaign, text, matchType } objects)
 
-Cross-reference these against the `recent_search_terms` and `active_keywords`. For each wrong-products and wrong-location theme you identify in question 1:
+Cross-reference these against the "recent_search_terms" and "active_keywords" in the payload. For each wrong-products and wrong-location theme you identify in question 1:
 - Are the problematic search query patterns already covered by an existing negative? If so, note which list covers it.
 - Which themes have **no negative coverage** at all? These are the genuine gaps.
 - Are there terms in the shared list that appear overly broad or that might be blocking useful traffic?
