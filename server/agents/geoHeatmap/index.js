@@ -179,9 +179,13 @@ async function runGeoHeatmap(context) {
 
   const payload = {
     period:              `${startDate} to ${endDate}`,
+    totalEnquiries:      enquiries.length,
     notInterestedTotal,
     activeTotal,
     geocodedLocations:   geocodedCount,
+    geocodingNote:       skippedCount > 0
+      ? `${skippedCount} suburb/postcode combinations could not be matched by Nominatim — geocoding limitation, not missing CRM data.`
+      : 'All locations geocoded successfully.',
     topNotInterested:    topNI,
     topActive,
   };

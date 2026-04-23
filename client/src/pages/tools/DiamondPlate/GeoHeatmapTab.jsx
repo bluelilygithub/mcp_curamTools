@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Tooltip } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
 import api from '../../../api/client';
 import MarkdownRenderer from '../../../components/ui/MarkdownRenderer';
 import InlineBanner from '../../../components/ui/InlineBanner';
