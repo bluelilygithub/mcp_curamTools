@@ -48,12 +48,13 @@ function ProgressBar({ lines }) {
 }
 
 export default function GeoHeatmapTab({ startDate, endDate }) {
-  const [running,    setRunning]    = useState(false);
-  const [progress,   setProgress]   = useState([]);
-  const [error,      setError]      = useState('');
-  const [result,     setResult]     = useState(null);
-  const [dataset,    setDataset]    = useState('notInterested'); // 'notInterested' | 'active'
-  const [fullscreen, setFullscreen] = useState(false);
+  const [running,       setRunning]       = useState(false);
+  const [progress,      setProgress]      = useState([]);
+  const [error,         setError]         = useState('');
+  const [result,        setResult]        = useState(null);
+  const [dataset,       setDataset]       = useState('notInterested'); // 'notInterested' | 'active'
+  const [fullscreen,    setFullscreen]    = useState(false);
+  const [reasonFilter,  setReasonFilter]  = useState('all');
 
   // Auto-load most recent run
   useEffect(() => {
@@ -104,10 +105,21 @@ export default function GeoHeatmapTab({ startDate, endDate }) {
     }
   }
 
-  const locations     = result?.data?.locations ?? [];
-  const activeDataset = dataset === 'notInterested'
-    ? locations.filter((l) => l.notInterested > 0)
-    : locations.filter((l) => l.active > 0);
+  const locations = result?.data?.locations ?? [];
+  const reasons   = result?.data?.reasons   ?? [];
+
+  const activeDataset = (() => {
+    if (dataset === 'active') return locations.filter((l) => l.active > 0);
+    // notInterested with optional reason filter
+    return locations
+      .filter((l) => l.notInterested > 0)
+      .map((l) => {
+        if (reasonFilter === 'all') return l;
+        const filtered = l.notInterestedReasons?.[reasonFilter] ?? 0;
+        return filtered > 0 ? { ...l, notInterested: filtered } : null;
+      })
+      .filter(Boolean);
+  })();
 
   const maxCount = activeDataset.length
     ? Math.max(...activeDataset.map((l) => dataset === 'notInterested' ? l.notInterested : l.active))
@@ -176,7 +188,7 @@ export default function GeoHeatmapTab({ startDate, endDate }) {
             ].map((opt) => (
               <button
                 key={opt.key}
-                onClick={() => setDataset(opt.key)}
+                onClick={() => { setDataset(opt.key); setReasonFilter('all'); }}
                 style={{
                   padding: '4px 12px', fontSize: 12, borderRadius: 6, border: 'none',
                   cursor: 'pointer', fontFamily: 'inherit',
@@ -189,6 +201,28 @@ export default function GeoHeatmapTab({ startDate, endDate }) {
               </button>
             ))}
           </div>
+
+          {/* Reason filter — only shown for Not Interested */}
+          {dataset === 'notInterested' && reasons.length > 0 && (
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xs" style={{ color: 'var(--color-muted)' }}>Filter by reason:</span>
+              <select
+                value={reasonFilter}
+                onChange={(e) => setReasonFilter(e.target.value)}
+                style={{
+                  fontSize: 12, padding: '3px 8px', borderRadius: 6,
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)', color: 'var(--color-text)',
+                  fontFamily: 'inherit', cursor: 'pointer',
+                }}
+              >
+                <option value="all">All reasons</option>
+                {reasons.map((r) => (
+                  <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Map */}
           <div

@@ -107,8 +107,10 @@ async function runGeoHeatmap(context) {
   emit(`${enquiries.length} enquiries loaded. Grouping by suburb/postcode…`);
 
   // Group into two buckets
+  // notInterestedMap[key] = { total, byReason: { reason: count } }
   const notInterestedMap = {};
   const activeMap        = {};
+  const allReasons       = new Set();
 
   for (const enq of enquiries) {
     const suburb   = (enq.suburb   || '').trim().toLowerCase();
@@ -117,11 +119,15 @@ async function runGeoHeatmap(context) {
     const address  = (enq.address  || '').trim().toLowerCase();
     if (!suburb && !postcode && !address) continue;
 
-    const key = `${suburb}|${postcode}|${state}|${address}`;
-    const isNI = enq.reason_not_interested && String(enq.reason_not_interested).trim() !== '';
+    const key    = `${suburb}|${postcode}|${state}|${address}`;
+    const reason = String(enq.reason_not_interested || '').trim();
+    const isNI   = reason !== '';
 
     if (isNI) {
-      notInterestedMap[key] = (notInterestedMap[key] || 0) + 1;
+      allReasons.add(reason);
+      if (!notInterestedMap[key]) notInterestedMap[key] = { total: 0, byReason: {} };
+      notInterestedMap[key].total++;
+      notInterestedMap[key].byReason[reason] = (notInterestedMap[key].byReason[reason] || 0) + 1;
     } else {
       activeMap[key] = (activeMap[key] || 0) + 1;
     }
@@ -129,6 +135,7 @@ async function runGeoHeatmap(context) {
 
   // Collect all unique suburb/postcode combos that need geocoding
   const allKeys = new Set([...Object.keys(notInterestedMap), ...Object.keys(activeMap)]);
+  const reasons = [...allReasons].sort();
   const geocoded = {};
 
   emit(`Geocoding ${allKeys.size} unique locations…`);
@@ -149,19 +156,21 @@ async function runGeoHeatmap(context) {
     const coords = geocoded[key];
     if (!coords) continue;
     const [suburb, postcode, state] = key.split('|');
+    const niEntry = notInterestedMap[key];
     locMap[key] = {
-      suburb:        suburb   || null,
-      postcode:      postcode || null,
-      state:         state    || null,
-      lat:           coords.lat,
-      lng:           coords.lng,
-      notInterested: notInterestedMap[key] || 0,
-      active:        activeMap[key]        || 0,
+      suburb:              suburb   || null,
+      postcode:            postcode || null,
+      state:               state    || null,
+      lat:                 coords.lat,
+      lng:                 coords.lng,
+      notInterested:       niEntry?.total  || 0,
+      notInterestedReasons: niEntry?.byReason || {},
+      active:              activeMap[key]  || 0,
     };
   }
 
   const locations = Object.values(locMap);
-  const notInterestedTotal = Object.values(notInterestedMap).reduce((s, n) => s + n, 0);
+  const notInterestedTotal = Object.values(notInterestedMap).reduce((s, n) => s + n.total, 0);
   const activeTotal        = Object.values(activeMap).reduce((s, n) => s + n, 0);
   const geocodedCount      = locations.length;
   const skippedCount       = allKeys.size - geocodedCount;
@@ -216,6 +225,7 @@ async function runGeoHeatmap(context) {
         activeTotal,
         geocodedCount,
         skippedCount,
+        reasons,
       },
     },
     trace,
