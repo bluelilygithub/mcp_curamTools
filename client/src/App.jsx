@@ -36,7 +36,7 @@ import DocExtractorPage          from './pages/tools/DocExtractorPage';
 import MediaGenPage              from './pages/tools/MediaGenPage';
 import HighIntentAdvisorPage     from './pages/tools/HighIntentAdvisorPage';
 import NotInterestedReportPage   from './pages/tools/NotInterestedReportPage';
-import AdsSetupArchitectPage     from './pages/tools/AdsSetupArchitectPage';
+import AdsSetupArchitectPage     from './pages/profitabilitySuite/adsSetupArchitect/AdsSetupArchitectPage';
 
 export default function App() {
   return (
