@@ -48,11 +48,12 @@ function ProgressBar({ lines }) {
 }
 
 export default function GeoHeatmapTab({ startDate, endDate }) {
-  const [running,  setRunning]  = useState(false);
-  const [progress, setProgress] = useState([]);
-  const [error,    setError]    = useState('');
-  const [result,   setResult]   = useState(null);
-  const [dataset,  setDataset]  = useState('notInterested'); // 'notInterested' | 'active'
+  const [running,    setRunning]    = useState(false);
+  const [progress,   setProgress]   = useState([]);
+  const [error,      setError]      = useState('');
+  const [result,     setResult]     = useState(null);
+  const [dataset,    setDataset]    = useState('notInterested'); // 'notInterested' | 'active'
+  const [fullscreen, setFullscreen] = useState(false);
 
   // Auto-load most recent run
   useEffect(() => {
@@ -191,9 +192,37 @@ export default function GeoHeatmapTab({ startDate, endDate }) {
 
           {/* Map */}
           <div
-            className="rounded-xl overflow-hidden mb-6"
-            style={{ border: '1px solid var(--color-border)', height: 480 }}
+            style={fullscreen ? {
+              position: 'fixed', inset: 0, zIndex: 9999,
+              background: 'var(--color-bg)',
+              display: 'flex', flexDirection: 'column',
+            } : { position: 'relative', marginBottom: '1.5rem' }}
           >
+            {/* Fullscreen toggle button */}
+            <button
+              onClick={() => setFullscreen((v) => !v)}
+              title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              style={{
+                position: 'absolute', top: 8, right: 8, zIndex: 1000,
+                width: 32, height: 32, borderRadius: 6, border: '1px solid var(--color-border)',
+                background: 'var(--color-surface)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'var(--color-text)',
+              }}
+            >
+              {fullscreen
+                ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+                : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8V5a2 2 0 0 1 2-2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M21 16v3a2 2 0 0 1-2 2h-3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/></svg>
+              }
+            </button>
+            <div
+              className={fullscreen ? '' : 'rounded-xl overflow-hidden'}
+              style={{
+                border: '1px solid var(--color-border)',
+                height: fullscreen ? '100%' : 480,
+                flex: fullscreen ? 1 : undefined,
+              }}
+            >
             <MapContainer
               center={AU_CENTER}
               zoom={AU_ZOOM}
@@ -234,6 +263,7 @@ export default function GeoHeatmapTab({ startDate, endDate }) {
                 );
               })}
             </MapContainer>
+            </div>
           </div>
 
           {/* AI Observations */}
