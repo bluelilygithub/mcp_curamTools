@@ -31,14 +31,18 @@ function httpsGet(url) {
 }
 
 async function geocodeSuburb(suburb, postcode, state, address) {
-  // Build best available query: prefer suburb+state, then suburb alone,
-  // then postcode, then address+state as last resort
+  // Normalise inputs — cache key is lowercase+trimmed so "BLACK ROCK" and "Black Rock" share one entry
+  const s  = (suburb   || '').trim().toLowerCase();
+  const pc = (postcode || '').trim();
+  const st = (state    || '').trim().toLowerCase();
+  const ad = (address  || '').trim().toLowerCase();
+
   let query;
-  if (suburb && state)    query = `${suburb}, ${state}, Australia`;
-  else if (suburb)        query = `${suburb}, Australia`;
-  else if (postcode)      query = `${postcode}, Australia`;
-  else if (address)       query = `${address}, Australia`;
-  else                    return { coords: null, fromCache: false };
+  if (s && st)  query = `${s}, ${st}, Australia`;
+  else if (s)   query = `${s}, Australia`;
+  else if (pc)  query = `${pc}, Australia`;
+  else if (ad)  query = `${ad}, Australia`;
+  else          return { coords: null, fromCache: false };
 
   // Check cache
   const cached = await pool.query(
@@ -106,10 +110,10 @@ async function runGeoHeatmap(context) {
   const activeMap        = {};
 
   for (const enq of enquiries) {
-    const suburb   = (enq.suburb   || '').trim();
+    const suburb   = (enq.suburb   || '').trim().toLowerCase();
     const postcode = (enq.postcode || '').trim();
-    const state    = (enq.state    || '').trim();
-    const address  = (enq.address  || '').trim();
+    const state    = (enq.state    || '').trim().toLowerCase();
+    const address  = (enq.address  || '').trim().toLowerCase();
     if (!suburb && !postcode && !address) continue;
 
     const key = `${suburb}|${postcode}|${state}|${address}`;

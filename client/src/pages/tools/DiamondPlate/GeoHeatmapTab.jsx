@@ -222,7 +222,7 @@ export default function GeoHeatmapTab({ startDate, endDate }) {
                     }}
                   >
                     <Tooltip>
-                      <strong>{loc.suburb || loc.postcode}</strong>
+                      <strong>{loc.suburb ? loc.suburb.replace(/\b\w/g, c => c.toUpperCase()) : loc.postcode}</strong>
                       {loc.suburb && loc.postcode && <span> ({loc.postcode})</span>}
                       <br />
                       {dataset === 'notInterested'
