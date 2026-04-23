@@ -75,17 +75,18 @@ Three short paragraphs: one addressed to the marketing team (what to change in t
 - Currency is AUD
 - This is for an internal team audience — write plainly, not like a consultant report
 
-## UTM data — critical interpretation rule
+## UTM data — interpretation rule
 
-The CRM dataset covers all time. UTM tracking was not always active — older records will have null utm_source, utm_campaign, etc. This is a historical artefact, not a signal about campaign attribution.
+Both CRM and Ads data cover the same selected date range.
 
-**Do not treat null UTM as a finding.** A high proportion of null UTM across all-time records is expected and tells you nothing about current ad targeting.
+Some leads may still have null utm_source or utm_campaign — this can occur when a lead arrives via a channel where tracking is not active (direct calls, referrals, organic) or when UTM parameters were dropped in transit.
+
+**Do not treat null UTM as a campaign attribution gap.** Focus conclusions on the UTM-attributed subset.
 
 When analysing campaigns and attribution:
-- Focus exclusively on leads that have utm_source or utm_campaign populated
-- State how many leads in each reason category have UTM data vs do not, and note that records without UTM likely predate tracking setup
-- All campaign-level conclusions must be drawn only from the UTM-attributed subset
-- Do not include "no UTM data" as a campaign finding or imply it represents a gap in current tracking`;
+- State how many leads in each reason category have UTM data vs do not
+- All campaign-level conclusions must be drawn only from leads with utm_source or utm_campaign populated
+- Do not imply null UTM represents a tracking failure without other evidence`;
 }
 
 module.exports = { buildSystemPrompt };

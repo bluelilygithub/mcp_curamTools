@@ -8,11 +8,12 @@
  * A ReAct loop would add quadratic token cost for no benefit.
  *
  * Data flow:
- *  1. wp_get_not_interested_reasons  — all leads with reason + UTM attribution (all time)
- *  2. wp_get_progress_details         — recent progress notes; filtered in Node.js to not-interested IDs
+ *  1. wp_get_not_interested_reasons  — not-interested leads in the selected date range (respects start/end date)
+ *  2. wp_get_progress_details         — progress notes; filtered in Node.js to not-interested IDs
  *  3. ads_get_search_terms            — recent search queries triggering ads
  *  4. ads_get_active_keywords         — all active keywords in account
  *  5. ads_get_campaign_performance    — campaign-level performance for context
+ *  6. ads_get_negative_keywords       — shared lists + campaign-level negatives
  *
  * CRM privacy is applied pre-AI per platform convention.
  */
@@ -153,7 +154,7 @@ async function runNotInterestedReport(context) {
   ]);
 
   // Phase 1 — CRM data (sequential: need lead IDs before filtering progress notes)
-  const rawNotInterested = await callMcpTool(orgId, wpServer, 'wp_get_not_interested_reasons', {})
+  const rawNotInterested = await callMcpTool(orgId, wpServer, 'wp_get_not_interested_reasons', rangeArgs)
     .catch((e) => ({ error: e.message }));
 
   const notInterestedLeads = Array.isArray(rawNotInterested)
@@ -209,7 +210,7 @@ async function runNotInterestedReport(context) {
 
   const userMessage =
     `Produce the Not Interested diagnostic report. ` +
-    `CRM data covers all time; Ads data covers ${startDate} to ${endDate}. ` +
+    `Both CRM and Ads data cover the period ${startDate} to ${endDate}. ` +
     `All data has been pre-fetched. Follow the output format in the system prompt exactly.\n\n` +
     `\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``;
 
