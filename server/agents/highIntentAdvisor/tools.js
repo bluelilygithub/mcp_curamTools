@@ -141,6 +141,19 @@ const getTrafficSourcesTool = {
   },
 };
 
+const getNegativeKeywordsTool = {
+  name: 'get_negative_keywords',
+  description: 'Shared negative keyword lists plus campaign-level negatives. Use in Phase 2 to understand what terms are already excluded before recommending new negatives or analysing misfiring search terms.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(_input, context) {
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_negative_keywords', {
+      customer_id: context.customerId ?? null,
+    });
+  },
+};
+
 // ── WordPress CRM tools ───────────────────────────────────────────────────────
 
 const getEnquiriesTool = {
@@ -286,6 +299,7 @@ const highIntentAdvisorTools = [
   getDailyPerformanceTool,
   getBudgetPacingTool,
   getImpressionShareTool,
+  getNegativeKeywordsTool,
   getPaidBouncedSessionsTool,
   getLandingPagePerformanceTool,
   getTrafficSourcesTool,
