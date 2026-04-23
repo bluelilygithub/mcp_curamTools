@@ -25,6 +25,34 @@
 
 ---
 
+## 2026-04-23 — Not Interested Report: negative keyword coverage analysis; AI session token savings
+
+### Built
+
+**Not Interested Report — negative keyword coverage**
+- `ads_get_negative_keywords` added to Phase 2 parallel fetch in `notInterestedReport/index.js` — runs alongside existing 4 calls, zero extra latency
+- Returns `{ sharedLists: { [listName]: [{ text, matchType }] }, campaignNegatives: [{ campaign, text, matchType }] }` — shared library lists + per-campaign negatives
+- Graceful fallback: if MCP call errors, passes `{ sharedLists: {}, campaignNegatives: [] }` so Claude gets an explicit empty signal rather than crashing
+- Prompt expanded from 2 questions → 3: new Q2 teaches Claude the data shape and asks for named gaps, not generic advice
+- New `### Negative Keyword Coverage` output section: what's already blocked (by list name) + exact terms/patterns to add
+- `### Where to act` expanded to 3 paragraphs: campaigns/match types · exact negative terms to add + shared vs campaign-specific · sales qualification
+- Two new constraints: inference is indicative not definitive; empty negative lists → state it explicitly as the structural cause
+
+**AI session token optimisation — memory and doc cleanup**
+- `project_scaffold.md` memory deleted — 488 lines, 16 days stale, conflicted with `CLAUDE.md` (9 vs 15 google-ads tools). All content superseded by `CLAUDE.md`
+- `feedback_read_docs_first.md` rewritten — mandatory reads now scoped by task type; `mcp_curamtools_prompts.md` explicitly excluded (historical setup prompts only); `DECISIONS.md` + `PLATFORM-PRIMITIVES.md` only required for new agents/platform primitives
+- `server/CLAUDE.md` 985→925 lines — duplicate Data Privacy + CRM field exclusions sections removed (68 lines); unique info (API endpoints, bypass note, do-not list) merged into the first section
+- Net saving: ~1,000+ tokens per session from eliminated mandatory reads; ~600 tokens from scaffold memory; ~90 tokens from CLAUDE.md dedup
+
+### Fixed / discovered
+- Nothing broken
+
+### Open / next
+- Run Not Interested Report to validate negative keyword data shape in live output
+- Consider whether `wp_get_enquiry_details` should be added to fetch extended fields for wrong-products leads (package_type, final_value)
+
+---
+
 ## 2026-04-22 — SQL Console NLP: multi-provider model routing; configurable prompt; reasoning model support
 
 ### Built

@@ -5,7 +5,7 @@ function buildSystemPrompt() {
 
 Your job is to produce a focused diagnostic report. Not a dashboard. Not a list of numbers. An insight — something the reader could not see themselves by looking at a spreadsheet.
 
-## The two questions you must answer
+## The three questions you must answer
 
 **1. Ads signal — is the targeting wrong?**
 Look at the utm_campaign data attached to each not-interested reason category. Cross-reference against the active keywords and recent search terms from Google Ads. Identify:
@@ -15,7 +15,20 @@ Look at the utm_campaign data attached to each not-interested reason category. C
 
 Note: search_term is not captured per lead in this CRM — individual lead-to-search-term attribution is not possible. The Google Ads search terms data is account-level only and must be treated as indicative, not definitive.
 
-**2. Sales signal — is it a qualification failure?**
+**2. Negative keyword coverage — what is already blocked, and what is missing?**
+The payload includes `negative_keywords` with two sub-keys:
+- `sharedLists` — the shared negative keyword lists applied account-wide (object keyed by list name; each entry is `[{ text, matchType }]`)
+- `campaignNegatives` — negatives added directly to individual campaigns (`[{ campaign, text, matchType }]`)
+
+Cross-reference these against the `recent_search_terms` and `active_keywords`. For each wrong-products and wrong-location theme you identify in question 1:
+- Are the problematic search query patterns already covered by an existing negative? If so, note which list covers it.
+- Which themes have **no negative coverage** at all? These are the genuine gaps.
+- Are there terms in the shared list that appear overly broad or that might be blocking useful traffic?
+- Campaign-level negatives vs shared list: note if negatives are scattered across campaigns instead of centralised — this is a maintenance risk.
+
+Be specific: name the list, name the terms, name the gaps. Do not give generic "add negative keywords" advice — name the actual terms to add.
+
+**3. Sales signal — is it a qualification failure?**
 Read the actual sales call notes (event_message) for each not-interested reason. Identify:
 - Whether reps are qualifying product fit and location early in the conversation, or only discovering the mismatch late
 - Whether there are patterns in how objections are handled (is there a rep who probes differently?)
@@ -40,11 +53,16 @@ Structure:
 ### Wrong Location — Sales Signal
 [What the call notes reveal about location qualification.]
 
+### Negative Keyword Coverage
+[Two sub-sections:
+1. **What is already blocked** — list the shared negative lists by name and what they cover. Note any campaign-level negatives and whether they duplicate or extend the shared lists.
+2. **Gaps — terms to add** — specific search query patterns visible in recent_search_terms or active_keywords that match wrong-products or wrong-location themes and are NOT currently in any negative list. Name the exact terms or patterns to add, and whether they should go in the shared list or be campaign-specific. If coverage is already good, say so.]
+
 ### Other Reasons
 [Brief summary only if there are other reason categories with meaningful data. Skip if not.]
 
 ### Where to act
-Two short paragraphs: one addressed to the marketing team (what to change in the ad account), one addressed to the sales team (what to change in how they qualify). Be direct and specific. Avoid generic advice.
+Three short paragraphs: one addressed to the marketing team (what to change in the ad account — campaigns, match types, bids), one specifically for the negative keyword list (exact terms to add and where), and one addressed to the sales team (what to change in how they qualify). Be direct and specific. Avoid generic advice.
 
 ## Constraints
 
@@ -52,6 +70,8 @@ Two short paragraphs: one addressed to the marketing team (what to change in the
 - Do not fabricate patterns — if the notes do not reveal a clear theme, say the notes are too sparse or inconsistent to draw a conclusion
 - search_term is not captured per lead in the CRM — do not reference it or imply per-lead search attribution exists
 - The recent_search_terms and active_keywords in the payload are account-level Google Ads data — use them to hypothesise, not conclude; always acknowledge the attribution is indirect
+- For negative keywords: cross-reference is indicative, not definitive — a search term appearing in recent_search_terms is not proof it caused a specific not-interested lead. State the inference clearly.
+- If negative_keywords.sharedLists is empty and campaignNegatives is empty, state that no negative keywords are configured and that this is the most likely structural cause of wrong-fit traffic
 - Currency is AUD
 - This is for an internal team audience — write plainly, not like a consultant report
 

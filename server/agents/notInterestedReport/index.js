@@ -52,7 +52,7 @@ function applyPrivacy(records, excludedFields) {
  * Groups leads by normalised reason; attaches matching progress notes.
  * Returns both the grouped payload and summary counts for emit messages.
  */
-function buildPayload({ notInterestedLeads, progressDetails, searchTerms, activeKeywords, campaignPerformance, rangeArgs }) {
+function buildPayload({ notInterestedLeads, progressDetails, searchTerms, activeKeywords, campaignPerformance, negativeKeywords, rangeArgs }) {
   // Index progress notes by post_id
   const notesByPostId = new Map();
   for (const item of (progressDetails || [])) {
@@ -117,6 +117,7 @@ function buildPayload({ notInterestedLeads, progressDetails, searchTerms, active
     recent_search_terms:  searchTerms,
     active_keywords:      activeKeywords,
     campaign_performance: campaignPerformance,
+    negative_keywords:    negativeKeywords,
   };
 }
 
@@ -171,7 +172,7 @@ async function runNotInterestedReport(context) {
   emit(`Found ${notInterestedLeads.length} not-interested leads (${focusLeadIds.size} wrong product/location). Fetching notes and ads data…`);
 
   // Phase 2 — progress notes + ads data in parallel
-  const [rawProgressDetails, searchTerms, activeKeywords, campaignPerformance] = await Promise.all([
+  const [rawProgressDetails, searchTerms, activeKeywords, campaignPerformance, negativeKeywords] = await Promise.all([
     callMcpTool(orgId, wpServer, 'wp_get_progress_details', { limit: 2000 })
       .catch((e) => ({ error: e.message })),
     callMcpTool(orgId, adsServer, 'ads_get_search_terms', { ...rangeArgs, customer_id: customerId })
@@ -179,6 +180,8 @@ async function runNotInterestedReport(context) {
     callMcpTool(orgId, adsServer, 'ads_get_active_keywords', { customer_id: customerId })
       .catch((e) => ({ error: e.message })),
     callMcpTool(orgId, adsServer, 'ads_get_campaign_performance', { ...rangeArgs, customer_id: customerId })
+      .catch((e) => ({ error: e.message })),
+    callMcpTool(orgId, adsServer, 'ads_get_negative_keywords', { customer_id: customerId })
       .catch((e) => ({ error: e.message })),
   ]);
 
@@ -197,9 +200,10 @@ async function runNotInterestedReport(context) {
   const payload = buildPayload({
     notInterestedLeads,
     progressDetails,
-    searchTerms:        Array.isArray(searchTerms)       ? searchTerms       : [],
-    activeKeywords:     Array.isArray(activeKeywords)    ? activeKeywords    : [],
-    campaignPerformance: Array.isArray(campaignPerformance) ? campaignPerformance : [],
+    searchTerms:        Array.isArray(searchTerms)          ? searchTerms          : [],
+    activeKeywords:     Array.isArray(activeKeywords)       ? activeKeywords       : [],
+    campaignPerformance: Array.isArray(campaignPerformance) ? campaignPerformance  : [],
+    negativeKeywords:   (negativeKeywords && !negativeKeywords.error) ? negativeKeywords : { sharedLists: {}, campaignNegatives: [] },
     rangeArgs,
   });
 
