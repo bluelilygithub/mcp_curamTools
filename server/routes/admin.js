@@ -1149,6 +1149,46 @@ router.put('/claude-session-config', async (req, res) => {
   }
 });
 
+router.post('/claude-session-config/start', async (req, res) => {
+  try {
+    const current = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'claude_session_config' LIMIT 1`,
+      [req.user.orgId]
+    );
+    const existing = { ...CLAUDE_SESSION_DEFAULTS, ...(current.rows[0]?.value ?? {}) };
+    const merged   = { ...existing, session_started_at: new Date().toISOString() };
+    await pool.query(
+      `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+       VALUES ($1, 'claude_session_config', $2, $3, NOW())
+       ON CONFLICT (org_id, key) DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+      [req.user.orgId, JSON.stringify(merged), req.user.id]
+    );
+    res.json(merged);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to record session start.' });
+  }
+});
+
+router.post('/claude-session-config/clear-start', async (req, res) => {
+  try {
+    const current = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'claude_session_config' LIMIT 1`,
+      [req.user.orgId]
+    );
+    const existing = { ...CLAUDE_SESSION_DEFAULTS, ...(current.rows[0]?.value ?? {}) };
+    const { session_started_at: _removed, ...merged } = existing;
+    await pool.query(
+      `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+       VALUES ($1, 'claude_session_config', $2, $3, NOW())
+       ON CONFLICT (org_id, key) DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+      [req.user.orgId, JSON.stringify(merged), req.user.id]
+    );
+    res.json(merged);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to clear session start.' });
+  }
+});
+
 // ── Competitor Settings ───────────────────────────────────────────────────
 //
 // GET  /admin/competitors — returns org competitor list

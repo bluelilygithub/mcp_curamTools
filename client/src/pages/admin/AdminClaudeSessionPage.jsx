@@ -109,33 +109,49 @@ function fmtDuration(mins) {
 function computeWindows(cfg) {
   const timeStr    = (typeof cfg === 'object' && cfg !== null) ? (cfg.daily_start ?? '06:00') : (cfg ?? '06:00');
   const now        = new Date();
-  const { h, m }  = parseHHMM(timeStr);
   const windowMs   = SESSION_MINS * 60_000;
 
-  // First window anchor for today
-  const firstStart = new Date(now);
-  firstStart.setHours(h, m, 0, 0);
-
-  // 5-hour window — find which window we're currently in
+  // 5-hour window — use pinned start if recorded, else fall back to fixed time
   let pct5h, sessionLabel, sessionSub;
 
-  if (now < firstStart) {
-    const minsUntil = Math.ceil((firstStart - now) / 60_000);
-    pct5h        = 0;
-    sessionLabel = `Starts in ${fmtDuration(minsUntil)}`;
-    sessionSub   = `First session begins at ${fmt12(firstStart)}`;
+  const pinnedAt = (typeof cfg === 'object' && cfg !== null && cfg.session_started_at)
+    ? new Date(cfg.session_started_at)
+    : null;
+
+  if (pinnedAt && !isNaN(pinnedAt) && now >= pinnedAt) {
+    const winEnd       = new Date(pinnedAt.getTime() + windowMs);
+    const elapsedInWin = now - pinnedAt;
+    pct5h = Math.min(elapsedInWin / windowMs, 1);
+    if (now >= winEnd) {
+      pct5h        = 1;
+      sessionLabel = 'Window complete';
+      sessionSub   = `Started ${fmt12(pinnedAt)} · Ended ${fmt12(winEnd)}`;
+    } else {
+      const minsLeft = Math.ceil((winEnd - now) / 60_000);
+      sessionLabel   = `${fmtDuration(minsLeft)} remaining`;
+      sessionSub     = `Started ${fmt12(pinnedAt)} · Resets at ${fmt12(winEnd)}`;
+    }
   } else {
-    const elapsed      = now - firstStart;
-    const winIdx       = Math.floor(elapsed / windowMs);
-    const winStart     = new Date(firstStart.getTime() + winIdx * windowMs);
-    const winEnd       = new Date(winStart.getTime() + windowMs);
-    const elapsedInWin = now - winStart;
+    const { h, m }  = parseHHMM(timeStr);
+    const firstStart = new Date(now);
+    firstStart.setHours(h, m, 0, 0);
 
-    pct5h = elapsedInWin / windowMs;
-
-    const minsLeft = Math.ceil((winEnd - now) / 60_000);
-    sessionLabel   = `${fmtDuration(minsLeft)} remaining`;
-    sessionSub     = `Window ${winIdx + 1} · Resets at ${fmt12(winEnd)}`;
+    if (now < firstStart) {
+      const minsUntil = Math.ceil((firstStart - now) / 60_000);
+      pct5h        = 0;
+      sessionLabel = `Starts in ${fmtDuration(minsUntil)}`;
+      sessionSub   = `First session begins at ${fmt12(firstStart)}`;
+    } else {
+      const elapsed      = now - firstStart;
+      const winIdx       = Math.floor(elapsed / windowMs);
+      const winStart     = new Date(firstStart.getTime() + winIdx * windowMs);
+      const winEnd       = new Date(winStart.getTime() + windowMs);
+      const elapsedInWin = now - winStart;
+      pct5h = elapsedInWin / windowMs;
+      const minsLeft = Math.ceil((winEnd - now) / 60_000);
+      sessionLabel   = `${fmtDuration(minsLeft)} remaining`;
+      sessionSub     = `Window ${winIdx + 1} · Resets at ${fmt12(winEnd)}`;
+    }
   }
 
   // Weekly window — days elapsed since configured start day
@@ -166,14 +182,15 @@ const DAY_OPTIONS = [
 ];
 
 export default function AdminClaudeSessionPage() {
-  const [config,     setConfig]     = useState(null);
-  const [windows,    setWindows]    = useState(null);
-  const [start,      setStart]      = useState('06:00');
-  const [weeklyDay,  setWeeklyDay]  = useState(1);
-  const [loading,    setLoading]    = useState(true);
-  const [saving,     setSaving]     = useState(false);
-  const [success,    setSuccess]    = useState('');
-  const [error,      setError]      = useState('');
+  const [config,       setConfig]       = useState(null);
+  const [windows,      setWindows]      = useState(null);
+  const [start,        setStart]        = useState('06:00');
+  const [weeklyDay,    setWeeklyDay]    = useState(1);
+  const [loading,      setLoading]      = useState(true);
+  const [saving,       setSaving]       = useState(false);
+  const [starting,     setStarting]     = useState(false);
+  const [success,      setSuccess]      = useState('');
+  const [error,        setError]        = useState('');
 
   const refresh = useCallback((cfg) => {
     setWindows(computeWindows(cfg));
@@ -200,6 +217,38 @@ export default function AdminClaudeSessionPage() {
 
   function livePreview(newStart, newWeeklyDay) {
     setWindows(computeWindows({ daily_start: newStart, weekly_start_day: newWeeklyDay }));
+  }
+
+  async function recordStart() {
+    setStarting(true);
+    setSuccess('');
+    setError('');
+    try {
+      const updated = await api.post('/admin/claude-session-config/start', {});
+      setConfig(updated);
+      refresh(updated);
+      setSuccess('Session start recorded. Gauge counts from now.');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  async function clearStart() {
+    setStarting(true);
+    setSuccess('');
+    setError('');
+    try {
+      const updated = await api.post('/admin/claude-session-config/clear-start', {});
+      setConfig(updated);
+      refresh(updated);
+      setSuccess('Cleared. Gauge reverted to fixed start time.');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setStarting(false);
+    }
   }
 
   async function save(e) {
@@ -236,6 +285,23 @@ export default function AdminClaudeSessionPage() {
         <p className="text-sm" style={{ color: 'var(--color-muted)' }}>Loading…</p>
       ) : (
         <>
+          {/* Session start button */}
+          <div className="flex items-center gap-3">
+            <Button variant="primary" onClick={recordStart} disabled={starting}>
+              {starting ? 'Recording…' : 'Start session now'}
+            </Button>
+            {config?.session_started_at && (
+              <Button variant="secondary" onClick={clearStart} disabled={starting}>
+                Clear
+              </Button>
+            )}
+            {config?.session_started_at && (
+              <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
+                Pinned: {fmt12(new Date(config.session_started_at))}
+              </span>
+            )}
+          </div>
+
           {/* Gauges */}
           <section
             className="rounded-2xl border p-8"
