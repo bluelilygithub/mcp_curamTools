@@ -20,7 +20,7 @@ async function runAdsSetupArchitect(context) {
     'Identify high-intent keywords, propose a campaign structure, and generate high-converting RSA copy based on the 10 competitors configured in the settings.';
 
   const { result, trace, tokensUsed } = await agentOrchestrator.run({
-    systemPrompt:  buildSystemPrompt(),
+    systemPrompt:  buildSystemPrompt(adminConfig),
     userMessage,
     tools:         adsSetupArchitectTools,
     model,

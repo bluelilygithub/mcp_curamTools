@@ -25,6 +25,42 @@
 
 ---
 
+## 2026-04-23 — Ads Setup Architect: model resolution fix; AU market + negative keyword risk prompt; MCP Prompts wiring
+
+### Fixed
+
+**Model resolution bug — `index.js` ignored `context.adminConfig`**
+- `index.js` was calling `AgentConfigService.getAdminConfig(TOOL_SLUG)` directly, bypassing the `context.adminConfig` that `createAgentRoute` already resolved (including org default fallback).
+- Org default model was never applied. UI model selector was silently ignored (body.model never read).
+- Fix: `adminConfig` now uses `context.adminConfig` when populated (canonical pattern); falls back to direct fetch only for scheduled runs. `model` resolves: `req.body.model` → `adminConfig.model` → `'claude-sonnet-4-6'`.
+- `maxIterations` fallback corrected: 15 → 20 to match `AgentConfigService` registered default.
+
+### Built
+
+**Ads Setup Architect — Australian Market Constraint (prompt)**
+- New `## Australian Market Constraint (CRITICAL)` section in `prompt.js`.
+- AU ceramic/graphene search pool is niche and thin — keyword bloat dilutes signal and splits budget. Exact/Phrase match preferred over Broad. Every keyword recommendation must be backed by AU volume from `ads_generate_keyword_ideas`; zero/negligible volume = do not recommend.
+
+**Ads Setup Architect — Negative Keyword Risk (prompt)**
+- New `## Negative Keyword Risk (CRITICAL)` section in `prompt.js`.
+- Documents the historical account lesson: a keyword added to the shared negative list caused ~50% traffic loss and significant CPC rise; performance did not fully recover on removal — weeks of re-learning.
+- Rules baked in: cross-reference `ads_get_search_terms` before any negative recommendation; prefer campaign-level negatives over shared list; mandatory risk flag per recommendation.
+- Operational Step 5 now explicitly calls `ads_get_search_terms` before the negative keyword section.
+- New output section `### 6. Negative Keyword Recommendations (with risk flags)` — Term | Scope | Rationale | Risk Assessment per row.
+
+**Ads Setup Architect — MCP Prompts support**
+- `prompt.js` refactored: `buildSystemPrompt(config = {})` checks `config.custom_prompt?.trim()` — if set, uses Admin override; else uses built-in default. Exports `DEFAULT_PROMPT` for preview endpoint.
+- `index.js` passes `adminConfig` to `buildSystemPrompt(adminConfig)`.
+- `ads-setup-architect` registered in `AdminPromptsPage.jsx` AGENTS array — now visible and editable in Admin › MCP Prompts.
+
+### Open / next
+- Implement **Profitability Oracle (True ROAS)** agent within the suite.
+- Develop **Radius Clustering** bidder using newly available postcode signals.
+- Run first Ads Setup Architect blueprint against live AU competitors.
+- MCP-SERVERS.md google-ads.js header says 11 tools but `server/CLAUDE.md` lists 15 — 4 undocumented tools pending full MCP-SERVERS.md entry: `ads_get_ad_group_performance`, `ads_get_search_terms_by_ad_group`, `ads_get_quality_scores`, `ads_get_negative_keywords`.
+
+---
+
 ## 2026-04-23 — Profitability Suite: Ads Setup Architect; Live Verification Mandate; Model Selection UI
 
 ### Built

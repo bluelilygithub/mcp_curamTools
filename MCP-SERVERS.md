@@ -14,7 +14,9 @@ All servers are registered in Admin > MCP Servers and connect via stdio (local p
 
 ---
 
-## google-ads.js — 9 tools
+## google-ads.js — 11 tools (+ 4 pending documentation)
+
+> **Note:** `server/CLAUDE.md` lists 15 tools. The 4 not yet fully documented here: `ads_get_ad_group_performance`, `ads_get_search_terms_by_ad_group`, `ads_get_quality_scores`, `ads_get_negative_keywords`. Add data shapes when next touching `google-ads.js`.
 
 | Tool | Description | Data Shape | When to Use |
 |---|---|---|---|

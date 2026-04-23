@@ -115,6 +115,13 @@ const AGENTS = [
     purpose: 'Pre-fetches 7 data sources in parallel: all enabled RSA ads (headlines + descriptions), asset performance labels (BEST/GOOD/LOW/POOR) per asset, ad group performance metrics, top 20 search terms per ad group, keyword Quality Score components, GA4 landing page performance, and GA4 paid bounce sessions. Produces 6 sections: Summary, Campaign and Ad Group Review (per ad), Search Term Alignment Audit (per ad group), Competitive Copy Gap, Recommendations, and a Priority Action List of exactly 10 items ranked by urgency across three tiers (Fix Today / Fix This Week / Fix This Month).',
   },
   {
+    slug: 'ads-setup-architect',
+    title: 'Ads Setup Architect',
+    description: 'Designs Google Ads campaign structure, keyword blueprint, and RSA copy based on live competitor and account data.',
+    usedIn: 'Profitability Suite → Ads Setup Architect page. Run on demand.',
+    purpose: 'ReAct agent with sequential tool chain: competitor discovery → keyword brainstorming (AU volume-backed) → live ad verification → CRM lead themes → KB differentiators. Produces a full campaign blueprint including account structure, keyword blueprint (Exact/Phrase only), ad copy (RSA), and negative keyword recommendations with risk flags. Hardcoded brand guardrails: 12-year warranty, CSIRO-tested formula, 9H+ hardness, pricing from $790/$990.',
+  },
+  {
     slug: 'sql-nlp',
     title: 'SQL Console — NLP',
     description: 'Translates natural language questions into PostgreSQL queries against the platform admin database.',
