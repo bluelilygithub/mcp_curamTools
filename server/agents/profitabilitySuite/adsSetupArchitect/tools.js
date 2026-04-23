@@ -85,6 +85,26 @@ const searchKnowledgeTool = {
   },
 };
 
+const adsGetSearchTermsTool = {
+  name: 'ads_get_search_terms',
+  description: 'Retrieve recent search terms that triggered ads. Use before recommending negative keywords to verify a term actually generated traffic and understand its conversion signal.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      start_date: { type: 'string', description: 'YYYY-MM-DD' },
+      end_date:   { type: 'string', description: 'YYYY-MM-DD' },
+    },
+  },
+  async execute(input, context) {
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_search_terms', {
+      customer_id: context.customerId ?? null,
+      start_date:  input.start_date ?? null,
+      end_date:    input.end_date   ?? null,
+    });
+  },
+};
+
 const adsGetAdGroupAdsTool = {
   name: 'ads_get_ad_group_ads',
   description: 'Retrieve current live RSA ad copy (headlines, descriptions) and ad strength. Use to verify existing copy before proposing new structures.',
@@ -109,10 +129,11 @@ const adsSetupArchitectTools = [
   getCompetitorSettingsTool,
   adsGenerateKeywordIdeasTool,
   adsGetAuctionInsightsTool,
+  adsGetSearchTermsTool,
   wpGetEnquiryDetailsTool,
   searchKnowledgeTool,
   adsGetAdGroupAdsTool,
-  adsGetAdAssetPerformanceTool
+  adsGetAdAssetPerformanceTool,
 ];
 
 module.exports = { adsSetupArchitectTools, TOOL_SLUG };
