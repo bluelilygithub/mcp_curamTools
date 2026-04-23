@@ -85,12 +85,34 @@ const searchKnowledgeTool = {
   },
 };
 
+const adsGetAdGroupAdsTool = {
+  name: 'ads_get_ad_group_ads',
+  description: 'Retrieve current live RSA ad copy (headlines, descriptions) and ad strength. Use to verify existing copy before proposing new structures.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+  async execute(_input, context) {
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_ad_group_ads', { customer_id: context.customerId ?? null });
+  },
+};
+
+const adsGetAdAssetPerformanceTool = {
+  name: 'ads_get_ad_asset_performance',
+  description: 'Retrieve current performance labels (BEST, GOOD, LOW, POOR) for all active headlines and descriptions. Use to identify failing assets that need replacement.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+  async execute(_input, context) {
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_ad_asset_performance', { customer_id: context.customerId ?? null });
+  },
+};
+
 const adsSetupArchitectTools = [
   getCompetitorSettingsTool,
   adsGenerateKeywordIdeasTool,
   adsGetAuctionInsightsTool,
   wpGetEnquiryDetailsTool,
-  searchKnowledgeTool
+  searchKnowledgeTool,
+  adsGetAdGroupAdsTool,
+  adsGetAdAssetPerformanceTool
 ];
 
 module.exports = { adsSetupArchitectTools, TOOL_SLUG };

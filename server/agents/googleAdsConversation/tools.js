@@ -151,6 +151,28 @@ const getChangeHistoryTool = {
   },
 };
 
+const getAdGroupAdsTool = {
+  name: 'get_ad_group_ads',
+  description: 'Current live RSA ad copy: headlines, descriptions, and ad strength for all enabled ads. Use for any question about "What are my current ads?" or to verify recent copy changes.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(_input, context) {
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_ad_group_ads', { customer_id: context.customerId ?? null });
+  },
+};
+
+const getAdAssetPerformanceTool = {
+  name: 'get_ad_asset_performance',
+  description: 'Current performance labels (BEST, GOOD, LOW, POOR) for individual headlines and descriptions. Use to identify which specific parts of an ad are underperforming right now.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(_input, context) {
+    const ads = await getAdsServer(context.orgId);
+    return callMcpTool(context.orgId, ads, 'ads_get_ad_asset_performance', { customer_id: context.customerId ?? null });
+  },
+};
+
 // ── GA4 tools ─────────────────────────────────────────────────────────────────
 
 const getSessionsOverviewTool = {
@@ -477,6 +499,8 @@ const googleAdsConversationTools = [
   getImpressionShareTool,
   getActiveKeywordsTool,
   getChangeHistoryTool,
+  getAdGroupAdsTool,
+  getAdAssetPerformanceTool,
   // GA4 — full set
   getSessionsOverviewTool,
   getTrafficSourcesTool,

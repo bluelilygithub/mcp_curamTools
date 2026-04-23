@@ -26,7 +26,12 @@ A senior-level strategic agent that designs high-performance Google Ads structur
     *   **Expert Guidance:** Provided a "Pros & Cons" breakdown for different models (Sonnet, Opus, GPT-4o, Gemini) to help users choose the right reasoning level for their budget and complexity needs.
     *   **Org Default Awareness:** The tool automatically respects and labels the organization-wide default model.
 
-## 4. Technical Integration
+## 4. Live Data & Integrity Mandate
+*   **Live Tool Integration:** Added `get_ad_group_ads` and `get_ad_asset_performance` to the **Ads Setup Architect** and **Conversation** agents. This allows them to read current RSA headlines, descriptions, and performance ratings directly from the Google Ads API.
+*   **Truthful Reasoning:** Updated the system prompts for both agents with a **Live Verification Mandate (CRITICAL)**. This instructs the AI to never guess the state of the account based on historical reports and to always verify with live tools before claiming a change is "live."
+*   **Operational Integrity:** The Architect now performs a "Current State Assessment" as its first step, ensuring all recommendations are built on top of what is actually running in the account right now.
+
+## 5. Technical Integration
 *   **Routing:** Registered the `/ads-setup-architect` endpoint in the server-side agents router.
 *   **Configuration:** Added default admin and operator configs to `AgentConfigService.js`, including cost-control budget ceilings for web-search intensive tasks.
 *   **Frontend Registry:** Added the tool to `tools.js` and `App.jsx` for seamless navigation from the main dashboard.
