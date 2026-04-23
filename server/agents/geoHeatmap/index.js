@@ -37,12 +37,13 @@ async function geocodeSuburb(suburb, postcode, state, address) {
   const st = (state    || '').trim().toLowerCase();
   const ad = (address  || '').trim().toLowerCase();
 
+  // Do NOT include state abbreviations (NSW, VIC etc.) — Nominatim needs full names.
+  // Suburb+country is reliable; state is kept in bucket key for deduplication only.
   let query;
-  if (s && st)  query = `${s}, ${st}, Australia`;
-  else if (s)   query = `${s}, Australia`;
-  else if (pc)  query = `${pc}, Australia`;
-  else if (ad)  query = `${ad}, Australia`;
-  else          return { coords: null, fromCache: false };
+  if (s)       query = `${s}, Australia`;
+  else if (pc) query = `${pc}, Australia`;
+  else if (ad) query = `${ad}, Australia`;
+  else         return { coords: null, fromCache: false };
 
   // Check cache
   const cached = await pool.query(
