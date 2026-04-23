@@ -171,7 +171,9 @@ async function callTool(name, args = {}) {
           pm_ga.meta_value  AS ga4_client_id,
           pm_ni.meta_value  AS reason_not_interested,
           pm_pc.meta_value  AS postcode,
-          pm_sb.meta_value  AS suburb
+          pm_sb.meta_value  AS suburb,
+          pm_st2.meta_value AS state,
+          pm_ad.meta_value  AS address
         FROM bqq_posts p
         LEFT JOIN bqq_postmeta pm_es  ON p.ID = pm_es.post_id  AND pm_es.meta_key  = 'enquiry_status'
         LEFT JOIN bqq_postmeta pm_src ON p.ID = pm_src.post_id AND pm_src.meta_key = 'utm_source'
@@ -189,6 +191,8 @@ async function callTool(name, args = {}) {
         LEFT JOIN bqq_postmeta pm_ni  ON p.ID = pm_ni.post_id  AND pm_ni.meta_key  = 'reason_not_interested'
         LEFT JOIN bqq_postmeta pm_pc  ON p.ID = pm_pc.post_id  AND pm_pc.meta_key  = 'postcode'
         LEFT JOIN bqq_postmeta pm_sb  ON p.ID = pm_sb.post_id  AND pm_sb.meta_key  = 'suburb'
+        LEFT JOIN bqq_postmeta pm_st2 ON p.ID = pm_st2.post_id AND pm_st2.meta_key = 'state'
+        LEFT JOIN bqq_postmeta pm_ad  ON p.ID = pm_ad.post_id  AND pm_ad.meta_key  = 'address'
         WHERE p.post_type = 'clientenquiry'
           AND p.post_status != 'trash'
       `;
@@ -222,6 +226,8 @@ async function callTool(name, args = {}) {
         reason_not_interested:  str(r.reason_not_interested),
         postcode:               str(r.postcode),
         suburb:                 str(r.suburb),
+        state:                  str(r.state),
+        address:                str(r.address),
       }));
     }
 

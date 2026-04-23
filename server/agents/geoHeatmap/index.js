@@ -30,10 +30,15 @@ function httpsGet(url) {
   });
 }
 
-async function geocodeSuburb(suburb, postcode) {
-  const query = suburb
-    ? `${suburb}, Australia`
-    : `${postcode}, Australia`;
+async function geocodeSuburb(suburb, postcode, state, address) {
+  // Build best available query: prefer suburb+state, then suburb alone,
+  // then postcode, then address+state as last resort
+  let query;
+  if (suburb && state)    query = `${suburb}, ${state}, Australia`;
+  else if (suburb)        query = `${suburb}, Australia`;
+  else if (postcode)      query = `${postcode}, Australia`;
+  else if (address)       query = `${address}, Australia`;
+  else                    return { coords: null, fromCache: false };
 
   // Check cache
   const cached = await pool.query(
@@ -103,9 +108,11 @@ async function runGeoHeatmap(context) {
   for (const enq of enquiries) {
     const suburb   = (enq.suburb   || '').trim();
     const postcode = (enq.postcode || '').trim();
-    if (!suburb && !postcode) continue;
+    const state    = (enq.state    || '').trim();
+    const address  = (enq.address  || '').trim();
+    if (!suburb && !postcode && !address) continue;
 
-    const key = `${suburb}|${postcode}`;
+    const key = `${suburb}|${postcode}|${state}|${address}`;
     const isNI = enq.reason_not_interested && String(enq.reason_not_interested).trim() !== '';
 
     if (isNI) {
@@ -123,8 +130,8 @@ async function runGeoHeatmap(context) {
 
   let i = 0;
   for (const key of allKeys) {
-    const [suburb, postcode] = key.split('|');
-    const { coords, fromCache } = await geocodeSuburb(suburb, postcode);
+    const [suburb, postcode, state, address] = key.split('|');
+    const { coords, fromCache } = await geocodeSuburb(suburb, postcode, state, address);
     geocoded[key] = coords;
     i++;
     if (i % 10 === 0) emit(`Geocoded ${i}/${allKeys.size}…`);
@@ -136,10 +143,11 @@ async function runGeoHeatmap(context) {
   for (const key of allKeys) {
     const coords = geocoded[key];
     if (!coords) continue;
-    const [suburb, postcode] = key.split('|');
+    const [suburb, postcode, state] = key.split('|');
     locMap[key] = {
-      suburb:        suburb  || null,
+      suburb:        suburb   || null,
       postcode:      postcode || null,
+      state:         state    || null,
       lat:           coords.lat,
       lng:           coords.lng,
       notInterested: notInterestedMap[key] || 0,
