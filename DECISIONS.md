@@ -638,6 +638,36 @@ All inline styles include `fontFamily: 'inherit'` to respect the user's platform
 
 ---
 
+### Profitability Suite — Siloed Architecture
+**Date:** 2026-04-23
+**Status:** Settled
+**Context:** The project is moving from basic reporting to high-level Business Intelligence. New tools like the "Profitability Oracle" and "Ads Setup Architect" require a distinct space to separate strategic analysis from daily monitoring.
+**Decision:** Established a `profitabilitySuite` directory silo in both `server/agents/` and `client/src/pages/`. The suite uses a "Suite Dashboard" experience with filtered tool registries and specialized UI components.
+**Rationale:** Keeps the codebase organized as it grows. Allows for a "premium" separate dashboard feel while reusing the core platform primitives (auth, storage, MCP registry).
+**Constraints it must not violate:** Must reuse existing `AgentOrchestrator` and `createAgentRoute` patterns. Should not duplicate configuration that can be shared via `AgentConfigService`.
+
+---
+
+### Live Verification Mandate (CRITICAL)
+**Date:** 2026-04-23
+**Status:** Settled
+**Context:** Agents often rely on historical report summaries from the knowledge base, which can lead to "hallucinating" that the account is in a state that has since changed.
+**Decision:** Introduced a "Live Verification Mandate" in the system prompts for the Ads Setup Architect and Conversation agents. They MUST use live tools (`ads_get_ad_group_ads`, `ads_get_ad_asset_performance`) to verify the current account state before making claims or proposing changes.
+**Rationale:** Ensures data integrity and user trust. Distinguishes between "what happened in the past" (reports) and "what is live now" (API).
+**Constraints it must not violate:** Every agent run that proposes copy changes must include a "Current State Assessment" based on live tool calls.
+
+---
+
+### Model Selection Guidance in UI
+**Date:** 2026-04-23
+**Status:** Settled
+**Context:** Users need to know which model to choose for complex strategic tasks. The `Admin > Models` page sets the global default, but per-tool overrides are allowed.
+**Decision:** The Ads Setup Architect UI includes a model selector that defaults to the Org Default but offers a "Settings" tab with a "Pros & Cons" breakdown for each model tier (Sonnet, Opus, GPT-4o, Gemini).
+**Rationale:** Empowers the user to make cost/quality trade-offs based on the specific task's strategic importance.
+**Constraints it must not violate:** Must respect the `Admin > Models` default as the initial state. Guidance must be grounded in the model's observed performance with the platform's tool-use patterns.
+
+---
+
 ## Open Questions
 
 _(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_

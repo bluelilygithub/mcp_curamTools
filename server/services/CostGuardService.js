@@ -17,14 +17,61 @@ const { pool } = require('../db');
 // Approximate AUD/USD rate. All cost calculations use AUD throughout.
 const AUD_PER_USD = 1.55;
 
-// Claude Sonnet 4.6 pricing in AUD per token (approximate at 1.55 AUD/USD)
+// Claude Sonnet 4.6 pricing (Standard fallback)
 // USD rates: input $3/MTok, output $15/MTok, cache_read $0.30/MTok, cache_write $3.75/MTok
-const TOKEN_COST_AUD = {
-  input:       3.00 * AUD_PER_USD / 1_000_000,   // ~$0.00000465
-  output:      15.00 * AUD_PER_USD / 1_000_000,  // ~$0.00002325
-  cacheRead:   0.30 * AUD_PER_USD / 1_000_000,   // ~$0.000000465
-  cacheWrite:  3.75 * AUD_PER_USD / 1_000_000,   // ~$0.00000581
+const SONNET_RATES = {
+  input:       3.00 * AUD_PER_USD / 1_000_000,
+  output:      15.00 * AUD_PER_USD / 1_000_000,
+  cacheRead:   0.30 * AUD_PER_USD / 1_000_000,
+  cacheWrite:  3.75 * AUD_PER_USD / 1_000_000,
 };
+
+// DeepSeek Reasoner (R1) pricing
+// USD rates: input $0.55/MTok, output $2.19/MTok (no cache breakdown in simple model)
+const DEEPSEEK_RATES = {
+  input:       0.55 * AUD_PER_USD / 1_000_000,
+  output:      2.19 * AUD_PER_USD / 1_000_000,
+  cacheRead:   0.14 * AUD_PER_USD / 1_000_000, // DeepSeek cached input rate
+  cacheWrite:  0.55 * AUD_PER_USD / 1_000_000,
+};
+
+// Claude Haiku 4.5 pricing
+// USD rates: input $0.80/MTok, output $4.00/MTok
+const HAIKU_RATES = {
+  input:       0.80 * AUD_PER_USD / 1_000_000,
+  output:      4.00 * AUD_PER_USD / 1_000_000,
+  cacheRead:   0.08 * AUD_PER_USD / 1_000_000,
+  cacheWrite:  1.00 * AUD_PER_USD / 1_000_000,
+};
+
+const MODEL_RATES = {
+  'claude-sonnet-4-6': SONNET_RATES,
+  'claude-haiku-4-5-20251001': HAIKU_RATES,
+  'deepseek-reasoner': DEEPSEEK_RATES,
+  'deepseek-chat': {
+    input:  0.14 * AUD_PER_USD / 1_000_000,
+    output: 0.28 * AUD_PER_USD / 1_000_000,
+  }
+};
+
+/**
+ * Get the rates for a given model ID.
+ * Falls back to Sonnet rates if the model is unknown.
+ */
+function getRatesForModel(modelId) {
+  if (!modelId) return SONNET_RATES;
+  const lower = modelId.toLowerCase();
+  
+  // Direct match
+  if (MODEL_RATES[lower]) return MODEL_RATES[lower];
+  
+  // Prefix matches
+  if (lower.startsWith('deepseek-')) return DEEPSEEK_RATES;
+  if (lower.startsWith('claude-3-5-haiku')) return HAIKU_RATES;
+  if (lower.startsWith('claude-3-5-sonnet')) return SONNET_RATES;
+  
+  return SONNET_RATES;
+}
 
 // ── Error type ─────────────────────────────────────────────────────────────
 
@@ -52,15 +99,17 @@ class BudgetExceededError extends Error {
 // ── Utilities ──────────────────────────────────────────────────────────────
 
 /**
- * Compute AUD cost from a tokensUsed object.
+ * Compute AUD cost from a tokensUsed object and model ID.
  * tokensUsed: { input, output, cacheRead, cacheWrite } — all fields optional.
+ * modelId: string — used to select the correct pricing rates.
  */
-function computeCostAud(tokensUsed = {}) {
+function computeCostAud(tokensUsed = {}, modelId = null) {
+  const rates = getRatesForModel(modelId);
   return (
-    (tokensUsed.input      || 0) * TOKEN_COST_AUD.input +
-    (tokensUsed.output     || 0) * TOKEN_COST_AUD.output +
-    (tokensUsed.cacheRead  || 0) * TOKEN_COST_AUD.cacheRead +
-    (tokensUsed.cacheWrite || 0) * TOKEN_COST_AUD.cacheWrite
+    (tokensUsed.input      || 0) * (rates.input      || 0) +
+    (tokensUsed.output     || 0) * (rates.output     || 0) +
+    (tokensUsed.cacheRead  || 0) * (rates.cacheRead  || 0) +
+    (tokensUsed.cacheWrite || 0) * (rates.cacheWrite || 0)
   );
 }
 

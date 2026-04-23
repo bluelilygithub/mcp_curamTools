@@ -27,6 +27,8 @@ All servers are registered in Admin > MCP Servers and connect via stdio (local p
 | `ads_get_impression_share_by_campaign` | Account impression share per campaign: impression share, lost to rank, lost to budget, top-of-page rate, absolute top-of-page rate. | `[{campaign_name, impression_share, lost_impression_share_rank, lost_impression_share_budget, top_of_page_rate, abs_top_of_page_rate}]` | To diagnose visibility loss or budget vs quality issues. |
 | `ads_get_active_keywords` | All active keywords currently in the account: keyword text, match type, bid (AUD), campaign name, ad group name. Up to 200 keywords ordered by bid DESC. | `[{keyword_text, match_type, bid_aud, campaign_name, ad_group_name}]` | For keyword strategy, gap analysis, or bid questions. |
 | `ads_get_change_history` | Recent account change events: bid changes, budget adjustments, status changes, ad edits, keyword additions/removals. Returns changedAt, resourceType, changedFields, clientType, operation, campaignName. | `[{changed_at, resource_type, changed_fields, client_type, operation, campaign_name}]` | For any question about what changed recently in the account. |
+| `ads_get_ad_group_ads` | All enabled RSA ads per campaign and ad group. Returns campaign, adGroup, adId, adStrength (EXCELLENT/GOOD/AVERAGE/POOR/UNSPECIFIED), finalUrls, headlines (text + pinnedField), descriptions (text + pinnedField). | `[{campaign, adGroup, adId, adStrength, finalUrls, headlines, descriptions}]` | Use for ad copy analysis and copy diagnostic reports. |
+| `ads_get_ad_asset_performance` | Asset performance labels for every active RSA asset from the Google Ads asset view. Returns campaign, adGroup, adId, fieldType (HEADLINE/DESCRIPTION), performanceLabel (BEST/GOOD/LOW/POOR/UNRATED/LEARNING), pinnedField, and text. | `[{campaign, adGroup, adId, fieldType, performanceLabel, text}]` | Use to identify which specific headlines and descriptions are rated Poor and should be replaced. |
 
 **Data Coverage:** Google Ads data available from ~March 2026 onwards only.
 
@@ -50,8 +52,8 @@ All servers are registered in Admin > MCP Servers and connect via stdio (local p
 
 | Tool | Description | Data Shape | When to Use |
 |---|---|---|---|
-| `wp_get_enquiries` | Fetch clientenquiry leads directly from WordPress database. Includes UTM attribution, search term, device type, landing page, gclid, GA4 client ID, enquiry status, and reason_not_interested. Years of history available. | `[{id, date, enquiry_status, utm_source, utm_medium, utm_campaign, utm_ad_group, utm_term, utm_content, search_term, device_type, landing_page, referral_page, gclid, ga4_client_id, reason_not_interested}]` | For lead volume, attribution, device analysis, or any question about what happened after the click. **Returns device_type on every record.** `search_term` is always null — GA4 does not capture per-lead search queries. |
-| `wp_get_enquiry_details` | Extended clientenquiry records with full CRM fields: sales_rep, package_type, enquiry_source, contacted_date, invoiced_date, completion_date, appointment_date, calculated_value, final_value, technician, job_number. | `[{id, date, enquiry_status, utm_source, utm_medium, utm_campaign, device_type, landing_page, gclid, reason_not_interested, job_number, sales_rep, package_type, enquiry_source, contacted_date, invoiced_date, completion_date, appointment_date, calculated_value, final_value, technician}]` | For lead velocity, pipeline value, sales rep performance, or financial analysis. |
+| `wp_get_enquiries` | Fetch clientenquiry leads directly from WordPress database. Includes UTM attribution, search term, device type, landing page, gclid, GA4 client ID, enquiry status, reason_not_interested, **postcode**, and **suburb**. Years of history available. | `[{id, date, enquiry_status, utm_source, utm_medium, utm_campaign, utm_ad_group, utm_term, utm_content, search_term, device_type, landing_page, referral_page, gclid, ga4_client_id, reason_not_interested, postcode, suburb}]` | For lead volume, attribution, device analysis, or any question about what happened after the click. **Returns device_type on every record.** `search_term` is always null — GA4 does not capture per-lead search queries. |
+| `wp_get_enquiry_details` | Extended clientenquiry records with full CRM fields: sales_rep, package_type, enquiry_source, contacted_date, invoiced_date, completion_date, appointment_date, calculated_value, final_value, technician, job_number, **postcode**, and **suburb**. | `[{id, date, enquiry_status, utm_source, utm_medium, utm_campaign, device_type, landing_page, gclid, reason_not_interested, job_number, sales_rep, package_type, enquiry_source, contacted_date, invoiced_date, completion_date, appointment_date, calculated_value, final_value, technician, postcode, suburb}]` | For lead velocity, pipeline value, sales rep performance, or financial analysis. |
 | `wp_get_progress_details` | Fetch progress_details ACF repeater rows (Enquiry Related Activities). Each row: entry_date (d/m/Y g:i a), next_event (scheduled follow-up), next_action (Phone/Email/Appointment/Invoice/Warranty), event_message, staff_member. Posts with zero activity have row_count=0. | `[{post_id, enquiry_date, row_count, rows: [{index, entry_date, next_event, next_action, event_message, staff_member}]}]` | For follow-up intensity, response time analysis, stale lead detection, or activity tracking. **entry_date unreliable (ACF UI bug).** |
 | `wp_get_not_interested_reasons` | Returns all clientenquiry records that have a reason_not_interested value, with their UTM attribution. | `[{id, date, reason_not_interested, enquiry_status, utm_source, utm_campaign, utm_medium, device_type, search_term}]` | Specifically for analysing why leads did not proceed. **Known values for reason_not_interested: `wrong_products`, `wrong_location`, `too_expensive`, `not_specified`.** `search_term` is always null — GA4 does not capture per-lead search queries; do not rely on this field. |
 | `wp_enquiry_field_check` | Returns a sample of recent clientenquiry records with all meta keys and values. | `[{id, date, keys: [], sample: {}}]` | **Discovery tool** — to diagnose which fields are populated and what values they hold. Bypasses CRM privacy exclusions. |
@@ -153,9 +155,25 @@ Device data is available in **all three systems** — never tell the user device
 
 ---
 
-## Conversation Agent — Tool Count: 23
+## Conversation Agent — Tool Count: 25
 
-The conversation agent (`googleAdsConversation`) wires tools from: google-ads (9), google-analytics (5), wordpress (5 — excludes `wp_get_server_ip`), platform (4 — excludes `get_pending_suggestions`, `update_suggestion_outcome`, `get_suggestion_history`, `flag_prompt_for_review`), knowledge-base (2 — excludes `add_document`). Current exported count: 23.
+The conversation agent (`googleAdsConversation`) wires tools from: google-ads (11), google-analytics (5), wordpress (5 — excludes `wp_get_server_ip`), platform (4 — excludes `get_pending_suggestions`, `update_suggestion_outcome`, `get_suggestion_history`, `flag_prompt_for_review`), knowledge-base (2 — excludes `add_document`). Current exported count: 25.
+
+---
+
+## Ads Setup Architect Agent — Tool Count: 7
+Registered in `server/agents/profitabilitySuite/adsSetupArchitect/`.
+
+| Tool | Description | When to Use |
+|---|---|---|
+| `get_competitor_settings` | Retrieve the configured list of 10 competitors and their websites for this organization. | First step for competitor-based setup analysis. |
+| `ads_generate_keyword_ideas` | Generate keyword ideas from a competitor URL. Returns keywords with AU volume and CPC. | For keyword research and gap analysis. |
+| `ads_get_ad_group_ads` | Current live RSA ad copy: headlines, descriptions, and ad strength for all enabled ads. | **Live Verification Mandate:** verify current copy before proposing changes. |
+| `ads_get_ad_asset_performance` | Current performance labels (BEST, GOOD, LOW, POOR) for individual headlines and descriptions. | Identify failing assets that need replacement. |
+| `ads_get_auction_insights` | Competitor domains appearing in the same auctions as the account. | For competitor analysis or visibility questions. |
+| `wp_get_enquiry_details` | Extended CRM records with final_value and enquiry themes. | Find high-performing lead sources. |
+| `search_knowledge` | Search knowledge base for Diamond Plate product info, differentiators, and SOPs. | Ensure ad copy aligns with brand guardrails. |
+
 
 **Cost Optimization:** Tool schema overhead is fixed per turn. Re-fetching across turns is the actual cost driver. Do not cut tools to reduce cost — focus on reducing re-fetches through caching and intelligent tool selection.
 

@@ -254,7 +254,7 @@ router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) =>
       onStep: (text, partialTokens) => {
         emit('progress', { text });
         if (partialTokens) {
-          taskCostAud += CostGuardService.computeCostAud(partialTokens);
+          taskCostAud += CostGuardService.computeCostAud(partialTokens, adminConfig.model);
           try { CostGuardService.check({ taskCostAud, maxTaskBudgetAud, dailyOrgSpendAud, maxDailyBudgetAud }); }
           catch (e) { emit('error', { error: e.message }); }
         }
@@ -262,7 +262,7 @@ router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) =>
     });
 
     if (tokensUsed) {
-      const finalCost = CostGuardService.computeCostAud(tokensUsed);
+      const finalCost = CostGuardService.computeCostAud(tokensUsed, adminConfig.model);
       taskCostAud = Math.max(taskCostAud, finalCost);
     }
 

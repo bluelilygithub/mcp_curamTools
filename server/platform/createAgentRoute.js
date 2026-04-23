@@ -182,7 +182,7 @@ function createAgentRoute({ slug, runFn, requiredPermission }) {
           emit: (text, partialTokensUsed) => {
             emit('progress', { text });
             if (partialTokensUsed) {
-              taskCostAud += CostGuardService.computeCostAud(partialTokensUsed);
+              taskCostAud += CostGuardService.computeCostAud(partialTokensUsed, adminConfig.model);
               CostGuardService.check({ taskCostAud, maxTaskBudgetAud, dailyOrgSpendAud, maxDailyBudgetAud });
             }
           },
@@ -190,7 +190,7 @@ function createAgentRoute({ slug, runFn, requiredPermission }) {
 
         // Post-run budget check using final tokensUsed (catches agents that don't emit partial costs)
         if (tokensUsed) {
-          const finalCostAud = CostGuardService.computeCostAud(tokensUsed);
+          const finalCostAud = CostGuardService.computeCostAud(tokensUsed, adminConfig.model);
           taskCostAud = Math.max(taskCostAud, finalCostAud); // use final if higher than accumulated
           CostGuardService.check({ taskCostAud, maxTaskBudgetAud, dailyOrgSpendAud, maxDailyBudgetAud });
         }

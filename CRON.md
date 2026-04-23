@@ -44,6 +44,7 @@ All cron jobs registered via `AgentScheduler.register` in `server/routes/agents.
 | Daypart Intelligence | `daypart-intelligence` | On-demand |
 | Cost Per Booked Job | `cost-per-booked-job` | On-demand |
 | Lead Velocity | `lead-velocity` | On-demand |
+| Ads Setup Architect | `ads-setup-architect` | On-demand — by design |
 | Not Interested Report | `not-interested-report` | On-demand — by design |
 
 ---

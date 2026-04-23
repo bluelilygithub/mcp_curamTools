@@ -25,6 +25,48 @@
 
 ---
 
+## 2026-04-23 — Profitability Suite: Ads Setup Architect; Live Verification Mandate; Model Selection UI
+
+### Built
+
+**Profitability Suite — Siloed Architecture**
+- Created `server/agents/profitabilitySuite/` and `client/src/pages/profitabilitySuite/` directory silos.
+- Purpose: high-level strategic Business Intelligence tools separate from daily monitoring.
+
+**Ads Setup Architect Agent (`ads-setup-architect`)**
+- Strategic agent that designs Google Ads structures (Campaigns, Ad Groups, Keywords, RSA Copy).
+- Sequential tool chain: Competitor discovery → Keyword brainstorming → Live ad verification → CRM theme analysis → KB differentiator search.
+- Hardcoded brand guardrails: 12-year warranty, CSIRO-tested formula, 9H+ hardness, pricing from $790/$990.
+- Registered in `agents.js` and `AgentConfigService.js` (`max_iterations: 20`, `max_task_budget_aud: 3.00`).
+
+**Live Verification Mandate (CRITICAL)**
+- New `ads_get_ad_group_ads` and `ads_get_ad_asset_performance` tools added to `google-ads.js` MCP server.
+- Mandatory verify instruction added to system prompts for **Ads Setup Architect** and **Conversation** agents.
+- Logic: AI must call live tools to verify headlines/descriptions before confirming edits or proposing new ones; distinguishes from stale KB reports.
+
+**Ads Setup Architect UI**
+- Four-tab layout: Report / Conversation / History / Settings.
+- **Discussion View:** Integrated `ConversationView` with "Discuss this report" seeder button.
+- **Model Settings:** Dynamic dropdown for model selection defaulting to Org Default.
+- **Expert Guidance:** "Pros & Cons" panels for Sonnet, Opus, GPT-4o, and Gemini based on strategic architecture performance.
+- SSE progress logging with "Architecting..." state.
+- TXT/PDF export for blueprints.
+
+**WordPress CRM Enhancement — Geographic Data**
+- `wp_get_enquiries` and `wp_get_enquiry_details` updated to include **postcode** and **suburb** ACF fields.
+- Enables geographic clustering/radius analysis for the Australian market.
+
+### Fixed / discovered
+- `ads_get_ad_group_ads` return shape updated in `MCP-SERVERS.md` to reflect RSA nested structure.
+- Resolved race condition in `AdsSetupArchitectPage` where model state initialized before admin config loaded.
+
+### Open / next
+- Implement **Profitability Oracle (True ROAS)** agent within the suite.
+- Develop **Radius Clustering** bidder using newly available postcode signals.
+- Run first Ads Setup Architect blueprint against live AU competitors.
+
+---
+
 ## 2026-04-23 — Not Interested Report: negative keyword coverage analysis; AI session token savings
 
 ### Built
