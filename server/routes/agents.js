@@ -159,6 +159,18 @@ agentsRouter.use(
   })
 );
 
+// ── Ads Setup Architect ───────────────────────────────────────────────────
+const { runAdsSetupArchitect } = require('../agents/profitabilitySuite/adsSetupArchitect');
+
+agentsRouter.use(
+  '/ads-setup-architect',
+  createAgentRoute({
+    slug:               'ads-setup-architect',
+    runFn:              runAdsSetupArchitect,
+    requiredPermission: 'ads_operator',
+  })
+);
+
 // ── Ads Copy Diagnostic ───────────────────────────────────────────────────
 const { runAdsCopyDiagnostic } = require('../agents/adsCopyDiagnostic');
 

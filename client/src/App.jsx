@@ -36,6 +36,7 @@ import DocExtractorPage          from './pages/tools/DocExtractorPage';
 import MediaGenPage              from './pages/tools/MediaGenPage';
 import HighIntentAdvisorPage     from './pages/tools/HighIntentAdvisorPage';
 import NotInterestedReportPage   from './pages/tools/NotInterestedReportPage';
+import AdsSetupArchitectPage     from './pages/tools/AdsSetupArchitectPage';
 
 export default function App() {
   return (
@@ -61,6 +62,7 @@ export default function App() {
                 <Route path="/tools/media-gen"             element={<MediaGenPage />} />
                 <Route path="/tools/high-intent-advisor"   element={<HighIntentAdvisorPage />} />
                 <Route path="/tools/not-interested-report" element={<NotInterestedReportPage />} />
+                <Route path="/tools/ads-setup-architect"   element={<AdsSetupArchitectPage />} />
 
                 {/* Admin-only */}
                 <Route element={<RequireRole allowedRoles={['org_admin']} />}>

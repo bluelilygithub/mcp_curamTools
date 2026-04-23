@@ -55,6 +55,7 @@ const AGENT_DEFAULTS = {
     schedule: '0 7 * * *', // 7am UTC = 5pm AEST; not active until cron registered
   },
   'not-interested-report': {},
+  'ads-setup-architect': {},
   'ai-visibility-monitor': {
     // Structured competitor list — each entry has a display name and optional URL.
     // Stored as JSONB; the agent uses the names for mention detection in AI responses.
@@ -136,6 +137,14 @@ const ADMIN_DEFAULTS = {
     model:               null,
     max_tokens:          6000,          // cross-source narrative analysis — needs headroom
     max_task_budget_aud: 2.00,
+    fallback_model:      null,
+  },
+  'ads-setup-architect': {
+    enabled:             true,
+    model:               null,
+    max_tokens:          8192,
+    max_iterations:      20,
+    max_task_budget_aud: 3.00, // web search + multiple idea gens adds cost
     fallback_model:      null,
   },
   'ads-copy-diagnostic': {

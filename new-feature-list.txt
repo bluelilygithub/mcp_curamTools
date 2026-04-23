@@ -1,0 +1,30 @@
+ 1. The "Waste-to-Negative" Feedback Loop
+  While you have a searchTermIntelligence agent, it likely looks at Ads data alone. This agent would close the loop by looking at the CRM "Not Interested" reasons.
+   * The Problem: You are bidding on "Ceramic Coating," but a specific search term like "cheap ceramic coating" is driving leads that the sales team marks as notinterested with the reason too_expensive.
+   * The Agent: It compares wp_get_not_interested_reasons against ads_get_search_terms.
+   * The Output: A list of suggested negative keywords based on actual sales rejection data, not just low CTR.
+
+  2. The "Profitability Oracle" (True ROAS)
+  Most Ads managers optimize for Cost Per Lead (CPL). This agent optimizes for Actual Profit.
+   * The Problem: Campaign A generates leads at $50 each, and Campaign B at $100. Campaign A looks better. However, CRM data shows Campaign B leads result in $3,000 jobs, while Campaign A leads are $500 "maintenance" jobs.
+   * The Agent: It joins ads_get_campaign_performance with wp_get_enquiry_details (specifically the final_value and enquiry_status = 'completed').
+   * The Output: A "True ROAS" report that tells you to shift budget from the "high-volume/low-value" campaign to the "low-volume/high-value" one.
+
+  3. The "Post-Click Leak" Detective
+  This agent focuses on technical and behavioral friction between the click and the lead.
+   * The Problem: You have high spend on a campaign, but the CRM shows zero leads for it, even though GA4 shows high traffic.
+   * The Agent: It compares ads_get_campaign_performance (clicks) vs. ga4_get_landing_page_performance (bounce rate) vs. wp_get_enquiries (lead count).
+   * The Output: It identifies "Ghost Traffic" (high clicks, no GA4 session—suggesting a slow site) or "Friction Points" (high sessions, high bounce, no leads—suggesting the landing page form is broken or the message doesn't match the
+     ad).
+
+  4. The "Local Dominance" Strategist
+  Since ceramic coating is a physical service, geography is your most important filter.
+   * The Problem: You are spending equally across a 50km radius, but your CRM shows that people more than 20km away convert 80% less because they don't want to drive to the shop.
+   * The Agent: It extracts the location/postcode from wp_get_enquiries and compares it to Google Ads "Location" performance (if available via MCP) or GA4 geo-data.
+   * The Output: A recommendation to geofence your ads more tightly around high-converting postcodes or to increase bids in wealthy suburbs that show high final_value in the CRM.
+
+  Why these are "Core" to a new project:
+  These agents move the project from a Reporting Tool (telling you what happened) to a Business Engine (telling you how to make more money). They leverage the WordPress CRM as the "Source of Truth" for value, which is something most
+  third-party Ads tools can't do.
+
+  Which of these "funnel-closing" patterns interests you most for the next phase?

@@ -70,6 +70,14 @@ const TOOLS = [
     path:        '/tools/not-interested-report',
     roles:       ['org_admin'],
   },
+  {
+    id:          'ads-setup-architect',
+    name:        'Ads Setup Architect',
+    description: 'Generates a complete Google Ads setup blueprint — campaigns, ad groups, key terms, and copy — based on competitor analysis and Diamond Plate benchmarks.',
+    icon:        'layout',
+    path:        '/tools/ads-setup-architect',
+    roles:       ['ads_operator', 'org_admin'],
+  },
 ];
 
 /**
