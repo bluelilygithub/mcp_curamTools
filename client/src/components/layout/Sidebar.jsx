@@ -10,7 +10,7 @@ import { useIcon } from '../../providers/IconProvider';
 import NavItem from './NavItem';
 import useToolStore from '../../stores/toolStore';
 import useAuthStore from '../../stores/authStore';
-import { getPermittedTools } from '../../config/tools';
+import { getPermittedToolGroups } from '../../config/tools';
 
 export default function Sidebar({ mobileOpen, onClose }) {
   const getIcon = useIcon();
@@ -19,7 +19,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
 
   const primaryRole = user?.roles?.find((r) => r.scope_type === 'global')?.name;
   const isAdmin = primaryRole === 'org_admin';
-  const tools = getPermittedTools(primaryRole);
+  const toolGroups = getPermittedToolGroups(primaryRole);
 
   // Close mobile sidebar on keyboard Escape
   useEffect(() => {
@@ -40,7 +40,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
         </div>
 
         {/* Tools section */}
-        {tools.length > 0 && (
+        {toolGroups.length > 0 && (
           <div className="mt-2">
             {!collapsed && (
               <p
@@ -51,15 +51,27 @@ export default function Sidebar({ mobileOpen, onClose }) {
               </p>
             )}
             {collapsed && <div className="pt-3" />}
-            {tools.map((tool) => (
-              <NavItem
-                key={tool.id}
-                to={tool.path}
-                icon={tool.icon}
-                label={tool.name}
-                collapsed={collapsed}
-                onClick={onLinkClick}
-              />
+            {toolGroups.map(({ group, tools }) => (
+              <div key={group}>
+                {!collapsed && toolGroups.length > 1 && (
+                  <p
+                    className="px-3 pt-3 pb-0.5 text-xs uppercase tracking-wider"
+                    style={{ color: 'var(--color-muted)', opacity: 0.6 }}
+                  >
+                    {group}
+                  </p>
+                )}
+                {tools.map((tool) => (
+                  <NavItem
+                    key={tool.id}
+                    to={tool.path}
+                    icon={tool.icon}
+                    label={tool.name}
+                    collapsed={collapsed}
+                    onClick={onLinkClick}
+                  />
+                ))}
+              </div>
             ))}
           </div>
         )}
@@ -76,27 +88,62 @@ export default function Sidebar({ mobileOpen, onClose }) {
               </p>
             )}
             {collapsed && <div className="pt-3" />}
+
+            {/* Users & Access */}
+            {!collapsed && (
+              <p className="px-3 pt-3 pb-0.5 text-xs uppercase tracking-wider" style={{ color: 'var(--color-muted)', opacity: 0.6 }}>
+                Users & Access
+              </p>
+            )}
             <NavItem to="/admin/users" icon="users" label="Users" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/departments" icon="bookmark" label="Departments" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/org-roles" icon="tag" label="Org Roles" collapsed={collapsed} onClick={onLinkClick} />
+
+            {/* AI & MCP */}
+            {!collapsed && (
+              <p className="px-3 pt-3 pb-0.5 text-xs uppercase tracking-wider" style={{ color: 'var(--color-muted)', opacity: 0.6 }}>
+                AI & MCP
+              </p>
+            )}
             <NavItem to="/admin/models" icon="cpu" label="Models" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/providers" icon="globe" label="Providers" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/agents" icon="bot" label="Agents" collapsed={collapsed} onClick={onLinkClick} />
-            <NavItem to="/admin/settings" icon="settings" label="App Settings" collapsed={collapsed} onClick={onLinkClick} />
-            <NavItem to="/admin/email-templates" icon="mail" label="Email Templates" collapsed={collapsed} onClick={onLinkClick} />
-            <NavItem to="/admin/security" icon="shield" label="Security" collapsed={collapsed} onClick={onLinkClick} />
-            <NavItem to="/admin/usage" icon="trending-up" label="Token Usage" collapsed={collapsed} onClick={onLinkClick} />
-            <NavItem to="/admin/claude-sessions" icon="clock" label="Claude Sessions" collapsed={collapsed} onClick={onLinkClick} />
-            <NavItem to="/admin/logs" icon="activity" label="Logs" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/mcp-servers" icon="server" label="MCP Servers" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/mcp-resources" icon="layers" label="MCP Resources" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/prompts" icon="file-text" label="MCP Prompts" collapsed={collapsed} onClick={onLinkClick} />
-            <NavItem to="/admin/diagnostics" icon="zap" label="Diagnostics" collapsed={collapsed} onClick={onLinkClick} />
-            <NavItem to="/admin/sql" icon="database" label="SQL Console" collapsed={collapsed} onClick={onLinkClick} />
-            <NavItem to="/admin/departments" icon="bookmark" label="Departments" collapsed={collapsed} onClick={onLinkClick} />
-            <NavItem to="/admin/org-roles" icon="tag" label="Org Roles" collapsed={collapsed} onClick={onLinkClick} />
-            <NavItem to="/admin/data-privacy" icon="eye-off" label="Data Privacy" collapsed={collapsed} onClick={onLinkClick} />
-            <NavItem to="/admin/storage" icon="archive" label="File Storage" collapsed={collapsed} onClick={onLinkClick} />
+
+            {/* Content */}
+            {!collapsed && (
+              <p className="px-3 pt-3 pb-0.5 text-xs uppercase tracking-wider" style={{ color: 'var(--color-muted)', opacity: 0.6 }}>
+                Content
+              </p>
+            )}
+            <NavItem to="/admin/email-templates" icon="mail" label="Email Templates" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/knowledge" icon="book-open" label="Knowledge Base" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/competitors" icon="target" label="Competitors" collapsed={collapsed} onClick={onLinkClick} />
+
+            {/* Monitoring */}
+            {!collapsed && (
+              <p className="px-3 pt-3 pb-0.5 text-xs uppercase tracking-wider" style={{ color: 'var(--color-muted)', opacity: 0.6 }}>
+                Monitoring
+              </p>
+            )}
+            <NavItem to="/admin/usage" icon="trending-up" label="Token Usage" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/claude-sessions" icon="clock" label="Claude Sessions" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/logs" icon="activity" label="Logs" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/diagnostics" icon="zap" label="Diagnostics" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/sql" icon="database" label="SQL Console" collapsed={collapsed} onClick={onLinkClick} />
+
+            {/* System */}
+            {!collapsed && (
+              <p className="px-3 pt-3 pb-0.5 text-xs uppercase tracking-wider" style={{ color: 'var(--color-muted)', opacity: 0.6 }}>
+                System
+              </p>
+            )}
+            <NavItem to="/admin/settings" icon="settings" label="App Settings" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/security" icon="shield" label="Security" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/data-privacy" icon="eye-off" label="Data Privacy" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/storage" icon="archive" label="File Storage" collapsed={collapsed} onClick={onLinkClick} />
           </div>
         )}
       </div>

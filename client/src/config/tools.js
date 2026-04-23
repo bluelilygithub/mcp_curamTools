@@ -14,6 +14,7 @@
  */
 
 const TOOLS = [
+  // ── Google Ads ────────────────────────────────────────────────────────────
   {
     id:          'google-ads-monitor',
     name:        'Google Ads Monitor',
@@ -21,14 +22,7 @@ const TOOLS = [
     icon:        'bar-chart',
     path:        '/tools/google-ads-monitor',
     roles:       ['ads_operator', 'org_admin'],
-  },
-  {
-    id:          'diamondplate-data',
-    name:        'DiamondPlate Data',
-    description: 'CRM lead intelligence — analyse enquiry volume, conversion patterns, channel attribution, and why leads don\'t convert.',
-    icon:        'trending-up',
-    path:        '/tools/diamondplate-data',
-    roles:       ['org_member', 'org_admin'],
+    group:       'Google Ads',
   },
   {
     id:          'ai-visibility-monitor',
@@ -37,22 +31,7 @@ const TOOLS = [
     icon:        'eye',
     path:        '/tools/google-ads-monitor?tab=ai-visibility',
     roles:       ['org_member', 'org_admin'],
-  },
-  {
-    id:          'doc-extractor',
-    name:        'Document Extractor',
-    description: 'Upload any image document and extract structured fields using Claude Vision. Compare accuracy across AI providers.',
-    icon:        'file-text',
-    path:        '/tools/doc-extractor',
-    roles:       ['org_member', 'org_admin'],
-  },
-  {
-    id:          'media-gen',
-    name:        'Media Generator',
-    description: 'Generate images and videos using Fal.ai models. Provide a text prompt and optional reference image to create AI-generated media.',
-    icon:        'film',
-    path:        '/tools/media-gen',
-    roles:       ['org_member', 'org_admin'],
+    group:       'Google Ads',
   },
   {
     id:          'high-intent-advisor',
@@ -61,6 +40,7 @@ const TOOLS = [
     icon:        'target',
     path:        '/tools/high-intent-advisor',
     roles:       ['org_admin'],
+    group:       'Google Ads',
   },
   {
     id:          'not-interested-report',
@@ -69,6 +49,7 @@ const TOOLS = [
     icon:        'alert-circle',
     path:        '/tools/not-interested-report',
     roles:       ['org_admin'],
+    group:       'Google Ads',
   },
   {
     id:          'ads-setup-architect',
@@ -77,16 +58,62 @@ const TOOLS = [
     icon:        'layout',
     path:        '/tools/ads-setup-architect',
     roles:       ['ads_operator', 'org_admin'],
+    group:       'Google Ads',
+  },
+  // ── CRM ──────────────────────────────────────────────────────────────────
+  {
+    id:          'diamondplate-data',
+    name:        'DiamondPlate Data',
+    description: 'CRM lead intelligence — analyse enquiry volume, conversion patterns, channel attribution, and why leads don\'t convert.',
+    icon:        'trending-up',
+    path:        '/tools/diamondplate-data',
+    roles:       ['org_member', 'org_admin'],
+    group:       'CRM',
+  },
+  // ── Utilities ─────────────────────────────────────────────────────────────
+  {
+    id:          'doc-extractor',
+    name:        'Document Extractor',
+    description: 'Upload any image document and extract structured fields using Claude Vision. Compare accuracy across AI providers.',
+    icon:        'file-text',
+    path:        '/tools/doc-extractor',
+    roles:       ['org_member', 'org_admin'],
+    group:       'Utilities',
+  },
+  {
+    id:          'media-gen',
+    name:        'Media Generator',
+    description: 'Generate images and videos using Fal.ai models. Provide a text prompt and optional reference image to create AI-generated media.',
+    icon:        'film',
+    path:        '/tools/media-gen',
+    roles:       ['org_member', 'org_admin'],
+    group:       'Utilities',
   },
 ];
 
 /**
- * Return tools the given role may access.
+ * Return tools the given role may access (flat array).
  * org_admin always sees all tools.
  */
 export function getPermittedTools(roleName) {
   if (roleName === 'org_admin') return TOOLS;
   return TOOLS.filter((t) => t.roles.includes(roleName) || t.roles.includes('org_member'));
+}
+
+/**
+ * Return permitted tools grouped by their `group` field.
+ * Preserves the order tools appear in TOOLS (first occurrence of a group sets its position).
+ */
+export function getPermittedToolGroups(roleName) {
+  const permitted = getPermittedTools(roleName);
+  const order = [];
+  const map = {};
+  for (const tool of permitted) {
+    const g = tool.group ?? 'Other';
+    if (!map[g]) { map[g] = []; order.push(g); }
+    map[g].push(tool);
+  }
+  return order.map((g) => ({ group: g, tools: map[g] }));
 }
 
 export default TOOLS;
