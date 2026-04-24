@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Tooltip } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap } from 'react-leaflet';
 import api from '../../../api/client';
 import MarkdownRenderer from '../../../components/ui/MarkdownRenderer';
 import InlineBanner from '../../../components/ui/InlineBanner';
+
+function InvalidateSize({ fullscreen }) {
+  const map = useMap();
+  useEffect(() => { map.invalidateSize(); }, [fullscreen, map]);
+  return null;
+}
 
 const AGENT_SLUG = 'geo-heatmap';
 const AU_CENTER  = [-27.0, 133.8];
@@ -263,6 +269,7 @@ export default function GeoHeatmapTab({ startDate, endDate }) {
               style={{ height: '100%', width: '100%' }}
               scrollWheelZoom
             >
+              <InvalidateSize fullscreen={fullscreen} />
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
                 url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
