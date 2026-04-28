@@ -10,6 +10,17 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../../api/client';
 import LineChart from '../../components/charts/LineChart';
 import BarChart from '../../components/charts/BarChart';
+import {
+  BarChart as ReBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+  Cell,
+} from 'recharts';
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -180,13 +191,273 @@ function AlgorithmNote() {
   );
 }
 
+// ── ROI Section ───────────────────────────────────────────────────────────────
+
+const TOOLTIP_STYLE = {
+  background:   'var(--color-surface, #1e293b)',
+  border:       '1px solid var(--color-border, #334155)',
+  borderRadius: 8,
+  color:        'var(--color-text, #f1f5f9)',
+  fontSize:     12,
+  fontFamily:   'inherit',
+};
+
+const INDUSTRY_ROAS  = 3.5;
+const TARGET_ROAS    = 5.56; // 50000 / 9000 (ads + mgmt)
+
+function fmtMonthLabel(m) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const [y, mo] = m.split('-');
+  return `${months[parseInt(mo, 10) - 1]} '${y.slice(2)}`;
+}
+
+function roasBarColor(roas) {
+  if (roas === null) return 'var(--color-border)';
+  if (roas >= TARGET_ROAS)   return '#10b981';
+  if (roas >= INDUSTRY_ROAS) return '#f59e0b';
+  return '#ef4444';
+}
+
+function RoiSection({ roiData, loading, error }) {
+  if (loading) {
+    return (
+      <div style={{ ...cardStyle, textAlign: 'center', padding: '32px', color: 'var(--color-muted)', fontSize: 13 }}>
+        Loading ROI data…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div style={{ ...cardStyle, borderLeft: '3px solid #ef4444' }}>
+        <p style={{ fontSize: 13, color: '#ef4444', fontFamily: 'inherit' }}>
+          ROI data error: {error}
+        </p>
+      </div>
+    );
+  }
+  if (!roiData) return null;
+
+  const { monthly = [], totals = {}, meta = {} } = roiData;
+  const chartData = monthly.map((m) => ({ ...m, label: fmtMonthLabel(m.month) }));
+
+  const roasChartData = chartData.map((m) => ({
+    label:        m.label,
+    roas:         m.roas,
+    industryRoas: INDUSTRY_ROAS,
+    targetRoas:   TARGET_ROAS,
+  }));
+
+  const noRevenue = !meta.wordpressAvailable || totals.revenue === 0;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+
+      {/* Section header */}
+      <div style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: 10, marginBottom: 2 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)', fontFamily: 'inherit', margin: 0 }}>
+          ROI &amp; Value for Money
+        </h2>
+        <p style={{ fontSize: 12, color: 'var(--color-muted)', marginTop: 4, fontFamily: 'inherit' }}>
+          Total investment (ad spend + $1,500/mo management) vs actual CRM revenue vs industry benchmark.
+          Industry: Car Detailing AU Google Ads avg 3–5× ROAS (3.5× conservative). Target: $50k/mo revenue.
+        </p>
+      </div>
+
+      {/* WordPress unavailable warning */}
+      {!meta.wordpressAvailable && (
+        <div style={{ ...cardStyle, borderLeft: '3px solid #f59e0b', background: 'rgba(245,158,11,0.06)', padding: '12px 16px' }}>
+          <p style={{ fontSize: 13, color: '#d97706', fontFamily: 'inherit' }}>
+            WordPress CRM not connected — revenue data unavailable. Cost and ROAS bars reflect ad spend only.
+            Connect the WordPress MCP server in Admin › MCP Servers to show actual revenue.
+          </p>
+        </div>
+      )}
+
+      {/* KPI tiles */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+        <KpiTile
+          label="Total Investment"
+          value={fmtAud(totals.totalCost)}
+          sub={`Ad spend $${Math.round(totals.adSpend).toLocaleString('en-AU')} + mgmt $${Math.round(totals.mgmtFee).toLocaleString('en-AU')}`}
+          accent="var(--color-primary)"
+        />
+        <KpiTile
+          label="Actual Revenue (CRM)"
+          value={noRevenue ? 'No data' : fmtAud(totals.revenue)}
+          sub={noRevenue ? 'final_value not available' : `${meta.months} months of enquiries`}
+          accent={noRevenue ? 'var(--color-border)' : '#10b981'}
+        />
+        <KpiTile
+          label="Actual ROAS"
+          value={totals.periodRoas != null ? `${totals.periodRoas}×` : '—'}
+          sub={`Industry avg: ${INDUSTRY_ROAS}× | Target: ${TARGET_ROAS}×`}
+          accent={
+            totals.periodRoas == null     ? undefined
+            : totals.periodRoas >= TARGET_ROAS   ? '#10b981'
+            : totals.periodRoas >= INDUSTRY_ROAS ? '#f59e0b'
+            : '#ef4444'
+          }
+        />
+        <KpiTile
+          label="Net Return"
+          value={totals.revenue > 0 ? fmtAud(totals.netReturn) : '—'}
+          sub="Revenue minus total investment"
+          accent={totals.revenue > 0 ? (totals.netReturn > 0 ? '#10b981' : '#ef4444') : 'var(--color-border)'}
+        />
+        <KpiTile
+          label="vs $50k/mo Target"
+          value={
+            totals.revenue > 0
+              ? `${totals.revenueGap >= 0 ? '+' : ''}${fmtAud(totals.revenueGap)}`
+              : '—'
+          }
+          sub={`Target: ${fmtAud(50000 * meta.months)} over ${meta.months} months`}
+          accent={totals.revenue > 0 ? (totals.revenueGap >= 0 ? '#10b981' : '#ef4444') : 'var(--color-border)'}
+        />
+        <KpiTile
+          label="Industry Benchmark Rev"
+          value={fmtAud(totals.totalCost * INDUSTRY_ROAS)}
+          sub={`${INDUSTRY_ROAS}× of total cost — industry expectation`}
+          accent="#6366f1"
+        />
+      </div>
+
+      {/* Revenue vs Investment chart */}
+      <div style={cardStyle}>
+        <p style={sectionHeadStyle}>Monthly Revenue vs Investment</p>
+        <p style={{ ...subStyle, marginBottom: 10 }}>
+          Stacked bars show total monthly investment (ad spend + management fee).
+          Revenue bar shows actual CRM final_value for enquiries in that month.
+          Industry benchmark revenue = 3.5× total cost. Target = $50,000/mo.
+        </p>
+        <Legend items={[
+          { color: '#6366f1', label: 'Ad Spend' },
+          { color: '#8b5cf6', label: 'Management Fee ($1,500/mo)' },
+          { color: '#10b981', label: 'Actual Revenue (CRM)' },
+        ]} />
+        <ResponsiveContainer width="100%" height={260}>
+          <ReBarChart
+            data={chartData}
+            margin={{ top: 8, right: 80, bottom: 4, left: 8 }}
+            barGap={6}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.5} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--color-muted)', fontFamily: 'inherit' }} />
+            <YAxis
+              tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+              tick={{ fontSize: 11, fill: 'var(--color-muted)', fontFamily: 'inherit' }}
+              width={48}
+            />
+            <Tooltip
+              contentStyle={TOOLTIP_STYLE}
+              formatter={(val, name) => [`$${Math.round(val).toLocaleString('en-AU')}`, name]}
+            />
+            {/* Stacked investment bars */}
+            <Bar dataKey="adSpend"  stackId="cost" fill="#6366f1" name="Ad Spend"         maxBarSize={48} />
+            <Bar dataKey="mgmtFee"  stackId="cost" fill="#8b5cf6" name="Management Fee"   maxBarSize={48} radius={[3,3,0,0]} />
+            {/* Revenue bar — separate group */}
+            <Bar dataKey="revenue"  fill="#10b981"  name="Actual Revenue"                 maxBarSize={48} radius={[3,3,0,0]} />
+            {/* Reference lines */}
+            <ReferenceLine
+              y={50000}
+              stroke="#f59e0b"
+              strokeDasharray="6 3"
+              strokeWidth={1.5}
+              label={{ value: 'Target $50k', position: 'right', fontSize: 11, fill: '#f59e0b', fontFamily: 'inherit' }}
+            />
+          </ReBarChart>
+        </ResponsiveContainer>
+        {noRevenue && (
+          <p style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 6, fontFamily: 'inherit' }}>
+            Revenue bars are $0 — WordPress CRM final_value data not available for this period.
+          </p>
+        )}
+      </div>
+
+      {/* ROAS comparison chart */}
+      <div style={cardStyle}>
+        <p style={sectionHeadStyle}>Monthly ROAS vs Benchmarks</p>
+        <p style={{ ...subStyle, marginBottom: 10 }}>
+          Return on total investment (revenue ÷ total cost including management fee).
+          Green = above target ({TARGET_ROAS}×). Amber = above industry average ({INDUSTRY_ROAS}×). Red = below industry average.
+        </p>
+        <Legend items={[
+          { color: '#10b981', label: `Above target (≥${TARGET_ROAS}×)` },
+          { color: '#f59e0b', label: `Above industry avg (${INDUSTRY_ROAS}–${TARGET_ROAS}×)` },
+          { color: '#ef4444', label: `Below industry avg (<${INDUSTRY_ROAS}×)` },
+          { color: '#f59e0b', label: `Industry benchmark line (${INDUSTRY_ROAS}×)` },
+          { color: '#10b981', label: `Target line (~${TARGET_ROAS}×)` },
+        ]} />
+        <ResponsiveContainer width="100%" height={220}>
+          <ReBarChart data={roasChartData} margin={{ top: 8, right: 80, bottom: 4, left: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.5} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--color-muted)', fontFamily: 'inherit' }} />
+            <YAxis
+              tickFormatter={(v) => `${v}×`}
+              tick={{ fontSize: 11, fill: 'var(--color-muted)', fontFamily: 'inherit' }}
+              width={36}
+            />
+            <Tooltip
+              contentStyle={TOOLTIP_STYLE}
+              formatter={(val, name) => {
+                if (name === 'roas') return [`${val !== null ? val + '×' : 'No data'}`, 'Actual ROAS'];
+                return [null, null]; // hide benchmark keys from tooltip
+              }}
+            />
+            <Bar dataKey="roas" name="roas" maxBarSize={48} radius={[3,3,0,0]}>
+              {roasChartData.map((entry, i) => (
+                <Cell key={i} fill={roasBarColor(entry.roas)} />
+              ))}
+            </Bar>
+            <ReferenceLine
+              y={INDUSTRY_ROAS}
+              stroke="#f59e0b"
+              strokeDasharray="6 3"
+              strokeWidth={1.5}
+              label={{ value: `Industry ${INDUSTRY_ROAS}×`, position: 'right', fontSize: 11, fill: '#f59e0b', fontFamily: 'inherit' }}
+            />
+            <ReferenceLine
+              y={TARGET_ROAS}
+              stroke="#10b981"
+              strokeDasharray="6 3"
+              strokeWidth={1.5}
+              label={{ value: `Target ${TARGET_ROAS}×`, position: 'right', fontSize: 11, fill: '#10b981', fontFamily: 'inherit' }}
+            />
+          </ReBarChart>
+        </ResponsiveContainer>
+        {noRevenue && (
+          <p style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 6, fontFamily: 'inherit' }}>
+            ROAS bars unavailable — requires revenue data from WordPress CRM.
+          </p>
+        )}
+      </div>
+
+      {/* Methodology note */}
+      <div style={{ ...cardStyle, background: 'rgba(99,102,241,0.04)', borderLeft: '3px solid #6366f1', padding: '12px 16px' }}>
+        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)', fontFamily: 'inherit', marginBottom: 4 }}>Methodology</p>
+        <p style={{ fontSize: 12, color: 'var(--color-muted)', lineHeight: 1.6, fontFamily: 'inherit' }}>
+          <strong>Investment:</strong> Google Ads spend (actual) + $1,500/mo management fee (prorated for partial months). &nbsp;
+          <strong>Revenue:</strong> Sum of <code>final_value</code> on <code>clientenquiry</code> CRM records within the period, by enquiry submission date.
+          Jobs invoiced after period end will not appear in their enquiry month — recent months may be understated.
+          Only enquiries with a recorded <code>final_value</code> are counted. &nbsp;
+          <strong>Industry benchmark:</strong> Car Detailing / Auto Detailing AU, Google Ads average 3–5× ROAS (WordStream).
+          3.5× used as the conservative lower bound.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CampaignDashboardPage() {
-  const [data,    setData]    = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(null);
-  const [days,    setDays]    = useState(90);
+  const [data,      setData]      = useState(null);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState(null);
+  const [roiData,   setRoiData]   = useState(null);
+  const [roiLoading, setRoiLoading] = useState(true);
+  const [roiError,  setRoiError]  = useState(null);
+  const [days,      setDays]      = useState(90);
 
   const load = useCallback(async (d) => {
     setLoading(true);
@@ -201,7 +472,21 @@ export default function CampaignDashboardPage() {
     }
   }, []);
 
-  useEffect(() => { load(days); }, [load, days]);
+  const loadRoi = useCallback(async (d) => {
+    setRoiLoading(true);
+    setRoiError(null);
+    try {
+      const result = await api.get(`/dashboard/roi-analysis?days=${d}`);
+      setRoiData(result);
+    } catch (e) {
+      setRoiError(e.message ?? 'Failed to load ROI data');
+    } finally {
+      setRoiLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(days);    }, [load,    days]);
+  useEffect(() => { loadRoi(days); }, [loadRoi, days]);
 
   // ── Derived data ────────────────────────────────────────────────────────────
 
@@ -561,6 +846,11 @@ export default function CampaignDashboardPage() {
           </div>
         </>
       )}
+
+      {/* ── ROI Analysis section — always shown, loads independently ────── */}
+      <div style={{ marginTop: 24, borderTop: '1px solid var(--color-border)', paddingTop: 24 }}>
+        <RoiSection roiData={roiData} loading={roiLoading} error={roiError} />
+      </div>
     </div>
   );
 }

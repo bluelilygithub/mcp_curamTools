@@ -25,6 +25,33 @@
 
 ---
 
+## 2026-04-29 — ROI Analysis: actual revenue vs investment vs industry benchmark chart
+
+### Built
+
+**ROI Analysis section — added to Campaign Dashboard (bottom of page)**
+- `server/routes/dashboard.js` — new `GET /api/dashboard/roi-analysis?days=` endpoint.
+  Fetches Google Ads daily performance (spend) and WordPress `wp_get_enquiry_details` (final_value) in parallel via MCPRegistry. Aggregates by calendar month. Calculates total investment (ad spend + prorated $1,500/mo management fee), actual CRM revenue, ROAS, vs industry benchmark vs target.
+- Revenue source: `final_value` from `clientenquiry` post type in WordPress CRM, by enquiry submission date. Only records with a recorded final_value are counted.
+- Management fee: $1,500/mo, prorated by calendar days covered for partial months at range boundaries.
+- Industry benchmark: Car Detailing / Auto Detailing AU, Google Ads average 3–5× ROAS (WordStream). 3.5× used as conservative lower bound.
+- Revenue target: $50,000/mo (stated).
+- WordPress gracefully unavailable: if WP MCP server not connected, returns `wordpressAvailable: false` — cost bars still display, revenue/ROAS bars show zero with explanatory note.
+
+**ROI section charts (inline Recharts — `ReferenceLine` required, not in BarChart wrapper):**
+- 6 KPI tiles: total investment, actual revenue, actual ROAS (colour-coded vs benchmarks), net return, vs $50k/mo target, industry benchmark revenue
+- Monthly Revenue vs Investment: stacked bar (ad spend + management fee) alongside actual revenue bar; $50k target reference line
+- Monthly ROAS: bar chart colour-coded green/amber/red; industry 3.5× reference line; target 5.56× reference line (50000/9000)
+- Methodology note: explains revenue calculation caveat (recent months may be understated as jobs complete after enquiry date)
+
+**Date range filtering:** ROI section uses same `days` preset (30d/60d/90d) as the rest of the dashboard; loads in parallel independently so WordPress delays don't block Google Ads charts.
+
+### Open / next
+- Profitability Oracle (True ROAS) — cross-source revenue attribution (ad campaign → CRM final_value) for per-campaign ROAS.
+- PDF export button for full management pack distribution.
+
+---
+
 ## 2026-04-29 — Campaign Dashboard: management chart view of 90-day Google Ads performance
 
 ### Built
