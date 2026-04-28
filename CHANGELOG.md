@@ -36,6 +36,8 @@
 ### Open / next
 - Test image-to-video and image-to-image models end-to-end with reference image after Railway redeploy.
 
+**Further fix (same session):** fal.ai models silently ignore base64 data URLs in `image_url` — generate from prompt only, image is discarded. Real fix: upload reference image to S3 via existing `StorageService`, pass 1-hour pre-signed URL. Fal.ai fetches it normally over HTTPS. Requires `AWS_S3_BUCKET` configured (env or Admin › Storage). `getImageUrl()` replaces `uploadToFalStorage()` and `imageToDataUrl()`. Commit `e45c3d2`.
+
 ---
 
 ## 2026-04-23 — Geo Heatmap: geographic lead intelligence map for DiamondPlate Data
