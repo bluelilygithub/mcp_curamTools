@@ -15,7 +15,7 @@
  *   Submit:  POST  https://queue.fal.run/{model}
  *   Status:  GET   https://queue.fal.run/{model}/requests/{id}/status
  *   Result:  GET   https://queue.fal.run/{model}/requests/{id}
- *   Storage: POST  https://storage.fal.run   (multipart, returns { url })
+ *   Images: passed as base64 data URLs directly in the payload (storage.fal.* DNS unreachable on Railway)
  */
 
 const https   = require('https');
@@ -116,55 +116,11 @@ function falJson(method, hostname, path, apiKey, bodyObj) {
 }
 
 /**
- * Upload an image buffer to Fal.ai storage.
- * Returns the CDN URL string.
+ * Convert image buffer to base64 data URL.
+ * Fal.ai models accept data URLs in image_url — avoids storage.fal.* DNS issues on Railway.
  */
-function uploadToFalStorage(buffer, mimetype, apiKey) {
-  return new Promise((resolve, reject) => {
-    const ext      = (mimetype.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
-    const filename = `reference.${ext}`;
-    const boundary = `FalBoundary${Date.now()}`;
-
-    const hdr  = Buffer.from(
-      `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
-      `Content-Type: ${mimetype}\r\n\r\n`,
-    );
-    const ftr  = Buffer.from(`\r\n--${boundary}--\r\n`);
-    const body = Buffer.concat([hdr, buffer, ftr]);
-
-    const req = https.request(
-      {
-        hostname: 'storage.fal.ai',
-        path: '/',
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${apiKey}`,
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
-          'Content-Length': body.length,
-        },
-      },
-      (res) => {
-        const chunks = [];
-        res.on('data', (c) => chunks.push(c));
-        res.on('end', () => {
-          const raw = Buffer.concat(chunks).toString();
-          if (res.statusCode >= 400) {
-            return reject(new Error(`Fal.ai storage upload failed (HTTP ${res.statusCode}): ${raw.slice(0, 200)}`));
-          }
-          try {
-            const parsed = JSON.parse(raw);
-            resolve(parsed.url || parsed.file_url || null);
-          } catch {
-            reject(new Error('Unexpected response from Fal.ai storage'));
-          }
-        });
-      },
-    );
-    req.on('error', reject);
-    req.write(body);
-    req.end();
-  });
+function imageToDataUrl(buffer, mimetype) {
+  return `data:${mimetype};base64,${buffer.toString('base64')}`;
 }
 
 /**
@@ -432,12 +388,12 @@ router.post(
     let runId = null;
 
     try {
-      // 1. Upload reference image if provided
+      // 1. Convert reference image to data URL if provided
       let imageUrl = null;
       if (req.file) {
-        sseWrite(res, { type: 'status', message: 'Uploading reference image to Fal.ai…' });
-        imageUrl = await uploadToFalStorage(req.file.buffer, req.file.mimetype, apiKey);
-        sseWrite(res, { type: 'status', message: 'Reference image uploaded.' });
+        sseWrite(res, { type: 'status', message: 'Preparing reference image…' });
+        imageUrl = imageToDataUrl(req.file.buffer, req.file.mimetype);
+        sseWrite(res, { type: 'status', message: 'Reference image ready.' });
       }
 
       // 2. Build payload and submit
