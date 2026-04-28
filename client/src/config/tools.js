@@ -34,6 +34,15 @@ const TOOLS = [
     group:       'Google Ads',
   },
   {
+    id:          'campaign-dashboard',
+    name:        'Campaign Dashboard',
+    description: 'Management view of Google Ads performance — spend, conversions, impression share, and search terms over the last 3 months.',
+    icon:        'bar-chart',
+    path:        '/tools/campaign-dashboard',
+    roles:       ['ads_operator', 'org_admin'],
+    group:       'Google Ads',
+  },
+  {
     id:          'high-intent-advisor',
     name:        'High Intent Advisor',
     description: 'Daily suggestions for attracting high-intent customers based on your ad, analytics, and CRM data.',

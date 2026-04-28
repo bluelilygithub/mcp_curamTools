@@ -668,6 +668,17 @@ All inline styles include `fontFamily: 'inherit'` to respect the user's platform
 
 ---
 
+### /api/dashboard — Direct-Service Route Pattern for Pure Data Dashboards
+**Date:** 2026-04-29
+**Status:** Settled
+**Context:** The management campaign dashboard requires data from multiple `GoogleAdsService` methods in one page load, but does not need AI analysis. Running a full agent (SSE stream, `AgentOrchestrator`, `persistRun`, tool-call loop) purely to fetch and return data is wasteful — it adds latency, token cost, and `agent_runs` history rows for a non-analytical operation.
+**Decision:** A dedicated `server/routes/dashboard.js` module mounted at `/api/dashboard` calls `GoogleAdsService` methods directly via `Promise.all` and returns the full payload as JSON in a single HTTP response. No MCP round-trip, no agent lifecycle, no AI cost. Auth-gated via `requireAuth` only — no `org_admin` restriction, consistent with other tool pages.
+**Rationale:** The pre-fetch pattern in `server/CLAUDE.md` documents the same principle for agents: if you can enumerate all required data before running Claude, don't use a ReAct loop. The same logic applies when no Claude call is needed at all — skip the agent entirely and call the service directly. A plain route is the correct primitive for read-only aggregated data with no AI step.
+**Constraints it must not violate:** `/api/dashboard` routes must never call `persistRun`, `AgentOrchestrator`, or `createAgentRoute`. They are data-fetching routes, not agent routes. `googleAdsService` (the singleton) is importable from `server/services/GoogleAdsService.js` — do not instantiate a new `GoogleAdsService()` in the route. If a dashboard route ever needs AI analysis, the correct path is a pre-fetch agent, not adding a Claude call to a dashboard route.
+**References:** `server/routes/dashboard.js`; `client/src/pages/tools/CampaignDashboardPage.jsx`; `server/CLAUDE.md` (pre-fetch pattern).
+
+---
+
 ## Open Questions
 
 _(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_

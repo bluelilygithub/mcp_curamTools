@@ -25,6 +25,40 @@
 
 ---
 
+## 2026-04-29 — Campaign Dashboard: management chart view of 90-day Google Ads performance
+
+### Built
+
+**Campaign Dashboard — new tool at `/tools/campaign-dashboard`**
+- `server/routes/dashboard.js` — new `GET /api/dashboard/campaign-performance?days=` endpoint. Calls 5 `GoogleAdsService` methods in parallel (`getCampaignPerformance`, `getDailyPerformance`, `getSearchTerms`, `getBudgetPacing`, `getImpressionShareByCampaign`) and returns all data in one JSON response. Auth-gated (`requireAuth`), no agent/MCP overhead.
+- `client/src/pages/tools/CampaignDashboardPage.jsx` — management-ready single-page dashboard. No AI runs required — pure data visualisation.
+- Registered in `client/src/config/tools.js` (Google Ads group, `ads_operator` + `org_admin`).
+- Wired in `App.jsx` and `server/index.js`.
+
+**Charts included:**
+- 5 KPI tiles: total spend, total conversions, avg CPA, avg CTR, revenue context (~$50k/mo avg, 6.7× ROAS)
+- Daily spend vs conversions trend (LineChart, 90-day overlay)
+- Ad spend by campaign (horizontal BarChart, sorted spend desc)
+- Conversions by campaign (horizontal BarChart)
+- CPA by campaign (horizontal BarChart, worst first — flags high-cost campaigns)
+- CTR by campaign (horizontal BarChart, lowest first — copy review targets)
+- Impression share breakdown per campaign (grouped BarChart: IS%, lost-to-rank%, lost-to-budget%)
+- Budget pacing current month (grouped BarChart: budget vs spent-to-date)
+- Top 15 converting search terms (horizontal BarChart)
+- Monthly spend vs $50k revenue benchmark (LineChart)
+
+**Management context built in:**
+- Context banner: AU small-population market, $7,500/mo spend, ~$50k/mo avg revenue, 6.7× ROAS
+- Algorithm sensitivity note: explains why apparent loss-leaders are intentional — previous negative keyword / location tightening disrupted algorithmic trust and caused ~50% traffic loss
+
+**Preset selector:** 30d / 60d / 90d (defaults 90d).
+
+### Open / next
+- Profitability Oracle (True ROAS) — cross-references CRM `final_value` with ad spend per campaign for actual revenue-based ROAS, not estimated.
+- Consider PDF export button on campaign dashboard for management pack distribution.
+
+---
+
 ## 2026-04-28 — Media Gen: fix reference image upload for image-to-video/image models
 
 ### Fixed / discovered

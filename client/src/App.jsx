@@ -37,6 +37,7 @@ import MediaGenPage              from './pages/tools/MediaGenPage';
 import HighIntentAdvisorPage     from './pages/tools/HighIntentAdvisorPage';
 import NotInterestedReportPage   from './pages/tools/NotInterestedReportPage';
 import AdsSetupArchitectPage     from './pages/profitabilitySuite/adsSetupArchitect/AdsSetupArchitectPage';
+import CampaignDashboardPage     from './pages/tools/CampaignDashboardPage';
 
 export default function App() {
   return (
@@ -63,6 +64,7 @@ export default function App() {
                 <Route path="/tools/high-intent-advisor"   element={<HighIntentAdvisorPage />} />
                 <Route path="/tools/not-interested-report" element={<NotInterestedReportPage />} />
                 <Route path="/tools/ads-setup-architect"   element={<AdsSetupArchitectPage />} />
+                <Route path="/tools/campaign-dashboard"    element={<CampaignDashboardPage />} />
 
                 {/* Admin-only */}
                 <Route element={<RequireRole allowedRoles={['org_admin']} />}>
