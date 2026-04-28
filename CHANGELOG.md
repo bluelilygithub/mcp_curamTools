@@ -25,15 +25,16 @@
 
 ---
 
-## 2026-04-28 — Media Gen: fix image upload DNS failure
+## 2026-04-28 — Media Gen: fix reference image upload for image-to-video/image models
 
 ### Fixed / discovered
-- `storage.fal.run` does not resolve via DNS — fal.ai's storage endpoint is `storage.fal.ai`.
-- All image-to-video and image-to-image models were failing with `getaddrinfo ENOTFOUND storage.fal.run` whenever a reference image was uploaded.
-- Fixed: `server/routes/mediaGen.js` line 139 — `hostname: 'storage.fal.run'` → `hostname: 'storage.fal.ai'`.
+- Both `storage.fal.run` and `storage.fal.ai` fail DNS resolution on Railway — fal.ai's storage subdomain is unreachable from Railway's network.
+- All image-to-video and image-to-image models were failing with `getaddrinfo ENOTFOUND` whenever a reference image was uploaded.
+- Fix: removed `uploadToFalStorage()` entirely. Reference image is now converted to a base64 data URL locally and passed directly in the `image_url` payload field. Fal.ai models accept data URLs — no storage upload needed.
+- `server/routes/mediaGen.js` — replaced multipart upload function with `imageToDataUrl(buffer, mimetype)`.
 
 ### Open / next
-- Test image-to-video and image-to-image models end-to-end with reference image.
+- Test image-to-video and image-to-image models end-to-end with reference image after Railway redeploy.
 
 ---
 
