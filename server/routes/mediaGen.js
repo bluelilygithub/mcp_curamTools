@@ -116,11 +116,26 @@ function falJson(method, hostname, path, apiKey, bodyObj) {
 }
 
 /**
- * Convert image buffer to base64 data URL.
- * Fal.ai models accept data URLs in image_url — avoids storage.fal.* DNS issues on Railway.
+ * Upload reference image for fal.ai.
+ * storage.fal.run and storage.fal.ai both fail DNS on Railway.
+ * Falls back to S3 pre-signed URL (1h expiry) which fal.ai can fetch normally.
  */
-function imageToDataUrl(buffer, mimetype) {
-  return `data:${mimetype};base64,${buffer.toString('base64')}`;
+async function getImageUrl(buffer, mimetype, orgId) {
+  const AgentConfigService = require('../platform/AgentConfigService');
+  const StorageService     = require('../services/StorageService');
+  const settings = await AgentConfigService.getStorageSettings(orgId);
+  const bucket   = settings.aws_bucket ?? process.env.AWS_S3_BUCKET;
+  const region   = settings.aws_region ?? process.env.AWS_S3_REGION ?? 'ap-southeast-2';
+
+  if (!bucket) {
+    throw new Error('Reference image upload requires S3 storage. Configure AWS_S3_BUCKET in Admin › Storage or environment variables.');
+  }
+
+  const ext = (mimetype.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+  const key = `org/${orgId}/media-gen/ref-${Date.now()}.${ext}`;
+  await StorageService.put({ bucket, region, key, body: buffer, contentType: mimetype });
+  const { url } = await StorageService.getSignedDownloadUrl({ bucket, region, key, expiresIn: 3600 });
+  return url;
 }
 
 /**
@@ -388,12 +403,12 @@ router.post(
     let runId = null;
 
     try {
-      // 1. Convert reference image to data URL if provided
+      // 1. Upload reference image to S3 and get a pre-signed URL fal.ai can fetch
       let imageUrl = null;
       if (req.file) {
-        sseWrite(res, { type: 'status', message: 'Preparing reference image…' });
-        imageUrl = imageToDataUrl(req.file.buffer, req.file.mimetype);
-        sseWrite(res, { type: 'status', message: 'Reference image ready.' });
+        sseWrite(res, { type: 'status', message: 'Uploading reference image…' });
+        imageUrl = await getImageUrl(req.file.buffer, req.file.mimetype, orgId);
+        sseWrite(res, { type: 'status', message: 'Reference image uploaded.' });
       }
 
       // 2. Build payload and submit
