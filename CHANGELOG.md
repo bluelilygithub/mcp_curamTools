@@ -25,6 +25,18 @@
 
 ---
 
+## 2026-04-28 — Media Gen: fix image upload DNS failure
+
+### Fixed / discovered
+- `storage.fal.run` does not resolve via DNS — fal.ai's storage endpoint is `storage.fal.ai`.
+- All image-to-video and image-to-image models were failing with `getaddrinfo ENOTFOUND storage.fal.run` whenever a reference image was uploaded.
+- Fixed: `server/routes/mediaGen.js` line 139 — `hostname: 'storage.fal.run'` → `hostname: 'storage.fal.ai'`.
+
+### Open / next
+- Test image-to-video and image-to-image models end-to-end with reference image.
+
+---
+
 ## 2026-04-23 — Geo Heatmap: geographic lead intelligence map for DiamondPlate Data
 
 ### Built

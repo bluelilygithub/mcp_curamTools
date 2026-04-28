@@ -135,7 +135,7 @@ function uploadToFalStorage(buffer, mimetype, apiKey) {
 
     const req = https.request(
       {
-        hostname: 'storage.fal.run',
+        hostname: 'storage.fal.ai',
         path: '/',
         method: 'POST',
         headers: {
