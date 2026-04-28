@@ -44,6 +44,8 @@ function resolveDateRange(days, startDate, endDate) {
 }
 
 /** Find, auto-connect, and call wp_get_enquiry_details via MCPRegistry.
+ *  Fetches a wider window (startDate - 180 days) so enquiries from before the
+ *  period that were invoiced/completed within it are captured.
  *  Returns array of enquiry rows, or null if WordPress MCP not configured/reachable. */
 async function fetchWordpressEnquiries(orgId, startDate, endDate) {
   try {
@@ -53,9 +55,13 @@ async function fetchWordpressEnquiries(orgId, startDate, endDate) {
     );
     if (!wp) return null;
     if (wp.connection_status !== 'connected') await MCPRegistry.connect(orgId, wp.id);
+    // Cast wider net: fetch enquiries submitted up to 180 days before the range start
+    // so old enquiries invoiced/completed within the display range are included.
+    const wideStart = new Date(startDate);
+    wideStart.setDate(wideStart.getDate() - 180);
     const result = await MCPRegistry.send(orgId, wp.id, 'tools/call', {
       name:      'wp_get_enquiry_details',
-      arguments: { start_date: startDate, end_date: endDate, limit: 3000 },
+      arguments: { start_date: wideStart.toISOString().slice(0, 10), end_date: endDate, limit: 5000 },
     });
     const raw = result?.content?.[0]?.text;
     if (!raw) return [];
@@ -64,6 +70,16 @@ async function fetchWordpressEnquiries(orgId, startDate, endDate) {
     console.error('[dashboard/roi-analysis] WordPress fetch failed:', e.message);
     return null;
   }
+}
+
+/**
+ * Pick the best date for revenue recognition:
+ *   invoiced_date → completion_date → enquiry post_date
+ * Returns a YYYY-MM-DD string, or '' if none.
+ */
+function revenueDate(row) {
+  const d = String(row.invoiced_date || row.completion_date || row.date || '').slice(0, 10);
+  return d.length === 10 ? d : '';
 }
 
 /** Parse a monetary string like "990.00", "$1,200", "1200" to a float. */
@@ -135,15 +151,16 @@ router.get('/roi-analysis', requireAuth, async (req, res) => {
       spendByMonth[month] = (spendByMonth[month] ?? 0) + (row.cost ?? 0);
     }
 
-    // Aggregate revenue by month from final_value (enquiry submission date)
+    // Aggregate revenue by month using invoiced_date → completion_date → enquiry date.
+    // Only count rows whose revenue date falls within the requested [startDate, endDate].
     const revenueByMonth = {};
     if (enquiries) {
       for (const row of enquiries) {
         const val = parseMonetary(row.final_value);
         if (val <= 0) continue;
-        // row.date from MySQL: "YYYY-MM-DD HH:mm:ss" or ISO string
-        const month = String(row.date ?? '').slice(0, 7);
-        if (!month) continue;
+        const rdate = revenueDate(row);
+        if (!rdate || rdate < startDate || rdate > endDate) continue;
+        const month = rdate.slice(0, 7);
         revenueByMonth[month] = (revenueByMonth[month] ?? 0) + val;
       }
     }
@@ -202,9 +219,9 @@ router.get('/roi-analysis', requireAuth, async (req, res) => {
         industryBenchmarkSource:
           'Car Detailing / Auto Detailing AU — Google Ads industry average (WordStream, 3–5× ROAS). 3.5× used as conservative benchmark.',
         revenueNote:
-          'Revenue = sum of final_value on clientenquiry records by enquiry submission date. ' +
-          'Jobs invoiced after the period end will not appear in their enquiry month. ' +
-          'Only records with a recorded final_value are included.',
+          'Revenue = sum of final_value, dated by invoiced_date → completion_date → enquiry date (first available). ' +
+          'Enquiries submitted up to 180 days before the range start are included so old jobs invoiced within the period are captured. ' +
+          'Only records with a recorded final_value and a revenue date within the selected range are counted.',
       },
     });
   } catch (err) {

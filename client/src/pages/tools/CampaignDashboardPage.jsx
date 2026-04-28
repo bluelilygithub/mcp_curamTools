@@ -39,10 +39,19 @@ function isoDate(d) { return d.toISOString().slice(0, 10); }
 function daysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return isoDate(d); }
 
 const PRESETS = [
-  { label: '30d', days: 30 },
-  { label: '60d', days: 60 },
-  { label: '90d', days: 90 },
+  { label: '7d',  key: '7d',  getRange: () => ({ start: daysAgo(7),  end: isoDate(new Date()) }) },
+  { label: '14d', key: '14d', getRange: () => ({ start: daysAgo(14), end: isoDate(new Date()) }) },
+  { label: '30d', key: '30d', getRange: () => ({ start: daysAgo(30), end: isoDate(new Date()) }) },
+  { label: '60d', key: '60d', getRange: () => ({ start: daysAgo(60), end: isoDate(new Date()) }) },
+  { label: '90d', key: '90d', getRange: () => ({ start: daysAgo(90), end: isoDate(new Date()) }) },
 ];
+
+const inputStyle = {
+  padding: '0.4rem 0.6rem', borderRadius: '0.5rem',
+  border: '1px solid var(--color-border)', background: 'var(--color-bg)',
+  color: 'var(--color-text)', fontSize: '0.8rem', outline: 'none',
+  fontFamily: 'inherit',
+};
 
 // ── Monthly aggregation for daily data ───────────────────────────────────────
 
@@ -437,9 +446,9 @@ function RoiSection({ roiData, loading, error }) {
         <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)', fontFamily: 'inherit', marginBottom: 4 }}>Methodology</p>
         <p style={{ fontSize: 12, color: 'var(--color-muted)', lineHeight: 1.6, fontFamily: 'inherit' }}>
           <strong>Investment:</strong> Google Ads spend (actual) + $1,500/mo management fee (prorated for partial months). &nbsp;
-          <strong>Revenue:</strong> Sum of <code>final_value</code> on <code>clientenquiry</code> CRM records within the period, by enquiry submission date.
-          Jobs invoiced after period end will not appear in their enquiry month — recent months may be understated.
-          Only enquiries with a recorded <code>final_value</code> are counted. &nbsp;
+          <strong>Revenue:</strong> Sum of <code>final_value</code> on <code>clientenquiry</code> CRM records, dated by <code>invoiced_date</code> → <code>completion_date</code> → enquiry date (first available).
+          Enquiries submitted up to 180 days before the range start are included so older jobs invoiced within the period are captured.
+          Only records with a revenue date within the selected range and a recorded <code>final_value</code> are counted. &nbsp;
           <strong>Industry benchmark:</strong> Car Detailing / Auto Detailing AU, Google Ads average 3–5× ROAS (WordStream).
           3.5× used as the conservative lower bound.
         </p>
@@ -451,19 +460,34 @@ function RoiSection({ roiData, loading, error }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CampaignDashboardPage() {
-  const [data,      setData]      = useState(null);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState(null);
-  const [roiData,   setRoiData]   = useState(null);
-  const [roiLoading, setRoiLoading] = useState(true);
-  const [roiError,  setRoiError]  = useState(null);
-  const [days,      setDays]      = useState(90);
+  const [data,        setData]        = useState(null);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState(null);
+  const [roiData,     setRoiData]     = useState(null);
+  const [roiLoading,  setRoiLoading]  = useState(true);
+  const [roiError,    setRoiError]    = useState(null);
+  const [activePreset, setActivePreset] = useState('90d');
+  const [startDate,   setStartDate]   = useState(daysAgo(90));
+  const [endDate,     setEndDate]     = useState(isoDate(new Date()));
 
-  const load = useCallback(async (d) => {
+  function applyPreset(preset) {
+    setActivePreset(preset.key);
+    const { start, end } = preset.getRange();
+    setStartDate(start);
+    setEndDate(end);
+  }
+
+  function onDateChange(field, value) {
+    setActivePreset(null);
+    if (field === 'start') setStartDate(value);
+    else setEndDate(value);
+  }
+
+  const load = useCallback(async (sd, ed) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.get(`/dashboard/campaign-performance?days=${d}`);
+      const result = await api.get(`/dashboard/campaign-performance?startDate=${sd}&endDate=${ed}`);
       setData(result);
     } catch (e) {
       setError(e.message ?? 'Failed to load data');
@@ -472,11 +496,11 @@ export default function CampaignDashboardPage() {
     }
   }, []);
 
-  const loadRoi = useCallback(async (d) => {
+  const loadRoi = useCallback(async (sd, ed) => {
     setRoiLoading(true);
     setRoiError(null);
     try {
-      const result = await api.get(`/dashboard/roi-analysis?days=${d}`);
+      const result = await api.get(`/dashboard/roi-analysis?startDate=${sd}&endDate=${ed}`);
       setRoiData(result);
     } catch (e) {
       setRoiError(e.message ?? 'Failed to load ROI data');
@@ -485,8 +509,8 @@ export default function CampaignDashboardPage() {
     }
   }, []);
 
-  useEffect(() => { load(days);    }, [load,    days]);
-  useEffect(() => { loadRoi(days); }, [loadRoi, days]);
+  useEffect(() => { load(startDate, endDate);    }, [load,    startDate, endDate]);
+  useEffect(() => { loadRoi(startDate, endDate); }, [loadRoi, startDate, endDate]);
 
   // ── Derived data ────────────────────────────────────────────────────────────
 
@@ -503,11 +527,6 @@ export default function CampaignDashboardPage() {
   const avgCtr           = campaigns.length > 0
     ? campaigns.reduce((s, c) => s + (c.ctr ?? 0), 0) / campaigns.length
     : 0;
-
-  // Date range from daily data
-  const dateRange = daily.length > 0
-    ? { start: daily[0].date, end: daily[daily.length - 1].date }
-    : null;
 
   // Daily chart data — thin out if >60 points to avoid crowding
   const dailyChartData = daily.map((d) => ({
@@ -578,34 +597,63 @@ export default function CampaignDashboardPage() {
     <div style={{ padding: '24px', maxWidth: 1200, margin: '0 auto', fontFamily: 'inherit' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text)', fontFamily: 'inherit', margin: 0 }}>
           Campaign Performance Dashboard
         </h1>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {PRESETS.map((p) => (
-            <button
-              key={p.days}
-              onClick={() => setDays(p.days)}
-              style={{
-                padding: '6px 14px',
-                borderRadius: 8,
-                border: '1px solid var(--color-border)',
-                background: days === p.days ? 'var(--color-primary)' : 'var(--color-surface)',
-                color: days === p.days ? '#fff' : 'var(--color-text)',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-                fontFamily: 'inherit',
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          {/* Preset buttons */}
+          <div style={{ display: 'flex', gap: 1, borderRadius: 8, padding: 4, background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+            {PRESETS.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => applyPreset(p)}
+                style={{
+                  padding: '3px 10px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: activePreset === p.key ? 'var(--color-primary)' : 'transparent',
+                  color: activePreset === p.key ? '#fff' : 'var(--color-muted)',
+                  fontSize: 12,
+                  fontWeight: activePreset === p.key ? 600 : 400,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
               }}
             >
               {p.label}
             </button>
           ))}
+          </div>
+          {/* Custom date pickers */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--color-muted)', fontFamily: 'inherit' }}>From</span>
+              <input
+                key={`start-${startDate}`}
+                type="date"
+                value={startDate}
+                max={endDate}
+                onChange={(e) => onDateChange('start', e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--color-muted)', fontFamily: 'inherit' }}>To</span>
+              <input
+                key={`end-${endDate}`}
+                type="date"
+                value={endDate}
+                min={startDate}
+                max={isoDate(new Date())}
+                onChange={(e) => onDateChange('end', e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
-      <ContextBanner dateRange={dateRange} />
+      <ContextBanner dateRange={{ start: startDate, end: endDate }} />
 
       {/* Loading / error states */}
       {loading && (
@@ -636,7 +684,7 @@ export default function CampaignDashboardPage() {
             <KpiTile
               label="Total Ad Spend"
               value={fmtAud(totalSpend)}
-              sub={`${days} days · $7,500/mo budget`}
+              sub={`${fmtDate(startDate)} – ${fmtDate(endDate)} · $7,500/mo budget`}
               accent="var(--color-primary)"
             />
             <KpiTile
