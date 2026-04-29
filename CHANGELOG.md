@@ -25,6 +25,35 @@
 
 ---
 
+## 2026-04-29 — Deterministic guardrails: needs_review status, tool schema validation, bounds warning UI
+
+### Built
+
+**Foundation — `needs_review` run status**
+- `server/db.js` — extended `agent_runs.status` CHECK constraint to include `'needs_review'`. Two-step migration: `DROP CONSTRAINT IF EXISTS agent_runs_status_check` + `ADD CONSTRAINT` with updated value list. Idempotent on both new and existing deployments. Also updated the `CREATE TABLE IF NOT EXISTS` block for clean installs.
+- `server/platform/persistRun.js` — JSDoc updated to document `'needs_review'` as a valid status value.
+
+**Schema validation — `validateToolData` + `toolSchemas`**
+- `server/platform/toolSchemas.js` — pure validator functions for the three most-used tool result shapes: `get_campaign_performance` (CTR ∈ [0,1], cost ≥ 0, conversions ≥ 0, clicks ≤ impressions), `get_daily_performance` (date format, cost ≥ 0, clicks ≤ impressions), `get_search_terms` (term string, CTR ∈ [0,1], cost ≥ 0). Aggregates failures by type using counters — 500 bad rows = one summary message. Max 10 `boundsFailed` entries total across all three schemas.
+- `server/platform/validateToolData.js` — pure orchestrator. Walks `extractToolData` output, runs matching schema per tool name, returns `Array<{ tool, message }>`. Catches validator throws so a bad schema never kills a run.
+- `server/platform/createAgentRoute.js` — wired validation between `extractToolData` and `persistRun`. Sets `status: 'needs_review'` when `boundsFailed.length > 0`; attaches `boundsFailed` to `resultPayload` only when non-empty. Backwards compatible — agents with no registered schemas always get `status: 'complete'`.
+
+**UI — `BoundsWarningPanel` + `GoogleAdsMonitorPage` updates**
+- `client/src/components/ui/BoundsWarningPanel.jsx` — reusable amber warning panel. Null-renders when `boundsFailed` is absent. Any tool page imports with one line and places before `<MarkdownRenderer>`.
+- `client/src/pages/tools/GoogleAdsMonitorPage.jsx` — four `status === 'complete'` filters updated to include `needs_review` (history tab, dashboard card "last run" header, run confirmation modal, history load). Amber "needs review" badge added to both the dashboard card and history run rows. `BoundsWarningPanel` added to both the live result view and expanded history run view.
+
+**Documentation**
+- `DECISIONS.md` — new entry: deterministic guardrails foundation decision + observability deferral rationale (Option 1 ad-hoc SQL now, Option 2 Admin Logs tab when manual querying becomes friction, Option 3 deferred until sustained list volume).
+- `server/CLAUDE.md` — new "Deterministic guardrails — needs_review status" section with the correct history filter pattern, `boundsFailed` render pattern, and observability SQL.
+- `PLATFORM-PRIMITIVES.md` — new entries for `validateToolData`, `toolSchemas`, `BoundsWarningPanel`; updated `agent_runs` schema status values; added post-extraction validation note to `extractToolData` entry.
+
+### Open / next
+- Extend `toolSchemas.js` to cover remaining high-use tools after observing production failure patterns.
+- Step 3 of the guardrails plan: operationalise `analyticalGuardrails` — parse `intelligence_profile` targets into a post-run bounds function (e.g. flag ROAS > 10× declared target as potentially inflated). Same `needs_review` + `boundsFailed` output. Additive to the existing text hint in the prompt.
+- Metric service layer: move deterministic arithmetic (CTR, ROAS, CPA derived values) out of LLM reasoning and into tool `execute()` functions so the AI receives pre-computed values.
+
+---
+
 ## 2026-04-29 — ROI Analysis: actual revenue vs investment vs industry benchmark chart
 
 ### Built

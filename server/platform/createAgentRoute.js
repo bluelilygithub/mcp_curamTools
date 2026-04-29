@@ -21,6 +21,7 @@ const AgentConfigService = require('./AgentConfigService');
 const CostGuardService = require('../services/CostGuardService');
 const { logUsage } = require('../services/UsageLogger');
 const EmbeddingService = require('../services/EmbeddingService');
+const { validateToolData } = require('./validateToolData');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -195,8 +196,10 @@ function createAgentRoute({ slug, runFn, requiredPermission }) {
           CostGuardService.check({ taskCostAud, maxTaskBudgetAud, dailyOrgSpendAud, maxDailyBudgetAud });
         }
 
-        const toolData = extractToolData(trace);
+        const toolData   = extractToolData(trace);
         const suggestions = extractSuggestions(result?.summary ?? '');
+        const boundsFailed = validateToolData(toolData);
+        const runStatus  = boundsFailed.length > 0 ? 'needs_review' : 'complete';
 
         const resultPayload = {
           summary:   result?.summary ?? '',
@@ -208,9 +211,10 @@ function createAgentRoute({ slug, runFn, requiredPermission }) {
           startDate: req.body.startDate ?? null,
           endDate:   req.body.endDate   ?? null,
           progressLog,
+          ...(boundsFailed.length > 0 && { boundsFailed }),
         };
 
-        await persistRun({ slug, orgId, status: 'complete', result: resultPayload, runId });
+        await persistRun({ slug, orgId, status: runStatus, result: resultPayload, runId });
 
         logUsage({ orgId, userId, slug, modelId: adminConfig.model, tokensUsed: tokensUsed ?? {}, costAud: taskCostAud })
           .catch(err => console.error(`[${slug}] usage log error:`, err.message));

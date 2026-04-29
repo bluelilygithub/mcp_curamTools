@@ -679,6 +679,17 @@ All inline styles include `fontFamily: 'inherit'` to respect the user's platform
 
 ---
 
+### Deterministic Guardrails — needs_review Observability Deferred to Admin Logs Tab
+**Date:** 2026-04-29
+**Status:** Settled — intentionally deferred
+**Context:** The `needs_review` status and `boundsFailed` payload were added to `createAgentRoute` as the foundation for deterministic data integrity checks. Three observability options were evaluated: (1) ad-hoc SQL queries via the SQL Console, (2) a `needs_review` tab or counter on the existing Admin Logs page, (3) a dedicated bounds analytics view with failure frequency charts over time.
+**Decision:** Option 1 (ad-hoc SQL) is the active approach until flagged run volume makes manual querying impractical. Option 2 (Admin Logs extension) is the planned next step, triggered when the SQL query is being run three or more times per week. Option 3 (dedicated analytics view) is deferred indefinitely — it is only justified if the Admin Logs list becomes unmanageable, which requires significantly higher run volume than this platform currently produces.
+**Rationale:** No flagged runs exist at the time of writing. Building UI for a phenomenon not yet observed in production is premature. The trigger for Option 2 is friction-based, not time-based: when manual querying becomes annoying, that is the correct signal to build the tab. Option 3 requires enough time-series data to make trend charts meaningful — at current run volume (manual + cron, single org), that threshold is unlikely to be reached. A frequency chart with 50 data points is noise.
+**Constraints it must not violate:** Do not build Option 3 in response to a single incident or a short spike in flagged runs. The deferral condition is sustained list volume, not occasional spikes. The SQL query that triggers the review is: `SELECT id, result->'boundsFailed', run_at FROM agent_runs WHERE status = 'needs_review' ORDER BY run_at DESC`.
+**References:** `server/platform/toolSchemas.js`; `server/platform/validateToolData.js`; `server/platform/createAgentRoute.js`; `client/src/components/ui/BoundsWarningPanel.jsx`.
+
+---
+
 ## Open Questions
 
 _(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_

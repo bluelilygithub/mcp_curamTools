@@ -17,6 +17,7 @@ import AgentDashboardCard from './GoogleAdsMonitor/AgentDashboardCard';
 import StrategicReviewCard from './GoogleAdsMonitor/StrategicReviewCard';
 import DaypartIntelligenceCard from './GoogleAdsMonitor/DaypartIntelligenceCard';
 import AiVisibilityTab from './GoogleAdsMonitor/AiVisibilityTab';
+import BoundsWarningPanel from '../../components/ui/BoundsWarningPanel';
 
 const AGENT_SLUG = 'google-ads-monitor';
 
@@ -207,7 +208,7 @@ function AllAgentsHistory({ onDiscuss, userEmail }) {
         ALL_AGENT_SLUGS.map(async ({ slug }) => {
           try {
             const rows = await api.get(`/agents/${slug}/history`);
-            results[slug] = (rows ?? []).filter((r) => r.status === 'complete');
+            results[slug] = (rows ?? []).filter((r) => (r.status === 'complete' || r.status === 'needs_review'));
           } catch { results[slug] = []; }
         })
       );
@@ -303,6 +304,13 @@ function AllAgentsHistory({ onDiscuss, userEmail }) {
                             </span>
                           )}
                         </button>
+                        {run.status === 'needs_review' && (
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
+                            background: '#d9770620', color: '#b45309', flexShrink: 0,
+                            fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.04em',
+                          }}>needs review</span>
+                        )}
                         {onDiscuss && summary && (
                           <button
                             onClick={() => {
@@ -360,6 +368,7 @@ function AllAgentsHistory({ onDiscuss, userEmail }) {
                             </button>
                           </div>
                           <div style={{ padding: '16px' }}>
+                            <BoundsWarningPanel boundsFailed={run.result?.boundsFailed} />
                             <MarkdownRenderer text={summary} />
                           </div>
                         </div>
@@ -456,7 +465,7 @@ export default function GoogleAdsMonitorPage() {
       const rows = await api.get(`/agents/${AGENT_SLUG}/history`);
       setHistory(rows);
       if (!result) {
-        const latest = rows.find((r) => r.status === 'complete');
+        const latest = rows.find((r) => (r.status === 'complete' || r.status === 'needs_review'));
         if (latest?.result) setResult(latest.result);
       }
     } catch { /* non-fatal */ }
@@ -487,7 +496,7 @@ export default function GoogleAdsMonitorPage() {
 
   function handleRunClick() {
     if (new Date(startDate) > new Date(endDate)) { setError('Start date must be before end date.'); return; }
-    const latest = history.find((r) => r.status === 'complete');
+    const latest = history.find((r) => (r.status === 'complete' || r.status === 'needs_review'));
     if (latest) {
       const hoursAgo  = (Date.now() - new Date(latest.run_at).getTime()) / 3_600_000;
       const sameRange = latest.result?.startDate === startDate && latest.result?.endDate === endDate;
@@ -618,7 +627,8 @@ export default function GoogleAdsMonitorPage() {
     }}>{label}</button>
   );
 
-  const hasResult = !!result;
+  const hasResult   = !!result;
+  const needsReview = hasResult && !!result.boundsFailed?.length;
 
   const actionBtnStyle = {
     fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'inherit',
@@ -650,7 +660,7 @@ export default function GoogleAdsMonitorPage() {
             AI-powered campaign analysis, search intent, and budget pacing.
           </p>
           {(() => {
-            const latest = history.find((r) => r.status === 'complete');
+            const latest = history.find((r) => (r.status === 'complete' || r.status === 'needs_review'));
             if (!latest) return null;
             const runDate = new Date(latest.run_at).toLocaleString('en-AU', {
               day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -739,12 +749,19 @@ export default function GoogleAdsMonitorPage() {
                         fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.04em',
                       }}>running</span>
                     )}
-                    {!running && hasResult && (
+                    {!running && hasResult && !needsReview && (
                       <span style={{
                         fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
                         background: '#16a34a20', color: '#16a34a',
                         fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.04em',
                       }}>complete</span>
+                    )}
+                    {!running && needsReview && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
+                        background: '#d9770620', color: '#b45309',
+                        fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.04em',
+                      }}>needs review</span>
                     )}
                   </div>
                   <p style={{ fontSize: 12, color: 'var(--color-muted)', margin: '0 0 0 21px', fontFamily: 'inherit' }}>
@@ -782,6 +799,7 @@ export default function GoogleAdsMonitorPage() {
                         </span>
                       )}
                     </div>
+                    <BoundsWarningPanel boundsFailed={result.boundsFailed} />
                     {summary && <MarkdownRenderer text={summary} />}
                     {campaigns.length > 0 && (
                       <div className="mt-4">

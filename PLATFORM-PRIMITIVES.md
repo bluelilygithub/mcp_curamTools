@@ -146,7 +146,7 @@ agent_runs (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id      INTEGER,           -- FK → organizations
   slug        TEXT,              -- agent identifier e.g. 'google-ads-monitor'
-  status      TEXT,              -- 'running' | 'complete' | 'error'
+  status      TEXT,              -- 'running' | 'complete' | 'error' | 'needs_review'
   summary     TEXT,              -- agent result text or error message
   data        JSONB,             -- tool results keyed by tool name (from extractToolData)
   suggestions JSONB,             -- [{text, priority}] (from extractSuggestions)
@@ -325,6 +325,73 @@ Generic — knows nothing about which agent ran. The UI reads `run.data.get_camp
 **Used by:** `createAgentRoute.js` before calling `persistRun`; Google Ads Monitor UI components read the resulting `data` object.
 **Reuse contract:** Tool names must be stable, lowercase, underscore-separated identifiers. Do not rename a tool after the UI is reading from its key. The convention — tool names are the keys — is what makes this generic and requires no per-agent configuration.
 **Does not handle:** Nested or de-duplicated tool results. Multiple calls to the same tool (later results overwrite earlier ones for the same tool name).
+**Post-extraction validation:** After `extractToolData`, `createAgentRoute` immediately calls `validateToolData(toolData)` — see the `validateToolData` entry below. The extracted `data` object is unchanged; `validateToolData` only reads it.
+
+---
+
+### validateToolData
+**Type:** Utility
+**Location:** `server/platform/validateToolData.js`
+**What it does:** Post-run structural integrity check for tool results. Pure function — no IO, no side effects. Walks each key in the `extractToolData` output, looks up a matching schema in `TOOL_SCHEMAS`, runs the validator, and collects failure messages. Returns `boundsFailed[]` — an empty array means all checked tools passed.
+**Interface:**
+```js
+const { validateToolData } = require('./validateToolData');
+
+validateToolData(toolData, schemas?)
+// toolData:  { [toolName]: result } — output of extractToolData
+// schemas:   optional override for testing; defaults to TOOL_SCHEMAS from toolSchemas.js
+// Returns:   Array<{ tool: string, message: string }>
+// Example:   [{ tool: 'get_campaign_performance', message: '2 rows with CTR outside [0,1]' }]
+```
+**Called by:** `createAgentRoute.js` between `extractToolData` and `persistRun`. Never called from agent code.
+**Reuse contract:** Do not call from agent code or route handlers. Extend coverage by adding schemas to `toolSchemas.js` — no changes to `validateToolData` needed.
+**Does not handle:** Semantic/bounds validation against account targets — that is the future `analyticalGuardrails` code layer. `validateToolData` checks structural shape only (correct types, valid ranges for domain-independent properties like CTR ∈ [0,1]).
+
+---
+
+### toolSchemas
+**Type:** Utility
+**Location:** `server/platform/toolSchemas.js`
+**What it does:** Registry of pure validator functions for tool result shapes. Each entry is `(result) => string[]`. Validators use counters to aggregate failures by type — a 500-row array with bad CTR produces one message (`"500 rows with CTR outside [0,1]"`), not 500 messages. Maximum `boundsFailed` entries across all three current schemas: 10.
+**Current schemas:**
+
+| Tool name | Checks |
+|---|---|
+| `get_campaign_performance` | Array shape; CTR ∈ [0,1]; cost ≥ 0; conversions ≥ 0; clicks ≤ impressions |
+| `get_daily_performance` | Array shape; date matches `YYYY-MM-DD`; cost ≥ 0; clicks ≤ impressions |
+| `get_search_terms` | Array shape; term is non-empty string; CTR ∈ [0,1] if present; cost ≥ 0 |
+
+**Extending:** add a new entry to `TOOL_SCHEMAS`. Pattern:
+```js
+function validateMyTool(result) {
+  const failures = [];
+  if (!Array.isArray(result)) { failures.push('expected array, got ' + typeof result); return failures; }
+  let badX = 0;
+  for (const row of result) {
+    if (/* bad condition */) badX++;
+  }
+  if (badX > 0) failures.push(`${badX} row(s) with X invalid`);
+  return failures;
+}
+TOOL_SCHEMAS.my_tool_name = validateMyTool;
+```
+**Reuse contract:** Validators must be pure — no async, no IO, no mutation. Use counters not per-row push. Always handle the non-array case first and return early. Validator throws are caught by `validateToolData` — they will not crash a run.
+
+---
+
+### BoundsWarningPanel
+**Type:** Component
+**Location:** `client/src/components/ui/BoundsWarningPanel.jsx`
+**What it does:** Amber inline warning panel displaying `boundsFailed` entries from a `needs_review` run. Null-renders when `boundsFailed` is absent or empty — safe to render unconditionally on any result view.
+**Interface:**
+```jsx
+<BoundsWarningPanel boundsFailed={result.boundsFailed} />
+// boundsFailed: Array<{ tool: string, message: string }> | undefined | null
+// Returns null when boundsFailed is empty/absent; renders amber panel with failure list otherwise
+```
+Renders: a heading with failure count, a `<ul>` of `tool: message` items in monospace tool name, and a one-line advisory note ("AI analysis completed. Review flagged values before acting on this report.").
+**Used by:** `GoogleAdsMonitorPage.jsx` — in both the live result card and the history run expanded view.
+**Reuse contract:** Import in any tool page that displays run results. Place it immediately before `<MarkdownRenderer>` in the result body. Do not add tool-specific logic to this component — it is generic.
 
 ---
 

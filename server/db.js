@@ -159,7 +159,7 @@ async function initSchema() {
         org_id       INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
         slug         TEXT NOT NULL,
         status       TEXT NOT NULL DEFAULT 'running'
-                       CHECK (status IN ('running', 'complete', 'error')),
+                       CHECK (status IN ('running', 'complete', 'error', 'needs_review')),
         result       JSONB,
         error        TEXT,
         run_at       TIMESTAMPTZ DEFAULT NOW(),
@@ -591,6 +591,14 @@ async function initSchema() {
         lng         NUMERIC(10, 7),
         created_at  TIMESTAMPTZ DEFAULT now()
       )
+    `);
+
+    // ── Extend agent_runs status constraint to include needs_review ───────────
+    // DROP + ADD is idempotent — safe to run on existing and new deployments.
+    await client.query(`ALTER TABLE agent_runs DROP CONSTRAINT IF EXISTS agent_runs_status_check`);
+    await client.query(`
+      ALTER TABLE agent_runs ADD CONSTRAINT agent_runs_status_check
+        CHECK (status IN ('running', 'complete', 'error', 'needs_review'))
     `);
 
     await client.query('COMMIT');

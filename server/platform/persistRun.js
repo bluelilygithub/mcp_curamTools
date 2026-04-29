@@ -9,7 +9,7 @@ const { pool } = require('../db');
  * @param {object} params
  * @param {string}  params.slug         — agent identifier e.g. 'google-ads-monitor'
  * @param {number}  params.orgId        — organisation FK
- * @param {string}  params.status       — 'running' | 'complete' | 'error'
+ * @param {string}  params.status       — 'running' | 'complete' | 'error' | 'needs_review'
  * @param {object}  [params.result]     — JSONB result payload (summary, data, suggestions, tokensUsed)
  * @param {string}  [params.error]      — error message string (status === 'error')
  * @param {Date}    [params.runAt]      — run start time (defaults to NOW())

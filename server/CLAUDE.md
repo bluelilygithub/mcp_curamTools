@@ -521,6 +521,30 @@ UI: Admin › Token Usage (`/admin/usage`). Period selector: 7d / 30d / 90d.
 
 ---
 
+## Deterministic guardrails — needs_review status
+
+`agent_runs.status` has four valid values: `'running'`, `'complete'`, `'error'`, `'needs_review'`. A `needs_review` run completed successfully — the AI ran, produced a summary, and all tool data was persisted. The only difference from `'complete'` is that `validateToolData` found structural integrity failures in one or more tool results (e.g. CTR > 1, negative cost, clicks > impressions). The full result payload is present and usable.
+
+**Do not filter history by `status = 'complete'` alone.** Any UI component or API query that fetches "successful runs" must include `needs_review`:
+```js
+// Wrong — drops runs with flagged data
+rows.filter(r => r.status === 'complete')
+
+// Correct
+rows.filter(r => r.status === 'complete' || r.status === 'needs_review')
+```
+Same for SQL: `WHERE status IN ('complete', 'needs_review')`.
+
+**`result.boundsFailed`** is an array of `{ tool, message }` objects, present only when `status = 'needs_review'`. Render it via `<BoundsWarningPanel boundsFailed={result.boundsFailed} />` — null-renders when absent, amber warning panel when present.
+
+**Validation is post-run and non-fatal.** The AI summary and all tool data are still written. `needs_review` is an annotation, not an error. Do not treat it like `'error'` status in UI logic.
+
+**Adding tool schemas:** edit `server/platform/toolSchemas.js`. Each validator is `(result) => string[]`. Use counters, not per-row accumulation — the goal is one summary message per failure type (e.g. `"3 rows with CTR outside [0,1]"`), not one message per bad row.
+
+**Observability:** `SELECT id, result->'boundsFailed', run_at FROM agent_runs WHERE status = 'needs_review' ORDER BY run_at DESC` in the SQL Console. See DECISIONS.md — "Deterministic Guardrails — needs_review Observability Deferred to Admin Logs Tab" for the deferred Admin Logs extension plan.
+
+---
+
 ## Rules learned through pain
 
 **Model selector `<select>` restricted to `ai_models` silently routes everything to Anthropic.**
