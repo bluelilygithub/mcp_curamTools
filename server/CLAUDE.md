@@ -543,6 +543,37 @@ Same for SQL: `WHERE status IN ('complete', 'needs_review')`.
 
 **Observability:** `SELECT id, result->'boundsFailed', run_at FROM agent_runs WHERE status = 'needs_review' ORDER BY run_at DESC` in the SQL Console. See DECISIONS.md — "Deterministic Guardrails — needs_review Observability Deferred to Admin Logs Tab" for the deferred Admin Logs extension plan.
 
+### Cross-source reconciliation (googleAdsMonitor extension)
+
+`server/agents/googleAdsMonitor/index.js` adds two reconciliation checks that produce `boundsFailed` entries at the agent level. These flow into `createAgentRoute`'s merged array alongside `validateToolData` output.
+
+**`reconcilePreRun(dailyPerformance, sessionsOverview)` — pure, synchronous:**
+- Compares summed Ads clicks (from `ads_get_daily_performance`) vs summed GA4 sessions (from `ga4_get_sessions_overview`)
+- Ads paid clicks ⊂ total sessions — flags `cross_source_pre_run` when Ads clicks > GA4 sessions × 1.2
+- Skips when Ads clicks < 10; returns `[]` on non-array inputs or error objects
+- Runs between pre-fetch and Claude call
+
+**`reconcilePostRun(orgId, startDate, endDate, totalAdsConversions)` — async:**
+- Fetches `wp_get_enquiries` for the same date range; compares count vs Ads conversions sum
+- Flags `cross_source_post_run` when: Ads conversions ≥ 3 AND (WP = 0 enquiries, OR Ads:WP ratio > 5:1)
+- WordPress errors/missing server caught silently — no false positives on unconfigured orgs
+- Runs after Claude (no latency impact on the AI call)
+
+**Merge pattern in `createAgentRoute`:**
+```js
+const boundsFailed = [
+  ...validateToolData(toolData),
+  ...(result?.boundsFailed ?? []),
+];
+```
+Any agent may set `result.boundsFailed` to contribute reconciliation entries. The merge is generic — not googleAdsMonitor-specific.
+
+**`tool` field values for reconciliation entries:**
+- `'cross_source_pre_run'` — Ads clicks vs GA4 sessions discrepancy
+- `'cross_source_post_run'` — Ads conversions vs WP enquiries discrepancy
+
+**Direction of checks:** only flags the suspicious direction. GA4 >> Ads and WP >> Ads are both normal (organic traffic and direct leads exist). Only Ads >> GA4 and Ads >> WP signal potential data quality problems.
+
 ---
 
 ## Rules learned through pain

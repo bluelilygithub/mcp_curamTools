@@ -347,6 +347,15 @@ validateToolData(toolData, schemas?)
 **Reuse contract:** Do not call from agent code or route handlers. Extend coverage by adding schemas to `toolSchemas.js` — no changes to `validateToolData` needed.
 **Does not handle:** Semantic/bounds validation against account targets — that is the future `analyticalGuardrails` code layer. `validateToolData` checks structural shape only (correct types, valid ranges for domain-independent properties like CTR ∈ [0,1]).
 
+**Agent-level reconciliation merge:** `createAgentRoute` merges `validateToolData` output with `result?.boundsFailed` from the agent:
+```js
+const boundsFailed = [
+  ...validateToolData(toolData),
+  ...(result?.boundsFailed ?? []),
+];
+```
+Agents contribute cross-source reconciliation failures by setting `result.boundsFailed` before returning from their `runFn`. The merge in `createAgentRoute` is generic — any agent can use this pattern. `googleAdsMonitor` is the first agent to do so (`cross_source_pre_run` and `cross_source_post_run` entries).
+
 ---
 
 ### toolSchemas

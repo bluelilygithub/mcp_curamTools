@@ -679,6 +679,22 @@ All inline styles include `fontFamily: 'inherit'` to respect the user's platform
 
 ---
 
+### Cross-Source Reconciliation — Ads vs GA4 vs WordPress
+**Date:** 2026-04-29
+**Status:** Settled — first two checks built; thresholds pending calibration
+**Context:** The `needs_review` / `validateToolData` system catches structural failures within a single tool result. It has no mechanism to detect cross-source contradictions: Ads claiming more clicks than GA4 records across all traffic channels, or Ads reporting conversions while WordPress records zero enquiries. These are the most actionable class of errors — they are unambiguous, externally verifiable, and not detectable by any prompt engineering or bounds check within a single source.
+**Decision:** Two reconciliation checks in `server/agents/googleAdsMonitor/index.js`:
+1. **Pre-run — `reconcilePreRun(dailyPerformance, sessionsOverview)`** — pure synchronous. Ads paid clicks are always a strict subset of total GA4 sessions (paid sessions are included in the GA4 total). If `totalAdsClicks > totalGaSessions × 1.2` (20% tolerance for ad-blockers/cookieless browsers), flags `cross_source_pre_run`. Skips when Ads clicks < 10 (noise guard for near-zero-spend periods). Runs between pre-fetch and Claude call — available before the AI sees any data.
+2. **Post-run — `reconcilePostRun(orgId, startDate, endDate, totalAdsConversions)`** — async. Fetches `wp_get_enquiries` for the same date range via `getWordPressServer`. Flags `cross_source_post_run` when Ads reports ≥ 3 conversions AND (WP records 0 enquiries, OR the Ads:WP ratio exceeds 5:1). WordPress errors or missing server are caught silently — no false positives on installs where WordPress is not configured.
+**Only flags the suspicious direction:**
+- Ads clicks >> GA4 sessions = tracking breakage (impossible under working tracking). GA4 >> Ads = normal (organic/direct traffic exists).
+- Ads conversions >> WP enquiries = Ads overcounting or conversion event misconfiguration. WP >> Ads = normal (organic/direct enquiries exist outside paid).
+**Merge pattern (generic, not agent-specific):** Agent attaches failures to `result.boundsFailed`. `createAgentRoute` merges with `validateToolData` output: `[...validateToolData(toolData), ...(result?.boundsFailed ?? [])]`. Any agent can contribute reconciliation entries this way — the merge in `createAgentRoute` is now generic and applies to all agents.
+**Threshold calibration status:** 1.2× (clicks/sessions) and 5:1 (conversions/enquiries) are initial estimates. Revisit after 4–6 weeks of production runs — adjust if false-positive rate is unacceptable or if real failures are missed.
+**References:** `server/agents/googleAdsMonitor/index.js`; `server/platform/createAgentRoute.js`; see also "Deterministic Guardrails — needs_review Observability Deferred to Admin Logs Tab" below.
+
+---
+
 ### Deterministic Guardrails — needs_review Observability Deferred to Admin Logs Tab
 **Date:** 2026-04-29
 **Status:** Settled — intentionally deferred

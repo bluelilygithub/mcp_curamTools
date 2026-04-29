@@ -25,6 +25,28 @@
 
 ---
 
+## 2026-04-29 — Cross-source reconciliation: Ads vs GA4 vs WordPress ground-truth checks
+
+### Built
+
+**Cross-source reconciliation — googleAdsMonitor extension**
+- `server/agents/googleAdsMonitor/index.js` — two reconciliation functions added before and after the Claude call:
+  - `reconcilePreRun(dailyPerformance, sessionsOverview)` — pure, synchronous. Sums Ads clicks from `ads_get_daily_performance` and GA4 sessions from `ga4_get_sessions_overview`. Ads paid clicks are a subset of total sessions — if Ads > GA4 × 1.2 (20% tolerance for ad-blockers), flags `cross_source_pre_run`. Skips when Ads clicks < 10 (low-traffic noise guard).
+  - `reconcilePostRun(orgId, startDate, endDate, totalAdsConversions)` — async. Fetches `wp_get_enquiries` via `getWordPressServer` for same date range. Flags `cross_source_post_run` when Ads conversions ≥ 3 AND (WP has 0 enquiries, or Ads:WP ratio > 5:1). WordPress errors/missing server caught silently — no false positives on unconfigured installs.
+  - Both produce `{ tool, message }` entries. Attached to `result.boundsFailed` before returning from `runSingleCustomer`.
+- `server/platform/createAgentRoute.js` — `boundsFailed` now merges `validateToolData(toolData)` with `result?.boundsFailed ?? []`. Any agent can contribute reconciliation failures by setting `result.boundsFailed` — platform handles the merge generically.
+
+**Direction-of-check rationale:**
+- Pre-run checks Ads clicks > GA4 sessions only (tracking breakage). GA4 >> Ads is normal (organic traffic).
+- Post-run checks Ads conversions >> WP enquiries only (Ads overcounting). WP >> Ads is expected (organic/direct leads exist outside paid campaigns).
+
+### Open / next
+- Calibrate thresholds (1.2× clicks/sessions, 5:1 conversions/enquiries) after 4–6 weeks of production data
+- Step 3 guardrails: operationalise `analyticalGuardrails` from intelligence_profile (flag ROAS > 10× declared target as potentially inflated)
+- Additional cross-source checks as patterns emerge (e.g. GA4 conversion events vs Ads conversion count)
+
+---
+
 ## 2026-04-29 — Deterministic guardrails: needs_review status, tool schema validation, bounds warning UI
 
 ### Built
