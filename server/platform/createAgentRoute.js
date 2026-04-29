@@ -198,7 +198,10 @@ function createAgentRoute({ slug, runFn, requiredPermission }) {
 
         const toolData   = extractToolData(trace);
         const suggestions = extractSuggestions(result?.summary ?? '');
-        const boundsFailed = validateToolData(toolData);
+        const boundsFailed = [
+          ...validateToolData(toolData),
+          ...(result?.boundsFailed ?? []),
+        ];
         const runStatus  = boundsFailed.length > 0 ? 'needs_review' : 'complete';
 
         const resultPayload = {

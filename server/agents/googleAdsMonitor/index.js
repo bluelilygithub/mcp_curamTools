@@ -29,9 +29,74 @@
 const { agentOrchestrator }  = require('../../platform/AgentOrchestrator');
 const AgentConfigService     = require('../../platform/AgentConfigService');
 const { pool }               = require('../../db');
-const { getAdsServer, getAnalyticsServer, callMcpTool } = require('../../platform/mcpTools');
+const { getAdsServer, getAnalyticsServer, getWordPressServer, callMcpTool } = require('../../platform/mcpTools');
 const { buildSystemPrompt }  = require('./prompt');
 const { TOOL_SLUG }          = require('./tools');
+
+// ── Cross-source reconciliation ───────────────────────────────────────────────
+
+// Ads clicks should never exceed total GA4 sessions (paid is a subset of all sessions).
+// Allow 20% tolerance for ad-blocker/cookieless gaps.
+const CLICKS_TO_SESSIONS_MAX = 1.2;
+const MIN_CLICKS_FOR_PRERUN  = 10; // skip check for tiny campaigns
+
+function reconcilePreRun(dailyPerformance, sessionsOverview) {
+  if (!Array.isArray(dailyPerformance) || !Array.isArray(sessionsOverview)) return [];
+  if (dailyPerformance.length === 0 || sessionsOverview.length === 0) return [];
+
+  const totalAdsClicks  = dailyPerformance.reduce((s, r) => s + (r.clicks ?? 0), 0);
+  const totalGaSessions = sessionsOverview.reduce((s, r) => s + (r.sessions ?? 0), 0);
+
+  if (totalAdsClicks < MIN_CLICKS_FOR_PRERUN) return [];
+
+  if (totalGaSessions === 0 || totalAdsClicks > totalGaSessions * CLICKS_TO_SESSIONS_MAX) {
+    return [{
+      tool:    'cross_source_pre_run',
+      message: `Tracking discrepancy: Ads reported ${totalAdsClicks} clicks but GA4 recorded ${totalGaSessions} total sessions — possible tracking breakage`,
+    }];
+  }
+  return [];
+}
+
+// Ads conversions vs WordPress enquiries in the same period.
+// Only flags gross over-reporting (Ads >> WP). WP >> Ads is normal (organic/direct leads).
+const ADS_TO_WP_RATIO_MAX        = 5;  // Ads conversions:WP enquiries threshold
+const MIN_CONVERSIONS_FOR_POSTRUN = 3;  // ignore noise from low-volume periods
+
+async function reconcilePostRun(orgId, startDate, endDate, totalAdsConversions) {
+  if (totalAdsConversions < MIN_CONVERSIONS_FOR_POSTRUN) return [];
+
+  try {
+    const wpServer  = await getWordPressServer(orgId);
+    const enquiries = await callMcpTool(orgId, wpServer, 'wp_get_enquiries', {
+      start_date: startDate,
+      end_date:   endDate,
+      limit:      2000,
+    });
+
+    if (!Array.isArray(enquiries)) return [];
+
+    const wpCount = enquiries.length;
+
+    if (wpCount === 0) {
+      return [{
+        tool:    'cross_source_post_run',
+        message: `Conversion mismatch: Ads reported ${totalAdsConversions} conversions but WordPress recorded 0 enquiries for ${startDate}–${endDate}`,
+      }];
+    }
+
+    const ratio = totalAdsConversions / wpCount;
+    if (ratio > ADS_TO_WP_RATIO_MAX) {
+      return [{
+        tool:    'cross_source_post_run',
+        message: `Conversion mismatch: Ads reported ${totalAdsConversions} conversions vs ${wpCount} WordPress enquiries (${ratio.toFixed(1)}:1 ratio) for ${startDate}–${endDate}`,
+      }];
+    }
+  } catch (_err) {
+    // WordPress not configured or unavailable — skip silently, not a data failure
+  }
+  return [];
+}
 
 async function runSingleCustomer(orgId, config, adminConfig, companyProfile, startDate, endDate, customerId, emit, context) {
   const customerVars = customerId
@@ -69,6 +134,10 @@ async function runSingleCustomer(orgId, config, adminConfig, companyProfile, sta
       .catch((e) => ({ error: e.message })),
   ]);
 
+  // ── Pre-run reconciliation: Ads clicks vs GA4 total sessions ─────────────────
+
+  const preRunFailures = reconcilePreRun(dailyPerformance, sessionsOverview);
+
   // ── Single Claude call — no tools, no loop ────────────────────────────────────
 
   emit('Analysing campaign performance…');
@@ -99,7 +168,21 @@ async function runSingleCustomer(orgId, config, adminConfig, companyProfile, sta
     context:       { ...context, startDate, endDate, toolSlug: TOOL_SLUG, customerId },
   });
 
-  return { result, trace, tokensUsed };
+  // ── Post-run reconciliation: Ads conversions vs WordPress enquiries ───────────
+
+  const totalAdsConversions = Array.isArray(campaignPerformance)
+    ? campaignPerformance.reduce((s, r) => s + (r.conversions ?? 0), 0)
+    : 0;
+
+  const postRunFailures = await reconcilePostRun(orgId, startDate, endDate, totalAdsConversions);
+
+  const reconciliationFailures = [...preRunFailures, ...postRunFailures];
+
+  const augmentedResult = reconciliationFailures.length > 0
+    ? { ...result, boundsFailed: reconciliationFailures }
+    : result;
+
+  return { result: augmentedResult, trace, tokensUsed };
 }
 
 async function runGoogleAdsMonitor(context) {
