@@ -195,6 +195,18 @@ agentsRouter.use(
   })
 );
 
+// ── WP Theme Extractor ───────────────────────────────────────────────────
+const { runWpThemeExtractor } = require('../agents/wpThemeExtractor');
+
+agentsRouter.use(
+  '/wp-theme-extractor',
+  createAgentRoute({
+    slug:               'wp-theme-extractor',
+    runFn:              runWpThemeExtractor,
+    requiredPermission: 'org_member',
+  })
+);
+
 // ── DiamondPlate Data ─────────────────────────────────────────────────────
 const { runDiamondplateData } = require('../agents/diamondplateData');
 

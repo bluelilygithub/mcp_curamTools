@@ -13,6 +13,19 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### WP Theme Extractor — External URL Fetch + JSON File Generation Pattern
+**Date:** 2026-05-03
+**Status:** Settled
+**Context:** The WP Theme Extractor needs to fetch arbitrary external URLs, send the HTML to Claude, and get back multiple WordPress PHP/CSS files in a single agent run. Two questions required explicit decisions: (1) how to fetch external URLs reliably on Railway, and (2) how to get Claude to return structured file content without tool use.
+**Decision (URL fetch):** Use `https.request` / `http.request` (Node built-ins), never `fetch()`. Handle HTTP/HTTPS, up to 5 redirects, 20s timeout, and hard 100KB truncation. Strip scripts/comments in Node.js before sending — reduces tokens and avoids prompt injection risk from embedded `<script>` content.
+**Decision (structured output):** Prompt Claude to return ONLY a JSON object with exact file-content keys. Parse using the CLAUDE.md-documented pattern: strip markdown fences, find first `{` and last `}`, `JSON.parse` that slice only. This is more reliable than asking for separate tool calls per file and avoids the ReAct overhead for a fixed-output task.
+**Decision (16384 max_tokens):** 9 PHP/CSS files averaging 200–500 lines each can exceed the platform default of 8192 output tokens. The agent defaults to 16384 and allows admin override. This is the only agent with a higher default — justified by the multi-file output requirement.
+**Rationale:** Pre-fetch + single Claude call is ~10× cheaper than a ReAct loop. External URL fetching is a new pattern for this codebase — using `https.request` is consistent with the MailChannels and Gemini API patterns documented in CLAUDE.md. JSON file output avoids multiple API calls and keeps the agent result self-contained in a single `agent_runs` row.
+**Constraints it must not violate:** URL fetch must use `https.request`, not `fetch` (Railway). HTML truncation must happen before the model call, not after. JSON parse must use the fence-strip + brace-find pattern, not a plain `JSON.parse(text)` which breaks when the model adds explanatory text. The 16384 token override must be set per-agent, not as a platform default change.
+**References:** `server/agents/wpThemeExtractor/index.js`; `server/agents/wpThemeExtractor/prompt.js`; `server/CLAUDE.md` — "fetch silently fails on Railway" and "Strip markdown fences AND surrounding text when parsing model JSON output" rules.
+
+---
+
 ### Mandatory Reference Read Before Writing Any New Agent or Page
 **Date:** 2026-04-21
 **Status:** Settled

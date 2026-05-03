@@ -79,6 +79,16 @@ const TOOLS = [
     roles:       ['org_member', 'org_admin'],
     group:       'CRM',
   },
+  // ── WordPress ────────────────────────────────────────────────────────────
+  {
+    id:          'wp-theme-extractor',
+    name:        'WP Theme Extractor',
+    description: 'Paste a URL and extract a production-ready WordPress theme skeleton with vanilla CSS, functions.php, and all standard templates.',
+    icon:        'code',
+    path:        '/tools/wp-theme-extractor',
+    roles:       ['org_member', 'org_admin'],
+    group:       'WordPress',
+  },
   // ── Utilities ─────────────────────────────────────────────────────────────
   {
     id:          'doc-extractor',

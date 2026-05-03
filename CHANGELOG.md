@@ -25,6 +25,52 @@
 
 ---
 
+## 2026-05-03 — WP Theme Extractor: URL → WordPress theme skeleton with vanilla CSS
+
+### Built
+
+**WP Theme Extractor agent (`wp-theme-extractor`) — new tool at `/tools/wp-theme-extractor`**
+
+- `server/agents/wpThemeExtractor/index.js` — pre-fetch pattern. Fetches external URL HTML via `https.request` (not fetch — Railway-safe), strips scripts/comments, sends to Claude in a single call. Handles HTTP/HTTPS, redirects (max 5), 100KB truncation, 20s timeout.
+- `server/agents/wpThemeExtractor/prompt.js` — detailed extraction prompt covering: Tailwind→vanilla CSS conversion, BEM class naming, `:root` variable extraction, responsive breakpoint preservation, `{{semantic-placeholder}}` text substitution, `placehold.co` image replacement, WordPress theme header, and full file structure requirements for all 9 output files.
+- `parseThemeJson()` — strips markdown fences and finds first `{`/last `}` (CLAUDE.md pattern) before `JSON.parse`. Catches truncated/wrapped JSON from model.
+- Returns `{ result: { summary, data: { files, url, pageType, mainFilename, fetchedKb } } }` — consumed by `createAgentRoute` to produce `resultPayload.summary` + `resultPayload.data.files`.
+
+**Files generated per run:**
+- `style.css` — WP theme header + extracted vanilla CSS + `:root` custom properties
+- `functions.php` — `add_theme_support`, nav menus (`primary-menu`, `footer-menu`), `wp_enqueue_style`, two widget areas
+- `header.php` — `wp_head()`, `body_class()`, `wp_nav_menu()` for primary nav
+- `footer.php` — footer nav, `wp_footer()`
+- `front-page.php` or `single.php` — toggled by Homepage / Post/Page selector
+- `page.php` — static page template with standard WP loop
+- `archive.php` — `the_archive_title()` + post loop with excerpt
+- `single-{detected-cpt}.php` — Claude detects CPT from HTML content (service, product, project, etc.)
+- `template-outline.html` — annotated HTML with `{{semantic-placeholders}}` for reference
+
+**Route:** registered in `server/routes/agents.js` as `/api/agents/wp-theme-extractor`, `org_member` permission.
+
+**Frontend — `client/src/pages/tools/WpThemeExtractorPage.jsx`**
+- Three tabs: Extract (URL input + page type toggle + run button), Files (file browser), History
+- File browser: left sidebar of filenames, right code view with Copy + Download per file, Download All button
+- Homepage/Post/Page radio toggle — controls which main template is generated
+- SPA warning: if fetched HTML looks empty (React SPA without SSR), the tool notifies the user to use DevTools → Copy outerHTML instead
+- Dashboard entry in `client/src/config/tools.js` under new "WordPress" group
+- Route wired in `client/src/App.jsx`
+
+**Token/cost notes:** `max_tokens` default is 16384 (overrides platform default 8192) — necessary because Claude generates ~8 PHP/CSS files. Typical run ≈ 30,000–60,000 input tokens (100KB HTML) + ~4,000 output tokens.
+
+### Fixed / discovered
+- `agentOrchestrator.run()` with `tools: []` and `maxIterations: 1` returns `{ result: { summary: rawText } }` where `rawText` is the model's raw response string. Pre-fetch agents that prompt Claude to return JSON must parse `result.summary` themselves before constructing their own `{ result: { summary, data } }` return shape.
+- React SPAs without SSR return `<div id="root"></div>` — fetching the page source URL gives an empty shell with no visible content. Only SSR pages (Next.js, WordPress, static HTML) produce useful output from a URL fetch.
+
+### Open / next
+- Test against real-world URLs (WordPress, Webflow, plain HTML, Next.js SSR)
+- Calibrate HTML truncation threshold (100KB) — complex pages may need more context; simple pages waste tokens
+- Consider a "Refine" step: let user paste back partial theme + ask Claude to improve specific files
+- ZIP download (all files in one click) — currently downloads files individually in a loop
+
+---
+
 ## 2026-04-29 — Cross-source reconciliation: Ads vs GA4 vs WordPress ground-truth checks
 
 ### Built
