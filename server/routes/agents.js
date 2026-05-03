@@ -204,6 +204,7 @@ agentsRouter.use(
     slug:               'wp-theme-extractor',
     runFn:              runWpThemeExtractor,
     requiredPermission: 'org_member',
+    rateLimit:          20,
   })
 );
 

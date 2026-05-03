@@ -67,12 +67,13 @@ function extractSuggestions(text) {
  * @param {string}   slug               — agent identifier (e.g. 'google-ads-monitor')
  * @param {Function} runFn              — async (context) => { result, trace?, tokensUsed? }
  * @param {string}   requiredPermission — role name; org_admin always satisfies the check
+ * @param {number}   [rateLimit=5]      — max runs per user per 5-minute window
  */
-function createAgentRoute({ slug, runFn, requiredPermission }) {
+function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
   const router = express.Router();
 
-  // 5 agent runs per user per 5 minutes — report agents are expensive
-  const runRateLimiter = createRateLimiter({ windowMs: 5 * 60_000, max: 5 });
+  // N agent runs per user per 5 minutes — default 5 for expensive report agents
+  const runRateLimiter = createRateLimiter({ windowMs: 5 * 60_000, max: rateLimit });
 
   // ── POST /run — SSE stream ───────────────────────────────────────────────
   router.post(
