@@ -89,30 +89,40 @@ function parseThemeJson(text) {
 async function runWpThemeExtractor(context) {
   const { req, emit } = context;
 
-  const url      = (req?.body?.url ?? '').trim();
-  const pageType = req?.body?.pageType ?? 'homepage'; // 'homepage' | 'post-page'
+  const url        = (req?.body?.url      ?? '').trim();
+  const pastedHtml = (req?.body?.html     ?? '').trim();
+  const pageType   =  req?.body?.pageType ?? 'homepage'; // 'homepage' | 'post-page'
 
-  if (!url) throw new Error('URL is required');
+  if (!url && !pastedHtml) throw new Error('Provide either a URL or paste HTML directly.');
 
   const adminConfig = await AgentConfigService.getAdminConfig(TOOL_SLUG);
 
-  emit(`Fetching ${url}…`);
+  let html;
+  let sourceLabel;
 
-  let rawHtml;
-  try {
-    rawHtml = await fetchHtml(url);
-  } catch (e) {
-    throw new Error(`Could not fetch URL: ${e.message}`);
+  if (pastedHtml) {
+    html        = preClean(pastedHtml.slice(0, MAX_HTML_BYTES * 4)); // 4 bytes/char safety
+    sourceLabel = 'pasted HTML';
+    emit('Using pasted HTML…');
+  } else {
+    emit(`Fetching ${url}…`);
+    let rawHtml;
+    try {
+      rawHtml = await fetchHtml(url);
+    } catch (e) {
+      throw new Error(`Could not fetch URL: ${e.message}`);
+    }
+    html        = preClean(rawHtml);
+    sourceLabel = url;
   }
 
-  const html    = preClean(rawHtml);
-  const sizeKb  = Math.round(Buffer.byteLength(html, 'utf-8') / 1024);
+  const sizeKb       = Math.round(Buffer.byteLength(html, 'utf-8') / 1024);
   const mainFilename = pageType === 'post-page' ? 'single.php' : 'front-page.php';
 
-  emit(`Fetched ${sizeKb}KB of HTML. Generating WordPress theme…`);
+  emit(`${sizeKb}KB of HTML ready. Generating WordPress theme…`);
 
   const userMessage =
-    `URL: ${url}\n` +
+    `Source: ${sourceLabel}\n` +
     `Page type toggle: ${pageType === 'post-page' ? 'Post/Page' : 'Homepage'}\n` +
     `Set mainTemplate.filename to "${mainFilename}".\n\n` +
     `HTML (may be truncated at 100KB):\n---\n${html}\n---`;
@@ -143,7 +153,7 @@ async function runWpThemeExtractor(context) {
       summary: files.summary ?? 'WP theme extracted successfully.',
       data: {
         files,
-        url,
+        url: sourceLabel,
         pageType,
         mainFilename,
         fetchedKb: sizeKb,

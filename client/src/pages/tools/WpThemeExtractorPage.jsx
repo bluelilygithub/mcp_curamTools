@@ -306,14 +306,16 @@ const inputStyle = {
 };
 
 export default function WpThemeExtractorPage() {
-  const [url,       setUrl]       = useState('');
-  const [pageType,  setPageType]  = useState('homepage');
-  const [running,   setRunning]   = useState(false);
-  const [progress,  setProgress]  = useState([]);
-  const [error,     setError]     = useState('');
-  const [runError,  setRunError]  = useState('');
-  const [result,    setResult]    = useState(null);
-  const [activeTab, setActiveTab] = useState('extract');
+  const [inputMode,  setInputMode]  = useState('url');   // 'url' | 'paste'
+  const [url,        setUrl]        = useState('');
+  const [pastedHtml, setPastedHtml] = useState('');
+  const [pageType,   setPageType]   = useState('homepage');
+  const [running,    setRunning]    = useState(false);
+  const [progress,   setProgress]   = useState([]);
+  const [error,      setError]      = useState('');
+  const [runError,   setRunError]   = useState('');
+  const [result,     setResult]     = useState(null);
+  const [activeTab,  setActiveTab]  = useState('extract');
 
   // Warn before leaving mid-run
   useEffect(() => {
@@ -333,8 +335,12 @@ export default function WpThemeExtractorPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleRun() {
-    if (!url.trim()) {
+    if (inputMode === 'url' && !url.trim()) {
       setError('Enter a URL to extract.');
+      return;
+    }
+    if (inputMode === 'paste' && !pastedHtml.trim()) {
+      setError('Paste some HTML first.');
       return;
     }
     setRunning(true);
@@ -342,8 +348,12 @@ export default function WpThemeExtractorPage() {
     setError('');
     setRunError('');
 
+    const payload = inputMode === 'paste'
+      ? { html: pastedHtml.trim(), pageType }
+      : { url: url.trim(), pageType };
+
     try {
-      const res     = await api.stream(`/agents/${AGENT_SLUG}/run`, { url: url.trim(), pageType });
+      const res     = await api.stream(`/agents/${AGENT_SLUG}/run`, payload);
       const reader  = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -435,22 +445,69 @@ export default function WpThemeExtractorPage() {
             className="rounded-2xl border p-5 mb-4"
             style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
           >
-            {/* URL input */}
+            {/* Input mode toggle */}
             <div className="mb-4">
-              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
-                Page URL
-              </label>
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com"
-                style={{ ...inputStyle, width: '100%', maxWidth: 520 }}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !running) handleRun(); }}
-              />
-              <p className="text-xs mt-1.5" style={{ color: 'var(--color-muted)' }}>
-                Works best with server-rendered pages. For React SPAs, use browser DevTools → Elements → Copy outerHTML instead.
-              </p>
+              <div
+                className="flex gap-0.5 rounded-lg p-1 inline-flex mb-3"
+                style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}
+              >
+                {[
+                  { value: 'url',   label: 'Fetch URL' },
+                  { value: 'paste', label: 'Paste HTML' },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => { setInputMode(opt.value); setError(''); }}
+                    style={{
+                      padding: '0.3rem 0.9rem', fontSize: '0.8rem', borderRadius: '0.4rem',
+                      border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                      background: inputMode === opt.value ? 'var(--color-primary)' : 'transparent',
+                      color:      inputMode === opt.value ? '#fff' : 'var(--color-muted)',
+                      fontWeight: inputMode === opt.value ? 600 : 400,
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {inputMode === 'url' && (
+                <>
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://example.com"
+                    style={{ ...inputStyle, width: '100%', maxWidth: 520 }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !running) handleRun(); }}
+                  />
+                  <p className="text-xs mt-1.5" style={{ color: 'var(--color-muted)' }}>
+                    Works best with server-rendered pages (WordPress, Next.js SSR, static HTML).
+                    Sites with bot protection (Cloudflare) — use <strong>Paste HTML</strong> instead.
+                  </p>
+                </>
+              )}
+
+              {inputMode === 'paste' && (
+                <>
+                  <textarea
+                    value={pastedHtml}
+                    onChange={(e) => setPastedHtml(e.target.value)}
+                    placeholder={'Paste full page HTML here.\n\nHow to get it:\n1. Open the page in Chrome\n2. Right-click → Inspect\n3. Right-click the <html> tag → Copy → Copy outerHTML\n4. Paste here'}
+                    rows={10}
+                    style={{
+                      ...inputStyle,
+                      width: '100%', display: 'block',
+                      fontFamily: 'monospace', fontSize: '0.75rem',
+                      resize: 'vertical', lineHeight: 1.5,
+                    }}
+                  />
+                  <p className="text-xs mt-1.5" style={{ color: 'var(--color-muted)' }}>
+                    Best for React SPAs, Cloudflare-protected sites, or any page that blocks server-side fetching.
+                    Chrome DevTools → Elements → right-click &lt;html&gt; → Copy outerHTML.
+                  </p>
+                </>
+              )}
             </div>
 
             {/* Page type toggle */}

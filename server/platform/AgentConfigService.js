@@ -183,6 +183,13 @@ const ADMIN_DEFAULTS = {
     max_task_budget_aud: 2.00,          // web search adds cost per competitor vs pure pre-fetch agents
     fallback_model:      null,
   },
+  'wp-theme-extractor': {
+    enabled:             true,
+    model:               null,
+    max_tokens:          16384, // generates 9 PHP/CSS files — needs extra headroom
+    max_task_budget_aud: 1.00,
+    fallback_model:      null,
+  },
   _platform: {
     enabled: true,
     model: null,
@@ -220,6 +227,7 @@ const AGENT_MODEL_REQUIREMENTS = {
   'ai-visibility-monitor':       { tier: 'advanced', reason: 'Multi-prompt web search with cross-source brand and competitor analysis' },
   'doc-extractor':               { tier: 'advanced', reason: 'Vision extraction quality scales with model capability — Sonnet handles complex layouts, poor scans, and dense forms significantly better than Haiku' },
   'high-intent-advisor':         { tier: 'advanced', reason: 'Three-phase cross-source analysis with ReAct loop — requires strong reasoning to connect Ads, GA4, and CRM signals into actionable suggestions' },
+  'wp-theme-extractor':          { tier: 'advanced', reason: 'Generates 9 complete PHP/CSS files from raw HTML — requires layout analysis, CSS conversion, and WP template knowledge' },
   'not-interested-report':       { tier: 'advanced', reason: 'Cross-source narrative analysis joining CRM not-interested reasons, sales call notes, and Ads keyword/search term data' },
   'geo-heatmap':                 { tier: 'standard', reason: 'Single analysis call on pre-fetched geocoded lead data' },
   _platform:                     { tier: 'advanced', reason: 'Default for unrecognised agents' },
