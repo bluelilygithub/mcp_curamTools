@@ -42,7 +42,7 @@ function fetchHtml(rawUrl, redirectsLeft = MAX_REDIRECTS) {
           : `${url.protocol}//${url.hostname}${res.headers.location}`;
         return fetchHtml(next, redirectsLeft - 1).then(resolve).catch(reject);
       }
-      if (res.statusCode !== 200) {
+      if (res.statusCode < 200 || res.statusCode >= 300) {
         return reject(new Error(`HTTP ${res.statusCode} fetching ${rawUrl}`));
       }
 
