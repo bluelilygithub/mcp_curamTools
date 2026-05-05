@@ -13,7 +13,7 @@ A demo agent serves an external client org (`org_type = 'demo'`). It uses the sa
 - Is registered in `DEMO_CATALOG` (`server/demo/demoCatalog.js`) — code-only, not DB
 - Is assigned to a client org via `org_agent_manifest` (DB row, not code)
 - Renders in `DemoShell` + `DemoSidebar`, not `AppShell` + `Sidebar`
-- Routes at `client/src/pages/demo/<ComponentName>.jsx` → `/demo/run/<slug-suffix>`
+- Routes at `client/src/pages/demo/<ComponentName>.jsx` → `/demo/run/<full-slug>` (DemoSidebar uses the slug verbatim from `org_agent_manifest`)
 
 Internal agents and demo agents share: auth, org scoping, budget enforcement, usage logging, PDF export, extraction privacy, `agent_runs` table, and `createAgentRoute`.
 
@@ -160,7 +160,7 @@ await exportPdf({ content: html, contentType: 'html', title: '...', filename: '.
 3. **`server/platform/AgentConfigService.js`** — add to `AGENT_DEFAULTS` and `ADMIN_DEFAULTS`
 4. **`server/routes/agents.js`** — register with `createAgentRoute`
 5. **`client/src/pages/demo/<Page>.jsx`** — build UI
-6. **`client/src/App.jsx`** — add `<Route path="/demo/run/<slug-suffix>" element={<Page />} />`
+6. **`client/src/App.jsx`** — add `<Route path="/demo/run/<full-slug>" element={<Page />} />` (must match the slug in `org_agent_manifest` exactly — DemoSidebar uses it verbatim)
 7. **SQL Console** — `INSERT INTO org_agent_manifest` for target org
 8. **DECISIONS.md** — add entry documenting non-obvious choices
 9. **CHANGELOG.md** — session entry

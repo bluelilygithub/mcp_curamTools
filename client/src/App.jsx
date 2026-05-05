@@ -99,7 +99,7 @@ export default function App() {
 
                 {/* Demo org routes */}
                 <Route path="/demo/dashboard" element={<DemoDashboardPage />} />
-                <Route path="/demo/run/document-analyzer" element={<DocumentAnalyzer />} />
+                <Route path="/demo/run/demo-document-analyzer" element={<DocumentAnalyzer />} />
               </Route>
             </Route>
 
