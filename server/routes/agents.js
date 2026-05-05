@@ -461,6 +461,19 @@ agentsRouter.post('/google-ads-monitor/email', requireAuth, async (req, res) => 
   }
 });
 
+// ── Demo Suite — Document Analyzer ───────────────────────────────────────
+const { runDocumentAnalyzer } = require('../agents/demoSuite/documentAnalyzer');
+
+agentsRouter.use(
+  '/demo-document-analyzer',
+  createAgentRoute({
+    slug:               'demo-document-analyzer',
+    runFn:              runDocumentAnalyzer,
+    requiredPermission: 'org_member',
+    rateLimit:          20, // interactive demo — allow more frequent runs than report agents
+  })
+);
+
 // ── Agent config routes (/api/agent-configs/:slug) ────────────────────────
 
 // GET /api/agent-configs/:slug — operator config (any authenticated user)

@@ -140,4 +140,154 @@ adminRouter.delete('/manifest/:slug', async (req, res) => {
 
 router.use('/admin', adminRouter);
 
+// ── Demo run endpoints ────────────────────────────────────────────────────
+// These endpoints serve the document analyzer HITL review flow.
+// All scoped to req.user.orgId — no cross-org access possible.
+//
+// GET  /api/demo/runs                          — list recent runs for this org
+// GET  /api/demo/runs/:runId                   — full run result (current review state)
+// PATCH /api/demo/runs/:runId/review/:findingId — update a single finding's review state
+
+// GET /api/demo/runs?slug=demo-document-analyzer&limit=10
+router.get('/runs', async (req, res) => {
+  try {
+    const slug  = req.query.slug  ?? 'demo-document-analyzer';
+    const limit = Math.min(parseInt(req.query.limit ?? '10', 10), 50);
+
+    const { rows } = await pool.query(
+      `SELECT id, slug, status, error, run_at, completed_at,
+              result->'summary'                          AS summary,
+              result->'data'->'document_type'            AS document_type,
+              result->'data'->'file_name'                AS file_name,
+              result->'data'->'pending_review_count'     AS pending_review_count
+         FROM agent_runs
+        WHERE org_id = $1 AND slug = $2
+        ORDER BY run_at DESC
+        LIMIT $3`,
+      [req.user.orgId, slug, limit]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load runs.' });
+  }
+});
+
+// GET /api/demo/runs/:runId — full result including current finding review states
+router.get('/runs/:runId', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, slug, status, error, run_at, completed_at, result
+         FROM agent_runs
+        WHERE id = $1 AND org_id = $2`,
+      [req.params.runId, req.user.orgId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Run not found.' });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load run.' });
+  }
+});
+
+// PATCH /api/demo/runs/:runId/review/:findingId
+// Body: { status, comment }
+// status must be one of: approved | rejected | resubmit
+// Low-confidence findings (confidence < 0.7) and cross-stage conflicts require a comment.
+router.patch('/runs/:runId/review/:findingId', async (req, res) => {
+  const VALID_STATUSES = new Set(['approved', 'rejected', 'resubmit']);
+  const { runId, findingId } = req.params;
+  const { status, comment }  = req.body ?? {};
+
+  if (!VALID_STATUSES.has(status)) {
+    return res.status(400).json({ error: `Invalid status. Must be: ${[...VALID_STATUSES].join(' | ')}` });
+  }
+
+  try {
+    // Load the run — scoped to org_id, prevents cross-org writes
+    const { rows } = await pool.query(
+      `SELECT id, result FROM agent_runs WHERE id = $1 AND org_id = $2`,
+      [runId, req.user.orgId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Run not found.' });
+
+    const result = rows[0].result ?? {};
+    const data   = result.data    ?? {};
+
+    // Find the finding in all_findings and update it in place
+    let found = false;
+    const allFindings = (data.all_findings ?? []).map((f) => {
+      if (f.finding_id !== findingId) return f;
+
+      // Enforce comment requirement for low-confidence or cross-stage conflict findings
+      const isLowConfidence = typeof f.confidence === 'number' && f.confidence < 0.7;
+      const isCrossStage    = f.also_flagged_deterministic || f.also_flagged_probabilistic;
+      if ((isLowConfidence || isCrossStage) && status === 'approved' && !comment?.trim()) {
+        return { ...f, _validation_error: 'Comment required before approving this finding.' };
+      }
+
+      found = true;
+      return {
+        ...f,
+        status,
+        comment:     comment?.trim() ?? null,
+        reviewed_by: req.user.email ?? req.user.id,
+        reviewed_at: new Date().toISOString(),
+        _validation_error: undefined,
+      };
+    });
+
+    // Surface validation errors before writing
+    const validationErr = allFindings.find((f) => f._validation_error);
+    if (validationErr) {
+      return res.status(422).json({ error: validationErr._validation_error });
+    }
+    if (!found) return res.status(404).json({ error: 'Finding not found in run.' });
+
+    // Sync the same finding into the stage-specific arrays
+    const syncFinding = (arr) => (arr ?? []).map((f) => {
+      const updated = allFindings.find((u) => u.finding_id === f.finding_id);
+      return updated ?? f;
+    });
+
+    const pending_review_count = allFindings.filter((f) => f.status === 'pending_review').length;
+
+    // Add review action to the trace
+    const trace = data.trace ?? [];
+    trace.push({
+      step:        'review_action',
+      timestamp:   new Date().toISOString(),
+      finding_id:  findingId,
+      finding_label: allFindings.find((f) => f.finding_id === findingId)?.label ?? findingId,
+      decision:    status,
+      reviewed_by: req.user.email ?? req.user.id,
+      comment:     comment?.trim() ?? null,
+    });
+
+    const updatedData = {
+      ...data,
+      all_findings:           allFindings,
+      deterministic_findings: syncFinding(data.deterministic_findings),
+      probabilistic_findings: syncFinding(data.probabilistic_findings),
+      pending_review_count,
+      trace,
+    };
+
+    await pool.query(
+      `UPDATE agent_runs
+          SET result = jsonb_set(result, '{data}', $1::jsonb)
+        WHERE id = $2 AND org_id = $3`,
+      [JSON.stringify(updatedData), runId, req.user.orgId]
+    );
+
+    res.json({
+      ok:                   true,
+      finding_id:           findingId,
+      status,
+      pending_review_count,
+    });
+  } catch (err) {
+    console.error('[demo/review PATCH]', err.message);
+    res.status(500).json({ error: 'Failed to update review.' });
+  }
+});
+
 module.exports = router;

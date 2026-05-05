@@ -8,6 +8,7 @@ import AppShell from './components/layout/AppShell';
 import OrgShell from './components/layout/OrgShell';
 import LoginPage from './pages/LoginPage';
 import DemoDashboardPage from './pages/demo/DemoDashboardPage';
+import DocumentAnalyzer from './pages/demo/DocumentAnalyzer';
 import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './pages/SettingsPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
@@ -98,6 +99,7 @@ export default function App() {
 
                 {/* Demo org routes */}
                 <Route path="/demo/dashboard" element={<DemoDashboardPage />} />
+                <Route path="/demo/run/document-analyzer" element={<DocumentAnalyzer />} />
               </Route>
             </Route>
 
