@@ -73,15 +73,7 @@ router.post('/organizations', async (req, res) => {
       `INSERT INTO organizations (name, org_type) VALUES ($1, $2) RETURNING id, name, org_type, created_at`,
       [name.trim(), orgType]
     );
-    const newOrg = rows[0];
-
-    // Inherit default model from the creating admin's org
-    const parentModel = await AgentConfigService.getOrgDefaultModel(req.user.orgId);
-    if (parentModel) {
-      await AgentConfigService.updateOrgDefaultModel(newOrg.id, parentModel, req.user.id);
-    }
-
-    res.json(newOrg);
+    res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Failed to create organisation.' });
   }
