@@ -313,6 +313,11 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
   const { showToast } = useToast();
   const isSelf = currentUser?.id === user.id;
 
+  // Organisation
+  const [allOrgs,       setAllOrgs]       = useState([]);
+  const [selectedOrgId, setSelectedOrgId] = useState(user.org_id ?? '');
+  const [orgSaving,     setOrgSaving]     = useState(false);
+
   // Org role (admin/member toggle)
   const [isAdmin,       setIsAdmin]       = useState(false);
   const [roleLoading,   setRoleLoading]   = useState(true);
@@ -353,7 +358,9 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
       api.get('/admin/departments'),
       api.get('/admin/org-roles'),
       api.get('/admin/models'),
-    ]).then(([roles, userDepts, userOrgRoles, depts, orgRoles, modelList]) => {
+      api.get('/admin/organizations'),
+    ]).then(([roles, userDepts, userOrgRoles, depts, orgRoles, modelList, orgs]) => {
+      setAllOrgs(Array.isArray(orgs) ? orgs : []);
       setIsAdmin(roles.some((r) => r.role_name === 'org_admin' && r.scope_type === 'global'));
       setUserDeptIds(userDepts.map((d) => d.id));
       setUserRoleNames(userOrgRoles);
@@ -461,6 +468,45 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
   return (
     <ModalShell onClose={onClose} title="Manage User" subtitle={user.email}>
       <div className="space-y-5">
+
+        {/* ── Organisation ──────────────────────────────────────────────── */}
+        <section>
+          <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>
+            Organisation
+          </p>
+          <div className="flex gap-2">
+            <select
+              value={selectedOrgId}
+              onChange={(e) => setSelectedOrgId(e.target.value)}
+              style={{ ...inputStyle, flex: 1 }}
+            >
+              {allOrgs.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}{o.org_type === 'demo' ? ' (Demo)' : ''}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={async () => {
+                setOrgSaving(true);
+                try {
+                  await api.put(`/admin/users/${user.id}`, { orgId: selectedOrgId });
+                  showToast('Organisation updated', 'success');
+                  onSaved();
+                } catch (e) {
+                  showToast(e.message || 'Failed to update organisation', 'error');
+                } finally {
+                  setOrgSaving(false);
+                }
+              }}
+              disabled={orgSaving}
+              className="text-xs px-3 py-1.5 rounded-xl transition-opacity hover:opacity-80 disabled:opacity-40 flex-shrink-0"
+              style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', cursor: 'pointer' }}
+            >
+              {orgSaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </section>
 
         {/* ── Organisation role ─────────────────────────────────────────── */}
         <section>

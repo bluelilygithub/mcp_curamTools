@@ -32,15 +32,16 @@ router.get('/users', async (req, res) => {
   try {
     const res2 = await pool.query(
       `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.is_active, u.created_at,
-              u.default_model_id,
+              u.default_model_id, u.org_id, o.name AS org_name,
               array_agg(DISTINCT r.role_name) FILTER (WHERE r.role_name IS NOT NULL) AS roles,
               array_agg(DISTINCT d.name)      FILTER (WHERE d.id       IS NOT NULL) AS department_names
          FROM users u
+         LEFT JOIN organizations o    ON o.id            = u.org_id
          LEFT JOIN user_roles r       ON r.user_id       = u.id
          LEFT JOIN user_departments ud ON ud.user_id      = u.id
          LEFT JOIN departments d       ON d.id            = ud.department_id
         WHERE u.org_id = $1
-        GROUP BY u.id
+        GROUP BY u.id, o.name
         ORDER BY u.created_at DESC`,
       [req.user.orgId]
     );
@@ -103,12 +104,16 @@ router.post('/users/:id/resend-invite', async (req, res) => {
 });
 
 router.put('/users/:id', async (req, res) => {
-  const { firstName, lastName, phone, isActive, role, defaultModelId } = req.body;
+  const { firstName, lastName, phone, isActive, role, defaultModelId, orgId } = req.body;
   const userId = parseInt(req.params.id);
   try {
     await pool.query(
-      `UPDATE users SET first_name = $1, last_name = $2, phone = $3, is_active = $4, default_model_id = $5 WHERE id = $6`,
-      [firstName, lastName, phone, isActive, defaultModelId ?? null, userId]
+      `UPDATE users SET first_name = $1, last_name = $2, phone = $3, is_active = $4, default_model_id = $5
+         ${orgId ? ', org_id = $7' : ''}
+       WHERE id = $6`,
+      orgId
+        ? [firstName, lastName, phone, isActive, defaultModelId ?? null, userId, parseInt(orgId)]
+        : [firstName, lastName, phone, isActive, defaultModelId ?? null, userId]
     );
     if (role) {
       await pool.query(`DELETE FROM user_roles WHERE user_id = $1 AND scope_type = 'global'`, [userId]);
