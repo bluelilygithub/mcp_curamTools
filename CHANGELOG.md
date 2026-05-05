@@ -25,6 +25,26 @@
 
 ---
 
+## 2026-05-06 — Multi-org user management: Organisations page + invite org selector
+
+### Built
+- **`GET/POST /api/admin/organizations`** — list all orgs, create new org (name + org_type). New routes in `server/routes/admin.js`, before the invite block.
+- **`AdminOrganizationsPage.jsx`** — new admin page: table of all orgs with name, type badge (Demo/Internal), created date; "New Organisation" modal with name + type fields.
+- **`AdminUsersPage.jsx` — InviteModal** — org dropdown added; fetches `/admin/organizations` on mount, shows selector when more than one org exists, defaults to admin's own org. `orgId` passed to invite endpoint.
+- **`Sidebar.jsx`** — "Organisations" nav item (building icon) added above Users under Users & Access.
+- **`IconProvider.jsx`** — `Building2` Lucide icon added as `building` semantic key.
+- **`App.jsx`** — `/admin/organizations` route added.
+
+### Fixed
+- Route mismatch: `/demo/run/document-analyzer` → `/demo/run/demo-document-analyzer` (DemoSidebar uses slug verbatim from `org_agent_manifest`).
+
+### Open / next
+- Run provisioning SQL to create Curam Engineering org (if not done already)
+- Invite demo user via Admin > Users, select Curam Engineering org
+- Demo user logs in → routed to DemoShell + document-analyzer agent
+
+---
+
 ## 2026-05-05 — Curam Engineering demo: document-analyzer built and deployed
 
 ### Built
