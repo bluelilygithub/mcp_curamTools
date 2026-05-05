@@ -5,7 +5,9 @@ import { ToastProvider } from './components/ui/Toast';
 import RequireAuth from './guards/RequireAuth';
 import RequireRole from './guards/RequireRole';
 import AppShell from './components/layout/AppShell';
+import OrgShell from './components/layout/OrgShell';
 import LoginPage from './pages/LoginPage';
+import DemoDashboardPage from './pages/demo/DemoDashboardPage';
 import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './pages/SettingsPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
@@ -54,7 +56,7 @@ export default function App() {
 
             {/* Authenticated */}
             <Route element={<RequireAuth />}>
-              <Route element={<AppShell />}>
+              <Route element={<OrgShell />}>
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
@@ -93,6 +95,9 @@ export default function App() {
                   <Route path="/admin/usage" element={<AdminUsagePage />} />
                   <Route path="/admin/claude-sessions" element={<AdminClaudeSessionPage />} />
                 </Route>
+
+                {/* Demo org routes */}
+                <Route path="/demo/dashboard" element={<DemoDashboardPage />} />
               </Route>
             </Route>
 

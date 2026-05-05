@@ -13,6 +13,20 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### Demo Layer — Multi-Tenant Org Branching, Catalog-vs-Manifest Split, OrgShell Pattern
+**Date:** 2026-05-05
+**Status:** Settled
+**Context:** The platform needed to serve external client demo orgs from the same repo and deployment, showing them a completely different UI (agent cards, not Blue Lily tools) without polluting the internal app. Three questions required explicit decisions: (1) how to distinguish demo orgs from internal orgs, (2) where to store the "which agents does this org get" configuration, and (3) how to branch the React layout without touching every existing file.
+**Decision (org_type column):** Add `org_type TEXT NOT NULL DEFAULT 'internal'` to the `organizations` table with a `CHECK (org_type IN ('internal', 'demo'))` constraint. `org_type` is propagated through the session middleware (`requireAuth`) and all three auth response shapes (login, register, profile). The client `authStore` persists `orgType` automatically — no extra API call needed after login.
+**Decision (catalog vs manifest split):** Agent catalog (`DEMO_CATALOG`) is code-registered in `server/demo/demoCatalog.js` — catalog entries are tied to deployed agent code, not runtime data. Per-org agent assignment lives in the DB table `org_agent_manifest` (slug, enabled, label, description, sort_order, is_configured). This mirrors the precedent of `AGENT_DEFAULTS` (code constant) + `agent_configs` (DB). Adding a new demo agent requires a code deploy; assigning it to a client org requires only an admin DB action.
+**Decision (OrgShell layout branching):** A single new component `OrgShell.jsx` replaces `AppShell` on the authenticated shell route in `App.jsx`. `OrgShell` reads `user.orgType` from `authStore`; internal orgs get `AppShell` unchanged, demo orgs get `DemoShell` (separate layout, separate sidebar, no `Sidebar.jsx` or `tools.js` imports). This is a one-time wiring change — after it, adding a new demo agent touches only files inside the `demoSuite/` silo. Sidebar.jsx requires zero modification.
+**Decision (additive wiring only):** The four unavoidable wiring files (db.js, requireAuth.js, auth.js, index.js, App.jsx) receive only new lines — no existing lines changed. `Sidebar.jsx` and `tools.js` are untouched because demo orgs never render the internal sidebar.
+**Rationale:** Keeping both org types in one repo avoids a separate deployment pipeline. The `org_type` column costs one JOIN column. The catalog/manifest split avoids DB FK constraints on slugs that may not yet exist in the catalog. The OrgShell pattern isolates demo layout changes to a single decision point — the authenticated shell route.
+**Constraints it must not violate:** `org_id` must always come from `req.user.orgId`, never from a request param. Catalog entries must be code-registered (not DB) because they are tied to deployed agent code. Demo agents must use `createAgentRoute` and `AgentOrchestrator` unmodified — they inherit auth, org scoping, usage logging, and PDF handling automatically.
+**References:** `server/db.js` (org_type migration + org_agent_manifest); `server/middleware/requireAuth.js`; `server/routes/auth.js`; `server/demo/demoCatalog.js`; `server/routes/demo.js`; `client/src/components/layout/OrgShell.jsx`; `client/src/components/layout/DemoShell.jsx`; `client/src/components/layout/DemoSidebar.jsx`.
+
+---
+
 ### WP Theme Extractor — External URL Fetch + JSON File Generation Pattern
 **Date:** 2026-05-03
 **Status:** Settled

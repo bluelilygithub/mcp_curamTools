@@ -19,6 +19,7 @@ async function requireAuth(req, res, next) {
          u.id, u.email, u.org_id, u.first_name, u.last_name,
          u.is_active,
          o.name AS org_name,
+         o.org_type,
          s.expires_at
        FROM auth_sessions s
        JOIN users u ON u.id = s.user_id
@@ -47,6 +48,7 @@ async function requireAuth(req, res, next) {
       orgId: row.org_id,
       org_id: row.org_id,
       orgName: row.org_name,
+      orgType: row.org_type ?? 'internal',
       firstName: row.first_name,
       lastName: row.last_name,
     };

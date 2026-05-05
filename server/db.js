@@ -601,6 +601,41 @@ async function initSchema() {
         CHECK (status IN ('running', 'complete', 'error', 'needs_review'))
     `);
 
+    // ── Demo layer ─────────────────────────────────────────────────────────────
+
+    // org_type distinguishes internal orgs from external demo client orgs.
+    // Default 'internal' — all existing orgs remain unaffected.
+    await client.query(`
+      ALTER TABLE organizations
+        ADD COLUMN IF NOT EXISTS org_type TEXT NOT NULL DEFAULT 'internal'
+    `);
+    await client.query(`
+      ALTER TABLE organizations
+        DROP CONSTRAINT IF EXISTS organizations_org_type_check
+    `);
+    await client.query(`
+      ALTER TABLE organizations
+        ADD CONSTRAINT organizations_org_type_check
+          CHECK (org_type IN ('internal', 'demo'))
+    `);
+
+    // Per-org agent manifest — controls which demo agents a client org sees.
+    // slug references DEMO_CATALOG constant (code), not a DB FK.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS org_agent_manifest (
+        org_id        INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        slug          TEXT NOT NULL,
+        enabled       BOOLEAN NOT NULL DEFAULT true,
+        label         TEXT,
+        description   TEXT,
+        sort_order    INTEGER NOT NULL DEFAULT 0,
+        is_configured BOOLEAN NOT NULL DEFAULT false,
+        assigned_at   TIMESTAMPTZ DEFAULT NOW(),
+        assigned_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        PRIMARY KEY (org_id, slug)
+      )
+    `);
+
     await client.query('COMMIT');
 
     // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)

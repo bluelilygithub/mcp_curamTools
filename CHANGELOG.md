@@ -25,6 +25,49 @@
 
 ---
 
+## 2026-05-05 — Demo layer foundation: multi-tenant org branching, manifest API, demo shell
+
+### Built
+
+**Schema — `organizations.org_type` + `org_agent_manifest`**
+- `server/db.js` — idempotent migration adds `org_type TEXT NOT NULL DEFAULT 'internal'` to `organizations`, with DROP/ADD CONSTRAINT pattern for `CHECK (org_type IN ('internal', 'demo'))`. New table `org_agent_manifest` — per-org agent assignment: `(org_id, slug)` PK, `enabled`, `label`, `description`, `sort_order`, `is_configured`, `assigned_at`, `assigned_by`.
+
+**Auth — `orgType` propagated through session**
+- `server/middleware/requireAuth.js` — `org_type` added to session JOIN; `orgType: row.org_type ?? 'internal'` set on `req.user`.
+- `server/routes/auth.js` — `org_type` added to the `organizations` JOIN in login, register, and GET /profile. Response shape includes `orgType` — `authStore` persists it automatically, no extra API call needed.
+
+**Manifest API — `server/routes/demo.js` (new)**
+- `GET /api/demo/manifest` — enabled rows merged with `DEMO_CATALOG` metadata, ordered by `sort_order`. Public (authenticated).
+- `GET /api/demo/admin/catalog` — full catalog array. Admin-only.
+- `GET /api/demo/admin/manifest` — all rows including disabled, merged with catalog. Admin-only.
+- `PUT /api/demo/admin/manifest/:slug` — upsert with `ON CONFLICT (org_id, slug)`. Admin-only.
+- `DELETE /api/demo/admin/manifest/:slug` — remove assignment. Admin-only.
+- `org_id` always from `req.user.orgId` — no org param accepted.
+
+**Catalog — `server/demo/demoCatalog.js` (new)**
+- `DEMO_CATALOG` code constant. Three agents: `document-analyzer` (extraction), `web-intelligence` (prefetch), `conversation-assistant` (react). Code-registered because catalog entries are tied to deployed agent code — per-org assignment lives in DB manifest.
+
+**Route mount — `server/index.js`**
+- One line added: `app.use('/api/demo', require('./routes/demo'))`.
+
+**Client — OrgShell layout branching**
+- `OrgShell.jsx` — reads `user.orgType`; renders `AppShell` for internal orgs, `DemoShell` for demo orgs. Redirects demo users away from non-`/demo` paths on mount.
+- `DemoShell.jsx` — mirrors AppShell pattern: TopNav + in-flow spacer + `DemoSidebar` + `<Outlet />`.
+- `DemoSidebar.jsx` — fetches `/api/demo/manifest` on mount, renders agent nav items from manifest. No import of `Sidebar.jsx` or `tools.js`.
+- `DemoDashboardPage.jsx` — agent card grid. Each card: icon, name, description, Ready/Coming-soon badge, Launch button (disabled when `is_configured = false`).
+- `App.jsx` — `OrgShell` replaces `AppShell` on the authenticated shell route; `/demo/dashboard` route added; `DemoDashboardPage` imported.
+
+### Fixed / discovered
+- Demo org users would land on `/dashboard` (internal shell) without the `OrgShell` redirect — `OrgShell` useEffect redirects to `/demo/dashboard` on any non-`/demo` path when `orgType === 'demo'`.
+
+### Open / next
+- Restart server to run schema migrations, create demo org + user in DB, test full login → redirect flow
+- Build `document-analyzer` agent under `server/agents/demoSuite/documentAnalyzer/`
+- Admin UI: Demo Manifest management page (`/admin/demo-manifest`) — assign/remove/configure agents per org
+- `DemoRunPage.jsx` — slug-routed page that dispatches to the correct agent UI
+
+---
+
 ## 2026-05-03 — WP Theme Extractor: URL → WordPress theme skeleton with vanilla CSS
 
 ### Built

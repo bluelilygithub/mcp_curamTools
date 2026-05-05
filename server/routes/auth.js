@@ -30,7 +30,7 @@ router.post('/login', authLimiter, async (req, res) => {
 
   try {
     const userRes = await pool.query(
-      `SELECT u.*, o.name AS org_name
+      `SELECT u.*, o.name AS org_name, o.org_type
          FROM users u
          LEFT JOIN organizations o ON o.id = u.org_id
         WHERE u.email = $1`,
@@ -101,6 +101,7 @@ router.post('/login', authLimiter, async (req, res) => {
         phone: user.phone,
         orgId: user.org_id,
         orgName: user.org_name,
+        orgType: user.org_type ?? 'internal',
         roles: rolesRes.rows,
       },
     });
@@ -144,7 +145,7 @@ router.post('/register', authLimiter, async (req, res) => {
     );
 
     const userRes = await pool.query(
-      `SELECT u.*, o.name AS org_name
+      `SELECT u.*, o.name AS org_name, o.org_type
          FROM users u
          LEFT JOIN organizations o ON o.id = u.org_id
         WHERE u.id = $1`,
@@ -166,6 +167,7 @@ router.post('/register', authLimiter, async (req, res) => {
         phone: user.phone,
         orgId: user.org_id,
         orgName: user.org_name,
+        orgType: user.org_type ?? 'internal',
         roles: rolesRes.rows,
       },
     });
@@ -189,7 +191,7 @@ router.get('/profile', requireAuth, async (req, res) => {
   try {
     const userRes = await pool.query(
       `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.timezone,
-              u.org_id, o.name AS org_name
+              u.org_id, o.name AS org_name, o.org_type
          FROM users u
          LEFT JOIN organizations o ON o.id = u.org_id
         WHERE u.id = $1`,
@@ -209,6 +211,7 @@ router.get('/profile', requireAuth, async (req, res) => {
       timezone: user.timezone,
       orgId: user.org_id,
       orgName: user.org_name,
+      orgType: user.org_type ?? 'internal',
       roles: rolesRes.rows,
     });
   } catch (err) {

@@ -1407,6 +1407,105 @@ Two tabs:
 
 4. **`MarkdownRenderer` — code block support:** `LEARNINGS--very important.md` notes that improvements such as "code blocks, tables, links" should be made once in `MarkdownRenderer`. Tables are confirmed implemented. Code block and link support are listed as improvements not yet made — current implementation status is not confirmed in the source files.
 
+---
+
+## Demo Layer Primitives
+
+### DEMO_CATALOG
+**Type:** Code constant
+**Location:** `server/demo/demoCatalog.js`
+**What it does:** Platform-level registry of available demo agents. Code-registered (not DB) because catalog entries are tied to deployed agent code. Per-org assignment lives in `org_agent_manifest` (DB).
+**Interface:**
+```js
+const { DEMO_CATALOG } = require('../demo/demoCatalog');
+// DEMO_CATALOG[slug] → { name, description, category, icon, pattern }
+// pattern values: 'extraction' | 'prefetch' | 'react'
+```
+**Current entries:** `document-analyzer`, `web-intelligence`, `conversation-assistant`.
+**Reuse contract:** To add a new demo agent: (1) add entry here, (2) build the agent under `server/agents/demoSuite/<slug>/`, (3) add the client page under `client/src/pages/demo/`, (4) add the route to `App.jsx`, (5) assign to client orgs via Admin > Demo Manifest. New catalog entries require a code deploy; assigning to an org is a DB-only admin action.
+
+---
+
+### org_agent_manifest Table Schema
+**Type:** Table
+**Location:** `server/db.js` (defined in `initSchema()`)
+**What it does:** Per-org agent assignment. Determines which demo agents a given org can see and run. The `slug` column references `DEMO_CATALOG` keys but is NOT a FK — catalog entries are code-registered.
+**Interface:**
+```sql
+org_agent_manifest (
+  org_id        INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  slug          TEXT NOT NULL,            -- references DEMO_CATALOG key (not FK)
+  enabled       BOOLEAN NOT NULL DEFAULT true,
+  label         TEXT,                     -- per-org display name override (nullable)
+  description   TEXT,                     -- per-org description override (nullable)
+  sort_order    INTEGER NOT NULL DEFAULT 0,
+  is_configured BOOLEAN NOT NULL DEFAULT false,  -- admin marks when agent is ready to run
+  assigned_at   TIMESTAMPTZ DEFAULT NOW(),
+  assigned_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  PRIMARY KEY (org_id, slug)
+)
+```
+**Used by:** `GET /api/demo/manifest` — enabled rows merged with DEMO_CATALOG metadata, ordered by `sort_order ASC`. Admin routes in `server/routes/demo.js`.
+**Reuse contract:** Only `server/routes/demo.js` writes to this table. `org_id` always from `req.user.orgId`, never a request param. The `label` and `description` columns override catalog defaults per-org — pass `null` to fall back to the catalog value. Set `is_configured = true` once the agent's dependencies (API keys, admin config) are ready — the client dashboard uses this to show Ready/Coming-soon state.
+
+---
+
+### OrgShell
+**Type:** Component
+**Location:** `client/src/components/layout/OrgShell.jsx`
+**What it does:** Layout branch point — reads `user.orgType` from `authStore`, renders `AppShell` for `'internal'` orgs and `DemoShell` for `'demo'` orgs. Redirects demo users away from non-`/demo` paths on mount.
+**Interface:**
+```jsx
+// Drop-in replacement for AppShell on the authenticated shell route in App.jsx
+<Route element={<OrgShell />}>
+  ...all authenticated routes...
+</Route>
+```
+**Redirect behaviour:** If `user.orgType === 'demo'` and `location.pathname` does not start with `/demo`, navigate to `/demo/dashboard` with `replace: true` (no back-button loop). Internal users on `/demo/*` paths are not redirected — intentional, to allow admins to preview demo pages.
+**Reuse contract:** This is the single branch point. Do not add `orgType` checks to any other component, route, or middleware. Changes to the demo layout go into `DemoShell` and `DemoSidebar`, not here.
+
+---
+
+### DemoShell
+**Type:** Component
+**Location:** `client/src/components/layout/DemoShell.jsx`
+**What it does:** Authenticated layout for demo orgs. Mirrors `AppShell` pattern: TopNav + in-flow spacer + fixed `DemoSidebar` + `<Outlet />`. No `Sidebar.jsx` import, no `tools.js` import.
+**Interface:** Used as `<Outlet />` target inside `OrgShell` — no props needed.
+**Reuse contract:** Sidebar width is fixed at 220px (no collapse — demo orgs don't need it). To customise the demo layout (branding, header), modify this file. Do not add internal-app concerns (tool groups, admin nav) here.
+
+---
+
+### DemoSidebar
+**Type:** Component
+**Location:** `client/src/components/layout/DemoSidebar.jsx`
+**What it does:** Demo-org sidebar. Fetches `/api/demo/manifest` on mount and renders one nav item per enabled agent, plus a fixed Dashboard item and Settings footer item. Desktop fixed + mobile slide-in (mirrors Sidebar.jsx behaviour).
+**Interface:**
+```jsx
+<DemoSidebar mobileOpen={boolean} onClose={fn} />
+```
+Fetches manifest silently — errors produce an empty nav rather than crashing. Nav items use the `icon` field from the manifest (sourced from DEMO_CATALOG).
+**Reuse contract:** Agent nav items link to `/demo/run/:slug`. Dashboard links to `/demo/dashboard`. Do not hardcode slugs — always derive from the manifest API.
+
+---
+
+### Demo Manifest API
+**Type:** Route file
+**Location:** `server/routes/demo.js`
+**Mounted at:** `/api/demo`
+
+| Method | Path | Auth | Behaviour |
+|---|---|---|---|
+| `GET` | `/api/demo/manifest` | authenticated | Enabled manifest rows merged with DEMO_CATALOG metadata, ordered by `sort_order ASC` |
+| `GET` | `/api/demo/admin/catalog` | org_admin | Full DEMO_CATALOG as array |
+| `GET` | `/api/demo/admin/manifest` | org_admin | All rows (including disabled), merged with catalog |
+| `PUT` | `/api/demo/admin/manifest/:slug` | org_admin | Upsert manifest row — `ON CONFLICT (org_id, slug)` |
+| `DELETE` | `/api/demo/admin/manifest/:slug` | org_admin | Remove assignment |
+
+**Merge pattern:** Catalog provides `name`, `description`, `icon`, `category`, `pattern` defaults. Manifest row overrides `label` → `name` and `description` per-org.
+**Security:** `org_id` always from `req.user.orgId`. Admin routes use `requireRole(['org_admin'])` sub-router — no org param accepted from client.
+
+---
+
 5. **`LineChart.jsx` — tooltip implementation:** The interface documents `leftFormat` and `rightFormat` as formatters, but the source files do not confirm whether a tooltip is rendered or whether these formatters apply only to axis tick labels.
 
 6. **`buildSystemPrompt` gather-first protocol:** `Learnings-ToolsForge.md` describes the system prompt as including a numbered "gather first, then analyse" instruction that drove efficient parallel tool calls. The exact tool-call order instructions and output format sections are referenced but not fully reproduced in any source file.
