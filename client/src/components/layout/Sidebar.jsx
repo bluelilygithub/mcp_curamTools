@@ -95,6 +95,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
                 Users & Access
               </p>
             )}
+            <NavItem to="/admin/organizations" icon="building" label="Organisations" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/users" icon="users" label="Users" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/departments" icon="bookmark" label="Departments" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/org-roles" icon="tag" label="Org Roles" collapsed={collapsed} onClick={onLinkClick} />

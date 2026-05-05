@@ -86,18 +86,28 @@ function ModalShell({ onClose, title, subtitle, children, maxWidth = 'max-w-md' 
 function InviteModal({ onClose, onInvited }) {
   const [email,   setEmail]   = useState('');
   const [role,    setRole]    = useState('org_member');
+  const [orgId,   setOrgId]   = useState('');
+  const [orgs,    setOrgs]    = useState([]);
   const [loading, setLoading] = useState(false);
   const [result,  setResult]  = useState(null);
   const [error,   setError]   = useState('');
   const { showToast } = useToast();
   const getIcon = useIcon();
 
+  useEffect(() => {
+    api.get('/admin/organizations').then((data) => {
+      setOrgs(Array.isArray(data) ? data : []);
+    }).catch(() => {});
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const data = await api.post('/admin/users/invite', { email, role });
+      const payload = { email, role };
+      if (orgId) payload.orgId = orgId;
+      const data = await api.post('/admin/users/invite', payload);
       setResult(data);
       showToast(`Invitation created for ${email}`, 'success');
     } catch (err) {
@@ -134,6 +144,19 @@ function InviteModal({ onClose, onInvited }) {
               <option value="org_admin">Admin</option>
             </select>
           </div>
+          {orgs.length > 1 && (
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
+                Organisation
+              </label>
+              <select value={orgId} onChange={(e) => setOrgId(e.target.value)} style={inputStyle}>
+                <option value="">— Default (your organisation) —</option>
+                {orgs.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name} {o.org_type === 'demo' ? '(Demo)' : ''}</option>
+                ))}
+              </select>
+            </div>
+          )}
           {error && <p className="text-xs" style={{ color: '#ef4444' }}>{error}</p>}
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose}

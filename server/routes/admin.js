@@ -50,11 +50,42 @@ router.get('/users', async (req, res) => {
   }
 });
 
+// ── Organisations ─────────────────────────────────────────────────────────────
+
+router.get('/organizations', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, org_type, created_at FROM organizations ORDER BY name ASC`
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load organisations.' });
+  }
+});
+
+router.post('/organizations', async (req, res) => {
+  const { name, orgType = 'internal' } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'Name is required.' });
+  if (!['internal', 'demo'].includes(orgType)) return res.status(400).json({ error: 'Invalid org type.' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO organizations (name, org_type) VALUES ($1, $2) RETURNING id, name, org_type, created_at`,
+      [name.trim(), orgType]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create organisation.' });
+  }
+});
+
+// ── Invite ─────────────────────────────────────────────────────────────────
+
 router.post('/users/invite', async (req, res) => {
   try {
-    const { email, role = 'org_member' } = req.body;
+    const { email, role = 'org_member', orgId } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required.' });
-    const result = await createInvitation(email, req.user.orgId, role, req.user.id);
+    const targetOrgId = orgId ? parseInt(orgId) : req.user.orgId;
+    const result = await createInvitation(email, targetOrgId, role, req.user.id);
     res.json({ email: result.email, activationUrl: result.activationUrl, expiresAt: result.expiresAt });
   } catch (err) {
     console.error('[admin/invite]', err.message);

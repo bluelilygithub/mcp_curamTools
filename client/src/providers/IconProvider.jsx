@@ -80,6 +80,7 @@ import {
   Film,
   Image,
   Archive,
+  Building2,
 } from 'lucide-react';
 
 const semanticMap = {
@@ -171,6 +172,7 @@ const semanticMap = {
   calendar: Calendar,
 
   // Organisation
+  building: Building2,
   tag: Tag,
   filter: Filter,
   sort: SortAsc,

@@ -12,6 +12,7 @@ import DocumentAnalyzer from './pages/demo/DocumentAnalyzer';
 import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './pages/SettingsPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
+import AdminOrganizationsPage from './pages/admin/AdminOrganizationsPage';
 import AdminModelsPage from './pages/admin/AdminModelsPage';
 import AdminAgentsPage from './pages/admin/AdminAgentsPage';
 import AdminAppSettingsPage from './pages/admin/AdminAppSettingsPage';
@@ -73,6 +74,7 @@ export default function App() {
 
                 {/* Admin-only */}
                 <Route element={<RequireRole allowedRoles={['org_admin']} />}>
+                  <Route path="/admin/organizations" element={<AdminOrganizationsPage />} />
                   <Route path="/admin/users" element={<AdminUsersPage />} />
                   <Route path="/admin/models" element={<AdminModelsPage />} />
                   <Route path="/admin/agents" element={<AdminAgentsPage />} />
