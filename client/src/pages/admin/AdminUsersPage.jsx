@@ -443,6 +443,7 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
     try {
       await api.put(`/admin/users/${user.id}`, {
         firstName, lastName, phone, isActive,
+        defaultModelId: defaultModel || null,
       });
       showToast('Profile updated', 'success');
       onSaved();
@@ -490,7 +491,11 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
               onClick={async () => {
                 setOrgSaving(true);
                 try {
-                  await api.put(`/admin/users/${user.id}`, { orgId: selectedOrgId });
+                  await api.put(`/admin/users/${user.id}`, {
+                    firstName, lastName, phone, isActive,
+                    defaultModelId: defaultModel || null,
+                    orgId: selectedOrgId,
+                  });
                   showToast('Organisation updated', 'success');
                   onSaved();
                 } catch (e) {
