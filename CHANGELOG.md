@@ -25,6 +25,23 @@
 
 ---
 
+## 2026-05-05 — Curam Engineering demo: document-analyzer built and deployed
+
+### Built
+- **`server/agents/demoSuite/documentAnalyzer.js`** — single-file two-stage analysis agent. Stage 1: 7 deterministic regex rules run in Node.js on Claude-extracted text. Stage 2: Claude probabilistic findings with per-finding confidence scores. PDF rasterisation via Ghostscript (mirrors docExtractor). SHA-256 file hash. Injection scan with annotation. Cross-stage overlap detection. Extraction privacy applied post-AI.
+- **`server/routes/demo.js`** — three HITL review endpoints appended: `GET /runs`, `GET /runs/:runId`, `PATCH /runs/:runId/review/:findingId`. Review state patched via `jsonb_set` into `agent_runs.result.data` — no separate table. Comment enforcement (low confidence + cross-stage). Trace append per review action.
+- **`server/platform/AgentConfigService.js`** — `AGENT_DEFAULTS` and `ADMIN_DEFAULTS` entries for `demo-document-analyzer` (max_tokens 8192, budget AUD 1.00).
+- **`server/routes/agents.js`** — `createAgentRoute` registration at `/api/agents/demo-document-analyzer`.
+- **`client/src/pages/demo/DocumentAnalyzer.jsx`** — full HITL UI: drag-drop upload, SSE stream with progress, sanitisation card, per-finding review (approve/reject/resubmit), comment enforcement, decision trace timeline, compliance certificate export via exportService.
+- **`client/src/App.jsx`** — route `/demo/run/document-analyzer`.
+- **`DEMO-AGENTS.md`** — new reference guide for building demo agents: provisioning SQL, two-stage pattern, HITL flow, compliance certificate, second-agent checklist, pattern constraints.
+
+### Open / next
+- Run provisioning SQL in Admin console to create Curam Engineering org + manifest row
+- Create demo user via Admin > Users
+
+---
+
 ## 2026-05-05 — Curam Engineering demo: document-analyzer planning + decisions
 
 ### Built
