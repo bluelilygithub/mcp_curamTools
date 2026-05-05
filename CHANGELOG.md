@@ -25,6 +25,30 @@
 
 ---
 
+## 2026-05-05 — Curam Engineering demo: document-analyzer planning + decisions
+
+### Built
+- Nothing deployed — planning and prep session only.
+
+### Decided
+- **Curam Engineering** is the first external demo client org (`org_type = 'demo'`).
+- Org + manifest created via Admin SQL Console, not committed code — client data stays out of version control.
+- `document-analyzer` agent: single-file `server/agents/demoSuite/documentAnalyzer.js`. No tools.js/prompt.js split (fixed prompt, no ReAct loop). Reuses `docExtractor` Ghostscript helpers + `getProvider`. Applies extraction privacy settings post-AI.
+- File upload: client converts to base64 → JSON body. No multer. Stays within `createAgentRoute` contract.
+- Slug: `demo-document-analyzer`. Permission: `org_member`.
+- Extraction prompt covers: parties/obligations, dates/milestones, payment terms, liability, scope boundaries, compliance refs. Flags: risk transfer, unlimited liability, missing specs. Tune after first real demo.
+- All decisions recorded in DECISIONS.md — "Demo Client Org — Curam Engineering" entry.
+
+### Open / next
+- Run SQL in Admin console to create Curam Engineering org + manifest row
+- Build `server/agents/demoSuite/documentAnalyzer.js`
+- Register route in `agents.js` + add AgentConfigService defaults
+- Build `client/src/pages/demo/DocumentAnalyzer.jsx`
+- Add `/demo/run/document-analyzer` route in `App.jsx`
+- Create demo user via Admin > Users
+
+---
+
 ## 2026-05-05 — Demo layer foundation: multi-tenant org branching, manifest API, demo shell
 
 ### Built

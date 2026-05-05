@@ -733,6 +733,23 @@ All inline styles include `fontFamily: 'inherit'` to respect the user's platform
 
 ---
 
+---
+
+### Demo Client Org — Curam Engineering (document-analyzer)
+**Date:** 2026-05-05
+**Status:** Settled — build planned, not yet executed
+**Context:** First external client demo org. Curam Engineering is an engineering firm. The demo showcases the `document-analyzer` agent: upload an engineering document (contract, spec, scope of work, RFI), receive structured field extraction with confidence scores and flagged clauses.
+**Decision (org creation):** Curam Engineering org created via Admin SQL Console — `INSERT INTO organizations (name, org_type) VALUES ('Curam Engineering', 'demo')` — not via a db.js seed or committed code. Client data does not belong in version control. `org_agent_manifest` row inserted the same way: `(org_id, 'document-analyzer', enabled=true, is_configured=true)`.
+**Decision (agent file):** Single file `server/agents/demoSuite/documentAnalyzer.js` — no tools.js/prompt.js split. Extraction agents with a fixed prompt and no ReAct loop do not need the three-file split; that pattern is for agents with external tool calls. Reuses `docExtractor`'s Ghostscript PDF rasterisation helpers and `getProvider` routing. Applies `getExtractionPrivacySettings` post-AI, pre-return.
+**Decision (file upload):** Client converts file to base64 and sends as JSON body `{ fileData, mimeType, fileName }` via the standard `createAgentRoute` POST /run endpoint. Body limit 10mb covers demo docs (1-5 page engineering PDFs). No multer required — avoids modifying `createAgentRoute` or adding middleware.
+**Decision (slug):** `demo-document-analyzer` — namespaced now to avoid future collision with any internal document extraction tool. `requiredPermission: 'org_member'` — demo org users hold this base role.
+**Decision (extraction prompt scope):** Generic engineering document coverage for first demo: parties and obligations, key dates and milestones, payment terms, liability clauses, scope boundaries, compliance references. Flags: risk transfer clauses, unlimited liability language, missing specification references. Prompt is tunable after first real demo run.
+**Decision (demo user):** Created via Admin > Users after server is running — not seeded in code.
+**Constraints it must not violate:** `org_id` always from `req.user.orgId`. Extraction privacy settings applied post-AI before returning result — excluded fields must never reach `agent_runs`. No modification to `createAgentRoute` or any platform primitive.
+**References:** `server/agents/demoSuite/documentAnalyzer.js` (to be built); `server/routes/agents.js` (route registration); `client/src/pages/demo/DocumentAnalyzer.jsx` (to be built); `client/src/App.jsx` (route `/demo/run/document-analyzer`).
+
+---
+
 ## Open Questions
 
 _(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_
