@@ -96,7 +96,7 @@ function InviteModal({ onClose, onInvited }) {
 
   useEffect(() => {
     api.get('/admin/organizations').then((data) => {
-      setOrgs(Array.isArray(data) ? data : []);
+      setOrgs(Array.isArray(data) ? data.filter((o) => o.org_type === 'demo') : []);
     }).catch(() => {});
   }, []);
 
@@ -135,6 +135,19 @@ function InviteModal({ onClose, onInvited }) {
               required autoFocus placeholder="colleague@example.com" style={inputStyle}
             />
           </div>
+          {orgs.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
+                Organisation
+              </label>
+              <select value={orgId} onChange={(e) => setOrgId(e.target.value)} style={inputStyle}>
+                <option value="">— Internal (default) —</option>
+                {orgs.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
               Role
@@ -144,19 +157,6 @@ function InviteModal({ onClose, onInvited }) {
               <option value="org_admin">Admin</option>
             </select>
           </div>
-          {orgs.length > 1 && (
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
-                Organisation
-              </label>
-              <select value={orgId} onChange={(e) => setOrgId(e.target.value)} style={inputStyle}>
-                <option value="">— Default (your organisation) —</option>
-                {orgs.map((o) => (
-                  <option key={o.id} value={o.id}>{o.name} {o.org_type === 'demo' ? '(Demo)' : ''}</option>
-                ))}
-              </select>
-            </div>
-          )}
           {error && <p className="text-xs" style={{ color: '#ef4444' }}>{error}</p>}
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose}
