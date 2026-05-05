@@ -676,15 +676,13 @@ async function seedAdminUser() {
   const bcrypt = require('bcryptjs');
   const hash = await bcrypt.hash(password, 12);
 
-  // Upsert org
-  let orgRes = await pool.query(
-    `INSERT INTO organizations (name) VALUES ($1)
-     ON CONFLICT DO NOTHING
-     RETURNING id`,
-    [orgName]
-  );
+  // Upsert org — check first to avoid duplicate rows on every restart
+  let orgRes = await pool.query('SELECT id FROM organizations WHERE name = $1 LIMIT 1', [orgName]);
   if (orgRes.rows.length === 0) {
-    orgRes = await pool.query('SELECT id FROM organizations WHERE name = $1', [orgName]);
+    orgRes = await pool.query(
+      `INSERT INTO organizations (name) VALUES ($1) RETURNING id`,
+      [orgName]
+    );
   }
   const orgId = orgRes.rows[0].id;
 
