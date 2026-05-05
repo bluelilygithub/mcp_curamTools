@@ -275,8 +275,9 @@ async function runDocumentAnalyzer(context) {
   // Trace and UI present Stage 1 before Stage 2 in logical order.
   emit('Stage 2: Running probabilistic analysis…');
   const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
-  const provider        = getProvider(adminConfig.model ?? 'claude-sonnet-4-6', customProviders);
-  const model           = adminConfig.model ?? 'claude-sonnet-4-6';
+  if (!adminConfig.model) throw new Error('No model configured. Set a default model in Admin > Models.');
+  const provider = getProvider(adminConfig.model, customProviders);
+  const model    = adminConfig.model;
   const maxTokens       = adminConfig.max_tokens ?? 8192;
 
   const response = await provider.chat({
