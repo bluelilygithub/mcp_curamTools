@@ -1,0 +1,161 @@
+The demo foundation is built. Now build the 
+Fsace engineering demo on top of it.
+
+Read the existing demoSuite architecture before 
+touching anything.
+
+═══════════════════════════════════════════════
+CONTEXT
+═══════════════════════════════════════════════
+
+Client: Fsace — engineering firm
+Purpose: Credibility tool. Show that AI can 
+assist engineering professionals without 
+replacing their judgment or creating liability.
+Audience: Owner + engineers. They care about 
+control, transparency, and audit trail.
+
+═══════════════════════════════════════════════
+STEP 1 — DOCUMENT ANALYZER AGENT
+═══════════════════════════════════════════════
+
+server/agents/demoSuite/documentAnalyzer.js
+
+Follow existing agent patterns exactly.
+Slug: demo-document-analyzer
+Permission: org_member
+
+Input: PDF or image
+- Client sends base64 JSON body 
+  { fileData, mimeType, fileName }
+- 10mb limit is acceptable
+
+Two-stage analysis, run sequentially, 
+results streamed via existing SSE pattern:
+
+Stage 1 — Deterministic rules (run first)
+Hard-coded pattern matching against:
+- Liability clauses (unlimited, absolute, 
+  consequential)
+- Missing specifications (TBD, TBC, to be 
+  confirmed)
+- Compliance references (ISO, AS/NZS, local 
+  codes)
+- Payment terms and milestone dates
+- Scope boundaries and exclusions
+Each match: rule name, matched text, 
+confidence 1.0, action required.
+Label this stage clearly in the response.
+
+Stage 2 — Probabilistic analysis (Claude)
+Single Claude call on remaining content.
+Extraction prompt targets:
+- Parties and obligations
+- Ambiguous language and risk transfer
+- Unusual or missing clauses
+- Flagged items get confidence score 0.0-1.0
+  and visible reasoning
+Label this stage clearly in the response.
+
+Any finding with confidence < 0.7 
+automatically sets status: 'pending_review'
+
+Input sanitisation:
+Before either stage, scan extracted text for 
+prompt injection patterns. Log result as 
+"Input sanitised: clean" or flag if detected.
+Show this as the first step in the trace.
+
+Usage logging and cost tracking inherited 
+via existing agent routing. Do not reimplement.
+
+═══════════════════════════════════════════════
+STEP 2 — HITL REVIEW
+═══════════════════════════════════════════════
+
+Each flagged finding creates a review item 
+stored in agent_runs metadata:
+{ finding_id, rule_or_model, matched_text, 
+  confidence, status, reviewed_by, 
+  reviewed_at, comment }
+
+Status values: pending_review, approved, 
+rejected, resubmit
+
+Client page shows a review queue:
+- High confidence findings (≥ 0.7): 
+  show with approve/reject
+- Low confidence findings (< 0.7): 
+  show with "Awaiting Engineering Lead 
+  validation" — cannot be approved without 
+  a comment
+- If model and deterministic rule disagree 
+  on same clause: flag explicitly, require 
+  comment before approval
+
+This is where human judgment is recorded. 
+Make it visible and deliberate.
+
+═══════════════════════════════════════════════
+STEP 3 — DECISION TRACE
+═══════════════════════════════════════════════
+
+Vertical timeline on the client page showing 
+every step in order:
+- Input sanitisation result
+- Deterministic rules fired
+- Probabilistic analysis complete
+- Each review action (who, when, decision)
+
+Pulled from agent_runs. No separate data 
+structure.
+
+═══════════════════════════════════════════════
+STEP 4 — COMPLIANCE CERTIFICATE
+═══════════════════════════════════════════════
+
+Generate via existing PDF handler.
+Triggered by button — only active when all 
+pending_review items are resolved.
+
+Certificate contains:
+- Client org name
+- Document name and file hash (SHA-256)
+- Timestamp of processing
+- Model used and token cost
+- Deterministic rules evaluated and matched
+- Probabilistic findings and confidence scores
+- Each review decision with reviewer and timestamp
+- Statement: "Document processed ephemerally. 
+  No source file retained after session."
+
+Download as PDF.
+
+═══════════════════════════════════════════════
+STEP 5 — CLIENT PAGE
+═══════════════════════════════════════════════
+
+client/src/pages/demo/DocumentAnalyzer.jsx
+
+- File upload
+- Sanitisation status card (first thing shown)
+- Two results panels: Deterministic | Probabilistic
+- Review queue with approve/reject actions
+- Decision trace timeline
+- Generate Certificate button (gated on 
+  all reviews resolved)
+- Running cost and model shown throughout
+
+Match existing demo UI style exactly.
+
+═══════════════════════════════════════════════
+AFTER EACH STEP
+═══════════════════════════════════════════════
+
+Stop and confirm before proceeding.
+State what was created and what existing 
+code was called.
+Do not modify anything outside demoSuite/ 
+and client/src/pages/demo/
+
+updating to force deployment
