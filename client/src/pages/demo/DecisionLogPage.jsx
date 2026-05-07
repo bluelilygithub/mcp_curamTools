@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useIcon } from '../../providers/IconProvider';
 import api from '../../api/client';
 import Button from '../../components/ui/Button';
@@ -21,7 +20,6 @@ const fmtCost = (n) =>
 
 export default function DecisionLogPage() {
   const getIcon = useIcon();
-  const navigate = useNavigate();
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -94,14 +92,6 @@ export default function DecisionLogPage() {
 
         {/* Action buttons */}
         <div className="flex items-center gap-2">
-          {/* New Document */}
-          <Button
-            variant="primary"
-            onClick={() => navigate('/demo/run/demo-document-analyzer')}
-          >
-            {getIcon('plus', { size: 14 })} New Document
-          </Button>
-
           {/* View mode toggle */}
           <button
             onClick={() => setViewMode(viewMode === 'cards' ? 'plain' : 'cards')}
