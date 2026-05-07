@@ -88,14 +88,17 @@ const RULES = [
 ];
 
 // ── Prompt injection scan ───────────────────────────────────────────────────
+// Scans file names for known prompt injection patterns.
+// Patterns are deliberately narrow to avoid false positives on legitimate
+// engineering document filenames (e.g. "you are now a..." in a filename is
+// extremely unlikely to be an injection attempt).
 const INJECTION_PATTERNS = [
-  /ignore\s+(previous|above|prior)\s+instructions?/gi,
-  /you\s+are\s+now\s+a\s+/gi,
-  /system\s*:\s*you/gi,
+  /ignore\s+(previous|above|prior)\s+instructions?\s+(and|\.|$)/gi,
+  /system\s*:\s*you\s+(are|must|will)/gi,
   /\[INST\]/g,
   /<\|im_start\|>/g,
-  /forget\s+your\s+(instructions?|training)/gi,
-  /disregard\s+(all\s+)?(previous|prior)\s+instructions?/gi,
+  /forget\s+(all\s+)?(your\s+)?(instructions?|training|guidelines)/gi,
+  /disregard\s+(all\s+)?(previous|prior)\s+(instructions?|directions)/gi,
 ];
 
 function scanInjection(text) {
