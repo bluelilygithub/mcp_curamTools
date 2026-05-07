@@ -29,8 +29,7 @@ const execFileAsync = promisify(execFile);
 
 const { getProvider }    = require('../../platform/AgentOrchestrator');
 const AgentConfigService = require('../../platform/AgentConfigService');
-
-
+const StorageService     = require('../../services/StorageService');
 
 const TOOL_SLUG         = 'demo-document-analyzer';
 const ANTHROPIC_MAX_PX  = 7900;
@@ -417,6 +416,28 @@ async function runDocumentAnalyzer(context) {
   const summary = parsed.summary ??
     `Document analysed: ${detFindings.length} deterministic and ${filteredProb.length} probabilistic findings. ${lowConfCount} low-confidence items require Engineering Lead validation.`;
 
+  // ── Auto-save to S3 ──────────────────────────────────────────────────────
+  // Fire-and-forget: saves the original file to S3 so it's available for
+  // future review. Non-blocking — the analysis result is returned immediately.
+  let s3Info = null;
+  try {
+    const bucket = process.env.AWS_S3_BUCKET;
+    const region = process.env.AWS_S3_REGION ?? 'ap-southeast-2';
+    if (bucket && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+      const orgName = context.req?.user?.orgName ?? 'Default Organisation';
+      const key = `${orgName}/${fileName}`;
+      await StorageService.put({ bucket, region, key, body: fileBuf, contentType: mimeType });
+      const { url, expiresAt } = await StorageService.getSignedDownloadUrl({
+        bucket, region, key, expiresIn: 365 * 24 * 3600, // 1 year
+      });
+      s3Info = { storageKey: key, url, expiresAt };
+      console.log(`[documentAnalyzer] Auto-saved to S3: ${key}`);
+    }
+  } catch (s3Err) {
+    // Non-fatal — S3 storage is an enhancement, not a hard dependency
+    console.warn(`[documentAnalyzer] S3 save failed (non-fatal): ${s3Err.message}`);
+  }
+
   return {
     result: {
       summary,
@@ -435,6 +456,7 @@ async function runDocumentAnalyzer(context) {
         model,
         trace,
         sanitisation,
+        s3:                     s3Info,    // S3 storage info if saved
       },
     },
     tokensUsed,

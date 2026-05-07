@@ -189,6 +189,7 @@ router.get('/runs', async (req, res) => {
               result->'data'->'document_type'            AS document_type,
               result->'data'->'file_name'                AS file_name,
               result->'data'->'pending_review_count'     AS pending_review_count,
+              result->'data'->'s3'                       AS s3,
               result->'tokensUsed'                       AS tokens_used,
               result->'costAud'                          AS cost_aud
          FROM agent_runs

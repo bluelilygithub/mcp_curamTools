@@ -484,10 +484,6 @@ export default function DocumentAnalyzer() {
   const [error, setError]         = useState('');
   const [certLoading, setCertLoading] = useState(false);
   const [certError, setCertError] = useState('');
-  const [s3Saving, setS3Saving] = useState(false);
-  const [s3Result, setS3Result] = useState(null);   // { storageKey, url, expiresAt }
-  const [s3Error, setS3Error] = useState('');
-
   const fileInputRef = useRef(null);
 
   // ── File handling ──────────────────────────────────────────────────────────
@@ -598,26 +594,6 @@ export default function DocumentAnalyzer() {
     }
   };
 
-  // ── Save to S3 ─────────────────────────────────────────────────────────────
-
-  const handleSaveToS3 = async () => {
-    if (!runId) {
-      setS3Error('Run ID not available. Please wait for the run to complete.');
-      return;
-    }
-    setS3Saving(true);
-    setS3Error('');
-    setS3Result(null);
-    try {
-      const res = await api.post(`/demo/runs/${runId}/save-to-s3`);
-      setS3Result(res);
-    } catch (err) {
-      setS3Error(err.message);
-    } finally {
-      setS3Saving(false);
-    }
-  };
-
   // ── Derived state ──────────────────────────────────────────────────────────
 
   const allFindings    = runResult?.all_findings ?? [];
@@ -629,6 +605,7 @@ export default function DocumentAnalyzer() {
   const model          = runResult?.model ?? '—';
   const costAud        = runResult?.costAud;
   const tokensUsed     = runResult?.tokensUsed;
+  const s3Info         = runResult?.s3 ?? runResult?.data?.s3 ?? null;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -850,21 +827,19 @@ export default function DocumentAnalyzer() {
             </button>
           </div>
 
-          {/* Save to AWS S3 */}
+          {/* S3 Storage — auto-saved during analysis */}
           <div className="rounded-xl p-4 flex items-center justify-between gap-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
             <div>
-              <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>Save to AWS</p>
+              <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>AWS S3 Storage</p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
-                {s3Result
-                  ? `Saved to ${s3Result.storageKey}`
-                  : s3Error
-                    ? s3Error
-                    : 'Upload the analysed document to AWS S3 for permanent storage.'
+                {s3Info
+                  ? `Saved to ${s3Info.storageKey}`
+                  : 'S3 not configured — set AWS_S3_BUCKET to enable automatic storage.'
                 }
               </p>
-              {s3Result && (
+              {s3Info?.url && (
                 <a
-                  href={s3Result.url}
+                  href={s3Info.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs mt-1 inline-block underline"
@@ -874,22 +849,13 @@ export default function DocumentAnalyzer() {
                 </a>
               )}
             </div>
-            {!s3Result ? (
-              <button
-                onClick={handleSaveToS3}
-                disabled={s3Saving}
-                className="shrink-0 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-                style={
-                  !s3Saving
-                    ? { background: '#ff9900', color: '#fff', cursor: 'pointer' }
-                    : { background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: 'not-allowed' }
-                }
-              >
-                {s3Saving ? 'Saving…' : 'Save to AWS'}
-              </button>
-            ) : (
+            {s3Info ? (
               <span className="text-xs font-medium px-3 py-1.5 rounded-full" style={{ background: '#dcfce7', color: '#166534' }}>
-                Saved ✓
+                Auto-saved ✓
+              </span>
+            ) : (
+              <span className="text-xs font-medium px-3 py-1.5 rounded-full" style={{ background: '#fef3c7', color: '#92400e' }}>
+                Not configured
               </span>
             )}
           </div>
