@@ -423,7 +423,9 @@ async function runDocumentAnalyzer(context) {
   try {
     const bucket = process.env.AWS_S3_BUCKET;
     const region = process.env.AWS_S3_REGION ?? 'ap-southeast-2';
-    if (bucket && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+    const hasKey = !!(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
+    console.log(`[documentAnalyzer] S3 check: bucket=${bucket ? '✓' : '✗'} key=${hasKey ? '✓' : '✗'} region=${region}`);
+    if (bucket && hasKey) {
       const orgName = context.req?.user?.orgName ?? 'Default Organisation';
       const key = `${orgName}/${fileName}`;
       await StorageService.put({ bucket, region, key, body: fileBuf, contentType: mimeType });
@@ -432,10 +434,14 @@ async function runDocumentAnalyzer(context) {
       });
       s3Info = { storageKey: key, url, expiresAt };
       console.log(`[documentAnalyzer] Auto-saved to S3: ${key}`);
+    } else {
+      console.log(`[documentAnalyzer] S3 skipped — missing config`);
     }
   } catch (s3Err) {
     // Non-fatal — S3 storage is an enhancement, not a hard dependency
     console.warn(`[documentAnalyzer] S3 save failed (non-fatal): ${s3Err.message}`);
+    // Surface the error in the result so the UI can show it
+    s3Info = { error: s3Err.message };
   }
 
   return {

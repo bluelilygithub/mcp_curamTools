@@ -627,6 +627,7 @@ export default function DocumentAnalyzer() {
   const costAud        = runResult?.costAud;
   const tokensUsed     = runResult?.tokensUsed;
   const s3Info         = runResult?.s3 ?? runResult?.data?.s3 ?? null;
+  const s3Error        = s3Info?.error ?? null;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -880,9 +881,13 @@ export default function DocumentAnalyzer() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              {s3Info ? (
+              {s3Info?.url ? (
                 <span className="text-xs font-medium px-3 py-1.5 rounded-full" style={{ background: '#dcfce7', color: '#166534' }}>
                   S3 saved ✓
+                </span>
+              ) : s3Error ? (
+                <span className="text-xs font-medium px-3 py-1.5 rounded-full" style={{ background: '#fee2e2', color: '#991b1b' }}>
+                  S3 error
                 </span>
               ) : (
                 <span className="text-xs font-medium px-3 py-1.5 rounded-full" style={{ background: '#fef3c7', color: '#92400e' }}>
