@@ -490,6 +490,8 @@ async function updateAdminConfig(slug, patch, updatedBy) {
 
 // ── Org-level default model (system_settings key: 'default_model') ──────────
 // When an agent's admin config model is null, createAgentRoute resolves this.
+// ── Org-level fallback model (system_settings key: 'fallback_model') ─────────
+// Used when the primary model fails — resolved in AgentOrchestrator.
 
 async function getOrgDefaultModel(orgId) {
   try {
@@ -515,7 +517,34 @@ async function updateOrgDefaultModel(orgId, modelId, updatedBy) {
   return modelId;
 }
 
+// ── Org-level fallback model (system_settings key: 'fallback_model') ─────────
+
+async function getOrgFallbackModel(orgId) {
+  try {
+    const res = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'fallback_model' LIMIT 1`,
+      [orgId]
+    );
+    return res.rows[0]?.value?.model_id ?? null;
+  } catch (err) {
+    console.error('[AgentConfigService] getOrgFallbackModel error:', err.message);
+    return null;
+  }
+}
+
+async function updateOrgFallbackModel(orgId, modelId, updatedBy) {
+  await pool.query(
+    `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+     VALUES ($1, 'fallback_model', $2, $3, NOW())
+     ON CONFLICT (org_id, key)
+     DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+    [orgId, JSON.stringify({ model_id: modelId }), updatedBy]
+  );
+  return modelId;
+}
+
 // ── Org-level company profile (system_settings key: 'company_profile') ──────
+
 
 const COMPANY_PROFILE_DEFAULTS = {
   company_name:        '',
@@ -862,6 +891,8 @@ async function updateCustomProviders(orgId, providers, updatedBy) {
 module.exports = {
   getOrgDefaultModel,
   updateOrgDefaultModel,
+  getOrgFallbackModel,
+  updateOrgFallbackModel,
   getCompanyProfile,
   updateCompanyProfile,
   getAgentConfig,
@@ -889,3 +920,4 @@ module.exports = {
   AGENT_MODEL_REQUIREMENTS,
   getRecommendedModel,
 };
+

@@ -1,0 +1,44 @@
+I have a sales database
+it records new enquires, calls that were converted to sales and calls that were paid
+calls made in one might be converted to a sales the next month and may be paid the month after.
+The status of the call changes as it moves through the funnel
+I need a chart that would show what's the pipeline so I can evaluate cashflow
+
+Created → Invoiced → Completed
+These map directly to your three cashflow moments:
+
+Created = an enquiry exists, value is potential
+Invoiced = work is committed, value is receivable (you're owed it)
+Completed = money has landed, value is realised
+
+What you can now calculate for any deal:
+
+Time to invoice = Invoiced date − Created date (your sales cycle length)
+Time to collect = Completed date − Invoiced date (your payment cycle length)
+Total cycle = Completed date − Created date
+
+The pipeline view that makes sense for cashflow:
+Each month you want to see three things stacked:
+
+Realised — completed this month (cash in hand)
+Receivable — invoiced but not yet completed (cash coming soon)
+Potential — created but not yet invoiced (cash further out)
+
+A deal moves left to right across months as its status changes. The "receivable" bucket is your most important cashflow signal — it tells you what's already committed and when to expect payment based on your average collection time.
+You can also run this in reverse as a forecast:
+If you know your average time-to-invoice and time-to-collect, then today's "created" deals predict next month's receivables, which predict the month after's completions.
+Ready to build the chart? I'll make it so you can input your monthly numbers and it will show both volume and value across the pipeline.You said: Is this one chart or a groupIs this one chart or a group12:42Claude responded: It's naturally a group of 3-4 views that work together, but they should live on one dashboard so you can read them together.It's naturally a group of 3-4 views that work together, but they should live on one dashboard so you can read them together.
+The core chart (the one you actually came for)
+A stacked bar by month where each bar shows value in each stage — Potential, Receivable, Realised. This is your cashflow pipeline at a glance. You see the "wave" moving through.
+Supporting views that make the core chart meaningful
+
+Funnel conversion rates — of the deals created each month, what % made it to invoiced, what % to completed. Without this, a big "Potential" bar could mean lots of opportunity or lots of dead leads — you can't tell.
+Average cycle times — how long deals typically spend Created→Invoiced and Invoiced→Completed. This tells you when to expect the wave to arrive, which is the actual cashflow forecast.
+Volume vs value side-by-side — because a few high-value deals can distort the picture. You want to know if your pipeline is 3 big deals or 30 small ones.
+
+The relationship between them
+The stacked bar answers "what does my pipeline look like now?"
+The conversion rates answer "how much of that will actually convert?"
+The cycle times answer "when will it convert?"
+Together those three answer your original question: "what's my cashflow going to look like?"
+Want me to build all of this as a single in

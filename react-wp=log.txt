@@ -1,0 +1,75 @@
+You reached the start of the range
+May 4, 2026, 12:54 PM
+Mounting volume on: /var/lib/containers/railwayapp/bind-mounts/9adf55fc-68db-49ec-8a72-dea838497d96/vol_4ddn9zujmgw5kgax
+Starting Container
+[security] ENCRYPTION_KEY is not set — gmail_tokens will be stored unencrypted. Generate a key with: openssl rand -hex 32
+npm warn config production Use `--omit=dev` instead.
+> project-vault@1.0.0 start
+> node server/index.js
+(node:41) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[db] PostgreSQL connected
+[db] Could not create idx_file_chunks_file_id: relation "file_chunks" does not exist
+[db] Could not create IVFFlat index on file_chunks (normal on empty table): relation "file_chunks" does not exist
+[db] Could not add summaryEmbedding column (pgvector may be missing): type "vector" does not exist
+[db] Schema ready
+Vault server running on port 3001
+[news-cron] Scheduled daily digest at 07:00 on days [0,1,2,3,4,5,6]
+[db] pgvector extension not available — RAG embeddings disabled: extension "vector" is not available
+[db] Could not create/migrate file_chunks table (pgvector may be missing): type "vector" does not exist
+[ModelAdvisor] analyse-prompt hit {
+  currentModelId: 'deepseek-v4-flash',
+  prompt: 'DeepSeek‑V3 is by far the cheapest for high‑volume'
+}
+[embeddings] embedText error: 404 {
+  "error": {
+    "code": 404,
+    "message": "models/text-embedding-004 is not found for API version v1, or is not supported for embedContent. Call ListModels to see the list of available models and their supported methods.",
+    "status": "NOT_FOUND"
+  }
+}
+[embeddings] embedText error: 404 {
+  "error": {
+    "code": 404,
+    "message": "models/text-embedding-004 is not found for API version v1, or is not supported for embedContent. Call ListModels to see the list of available models and their supported methods.",
+    "status": "NOT_FOUND"
+  }
+}
+[session-summary] error: column "summaryEmbedding" of relation "sessions" does not exist
+  finalCount: 0,
+  preview: '[]'
+}
+[branches] {
+  model: 'deepseek-v4-pro',
+  assistantLen: 2706,
+  textLen: 2,
+  matched: true,
+  rawCount: 0,
+[ModelAdvisor] analyse-prompt hit {
+  currentModelId: 'deepseek-v4-flash',
+  prompt: "Give me five options we haven't considered for cra"
+}
+[embeddings] embedText error: 404 {
+  "error": {
+    "code": 404,
+    "message": "models/text-embedding-004 is not found for API version v1, or is not supported for embedContent. Call ListModels to see the list of available models and their supported methods.",
+    "status": "NOT_FOUND"
+  }
+}
+  }
+}
+[session-summary] error: column "summaryEmbedding" of relation "sessions" does not exist
+[embeddings] embedText error: 404 {
+  "error": {
+    "code": 404,
+    "message": "models/text-embedding-004 is not found for API version v1, or is not supported for embedContent. Call ListModels to see the list of available models and their supported methods.",
+    "status": "NOT_FOUND"
+[branches] {
+  model: 'deepseek-v4-pro',
+  assistantLen: 3333,
+  textLen: 2,
+  matched: true,
+  rawCount: 0,
+  finalCount: 0,
+  preview: '[]'
+}

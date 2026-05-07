@@ -124,7 +124,13 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
           const orgDefault = await AgentConfigService.getOrgDefaultModel(orgId);
           if (orgDefault) adminConfig = { ...adminConfig, model: orgDefault };
         }
+        // Resolve org fallback model when no per-agent fallback is set
+        if (!adminConfig.fallback_model) {
+          const orgFallback = await AgentConfigService.getOrgFallbackModel(orgId);
+          if (orgFallback) adminConfig = { ...adminConfig, fallback_model: orgFallback };
+        }
       } catch (cfgErr) {
+
         emit('error', { error: 'Failed to load agent config' });
         await persistRun({ slug, orgId, status: 'error', error: cfgErr.message, runId });
         return done();

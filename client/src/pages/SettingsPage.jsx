@@ -10,6 +10,8 @@ import useAuthStore from '../stores/authStore';
 import { THEMES } from '../providers/ThemeProvider';
 import Button from '../components/ui/Button';
 import InlineBanner from '../components/ui/InlineBanner';
+import ModelsTab from '../components/settings/ModelsTab';
+
 
 // ── Timezones ──────────────────────────────────────────────────────────────
 
@@ -306,10 +308,17 @@ function AppearanceTab() {
 
 // ── Page shell ─────────────────────────────────────────────────────────────
 
-const TABS = ['Profile', 'Appearance'];
-
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState('Profile');
+  const { user } = useAuthStore();
+  const isAdmin = user?.roles?.some((r) => r.name === 'org_admin');
+
+  const tabs = isAdmin ? ['Profile', 'Appearance', 'Models'] : ['Profile', 'Appearance'];
+  const [activeTab, setActiveTab] = useState(tabs[0]);
+
+  // Reset tab if current tab is no longer available (e.g. user loses admin role)
+  useEffect(() => {
+    if (!tabs.includes(activeTab)) setActiveTab(tabs[0]);
+  }, [isAdmin]);
 
   return (
     <div className="p-6 max-w-2xl mx-auto">
@@ -320,7 +329,7 @@ export default function SettingsPage() {
 
       {/* Tab bar */}
       <div className="flex gap-1 mb-6 border-b" style={{ borderColor: 'var(--color-border)' }}>
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -338,6 +347,8 @@ export default function SettingsPage() {
 
       {activeTab === 'Profile'    && <ProfileTab />}
       {activeTab === 'Appearance' && <AppearanceTab />}
+      {activeTab === 'Models'     && <ModelsTab />}
     </div>
   );
 }
+
