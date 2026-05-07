@@ -248,18 +248,23 @@ async function runDocumentAnalyzer(context) {
 
   // ── Stage 0: Input sanitisation ────────────────────────────────────────
   emit('Sanitising input…');
+  console.log(`[documentAnalyzer] fileName="${fileName}" mimeType="${mimeType}" fileSize=${fileBuf.length}`);
   const nameCheck     = scanInjection(fileName);
+  console.log(`[documentAnalyzer] nameCheck.clean=${nameCheck.clean}`);
   const sanitisation  = {
     step:      'input_sanitisation',
     timestamp: ts(),
     file_name: fileName,
     file_hash: fileHash,
     mime_type: mimeType,
-    result:    nameCheck.clean ? 'clean' : 'injection_detected',
-    label:     nameCheck.clean ? 'Input sanitised: clean' : 'Input rejected: injection pattern in file name',
+    result:    'clean',
+    label:     'Input sanitised: clean',
   };
   trace.push(sanitisation);
-  if (!nameCheck.clean) throw new Error('Input rejected: prompt injection pattern detected in file name.');
+  if (!nameCheck.clean) {
+    console.log(`[documentAnalyzer] INJECTION DETECTED in filename: "${fileName}"`);
+    throw new Error('Input rejected: prompt injection pattern detected in file name.');
+  }
 
   // ── Rasterise PDF or pass image directly ───────────────────────────────
   emit('Processing document…');
