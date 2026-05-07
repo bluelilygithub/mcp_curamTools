@@ -279,9 +279,11 @@ async function runDocumentAnalyzer(context) {
   // Fallback model is handled inline: if primary fails, retry once with fallback.
   emit('Stage 2: Running probabilistic analysis…');
   const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
-  const model    = adminConfig.model      ?? 'claude-sonnet-4-6';
+  const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(orgId).catch(() => null);
+  const model    = orgDefaultModel ?? 'claude-sonnet-4-6';
   const maxTokens = adminConfig.max_tokens ?? 8192;
   const fallback  = adminConfig.fallback_model ?? null;
+
 
   async function callModel(modelId) {
     const provider = getProvider(modelId, customProviders);
