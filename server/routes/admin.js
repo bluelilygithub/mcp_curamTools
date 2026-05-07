@@ -843,6 +843,37 @@ router.get('/logs', async (req, res) => {
   }
 });
 
+// DELETE /admin/logs — empty all usage logs for this org
+router.delete('/logs', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM usage_logs WHERE org_id = $1', [req.user.orgId]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to empty usage logs.' });
+  }
+});
+
+// GET /admin/logs/export — export usage logs as JSON
+router.get('/logs/export', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT ul.id, ul.tool_slug, ul.model_id, ul.input_tokens, ul.output_tokens,
+              ul.cost_usd, ul.created_at,
+              u.email AS user_email
+         FROM usage_logs ul
+         LEFT JOIN users u ON u.id = ul.user_id
+        WHERE ul.org_id = $1
+        ORDER BY ul.created_at DESC`,
+      [req.user.orgId]
+    );
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename="usage-logs.json"');
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to export usage logs.' });
+  }
+});
+
 // ── Server logs ───────────────────────────────────────────────────────────
 
 router.get('/server-logs', async (req, res) => {
@@ -880,6 +911,32 @@ router.get('/server-logs', async (req, res) => {
     res.json({ logs: rows.rows, total: parseInt(count.rows[0].count, 10), limit, offset });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load server logs.' });
+  }
+});
+
+// DELETE /admin/server-logs — empty all server logs
+router.delete('/server-logs', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM app_logs');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to empty server logs.' });
+  }
+});
+
+// GET /admin/server-logs/export — export server logs as JSON
+router.get('/server-logs/export', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT id, level, message, meta, created_at
+         FROM app_logs
+        ORDER BY created_at DESC`
+    );
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename="server-logs.json"');
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to export server logs.' });
   }
 });
 

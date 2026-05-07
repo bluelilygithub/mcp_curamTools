@@ -36,6 +36,48 @@ const fmtTokens = (t) => {
   return t.toLocaleString('en-AU');
 };
 
+// ── Action bar (Export / Empty) ───────────────────────────────────────────────
+
+function ActionBar({ onExport, onEmpty, emptyLabel = 'Empty' }) {
+  const getIcon = useIcon();
+  const [confirmEmpty, setConfirmEmpty] = useState(false);
+
+  return (
+    <div className="flex items-center gap-2 mb-4">
+      <button
+        onClick={onExport}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-opacity hover:opacity-70"
+        style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted)' }}
+      >
+        {getIcon('download', { size: 12 })}
+        Export
+      </button>
+
+      {confirmEmpty ? (
+        <div className="flex items-center gap-1">
+          <Button variant="danger" onClick={() => { onEmpty(); setConfirmEmpty(false); }}>Confirm</Button>
+          <button
+            onClick={() => setConfirmEmpty(false)}
+            className="px-3 py-1.5 rounded-lg text-xs border transition-opacity hover:opacity-70"
+            style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted)' }}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setConfirmEmpty(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-opacity hover:opacity-70"
+          style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted)' }}
+        >
+          {getIcon('trash', { size: 12 })}
+          {emptyLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── Usage Logs tab ────────────────────────────────────────────────────────────
 
 function UsageLogsTab() {
@@ -45,12 +87,31 @@ function UsageLogsTab() {
   const [error, setError]     = useState('');
   const [expandedRun, setExpandedRun] = useState(null);
 
-  useEffect(() => {
+  const fetchLogs = () => {
+    setLoading(true);
     api.get('/admin/logs?limit=100')
       .then(setLogs)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { fetchLogs(); }, []);
+
+  const handleEmpty = async () => {
+    try {
+      await api.delete('/admin/logs');
+      setLogs([]);
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleExport = () => {
+    const a = document.createElement('a');
+    a.href = '/api/admin/logs/export';
+    a.download = 'usage-logs.json';
+    a.click();
+  };
 
   const totalTokens = logs.reduce((s, l) => s + (l.input_tokens || 0) + (l.output_tokens || 0), 0);
   const totalCost   = logs.reduce((s, l) => s + parseFloat(l.cost_usd || 0), 0);
@@ -88,6 +149,8 @@ function UsageLogsTab() {
           ))}
         </div>
       )}
+
+      <ActionBar onExport={handleExport} onEmpty={handleEmpty} emptyLabel="Empty usage logs" />
 
       {logs.length === 0 ? (
         <EmptyState icon="activity" message="No usage logs yet." hint="Logs appear here after the first AI tool run." />
@@ -307,6 +370,23 @@ function ServerLogsTab() {
 
   const handleSearch = (e) => { e.preventDefault(); setOffset(0); setSearch(searchInput); };
 
+  const handleEmpty = async () => {
+    try {
+      await api.delete('/admin/server-logs');
+      setLogs([]);
+      setTotal(0);
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleExport = () => {
+    const a = document.createElement('a');
+    a.href = '/api/admin/server-logs/export';
+    a.download = 'server-logs.json';
+    a.click();
+  };
+
   const totalPages  = Math.ceil(total / LIMIT);
   const currentPage = Math.floor(offset / LIMIT) + 1;
 
@@ -374,6 +454,8 @@ function ServerLogsTab() {
 
         <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{total} {total === 1 ? 'entry' : 'entries'}</p>
       </div>
+
+      <ActionBar onExport={handleExport} onEmpty={handleEmpty} emptyLabel="Empty server logs" />
 
       {logs.length === 0 ? (
         <EmptyState icon="file-text" message="No server log entries." hint="Warnings and errors will appear here automatically." />

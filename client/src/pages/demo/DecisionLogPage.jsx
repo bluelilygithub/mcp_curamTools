@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useIcon } from '../../providers/IconProvider';
 import api from '../../api/client';
+import Button from '../../components/ui/Button';
+import InlineBanner from '../../components/ui/InlineBanner';
 
 const fmtTs = (s) => {
   if (!s) return '—';
@@ -22,8 +24,11 @@ export default function DecisionLogPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedRun, setExpandedRun] = useState(null);
+  const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'plain'
+  const [confirmEmpty, setConfirmEmpty] = useState(false);
 
-  useEffect(() => {
+  const fetchRuns = () => {
+    setLoading(true);
     api.get('/demo/runs?slug=demo-document-analyzer&limit=50')
       .then((data) => {
         setRuns(data);
@@ -33,7 +38,27 @@ export default function DecisionLogPage() {
         setError(err.message);
         setLoading(false);
       });
-  }, []);
+  };
+
+  useEffect(() => { fetchRuns(); }, []);
+
+  const handleEmpty = async () => {
+    try {
+      await api.delete('/demo/runs');
+      setRuns([]);
+      setConfirmEmpty(false);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleExport = () => {
+    // Trigger download via hidden link
+    const a = document.createElement('a');
+    a.href = '/api/demo/runs/export';
+    a.download = 'demo-runs.json';
+    a.click();
+  };
 
   if (loading) {
     return (
@@ -55,19 +80,74 @@ export default function DecisionLogPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>
-          Decision Log
-        </h1>
-        <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>
-          Chronological record of all document analysis runs and the decisions made at each step.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>
+            Decision Log
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>
+            Chronological record of all document analysis runs and the decisions made at each step.
+          </p>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-2">
+          {/* View mode toggle */}
+          <button
+            onClick={() => setViewMode(viewMode === 'cards' ? 'plain' : 'cards')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-opacity hover:opacity-70"
+            style={{
+              borderColor: 'var(--color-border)',
+              color: 'var(--color-muted)',
+            }}
+          >
+            {getIcon(viewMode === 'cards' ? 'file-text' : 'layers', { size: 12 })}
+            {viewMode === 'cards' ? 'Plain text' : 'Cards'}
+          </button>
+
+          {/* Export */}
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-opacity hover:opacity-70"
+            style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted)' }}
+          >
+            {getIcon('download', { size: 12 })}
+            Export
+          </button>
+
+          {/* Empty */}
+          {confirmEmpty ? (
+            <div className="flex items-center gap-1">
+              <Button variant="danger" onClick={handleEmpty}>Confirm</Button>
+              <button
+                onClick={() => setConfirmEmpty(false)}
+                className="px-3 py-1.5 rounded-lg text-xs border transition-opacity hover:opacity-70"
+                style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted)' }}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmEmpty(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-opacity hover:opacity-70"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted)' }}
+            >
+              {getIcon('trash', { size: 12 })}
+              Empty
+            </button>
+          )}
+        </div>
       </div>
+
+      {error && <InlineBanner type="error" message={error} onDismiss={() => setError('')} />}
 
       {runs.length === 0 ? (
         <div className="rounded-xl p-8 text-center" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
           <p className="text-sm" style={{ color: 'var(--color-muted)' }}>No runs recorded yet.</p>
         </div>
+      ) : viewMode === 'plain' ? (
+        <PlainTextView runs={runs} />
       ) : (
         <div className="space-y-3">
           {runs.map((run) => (
@@ -82,6 +162,37 @@ export default function DecisionLogPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function PlainTextView({ runs }) {
+  const lines = runs.flatMap((run) => {
+    const out = [
+      `=== Run ${run.id} ===`,
+      `Status:   ${run.status}`,
+      `File:     ${run.file_name ?? '—'}`,
+      `Type:     ${run.document_type ?? '—'}`,
+      `Run at:   ${fmtTs(run.run_at)}`,
+      `Tokens:   ${fmtTokens(run.tokens_used ?? run)}`,
+      `Cost:     ${fmtCost(run.cost_aud)}`,
+      `Completed: ${fmtTs(run.completed_at)}`,
+      '',
+    ];
+    return out;
+  });
+
+  return (
+    <pre
+      className="rounded-xl p-4 text-xs leading-relaxed overflow-x-auto whitespace-pre-wrap"
+      style={{
+        background: 'var(--color-bg)',
+        color: 'var(--color-text)',
+        border: '1px solid var(--color-border)',
+        fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+      }}
+    >
+      {lines.join('\n')}
+    </pre>
   );
 }
 

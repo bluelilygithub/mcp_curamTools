@@ -141,6 +141,34 @@ adminRouter.delete('/manifest/:slug', async (req, res) => {
 
 router.use('/admin', adminRouter);
 
+// ── DELETE /api/demo/runs — empty all runs for this org ───────────────────
+router.delete('/runs', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM agent_runs WHERE org_id = $1', [req.user.orgId]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to empty runs.' });
+  }
+});
+
+// ── GET /api/demo/runs/export — export all runs as JSON ───────────────────
+router.get('/runs/export', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, slug, status, error, run_at, completed_at, result
+         FROM agent_runs
+        WHERE org_id = $1
+        ORDER BY run_at DESC`,
+      [req.user.orgId]
+    );
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename="demo-runs.json"');
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to export runs.' });
+  }
+});
+
 // ── Demo run endpoints ────────────────────────────────────────────────────
 // These endpoints serve the document analyzer HITL review flow.
 // All scoped to req.user.orgId — no cross-org access possible.
