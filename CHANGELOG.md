@@ -25,6 +25,53 @@
 
 ---
 
+## 2026-05-08 — Documentation: DEMO-AGENTS.md + DECISIONS.md entries for document-analyzer session
+
+### Built
+- **`DEMO-AGENTS.md`** — comprehensive reference doc for building demo agents on the platform. Covers: what a demo agent is, provisioning a demo client org, full reference implementation of document-analyzer (two-stage analysis pattern, file upload via base64, PDF rasterisation, HITL review flow, decision trace, compliance certificate, S3 save, Decision Log page), checklist for adding a second demo agent, and pattern constraints.
+- **`DECISIONS.md`** — three new decision entries: Default & Fallback Model Management (Settings > Models tab), Document Analyzer file upload via base64 JSON body, Document Analyzer Save to AWS S3, and Decision Log page run history viewer.
+
+### Fixed
+- Removed duplicate content blocks from DEMO-AGENTS.md (S3 save and Decision Log sections appeared twice at the bottom).
+- Removed duplicate `---` separators from DECISIONS.md.
+
+### Open / next
+- Run provisioning SQL to create Curam Engineering org (if not done already)
+- Invite demo user via Admin > Users, select Curam Engineering org
+- Demo user logs in → routed to DemoShell + document-analyzer agent
+
+---
+
+## 2026-05-08 — Default LLM model tables; file upload fix; S3 save; Decision Log page
+
+### Built
+
+**Default & Fallback Model Management — Settings > Models tab**
+- `server/routes/settings.js` — new `GET/PUT /api/settings/default-model` and `GET/PUT /api/settings/fallback-model` endpoints. Store/retrieve org-level default and fallback model IDs in `system_settings` under keys `default_model` and `fallback_model`.
+- `server/platform/AgentConfigService.js` — new `getOrgDefaultModel`, `updateOrgDefaultModel`, `getOrgFallbackModel`, `updateOrgFallbackModel` methods. Canonical access path for model resolution.
+- `client/src/components/settings/ModelsTab.jsx` — new "Default & Fallback Models" section with two dropdowns (default model, fallback model), inactive-model warning highlighting, and "Save defaults" button. Fetches all three endpoints on mount via `Promise.all`.
+- `client/src/pages/SettingsPage.jsx` — wired ModelsTab into the settings page layout.
+
+**Document Analyzer — file upload fix**
+- `client/src/pages/demo/DocumentAnalyzer.jsx` — fixed file upload to use `FileReader.readAsDataURL` with base64 prefix stripping, sending `{ fileData, mimeType, fileName }` JSON body. No multer dependency. 9 MB client-side limit.
+
+**Document Analyzer — Save to AWS S3**
+- `server/routes/demo.js` — new `POST /api/demo/runs/:runId/save-to-s3` endpoint. Reads `file_data` and `file_name` from the run's result JSONB, uploads to S3 via `StorageService.put` under `{orgName}/{fileName}`, returns a 7-day pre-signed download URL.
+- `client/src/pages/demo/DocumentAnalyzer.jsx` — new "Save to AWS" section below the certificate card. Orange AWS-branded button, loading/saved states, pre-signed URL link. Idempotent — shows "Saved ✓" on repeat clicks.
+
+**Decision Log Page — readable run history**
+- `client/src/pages/demo/DecisionLogPage.jsx` — new full page listing all document analyzer runs in chronological order. Expandable cards with timeline view showing decision badges (amber-highlighted for model selection, file storage, certificate readiness) and regular step entries for each trace step.
+- `client/src/App.jsx` — new route `/demo/decision-log` added.
+- `client/src/components/layout/DemoSidebar.jsx` — new "Decision Log" nav item under new "History" section.
+- `server/routes/demo.js` — extended runs list query to also return `tokens_used` and `cost_aud` from the result JSONB.
+
+### Open / next
+- Run provisioning SQL to create Curam Engineering org (if not done already)
+- Invite demo user via Admin > Users, select Curam Engineering org
+- Demo user logs in → routed to DemoShell + document-analyzer agent
+
+---
+
 ## 2026-05-06 — Multi-org user management: Organisations page + invite org selector
 
 ### Built

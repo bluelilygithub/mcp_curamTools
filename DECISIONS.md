@@ -210,8 +210,6 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
----
-
 ### MCP_curamTools Scaffold — Resolved Annotation Decisions
 **Date:** 2026-03-28
 **Status:** Settled — all SECTION-ANNOTATION.md items resolved in the first scaffold session
@@ -252,8 +250,6 @@ These files are the source of truth. The documents below derive from them and re
 **Status:** Settled
 **Context:** SECTION-5-UX.md specified `curam-mcp-auth`. The session scaffold prompt specified `mcp-curamtools-auth`. The scaffold prompt is the authority.
 **Decision:** Storage keys are `mcp-curamtools-auth`, `mcp-curamtools-settings`, `mcp-curamtools-tool`.
-
----
 
 ---
 
@@ -744,8 +740,6 @@ All inline styles include `fontFamily: 'inherit'` to respect the user's platform
 
 ---
 
----
-
 ### Demo Client Org — Curam Engineering (document-analyzer)
 **Date:** 2026-05-05
 **Status:** Settled — build planned, not yet executed
@@ -758,6 +752,49 @@ All inline styles include `fontFamily: 'inherit'` to respect the user's platform
 **Decision (demo user):** Created via Admin > Users after server is running — not seeded in code.
 **Constraints it must not violate:** `org_id` always from `req.user.orgId`. Extraction privacy settings applied post-AI before returning result — excluded fields must never reach `agent_runs`. No modification to `createAgentRoute` or any platform primitive.
 **References:** `server/agents/demoSuite/documentAnalyzer.js` (to be built); `server/routes/agents.js` (route registration); `client/src/pages/demo/DocumentAnalyzer.jsx` (to be built); `client/src/App.jsx` (route `/demo/run/document-analyzer`).
+
+---
+
+### Default & Fallback Model Management — Settings > Models Tab
+**Date:** 2026-05-08
+**Status:** Settled
+**Context:** The platform needed a way for org admins to set a default model used by all agents (unless overridden per-agent) and a fallback model used when the primary model fails. Previously, model selection was hardcoded per-agent or relied on the first enabled model in `ai_models`.
+**Decision (storage):** Org-level default and fallback model IDs stored in `system_settings` under keys `default_model` and `fallback_model` respectively. Each stores `{ model_id: string | null }`. This reuses the existing `system_settings` pattern (org_id + key + value) — no new table needed.
+**Decision (API shape):** Two independent endpoints — `GET/PUT /api/settings/default-model` and `GET/PUT /api/settings/fallback-model` — rather than a single combined endpoint. Simpler to reason about, easier to test, and avoids merge conflicts when both are saved simultaneously.
+**Decision (UI):** Two `<select>` dropdowns in the Models tab, each listing only enabled models. Inactive-model warning (red border + warning text) shown when the selected model is disabled. "Save defaults" button saves both simultaneously via `Promise.all`. This is a separate save action from the model list save — admins can edit models without affecting defaults.
+**Decision (model resolution order):** `createAgentRoute` resolves model as: `req.body.model` → `adminConfig.model` → `getOrgDefaultModel(orgId)` → hardcoded fallback `'deepseek-chat'`. The fallback model is resolved separately in `AgentOrchestrator` when the primary model fails.
+**Rationale:** Keeping defaults at org level (not global) allows different orgs to use different models. The two-store pattern (default + fallback) mirrors the existing agent-level admin config pattern. The UI separation (model editing vs default selection) prevents accidental overwrites.
+**References:** `server/routes/settings.js` (default-model and fallback-model endpoints); `server/platform/AgentConfigService.js` (getOrgDefaultModel, updateOrgDefaultModel, getOrgFallbackModel, updateOrgFallbackModel); `client/src/components/settings/ModelsTab.jsx` (Default & Fallback Models section).
+
+---
+
+### Document Analyzer — File Upload via Base64 JSON Body
+**Date:** 2026-05-08
+**Status:** Settled
+**Context:** The document analyzer needed file upload capability. The initial implementation used `multer` middleware, but this conflicted with `createAgentRoute`'s body parser and required modifying the route signature.
+**Decision:** Client uses `FileReader.readAsDataURL`, strips the `data:...;base64,` prefix, and sends `{ fileData, mimeType, fileName }` as a standard JSON body. No multer. 9 MB client-side limit. Works within `createAgentRoute`'s existing `express.json({ limit: '10mb' })` body parser.
+**Rationale:** Avoids modifying `createAgentRoute` or adding middleware. The base64 overhead (~33%) is acceptable for engineering documents (1-5 pages, typically < 5 MB raw). Simpler than multipart uploads and works with the existing SSE streaming pattern.
+**References:** `client/src/pages/demo/DocumentAnalyzer.jsx` — `acceptFile` validation, `handleRun` base64 conversion.
+
+---
+
+### Document Analyzer — Save to AWS S3
+**Date:** 2026-05-08
+**Status:** Settled
+**Context:** After analysis, users needed a way to permanently store the uploaded document. The ephemeral processing model (file never stored) meant the document was lost after the session.
+**Decision:** New `POST /api/demo/runs/:runId/save-to-s3` endpoint reads `file_data` and `file_name` from the run's result JSONB, uploads to S3 via `StorageService.put` under `{orgName}/{fileName}`, returns a 7-day pre-signed download URL. Idempotent — repeat calls return the same result. The S3 key prefix is the org name (not org ID) for human readability.
+**Rationale:** Reuses the existing `StorageService` (already used by Media Generator). No new AWS dependencies. The 7-day expiry balances security with usability — users can download the file without needing AWS console access. Org name as prefix makes S3 browsing human-readable.
+**References:** `server/routes/demo.js` — save-to-s3 endpoint; `client/src/pages/demo/DocumentAnalyzer.jsx` — handleSaveToS3.
+
+---
+
+### Decision Log Page — Run History Viewer
+**Date:** 2026-05-08
+**Status:** Settled
+**Context:** Users needed a way to review past document analyzer runs without re-running the analysis. The existing runs list endpoint returned minimal data.
+**Decision:** New `/demo/decision-log` page with expandable cards showing full run history. Each card shows: file name, document type, status badge, pending review count, token usage, cost, and a timeline view of all trace steps. Decision badges (amber-highlighted) for model selection, file storage, and certificate readiness. The `GET /api/demo/runs` endpoint was extended to return `tokens_used` and `cost_aud` from the result JSONB.
+**Rationale:** A dedicated history page is cleaner than adding history to the document analyzer page itself. The expandable card pattern keeps the page scannable. Decision badges provide at-a-glance status of key actions (was the file saved? was a certificate generated?).
+**References:** `client/src/pages/demo/DecisionLogPage.jsx`; `client/src/App.jsx` route `/demo/decision-log`; `client/src/components/layout/DemoSidebar.jsx` nav item; `server/routes/demo.js` runs list query.
 
 ---
 

@@ -1,9 +1,9 @@
 /**
  * AdminLogsPage — two tabs: Usage Logs (AI cost/token tracking) and Server Logs (app_logs).
+ * Card-based presentation matching the Decision Log page style from the demo app.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api/client';
-import { fmtDateTime } from '../../utils/date';
 import InlineBanner from '../../components/ui/InlineBanner';
 import EmptyState from '../../components/ui/EmptyState';
 import Button from '../../components/ui/Button';
@@ -21,22 +21,29 @@ const LEVEL_STYLE = {
 
 const SERVER_LEVELS = ['all', 'error', 'warn', 'info'];
 
-function formatDate(iso) {
-  if (!iso) return '—';
-  return fmtDateTime(iso);
-}
-
 function formatCost(usd) {
   if (usd == null) return '—';
   return `$${parseFloat(usd).toFixed(4)} USD`;
 }
 
+const fmtTs = (s) => {
+  if (!s) return '—';
+  return new Date(s).toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' });
+};
+
+const fmtTokens = (t) => {
+  if (!t) return '—';
+  return t.toLocaleString('en-AU');
+};
+
 // ── Usage Logs tab ────────────────────────────────────────────────────────────
 
 function UsageLogsTab() {
+  const getIcon = useIcon();
   const [logs, setLogs]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
+  const [expandedRun, setExpandedRun] = useState(null);
 
   useEffect(() => {
     api.get('/admin/logs?limit=100')
@@ -48,10 +55,26 @@ function UsageLogsTab() {
   const totalTokens = logs.reduce((s, l) => s + (l.input_tokens || 0) + (l.output_tokens || 0), 0);
   const totalCost   = logs.reduce((s, l) => s + parseFloat(l.cost_usd || 0), 0);
 
+  if (loading) {
+    return (
+      <div className="p-8 flex items-center gap-2" style={{ color: 'var(--color-muted)' }}>
+        {getIcon('loader', { size: 16 })}
+        <span className="text-sm">Loading usage logs…</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <p className="text-sm" style={{ color: '#dc2626' }}>{error}</p>
+      </div>
+    );
+  }
+
   return (
     <>
-      {error && <InlineBanner type="error" message={error} className="mb-4" />}
-
+      {/* Summary cards */}
       {logs.length > 0 && (
         <div className="grid grid-cols-2 gap-4 mb-6">
           {[
@@ -66,39 +89,179 @@ function UsageLogsTab() {
         </div>
       )}
 
-      <div className="rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-        {loading ? (
-          <div className="p-8 text-center text-sm" style={{ color: 'var(--color-muted)' }}>Loading…</div>
-        ) : logs.length === 0 ? (
-          <EmptyState icon="activity" message="No usage logs yet." hint="Logs appear here after the first AI tool run." />
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="w-full" style={{ borderCollapse: 'collapse', minWidth: 600 }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
-                  {['Time', 'User', 'Tool', 'Model', 'In', 'Out', 'Cost'].map((col) => (
-                    <th key={col} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>{col}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {logs.map((l) => (
-                  <tr key={l.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted)' }}>{formatDate(l.created_at)}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text)' }}>{l.user_email || '—'}</td>
-                    <td className="px-4 py-3 text-xs font-mono" style={{ color: 'var(--color-text)' }}>{l.tool_slug || '—'}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted)' }}>{l.model_id || '—'}</td>
-                    <td className="px-4 py-3 text-xs text-right" style={{ color: 'var(--color-text)' }}>{(l.input_tokens || 0).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-xs text-right" style={{ color: 'var(--color-text)' }}>{(l.output_tokens || 0).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-xs text-right" style={{ color: 'var(--color-text)' }}>{formatCost(l.cost_usd)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {logs.length === 0 ? (
+        <EmptyState icon="activity" message="No usage logs yet." hint="Logs appear here after the first AI tool run." />
+      ) : (
+        <div className="space-y-3">
+          {logs.map((l) => (
+            <UsageLogCard
+              key={l.id}
+              log={l}
+              expanded={expandedRun === l.id}
+              onToggle={() => setExpandedRun(expandedRun === l.id ? null : l.id)}
+              getIcon={getIcon}
+            />
+          ))}
+        </div>
+      )}
     </>
+  );
+}
+
+function UsageLogCard({ log, expanded, onToggle, getIcon }) {
+  return (
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+    >
+      {/* Summary row — always visible */}
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 p-4 text-left transition-colors hover:opacity-80"
+        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+      >
+        <span style={{ color: 'var(--color-muted)', flexShrink: 0 }}>
+          {getIcon(expanded ? 'chevron-down' : 'chevron-right', { size: 16 })}
+        </span>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+              {log.tool_slug ?? 'Unknown tool'}
+            </p>
+            <span
+              className="text-xs font-medium px-2 py-0.5 rounded-full"
+              style={{ background: 'rgba(99,102,241,0.10)', color: '#6366f1' }}
+            >
+              {log.model_id ?? '—'}
+            </span>
+          </div>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
+            {fmtTs(log.created_at)} · {log.user_email ?? '—'}
+          </p>
+        </div>
+
+        <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
+          {expanded ? 'Hide details' : 'View details'}
+        </span>
+      </button>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div style={{ borderTop: '1px solid var(--color-border)' }}>
+          <UsageLogDetail log={log} getIcon={getIcon} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UsageLogDetail({ log, getIcon }) {
+  // Build decision-style log entries
+  const logEntries = [];
+
+  // 1. Tool decision
+  logEntries.push({
+    type: 'decision',
+    icon: 'cpu',
+    label: 'Tool Execution',
+    detail: `Tool: ${log.tool_slug ?? '—'}`,
+    timestamp: log.created_at,
+  });
+
+  // 2. Model decision
+  logEntries.push({
+    type: 'decision',
+    icon: 'bot',
+    label: 'Model Selection',
+    detail: `Model: ${log.model_id ?? '—'}`,
+    timestamp: log.created_at,
+  });
+
+  // 3. Token usage step
+  logEntries.push({
+    type: 'step',
+    icon: 'activity',
+    label: 'Token Usage',
+    detail: `${fmtTokens(log.input_tokens || 0)} input · ${fmtTokens(log.output_tokens || 0)} output`,
+    timestamp: log.created_at,
+  });
+
+  // 4. Cost step
+  logEntries.push({
+    type: 'step',
+    icon: 'trending-up',
+    label: 'Cost',
+    detail: formatCost(log.cost_usd),
+    timestamp: log.created_at,
+  });
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* Run metadata */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <MetaItem label="Tool" value={log.tool_slug ?? '—'} />
+        <MetaItem label="Model" value={log.model_id ?? '—'} />
+        <MetaItem label="User" value={log.user_email ?? '—'} />
+        <MetaItem label="Time" value={fmtTs(log.created_at)} />
+      </div>
+
+      {/* Decision log entries */}
+      <div className="space-y-0">
+        <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>
+          Decision Log
+        </p>
+        {logEntries.map((entry, i) => (
+          <div key={i} className="flex gap-3">
+            {/* Timeline spine */}
+            <div className="flex flex-col items-center" style={{ width: 28, flexShrink: 0 }}>
+              <div
+                className="flex items-center justify-center rounded-full"
+                style={{
+                  width: 28,
+                  height: 28,
+                  background: entry.type === 'decision' ? '#fef3c7' : 'var(--color-surface)',
+                  border: `2px solid ${entry.type === 'decision' ? '#f59e0b' : 'var(--color-border)'}`,
+                  flexShrink: 0,
+                }}
+              >
+                <span style={{ color: entry.type === 'decision' ? '#92400e' : 'var(--color-primary)' }}>
+                  {getIcon(entry.icon, { size: 12 })}
+                </span>
+              </div>
+              {i < logEntries.length - 1 && (
+                <div style={{ width: 2, flex: 1, background: 'var(--color-border)', minHeight: 16 }} />
+              )}
+            </div>
+
+            {/* Content */}
+            <div className="pb-4 min-w-0 flex-1">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                {entry.type === 'decision' && (
+                  <span
+                    className="text-xs font-medium px-1.5 py-0.5 rounded-full"
+                    style={{ background: '#fef3c7', color: '#92400e' }}
+                  >
+                    Decision
+                  </span>
+                )}
+                <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>
+                  {entry.label}
+                </p>
+                <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+                  {fmtTs(entry.timestamp)}
+                </p>
+              </div>
+              {entry.detail && (
+                <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
+                  {entry.detail}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -147,9 +310,18 @@ function ServerLogsTab() {
   const totalPages  = Math.ceil(total / LIMIT);
   const currentPage = Math.floor(offset / LIMIT) + 1;
 
+  if (loading) {
+    return (
+      <div className="p-8 flex items-center gap-2" style={{ color: 'var(--color-muted)' }}>
+        {getIcon('loader', { size: 16 })}
+        <span className="text-sm">Loading server logs…</span>
+      </div>
+    );
+  }
+
   return (
     <>
-      {error && <InlineBanner type="error" message={error} onDismiss={() => setError('')} className="mb-4" />}
+      {error && <InlineBanner type="error" message={error} onDismiss={() => setError('')} />}
 
       {/* Filters */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -203,57 +375,21 @@ function ServerLogsTab() {
         <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{total} {total === 1 ? 'entry' : 'entries'}</p>
       </div>
 
-      <div className="rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-        {loading ? (
-          <div className="p-8 text-center text-sm" style={{ color: 'var(--color-muted)' }}>Loading…</div>
-        ) : logs.length === 0 ? (
-          <EmptyState icon="file-text" message="No server log entries." hint="Warnings and errors will appear here automatically." />
-        ) : (
-          <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
-                {['Time', 'Level', 'Message', ''].map((col) => (
-                  <th key={col} className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>{col}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {logs.map((log) => {
-                const style    = LEVEL_STYLE[log.level] || { background: 'var(--color-surface)', color: 'var(--color-muted)' };
-                const isExpanded = expanded === log.id;
-                const hasMeta    = log.meta && Object.keys(log.meta).length > 0;
-                return (
-                  <>
-                    <tr key={log.id} style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
-                      <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-muted)' }}>{formatDate(log.created_at)}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold uppercase" style={style}>{log.level}</span>
-                      </td>
-                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text)' }}>{log.message}</td>
-                      <td className="px-4 py-3 text-right">
-                        {hasMeta && (
-                          <button onClick={() => setExpanded(isExpanded ? null : log.id)} className="text-xs hover:opacity-70" style={{ color: 'var(--color-muted)' }}>
-                            {getIcon(isExpanded ? 'chevron-up' : 'chevron-down', { size: 14 })}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                    {isExpanded && hasMeta && (
-                      <tr key={`${log.id}-meta`} style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
-                        <td colSpan={4} className="px-4 py-3">
-                          <pre className="text-xs rounded-xl p-3 overflow-x-auto" style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}>
-                            {JSON.stringify(log.meta, null, 2)}
-                          </pre>
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {logs.length === 0 ? (
+        <EmptyState icon="file-text" message="No server log entries." hint="Warnings and errors will appear here automatically." />
+      ) : (
+        <div className="space-y-3">
+          {logs.map((log) => (
+            <ServerLogCard
+              key={log.id}
+              log={log}
+              expanded={expanded === log.id}
+              onToggle={() => setExpanded(expanded === log.id ? null : log.id)}
+              getIcon={getIcon}
+            />
+          ))}
+        </div>
+      )}
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-4">
@@ -270,13 +406,79 @@ function ServerLogsTab() {
   );
 }
 
+function ServerLogCard({ log, expanded, onToggle, getIcon }) {
+  const style = LEVEL_STYLE[log.level] || { background: 'var(--color-surface)', color: 'var(--color-muted)' };
+  const hasMeta = log.meta && Object.keys(log.meta).length > 0;
+
+  return (
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+    >
+      {/* Summary row — always visible */}
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 p-4 text-left transition-colors hover:opacity-80"
+        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+      >
+        <span style={{ color: 'var(--color-muted)', flexShrink: 0 }}>
+          {getIcon(expanded ? 'chevron-down' : 'chevron-right', { size: 16 })}
+        </span>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-2 py-0.5 rounded-full text-xs font-semibold uppercase" style={style}>
+              {log.level}
+            </span>
+            <p className="text-sm font-medium truncate" style={{ color: 'var(--color-text)' }}>
+              {log.message}
+            </p>
+          </div>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
+            {fmtTs(log.created_at)}
+          </p>
+        </div>
+
+        <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
+          {expanded ? 'Hide details' : hasMeta ? 'View details' : ''}
+        </span>
+      </button>
+
+      {/* Expanded detail */}
+      {expanded && hasMeta && (
+        <div style={{ borderTop: '1px solid var(--color-border)' }}>
+          <div className="p-4">
+            <pre
+              className="text-xs rounded-xl p-3 overflow-x-auto"
+              style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+            >
+              {JSON.stringify(log.meta, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Shared components ─────────────────────────────────────────────────────────
+
+function MetaItem({ label, value }) {
+  return (
+    <div className="rounded-lg p-2" style={{ background: 'var(--color-bg)' }}>
+      <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{label}</p>
+      <p className="text-sm font-medium mt-0.5" style={{ color: 'var(--color-text)' }}>{value}</p>
+    </div>
+  );
+}
+
 // ── Page shell ────────────────────────────────────────────────────────────────
 
 export default function AdminLogsPage() {
   const [tab, setTab] = useState('Usage Logs');
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6">
         <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Logs</h1>
         <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>AI usage and server activity.</p>

@@ -151,6 +151,28 @@ import { exportPdf } from '../../utils/exportService';
 await exportPdf({ content: html, contentType: 'html', title: '...', filename: '...' });
 ```
 
+### Save to AWS S3
+
+After a run completes, the user can save the uploaded file to AWS S3 for permanent storage. The "Save to AWS" section appears below the certificate card with an orange AWS-branded button.
+
+**Server:** `POST /api/demo/runs/:runId/save-to-s3` in `server/routes/demo.js`. Reads `file_data` and `file_name` from the run's result JSONB, uploads to S3 via `StorageService.put` under `{orgName}/{fileName}`, returns a 7-day pre-signed download URL.
+
+**Client:** `client/src/pages/demo/DocumentAnalyzer.jsx` — `handleSaveToS3` calls `api.post('/demo/runs/${runId}/save-to-s3')`. Shows loading/saved states. Idempotent — shows "Saved ✓" on repeat clicks. Pre-signed URL opens in a new tab.
+
+**Requirements:** `AWS_S3_BUCKET` env var must be set. `AWS_S3_REGION` defaults to `ap-southeast-2`. AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) must be configured.
+
+### Decision Log page
+
+A full-page run history viewer at `/demo/decision-log`. Lists all document analyzer runs in chronological order (newest first). Each run is an expandable card showing:
+
+- **Header:** file name, document type, status badge, pending review count, token usage, cost
+- **Timeline view:** decision badges (amber-highlighted for model selection, file storage, certificate readiness) and regular step entries for each trace step
+- **Findings summary:** deterministic vs probabilistic finding counts
+
+**Files:** `client/src/pages/demo/DecisionLogPage.jsx` — route at `/demo/decision-log` in `App.jsx`. Nav item "Decision Log" under "History" section in `DemoSidebar.jsx`.
+
+**Server:** `GET /api/demo/runs` extended to return `tokens_used` and `cost_aud` from the result JSONB.
+
 ---
 
 ## Adding a second demo agent — checklist
