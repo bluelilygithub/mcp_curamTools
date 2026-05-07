@@ -484,6 +484,7 @@ export default function DocumentAnalyzer() {
   const [error, setError]         = useState('');
   const [certLoading, setCertLoading] = useState(false);
   const [certError, setCertError] = useState('');
+  const [downloadError, setDownloadError] = useState('');
   const fileInputRef = useRef(null);
 
   // ── File handling ──────────────────────────────────────────────────────────
@@ -564,6 +565,26 @@ export default function DocumentAnalyzer() {
       const row = await api.get(`/demo/runs/${runId}`);
       setRunResult(row.result?.data ?? row.result);
     } catch { /* non-fatal */ }
+  };
+
+  // ── Download original file ────────────────────────────────────────────────
+
+  const handleDownload = async () => {
+    if (!runId) return;
+    setDownloadError('');
+    try {
+      const { blob, filename } = await api.downloadBlob(`/demo/runs/${runId}/download`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setDownloadError(err.message);
+    }
   };
 
   // ── Certificate ────────────────────────────────────────────────────────────
@@ -835,15 +856,16 @@ export default function DocumentAnalyzer() {
                 {runResult?.file_name ?? 'Document'}
               </p>
               {runId && (
-                <a
-                  href={`/api/demo/runs/${runId}/download`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs mt-1 inline-block underline"
+                <button
+                  onClick={handleDownload}
+                  className="text-xs mt-1 inline-block underline bg-transparent border-none p-0 cursor-pointer"
                   style={{ color: 'var(--color-primary)' }}
                 >
                   Download original file →
-                </a>
+                </button>
+              )}
+              {downloadError && (
+                <p className="text-xs mt-1" style={{ color: '#dc2626' }}>{downloadError}</p>
               )}
               {s3Info?.url && (
                 <a

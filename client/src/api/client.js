@@ -127,6 +127,32 @@ const api = {
   },
 
   /**
+   * Download a file as a blob. Returns { blob, filename }.
+   * Uses the auth token so it works with authenticated endpoints.
+   */
+  downloadBlob: async (path) => {
+    const token = useAuthStore.getState().token;
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${BASE}${path}`, { method: 'GET', headers });
+    if (res.status === 401) {
+      useAuthStore.getState().clearAuth();
+      window.location.href = '/login';
+      throw new Error('Session expired. Please log in again.');
+    }
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      try { const body = await res.json(); message = body.error || body.message || message; } catch {}
+      throw new Error(message);
+    }
+    const disposition = res.headers.get('content-disposition') ?? '';
+    const match = disposition.match(/filename="?(.+?)"?$/);
+    const filename = match ? match[1] : 'download';
+    const blob = await res.blob();
+    return { blob, filename };
+  },
+
+  /**
    * Open a streaming SSE connection via POST.
    * Returns the raw fetch Response — caller reads the ReadableStream.
    */

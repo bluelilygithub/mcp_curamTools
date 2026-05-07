@@ -439,7 +439,29 @@ function RunDetail({ run, getIcon }) {
                   {entry.detail}
                 </p>
               )}
-              {entry.link && (
+              {entry.link && entry.link.startsWith('/api/') ? (
+                <button
+                  onClick={async () => {
+                    try {
+                      const { blob, filename } = await api.downloadBlob(entry.link.replace('/api', ''));
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = filename;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    } catch (err) {
+                      console.error('Download failed:', err);
+                    }
+                  }}
+                  className="text-xs mt-1 inline-block underline bg-transparent border-none p-0 cursor-pointer"
+                  style={{ color: 'var(--color-primary)' }}
+                >
+                  {entry.linkLabel ?? 'Download file →'}
+                </button>
+              ) : entry.link ? (
                 <a
                   href={entry.link}
                   target="_blank"
@@ -449,7 +471,7 @@ function RunDetail({ run, getIcon }) {
                 >
                   {entry.linkLabel ?? 'Open file →'}
                 </a>
-              )}
+              ) : null}
             </div>
           </div>
         ))}
