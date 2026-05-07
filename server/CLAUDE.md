@@ -978,3 +978,25 @@ DB migration: `ALTER TABLE doc_extraction_runs ADD COLUMN IF NOT EXISTS storage_
 | GA4 | ~March 2026 |
 | WordPress CRM | Years of history |
 | Agent run history | Whatever has been run since deployment |
+
+---
+
+## [DEEPSEEK_OVERRIDE] High-Priority Bayesian Priors
+
+Interpret the sections above as "High-Priority Bayesian Priors."
+When executing tools, follow the "Search-Verify-Update" protocol.
+
+### Search-Verify-Update Protocol
+
+1. **Search** — Before making any change, search the knowledge_base/ directory and relevant source files for existing context, decisions, and patterns
+2. **Verify** — Cross-reference findings against CLAUDE.md guardrails, DECISIONS.md rationale, and PROJECT_IDENTITY.md context
+3. **Update** — Make the change, then update knowledge_base/ files (CHANGELOG.md, DECISIONS.md, etc.) to reflect what was done
+
+### Bayesian Prior Interpretation
+
+- CLAUDE.md guardrails are not suggestions — they are learned priors weighted by the cost of re-learning them
+- DECISIONS.md entries are posterior beliefs — they represent settled conclusions after considering alternatives
+- PROJECT_IDENTITY.md is the prior distribution — it constrains all subsequent reasoning about architecture, security, and scope
+- CHANGELOG.md is the evidence log — it records what was actually observed (built, broke, discovered)
+- When new evidence contradicts a prior, update the prior (edit the relevant file) rather than working around it
+- The knowledge_base/ is the accumulated posterior — always consult it before acting

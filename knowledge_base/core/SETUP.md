@@ -1,0 +1,267 @@
+# MCP CuramTools — Setup Guide
+
+> **Project context:** This is an internal learning project for one organisation, built and maintained by a solo developer. Read [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md) for the full context before making architectural or security decisions.
+
+## Port Architecture
+
+| Service | Port | Notes |
+|---|---|---|
+| Express API server | **3002** | `server/.env` → `PORT=3002` |
+| Vite dev server | **5174** | `client/vite.config.js` → `port: 5174` |
+| Vite proxy target | **3002** | `client/vite.config.js` → proxy `/api` → `http://localhost:3002` |
+
+**Critical:** These three values must be consistent. If the Express server is not on 3002, every API call from the Vite dev server will fail (502 Bad Gateway or a 500 from the wrong process).
+
+---
+
+## Prerequisites
+
+- **Node.js 18+** — required for native `fetch` (used in model test route and MailChannels). Earlier versions will fail silently or throw on `fetch is not defined`.
+- **PostgreSQL with pgvector** — the schema runs `CREATE EXTENSION IF NOT EXISTS vector` on startup. Railway supports this out of the box. A local PostgreSQL instance requires pgvector installed separately. Startup will fail with `extension "vector" is not available` if missing.
+- **Anthropic API key** — required for all AI features and the admin model test. Missing key causes a clear `ANTHROPIC_API_KEY is not set` error on test; other routes silently produce no output.
+
+---
+
+## Installation
+
+### 1. Server
+
+```bash
+cd server
+npm install
+```
+
+The `.env` file is already configured. Do not copy from `.env.example` — the actual `.env` has the real credentials and correct port values.
+
+### 2. Client
+
+```bash
+cd client
+npm install
+```
+
+No `.env` needed for the client — Vite proxies all `/api` calls to the Express server at port 3002.
+
+---
+
+## Running Locally
+
+Open two terminals:
+
+**Terminal 1 — Server:**
+```bash
+cd server
+node index.js
+```
+
+Expected output:
+```
+[db] Schema initialised
+[db] Admin seeded: <email> (org: <org name>)
+[server] MCP_curamTools running on port 3002
+```
+
+**Terminal 2 — Client:**
+```bash
+cd client
+npm run dev
+```
+
+Expected output:
+```
+  VITE v5.x.x  ready in xxx ms
+  ➜  Local:   http://localhost:5174/
+```
+
+Open `http://localhost:5174` in the browser.
+
+---
+
+## Railway Deployment
+
+The `PORT` variable is injected automatically by Railway — do not set it in Railway's environment variables. The `PORT=3002` in the local `.env` is for local development only.
+
+**Required Railway environment variables** (set in Railway dashboard → service → Variables):
+
+| Variable | Value |
+|---|---|
+| `APP_URL` | `https://mcpcuramtools-production.up.railway.app` |
+| `DATABASE_URL` | Railway Postgres connection string (auto-injected if using Railway Postgres) |
+| `ANTHROPIC_API_KEY` | Your Anthropic key |
+| `MAIL_CHANNEL_API_KEY` | MailChannels key |
+| `SEED_ADMIN_EMAIL` | Initial admin email |
+| `SEED_ADMIN_PASSWORD` | Initial admin password |
+| `ORG_NAME` | `Blue Lily` |
+
+**Do not set `PORT`** — Railway manages this. Setting it causes port binding conflicts.
+
+### Railway build configuration
+In Railway dashboard → service settings, confirm:
+- **Root Directory**: `/` (project root — not `/server`)
+- **Builder**: `Dockerfile`
+
+If Root Directory is set to `/server`, Railway uses Nixpacks on the server only — the React client is never built and `server/public/` will be empty. Every asset request will return a 500 JSON error because Express falls through to its error handler. The Dockerfile at the project root handles the full two-stage build automatically.
+
+**`APP_URL` must match the deployed domain exactly** — it is used for CORS and for building invite/reset email links. If the Railway domain changes, update this variable and redeploy.
+
+---
+
+## Key Environment Variables (server/.env)
+
+| Variable | Correct Value | Common Mistake |
+|---|---|---|
+| `PORT` | `3002` | Setting to `3001` breaks all API calls from Vite |
+| `APP_URL` | `http://localhost:5174` | Wrong port breaks invite/reset email links |
+| `GOOGLE_REDIRECT_URI` | `http://localhost:3002/api/gmail/callback` | Must use port 3002, not 3001 |
+
+---
+
+## Common Issues
+
+### 500 on API calls
+The Express server is not running on port 3002, or a different process on port 3002 is responding. Check:
+```
+[server] MCP_curamTools running on port 3002
+```
+If missing, check `server/.env` → `PORT=3002`.
+
+### 502 Bad Gateway
+Vite can't reach the API server. Confirm the server is running and on port 3002.
+
+### Invite email sent (logged) but never arrives in inbox or spam
+Do **not** set `MAIL_FROM_EMAIL` as a Railway environment variable. The sending address is hardcoded in `EmailService.js` as `noreply@curam-ai.com.au` — the domain authorised for the MailChannels API key. If `MAIL_FROM_EMAIL` is set in Railway to a different domain (e.g. `bluelily.com.au`), MailChannels will accept the API call and log "Sent" but silently drop delivery because the domain is not authorised.
+
+Also: `EmailService` uses `https.request` (not native `fetch`) to call the MailChannels API. On Railway, native `fetch` causes the same silent delivery failure. Do not refactor this to use `fetch`.
+
+### Invite email not received locally (expected)
+Invitation emails contain `http://localhost:5174/invite/...` as the activation link. Mail servers reject emails with `localhost` URLs as a spam signal — this is why delivery works on Railway (real domain) but not in local development.
+
+**Local workaround:** the activation URL is always printed to the server terminal:
+```
+[InvitationService] Activation URL for user@example.com: http://localhost:5174/invite/abc123...
+```
+Open that URL directly in the browser. Email delivery for invitations only works in production.
+
+### Password reset emails not received locally (expected)
+Same cause as invite emails — reset links contain `http://localhost:5174/reset-password/...` which mail servers reject. In local development, trigger a reset and copy the link from the server terminal log.
+
+### pgvector extension missing
+If startup logs `extension "vector" is not available`, the PostgreSQL instance doesn't have pgvector installed. On Railway this is pre-installed. For local PostgreSQL, install pgvector for your PostgreSQL version before starting.
+
+### No admin user created on startup
+`seedAdminUser()` only runs if both `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` are set in `.env`. If either is missing, startup completes but no login is possible. Check both values are present.
+
+### Org name change creates a new org
+`ORG_NAME` in `.env` is used to seed the organisation on first startup via `INSERT ... ON CONFLICT DO NOTHING`. Changing `ORG_NAME` after first run creates a second org — it does not rename the existing one. Don't change this value after the first startup.
+
+### Google credentials in .env
+The `.env` contains Google OAuth credentials (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_MANAGER_ID`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_GA4_PROPERTY_ID`). These are used by `GoogleAdsService`, `GoogleAnalyticsService`, and the Gmail/Calendar integrations. All Google services share the same OAuth2 refresh token.
+
+### Schema errors on startup
+`initSchema()` is fully idempotent (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). Safe to restart at any time.
+
+---
+
+## Google Ads & Analytics Setup
+
+Both `GoogleAdsService` and `GoogleAnalyticsService` use a shared OAuth2 refresh token. One token set covers all Google APIs.
+
+**Required env vars:**
+```
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+GOOGLE_REFRESH_TOKEN         # must include adwords + analytics.readonly scopes
+GOOGLE_ADS_CUSTOMER_ID       # e.g. 123-456-7890 (displayed format with dashes)
+GOOGLE_ADS_MANAGER_ID        # MCC / manager account ID
+GOOGLE_ADS_DEVELOPER_TOKEN   # from Google Ads API Center
+GOOGLE_GA4_PROPERTY_ID       # numeric property ID only, no 'properties/' prefix
+```
+
+**To obtain a refresh token with all required scopes:**
+1. Enable in [Google Cloud Console](https://console.cloud.google.com/): Google Ads API, Google Analytics Data API, Gmail API, Google Calendar API.
+2. Create an OAuth 2.0 Client ID (Web application type).
+3. Add authorised redirect URIs:
+   - `http://localhost:3002/api/gmail/callback` (local)
+   - `https://yourapp.up.railway.app/api/gmail/callback` (production)
+4. Use the Google OAuth Playground or a one-time local auth flow with all required scopes in a single grant.
+
+**Required scopes:**
+- `https://www.googleapis.com/auth/adwords`
+- `https://www.googleapis.com/auth/analytics.readonly`
+- `https://www.googleapis.com/auth/gmail.readonly`
+- `https://www.googleapis.com/auth/calendar.readonly`
+
+**Diagnosing Google API issues:** Use the Admin Diagnostics page (`/admin/diagnostics`) — it runs live probes against Google OAuth token refresh, Google Ads API (minimal GAQL query), and GA4 (minimal report) and reports specific errors. This is the fastest way to confirm credentials are correct after deploy.
+
+---
+
+## Claude Code Session Tracker
+
+Admin › Claude Sessions (`/admin/claude-sessions`) provides two visual gauges tracking your position in Claude Code's usage windows:
+
+| Gauge | What it shows |
+|---|---|
+| 5-hour window | Time elapsed since configured daily start → minutes until reset |
+| Weekly window | ISO week progress (Mon–Sun) → days remaining |
+
+**Configuration:** set your typical daily coding start time (default 06:00) in the settings form. The 5-hour gauge counts from that time each day.
+
+**How it works:** pure client-side JavaScript (`new Date()`). No Claude Code API access — this is a time-based reference only. Browser local time is used automatically — no timezone config needed.
+
+**Accuracy note:** The 5-hour window starts from your *first message*, not from a fixed clock time. The gauge is an approximation based on your configured start — if you start later than usual, the actual reset will be later than shown.
+
+Check real status anytime: `/usage` in the Claude Code terminal.
+
+---
+
+## Prompt Cache Keep-Warm
+
+The conversation agent's Anthropic prompt cache (system prompt + tool schemas, ~6,800 tokens) has a **5-minute TTL**. If a user pauses mid-conversation, the cache expires and the next message pays the cache write premium (~$0.025 AUD) instead of the read rate (~$0.002 AUD).
+
+**This is handled automatically — no configuration required.**
+
+`ConversationView.jsx` runs a `setInterval` (270 seconds) while the conversation view is mounted. Every 4.5 minutes it calls:
+
+```
+POST /api/conversation/keep-warm
+```
+
+The server builds the exact same system prompt and tool array used by real conversation turns, makes a 1-token call to Anthropic, and returns `{ ok, cacheRead, cacheWrite }`. The cache TTL resets on each hit.
+
+**Cost:** ~$0.002 AUD per ping (cache read). Over an 8-hour session: ~$0.23 AUD. Payback: one avoided cache write ($0.025) after a 5-min idle gap.
+
+**What is cached:** system prompt (~3,500 tokens) + tool schemas (~3,300 tokens) = ~6,800 tokens per call.
+
+**Not logged to `usage_logs`** — infrastructure call, not a user-initiated run. Check `[conversation:keep-warm]` in server logs to verify cache hits.
+
+**If you add a new conversation agent:** create a matching `/keep-warm` endpoint in its route file using the same pattern in `routes/conversation.js`, and add the 270s interval to its view component.
+
+---
+
+## Adding a New Agent
+
+1. Create `server/agents/<slug>/index.js` — exports `run<Name>(context)`
+2. Create `server/agents/<slug>/tools.js` — exports `{ <name>Tools, TOOL_SLUG }`
+3. Create `server/agents/<slug>/prompt.js` — exports `buildSystemPrompt(config)`
+4. In `server/routes/agents.js`:
+   - Import `run<Name>`
+   - `agentsRouter.use('/<slug>', createAgentRoute({ slug, runFn, requiredPermission }))`
+   - `AgentScheduler.register({ slug, schedule, runFn })` if it needs a cron schedule
+5. Add operator defaults to `AGENT_DEFAULTS` in `server/platform/AgentConfigService.js`
+6. Add admin defaults to `ADMIN_DEFAULTS` in `server/platform/AgentConfigService.js`
+7. Create `client/src/pages/tools/<NamePage>.jsx`
+8. Add the route in `client/src/App.jsx` (under `RequireAuth > AppShell`)
+9. Add an entry in `client/src/config/tools.js`
+
+See `PLATFORM-PRIMITIVES.md` for the full interface contract of each primitive.
+See `MCP_CURAMTOOLS_PROMPTS.md` for prompt structure conventions.
+
+---
+
+## First Login
+
+Seeded from env on first startup:
+- Email: value of `SEED_ADMIN_EMAIL`
+- Password: value of `SEED_ADMIN_PASSWORD`
+
+Log in at `http://localhost:5174/login`.
