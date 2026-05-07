@@ -340,7 +340,18 @@ function RunDetail({ run, getIcon }) {
     });
   }
 
-  // 3. S3 save decision (if present)
+  // 3. File download + S3 save decision
+  if (data.file_data) {
+    logEntries.push({
+      type: 'decision',
+      icon: 'download',
+      label: 'Original File',
+      detail: `${data.file_name ?? 'Document'} — available for download`,
+      timestamp: trace[trace.length - 1]?.timestamp ?? run.completed_at,
+      link: `/api/demo/runs/${run.id}/download`,
+      linkLabel: 'Download file →',
+    });
+  }
   if (s3?.url) {
     logEntries.push({
       type: 'decision',
@@ -349,16 +360,10 @@ function RunDetail({ run, getIcon }) {
       detail: `Saved to ${s3.storageKey}`,
       timestamp: trace[trace.length - 1]?.timestamp ?? run.completed_at,
       link: s3.url,
-    });
-  } else if (data.file_data) {
-    logEntries.push({
-      type: 'decision',
-      icon: 'archive',
-      label: 'File Storage Decision',
-      detail: 'File available for S3 storage (Save to AWS toggle in results)',
-      timestamp: trace[trace.length - 1]?.timestamp ?? run.completed_at,
+      linkLabel: 'Open from S3 →',
     });
   }
+
 
   // 4. Certificate decision (if all resolved)
   const allFindings = data.all_findings ?? [];
@@ -442,7 +447,7 @@ function RunDetail({ run, getIcon }) {
                   className="text-xs mt-1 inline-block underline"
                   style={{ color: 'var(--color-primary)' }}
                 >
-                  Open file →
+                  {entry.linkLabel ?? 'Open file →'}
                 </a>
               )}
             </div>

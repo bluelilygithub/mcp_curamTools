@@ -374,4 +374,40 @@ router.post('/runs/:runId/save-to-s3', async (req, res) => {
   }
 });
 
+// ── GET /api/demo/runs/:runId/download ────────────────────────────────────
+// Serves the original uploaded file directly from the database (base64).
+// Works without S3 — the file data is stored in result.data.file_data.
+// Falls back to S3 pre-signed URL if available and DB data is missing.
+router.get('/runs/:runId/download', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, result FROM agent_runs WHERE id = $1 AND org_id = $2`,
+      [req.params.runId, req.user.orgId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Run not found.' });
+
+    const result = rows[0].result ?? {};
+    const data   = result.data    ?? {};
+
+    // Try DB base64 first
+    if (data.file_data && data.file_name) {
+      const fileBuf  = Buffer.from(data.file_data, 'base64');
+      const mimeType = data.mime_type ?? 'application/octet-stream';
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${data.file_name}"`);
+      res.setHeader('Content-Length', fileBuf.length);
+      return res.send(fileBuf);
+    }
+
+    // Fallback: redirect to S3 pre-signed URL if available
+    if (data.s3?.url) {
+      return res.redirect(data.s3.url);
+    }
+
+    return res.status(404).json({ error: 'No file data available for this run.' });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to download file: ${err.message}` });
+  }
+});
+
 module.exports = router;

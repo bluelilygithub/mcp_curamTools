@@ -827,37 +827,47 @@ export default function DocumentAnalyzer() {
             </button>
           </div>
 
-          {/* S3 Storage — auto-saved during analysis */}
+          {/* Original file download + S3 Storage */}
           <div className="rounded-xl p-4 flex items-center justify-between gap-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
             <div>
-              <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>AWS S3 Storage</p>
+              <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>Original File</p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
-                {s3Info
-                  ? `Saved to ${s3Info.storageKey}`
-                  : 'S3 not configured — set AWS_S3_BUCKET to enable automatic storage.'
-                }
+                {runResult?.file_name ?? 'Document'}
               </p>
-              {s3Info?.url && (
+              {runId && (
                 <a
-                  href={s3Info.url}
+                  href={`/api/demo/runs/${runId}/download`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs mt-1 inline-block underline"
                   style={{ color: 'var(--color-primary)' }}
                 >
-                  Open file →
+                  Download original file →
+                </a>
+              )}
+              {s3Info?.url && (
+                <a
+                  href={s3Info.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs mt-1 inline-block underline ml-3"
+                  style={{ color: 'var(--color-primary)' }}
+                >
+                  Open from S3 →
                 </a>
               )}
             </div>
-            {s3Info ? (
-              <span className="text-xs font-medium px-3 py-1.5 rounded-full" style={{ background: '#dcfce7', color: '#166534' }}>
-                Auto-saved ✓
-              </span>
-            ) : (
-              <span className="text-xs font-medium px-3 py-1.5 rounded-full" style={{ background: '#fef3c7', color: '#92400e' }}>
-                Not configured
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {s3Info ? (
+                <span className="text-xs font-medium px-3 py-1.5 rounded-full" style={{ background: '#dcfce7', color: '#166534' }}>
+                  S3 saved ✓
+                </span>
+              ) : (
+                <span className="text-xs font-medium px-3 py-1.5 rounded-full" style={{ background: '#fef3c7', color: '#92400e' }}>
+                  S3 not configured
+                </span>
+              )}
+            </div>
           </div>
         </>
       )}
