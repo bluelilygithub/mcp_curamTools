@@ -697,7 +697,8 @@ export default function DocumentAnalyzer() {
       {runResult && (
         <>
           {/* Sanitisation card — first thing shown */}
-          <SanitisationCard sanitisation={runResult.sanitisation} getIcon={getIcon} />
+          {/* sanitisation may be at runResult.sanitisation (from DB fetch) or runResult.data.sanitisation (from SSE stream) */}
+          <SanitisationCard sanitisation={runResult.sanitisation ?? runResult.data?.sanitisation} getIcon={getIcon} />
 
           {/* Re-analyze */}
           <button
