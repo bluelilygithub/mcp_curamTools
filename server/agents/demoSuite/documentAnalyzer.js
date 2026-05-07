@@ -30,6 +30,8 @@ const execFileAsync = promisify(execFile);
 const { getProvider }    = require('../../platform/AgentOrchestrator');
 const AgentConfigService = require('../../platform/AgentConfigService');
 
+
+
 const TOOL_SLUG         = 'demo-document-analyzer';
 const ANTHROPIC_MAX_PX  = 7900;
 const DEFAULT_PDF_DPI   = 150;
@@ -270,32 +272,53 @@ async function runDocumentAnalyzer(context) {
     imageParts = [{ type: 'image', source: { type: 'base64', media_type: mimeType, data: fileData } }];
   }
 
-  // ── Stage 2: Claude — extract text + probabilistic analysis ───────────
+  // ── Stage 2: Vision model — extract text + probabilistic analysis ─────
   // Runs before Stage 1 internally because deterministic rules need extracted text.
   // Trace and UI present Stage 1 before Stage 2 in logical order.
+  // Uses direct provider.chat() because the orchestrator doesn't support image content.
+  // Fallback model is handled inline: if primary fails, retry once with fallback.
   emit('Stage 2: Running probabilistic analysis…');
   const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
-  const provider = getProvider(adminConfig.model, customProviders);
-  const model    = adminConfig.model;
-  const maxTokens       = adminConfig.max_tokens ?? 8192;
+  const model    = adminConfig.model      ?? 'claude-sonnet-4-6';
+  const maxTokens = adminConfig.max_tokens ?? 8192;
+  const fallback  = adminConfig.fallback_model ?? null;
 
-  const response = await provider.chat({
-    model,
-    max_tokens: maxTokens,
-    system:     SYSTEM_PROMPT,
-    messages:   [{
-      role:    'user',
-      content: [
-        ...imageParts,
-        {
-          type: 'text',
-          text: `Analyse this engineering document (${imageParts.length} ${imageParts.length === 1 ? 'page' : 'pages'}). Return the JSON as specified.`,
-        },
-      ],
-    }],
-  });
+  async function callModel(modelId) {
+    const provider = getProvider(modelId, customProviders);
+    return provider.chat({
+      model: modelId,
+      max_tokens: maxTokens,
+      system: SYSTEM_PROMPT,
+      messages: [{
+        role: 'user',
+        content: [
+          ...imageParts,
+          {
+            type: 'text',
+            text: `Analyse this engineering document (${imageParts.length} ${imageParts.length === 1 ? 'page' : 'pages'}). Return the JSON as specified.`,
+          },
+        ],
+      }],
+    });
+  }
 
-  const tokensUsed = response.usage;
+  let response, tokensUsed;
+  try {
+    response = await callModel(model);
+  } catch (primaryErr) {
+    if (fallback) {
+      emit(`Primary model failed — retrying with fallback model…`);
+      try {
+        response = await callModel(fallback);
+      } catch (fallbackErr) {
+        throw new Error(`Both primary (${model}) and fallback (${fallback}) models failed. Primary: ${primaryErr.message}`);
+      }
+    } else {
+      throw primaryErr;
+    }
+  }
+
+  tokensUsed = response.usage;
   const textBlock  = response.content?.find((b) => b.type === 'text');
   if (!textBlock) throw new Error('No text response from model.');
 
@@ -309,6 +332,8 @@ async function runDocumentAnalyzer(context) {
   } catch {
     throw new Error(`Model returned non-JSON output: ${textBlock.text.slice(0, 200)}`);
   }
+
+
 
   trace.push({
     step:           'probabilistic_analysis',
