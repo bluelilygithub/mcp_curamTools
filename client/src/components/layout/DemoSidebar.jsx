@@ -41,6 +41,16 @@ export default function DemoSidebar({ mobileOpen, onClose }) {
             ))}
           </div>
         )}
+
+        <div className="mt-2">
+          <p
+            className="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-wider"
+            style={{ color: 'var(--color-muted)' }}
+          >
+            History
+          </p>
+          <NavItem to="/demo/decision-log" icon="file-text" label="Decision Log" onClick={onLinkClick} />
+        </div>
       </div>
 
       <div style={{ borderTop: '1px solid var(--color-border)' }}>

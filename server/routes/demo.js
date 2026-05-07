@@ -160,7 +160,9 @@ router.get('/runs', async (req, res) => {
               result->'summary'                          AS summary,
               result->'data'->'document_type'            AS document_type,
               result->'data'->'file_name'                AS file_name,
-              result->'data'->'pending_review_count'     AS pending_review_count
+              result->'data'->'pending_review_count'     AS pending_review_count,
+              result->'tokensUsed'                       AS tokens_used,
+              result->'costAud'                          AS cost_aud
          FROM agent_runs
         WHERE org_id = $1 AND slug = $2
         ORDER BY run_at DESC
