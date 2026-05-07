@@ -90,11 +90,12 @@ const RULES = [
 // ── Prompt injection scan ───────────────────────────────────────────────────
 // Scans file names for known prompt injection patterns.
 // Patterns are deliberately narrow to avoid false positives on legitimate
-// engineering document filenames (e.g. "you are now a..." in a filename is
-// extremely unlikely to be an injection attempt).
+// engineering document text (e.g. "The stormwater system: you must ensure…"
+// is normal specification language, not an injection attempt).
+// Only patterns that are extremely unlikely to appear in legitimate
+// engineering documents are included.
 const INJECTION_PATTERNS = [
   /ignore\s+(previous|above|prior)\s+instructions?\s+(and|\.|$)/gi,
-  /system\s*:\s*you\s+(are|must|will)/gi,
   /\[INST\]/g,
   /<\|im_start\|>/g,
   /forget\s+(all\s+)?(your\s+)?(instructions?|training|guidelines)/gi,
