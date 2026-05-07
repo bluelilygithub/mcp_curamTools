@@ -424,6 +424,8 @@ async function runDocumentAnalyzer(context) {
         document_type:          parsed.document_type ?? 'unknown',
         file_name:              fileName,
         file_hash:              fileHash,
+        mime_type:              mimeType,
+        file_data:              fileData,   // base64 — for optional S3 storage
         parties:                parsed.parties ?? [],
         deterministic_findings: detFindings,
         probabilistic_findings: filteredProb,

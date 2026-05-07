@@ -17,6 +17,7 @@ const { pool } = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
 const { requireRole } = require('../middleware/requireRole');
 const { DEMO_CATALOG } = require('../demo/demoCatalog');
+const StorageService = require('../services/StorageService');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -287,6 +288,58 @@ router.patch('/runs/:runId/review/:findingId', async (req, res) => {
   } catch (err) {
     console.error('[demo/review PATCH]', err.message);
     res.status(500).json({ error: 'Failed to update review.' });
+  }
+});
+
+// ── POST /api/demo/runs/:runId/save-to-s3 ─────────────────────────────────
+// Saves the uploaded file from a document analyzer run to S3.
+// The file is stored under: {orgName}/{fileName}
+// If the folder (prefix) doesn't exist, S3 creates it implicitly via the key.
+// Returns a pre-signed download URL.
+router.post('/runs/:runId/save-to-s3', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, result FROM agent_runs WHERE id = $1 AND org_id = $2`,
+      [req.params.runId, req.user.orgId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Run not found.' });
+
+    const result = rows[0].result ?? {};
+    const data   = result.data    ?? {};
+
+    const fileData  = data.file_data;
+    const fileName  = data.file_name;
+    const mimeType  = data.mime_type ?? 'application/octet-stream';
+    const orgName   = req.user.orgName ?? 'Default Organisation';
+
+    if (!fileData || !fileName) {
+      return res.status(400).json({ error: 'No file data available for this run.' });
+    }
+
+    const bucket = process.env.AWS_S3_BUCKET;
+    const region = process.env.AWS_S3_REGION ?? 'ap-southeast-2';
+
+    if (!bucket) {
+      return res.status(500).json({ error: 'AWS S3 bucket not configured.' });
+    }
+
+    // S3 key: {orgName}/{fileName}
+    // S3 doesn't have real folders — the prefix acts as a folder implicitly.
+    const key = `${orgName}/${fileName}`;
+
+    const fileBuf = Buffer.from(fileData, 'base64');
+
+    await StorageService.put({ bucket, region, key, body: fileBuf, contentType: mimeType });
+
+    // Generate a pre-signed download URL (expires in 7 days)
+    const { url, expiresAt } = await StorageService.getSignedDownloadUrl({
+      bucket, region, key, expiresIn: 7 * 24 * 3600,
+    });
+
+    res.json({ ok: true, storageKey: key, url, expiresAt });
+  } catch (err) {
+    console.error('[demo/save-to-s3]', err.message);
+    res.status(500).json({ error: `Failed to save to S3: ${err.message}` });
   }
 });
 
