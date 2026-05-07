@@ -16,7 +16,7 @@
  * budget checks can fire on each iteration.
  */
 
-const DEFAULT_MODEL           = 'claude-sonnet-4-6';
+const DEFAULT_MODEL           = 'deepseek-chat';
 const MAX_ITERATIONS_HARD_CAP = 20;
 
 // ─── Session-scoped tool result cache ────────────────────────────────────────

@@ -22,22 +22,22 @@ router.use(requireAuth);
 
 const MODEL_DEFAULTS = [
   {
-    id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5', tier: 'standard', enabled: true,
-    emoji: '⚡', label: 'Economy', tagline: 'Fast & cost-effective',
-    desc: 'Best for high-volume tasks and simple tool calls.',
-    inputPricePer1M: 0.80, outputPricePer1M: 4.00, contextWindow: 200000,
+    id: 'deepseek-chat', name: 'DeepSeek V3', tier: 'advanced', enabled: true,
+    emoji: '🧠', label: 'Standard', tagline: 'Smart & cost-effective',
+    desc: 'Default model for all agents — analysis, writing, and tool workloads.',
+    inputPricePer1M: 0.27, outputPricePer1M: 1.10, contextWindow: 64000,
   },
   {
-    id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', tier: 'advanced', enabled: true,
-    emoji: '🧠', label: 'Standard', tagline: 'Smart & balanced',
-    desc: 'Best for most work — writing, analysis, and agent tool workloads.',
+    id: 'deepseek-reasoner', name: 'DeepSeek R1', tier: 'premium', enabled: true,
+    emoji: '🔬', label: 'Premium', tagline: 'Deep reasoning',
+    desc: 'Best for complex multi-step reasoning tasks.',
+    inputPricePer1M: 0.55, outputPricePer1M: 2.19, contextWindow: 64000,
+  },
+  {
+    id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', tier: 'advanced', enabled: false,
+    emoji: '🧠', label: 'Claude', tagline: 'Anthropic fallback',
+    desc: 'Fallback option if DeepSeek is unavailable.',
     inputPricePer1M: 3.00, outputPricePer1M: 15.00, contextWindow: 200000,
-  },
-  {
-    id: 'claude-opus-4-6', name: 'Claude Opus 4.6', tier: 'premium', enabled: false,
-    emoji: '🔬', label: 'Premium', tagline: 'Most capable',
-    desc: 'Best for complex reasoning and advanced multi-step agent tasks.',
-    inputPricePer1M: 15.00, outputPricePer1M: 75.00, contextWindow: 200000,
   },
 ];
 

@@ -280,7 +280,7 @@ async function runDocumentAnalyzer(context) {
   emit('Stage 2: Running probabilistic analysis…');
   const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
   const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(orgId).catch(() => null);
-  const model    = orgDefaultModel ?? 'claude-sonnet-4-6';
+  const model    = orgDefaultModel ?? 'deepseek-chat';
   const maxTokens = adminConfig.max_tokens ?? 8192;
   const fallback  = adminConfig.fallback_model ?? null;
 
