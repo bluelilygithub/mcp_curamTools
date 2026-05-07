@@ -352,13 +352,6 @@ async function runDocumentAnalyzer(context) {
   emit('Stage 1: Running deterministic rules…');
   const extractedText = parsed.extracted_text ?? '';
 
-  // Secondary injection scan on document content — does not block, just annotates
-  const contentCheck = scanInjection(extractedText);
-  if (!contentCheck.clean) {
-    sanitisation.result = 'content_flagged';
-    sanitisation.label  = 'Input sanitised: injection pattern detected in document content — analysis proceeded with caution.';
-  }
-
   // Run rules on extracted text + Claude excerpt corpus for best coverage
   const corpus = [extractedText, ...(parsed.findings ?? []).map((f) => f.excerpt ?? '')].join('\n');
   const detFindings = runDeterministic(corpus);
