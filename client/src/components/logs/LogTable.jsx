@@ -210,9 +210,11 @@ export default function LogTable({ columns, rows, loading, onExport, renderDetai
               </tr>
             </thead>
             <tbody>
-              {paged.map((row) => {
+              {paged.flatMap((row) => {
                 const isExpanded = expandedRow === row.id;
-                return (
+                const rows = [];
+                // Main data row
+                rows.push(
                   <tr
                     key={row.id}
                     style={{
@@ -239,19 +241,18 @@ export default function LogTable({ columns, rows, loading, onExport, renderDetai
                     ))}
                   </tr>
                 );
-                })}
-              {/* Expanded detail row inside tbody */}
-              {expandedRow && renderDetail && (() => {
-                const row = paged.find((r) => r.id === expandedRow);
-                if (!row) return null;
-                return (
-                  <tr key={`detail-${expandedRow}`}>
-                    <td colSpan={columns.length + 1} style={{ padding: 0, borderBottom: '1px solid var(--color-border)' }}>
-                      {renderDetail(row)}
-                    </td>
-                  </tr>
-                );
-              })()}
+                // Expanded detail row directly below
+                if (isExpanded && renderDetail) {
+                  rows.push(
+                    <tr key={`detail-${row.id}`}>
+                      <td colSpan={columns.length + 1} style={{ padding: 0, borderBottom: '1px solid var(--color-border)' }}>
+                        {renderDetail(row)}
+                      </td>
+                    </tr>
+                  );
+                }
+                return rows;
+              })}
             </tbody>
           </table>
         </div>
