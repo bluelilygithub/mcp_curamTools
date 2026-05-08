@@ -221,6 +221,9 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
           startDate: req.body.startDate ?? null,
           endDate:   req.body.endDate   ?? null,
           progressLog,
+          // Capture prompt/response for Decision Log display
+          prompt_text:  result?.prompt_text  ?? null,
+          response_text: result?.response_text ?? null,
           ...(boundsFailed.length > 0 && { boundsFailed }),
         };
 
