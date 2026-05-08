@@ -335,16 +335,85 @@ async function runDocumentAnalyzer(context) {
   const textBlock  = response.content?.find((b) => b.type === 'text');
   if (!textBlock) throw new Error('No text response from model.');
 
+  // ── Robust JSON extraction ──────────────────────────────────────────────
+  // The model may return JSON with unescaped characters in string values
+  // (especially extracted_text which contains raw document text).
+  // We try multiple strategies in order of robustness.
   let parsed;
-  try {
-    const stripped = textBlock.text.replace(/```(?:json)?\s*/gi, '').trim();
-    const first    = stripped.indexOf('{');
-    const last     = stripped.lastIndexOf('}');
-    if (first === -1 || last === -1 || last <= first) throw new SyntaxError('No JSON object found');
-    parsed = JSON.parse(stripped.slice(first, last + 1));
-  } catch {
-    throw new Error(`Model returned non-JSON output: ${textBlock.text.slice(0, 200)}`);
+  const extractionErrors = [];
+
+  function tryParse(raw) {
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      extractionErrors.push(e.message);
+      return null;
+    }
   }
+
+  // Strategy 1: Strip markdown fences and try direct parse
+  let candidate = textBlock.text.replace(/```(?:json)?\s*/gi, '').trim();
+  const firstBrace = candidate.indexOf('{');
+  const lastBrace  = candidate.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    candidate = candidate.slice(firstBrace, lastBrace + 1);
+  }
+  parsed = tryParse(candidate);
+
+  // Strategy 2: If that failed, try to repair unescaped newlines in string values.
+  // JSON does not allow literal newlines inside strings — replace \n with \\n
+  // inside string content (between quotes).
+  if (!parsed) {
+    try {
+      // Replace unescaped newlines inside quoted strings
+      const repaired = candidate.replace(/: "([^"]*?)"/gs, (match) => {
+        return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+      });
+      parsed = tryParse(repaired);
+    } catch { /* fall through */ }
+  }
+
+  // Strategy 3: If still failing, try to extract just the JSON structure fields
+  // that we absolutely need (document_type, extracted_text, findings, summary)
+  // by manually parsing with regex. This is a last resort for malformed output.
+  if (!parsed) {
+    try {
+      const extractField = (name) => {
+        const re = new RegExp(`"${name}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`, 's');
+        const m = re.exec(candidate);
+        return m ? m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : null;
+      };
+      const extractArray = (name) => {
+        const re = new RegExp(`"${name}"\\s*:\\s*\\[([\\s\\S]*?)\\]\\s*[,}]`, 's');
+        const m = re.exec(candidate);
+        if (!m) return [];
+        try { return JSON.parse(`[${m[1]}]`); } catch { return []; }
+      };
+
+      const docType    = extractField('document_type') ?? 'unknown';
+      const extracted  = extractField('extracted_text') ?? '';
+      const summary    = extractField('summary') ?? '';
+      const findings   = extractArray('findings');
+
+      if (extracted || summary || findings.length) {
+        parsed = {
+          document_type: docType,
+          extracted_text: extracted,
+          findings,
+          summary,
+        };
+      }
+    } catch { /* give up */ }
+  }
+
+  if (!parsed) {
+    throw new Error(
+      `Model returned non-JSON output after ${extractionErrors.length} attempts. ` +
+      `First error: ${extractionErrors[0]}. ` +
+      `Output preview: ${textBlock.text.slice(0, 300)}`
+    );
+  }
+
 
 
 
