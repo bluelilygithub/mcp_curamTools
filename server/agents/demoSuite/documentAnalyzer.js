@@ -166,8 +166,8 @@ Return this exact JSON structure — no markdown fences, no explanation, just th
       "category": "obligation | risk_transfer | ambiguous_language | unusual_clause | missing_clause | parties_and_obligations"
     }
   ],
-  "summary": "2-3 sentence plain English overview of the document and its key risk areas",
-  "custom_response": "If the user provided additional instructions, answer them directly here in plain English. Otherwise omit this field."
+  "summary": "2-3 sentence plain English overview of the document and its key risk areas. Use markdown formatting — headings (##), bullet lists, bold, and paragraphs — to make the summary scannable and well-structured.",
+  "custom_response": "If the user provided additional instructions, answer them directly here in plain English. Use markdown formatting — headings (##), bullet lists, bold, and paragraphs — to structure your response clearly. Otherwise omit this field."
 }
 
 Focus findings on:
