@@ -502,7 +502,7 @@ async function runDocumentAnalyzer(context) {
       const key = `${orgName}/${fileName}`;
       await StorageService.put({ bucket, region, key, body: fileBuf, contentType: mimeType });
       const { url, expiresAt } = await StorageService.getSignedDownloadUrl({
-        bucket, region, key, expiresIn: 365 * 24 * 3600, // 1 year
+        bucket, region, key, expiresIn: 7 * 24 * 3600, // 7 days (max for SigV4 presigned URLs)
       });
       s3Info = { storageKey: key, url, expiresAt };
       console.log(`[documentAnalyzer] Auto-saved to S3: ${key}`);
