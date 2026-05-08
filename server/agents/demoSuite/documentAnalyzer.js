@@ -236,7 +236,7 @@ async function pdfToImages(pdfBuf, maxPages = DEFAULT_MAX_PAGES, dpi = DEFAULT_P
 // ── Main runFn ──────────────────────────────────────────────────────────────
 async function runDocumentAnalyzer(context) {
   const { orgId, adminConfig, emit } = context;
-  const { fileData, mimeType, fileName = 'document' } = context.req?.body ?? {};
+  const { fileData, mimeType, fileName = 'document', customPrompt } = context.req?.body ?? {};
 
   if (!fileData || !mimeType) throw new Error('Missing fileData or mimeType in request body.');
 
@@ -295,6 +295,11 @@ async function runDocumentAnalyzer(context) {
 
   async function callModel(modelId) {
     const provider = getProvider(modelId, customProviders);
+    // Build the text portion of the user message
+    let userText = `Analyse this engineering document (${imageParts.length} ${imageParts.length === 1 ? 'page' : 'pages'}). Return the JSON as specified.`;
+    if (customPrompt?.trim()) {
+      userText += `\n\nAdditional instructions from the reviewer:\n${customPrompt.trim()}`;
+    }
     return provider.chat({
       model: modelId,
       max_tokens: maxTokens,
@@ -303,10 +308,7 @@ async function runDocumentAnalyzer(context) {
         role: 'user',
         content: [
           ...imageParts,
-          {
-            type: 'text',
-            text: `Analyse this engineering document (${imageParts.length} ${imageParts.length === 1 ? 'page' : 'pages'}). Return the JSON as specified.`,
-          },
+          { type: 'text', text: userText },
         ],
       }],
     });

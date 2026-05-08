@@ -485,6 +485,7 @@ export default function DocumentAnalyzer() {
   const [certLoading, setCertLoading] = useState(false);
   const [certError, setCertError] = useState('');
   const [downloadError, setDownloadError] = useState('');
+  const [customPrompt, setCustomPrompt] = useState('');
   const fileInputRef = useRef(null);
 
   // ── File handling ──────────────────────────────────────────────────────────
@@ -542,7 +543,7 @@ export default function DocumentAnalyzer() {
     if (!fileData) return;
 
     await streamRun(
-      { fileData, mimeType: file.type, fileName: file.name },
+      { fileData, mimeType: file.type, fileName: file.name, customPrompt },
       (text)   => setProgress((p) => [...p, text]),
       async (data) => {
         setRunResult(data);
@@ -681,6 +682,29 @@ export default function DocumentAnalyzer() {
             </div>
           )}
           <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,image/jpeg,image/png,image/webp,image/gif" onChange={(e) => { if (e.target.files[0]) acceptFile(e.target.files[0]); }} />
+        </div>
+      )}
+
+      {/* Custom prompt */}
+      {!running && !runResult && file && (
+        <div className="space-y-2">
+          <label className="text-xs font-medium" style={{ color: 'var(--color-muted)' }}>
+            Custom instructions (optional)
+          </label>
+          <textarea
+            rows={3}
+            placeholder="e.g. Focus specifically on payment terms and liability caps…"
+            value={customPrompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
+            className="w-full text-sm rounded-xl p-3 resize-none"
+            style={{
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-surface)',
+              color: 'var(--color-text)',
+              fontFamily: 'inherit',
+              outline: 'none',
+            }}
+          />
         </div>
       )}
 
