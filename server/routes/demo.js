@@ -410,4 +410,109 @@ router.get('/runs/:runId/download', async (req, res) => {
   }
 });
 
+// ── POST /api/demo/runs/:runId/follow-up ──────────────────────────────────
+// Allows the user to ask a follow-up question about a previously analysed document.
+// The LLM receives the original extracted text, findings, summary, and the new question
+// so it can answer contextually — even if the question is unrelated to the previous analysis.
+router.post('/runs/:runId/follow-up', async (req, res) => {
+  const { question } = req.body ?? {};
+  if (!question?.trim()) {
+    return res.status(400).json({ error: 'Question is required.' });
+  }
+
+  try {
+    // Load the run — scoped to org_id
+    const { rows } = await pool.query(
+      `SELECT id, result FROM agent_runs WHERE id = $1 AND org_id = $2`,
+      [req.params.runId, req.user.orgId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Run not found.' });
+
+    const result = rows[0].result ?? {};
+    const data   = result.data    ?? {};
+
+    // Build context from the original analysis
+    const extractedText = data.extracted_text ?? '';
+    const summary       = result.summary ?? '';
+    const findings      = data.all_findings ?? [];
+    const documentType  = data.document_type ?? 'unknown';
+    const fileName      = data.file_name ?? 'document';
+
+    const findingsContext = findings
+      .map((f) => `- [${f.stage}] ${f.label} (confidence: ${f.confidence}): ${f.description ?? ''}`)
+      .join('\n');
+
+    const contextPrompt = `You are a specialist in engineering contract and document review for Australian and New Zealand projects.
+
+You previously analysed the document "${fileName}" (type: ${documentType}).
+
+Here is the context from that analysis:
+
+## Summary
+${summary}
+
+## Extracted Text (abridged)
+${extractedText.slice(0, 8000)}${extractedText.length > 8000 ? '\n\n[Text truncated to 8000 characters]' : ''}
+
+## Findings
+${findingsContext || 'No findings were identified.'}
+
+---
+
+The reviewer now asks:
+
+${question.trim()}
+
+Answer the question directly using the context above. If the question is unrelated to the document, answer it to the best of your ability based on your general engineering knowledge. Use markdown formatting — headings (##), bullet lists, bold, and paragraphs — to structure your response clearly.`;
+
+    // Get provider and model config
+    const AgentConfigService = require('../platform/AgentConfigService');
+    const { getProvider } = require('../platform/AgentOrchestrator');
+
+    const customProviders = await AgentConfigService.getCustomProviders(req.user.orgId).catch(() => []);
+    const adminConfig = await AgentConfigService.getAdminConfig('demo-document-analyzer').catch(() => ({}));
+    const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(req.user.orgId).catch(() => null);
+    const model    = orgDefaultModel ?? 'deepseek-chat';
+    const maxTokens = adminConfig.max_tokens ?? 4096;
+    const fallback  = adminConfig.fallback_model ?? null;
+
+    async function callModel(modelId) {
+      const provider = getProvider(modelId, customProviders);
+      return provider.chat({
+        model: modelId,
+        max_tokens: maxTokens,
+        system: 'You are a specialist engineering document analyst. Answer the reviewer\'s follow-up question using the provided context.',
+        messages: [{ role: 'user', content: [{ type: 'text', text: contextPrompt }] }],
+      });
+    }
+
+    let response;
+    try {
+      response = await callModel(model);
+    } catch (primaryErr) {
+      if (fallback) {
+        try {
+          response = await callModel(fallback);
+        } catch (fallbackErr) {
+          throw new Error(`Both primary (${model}) and fallback (${fallback}) models failed. Primary: ${primaryErr.message}`);
+        }
+      } else {
+        throw primaryErr;
+      }
+    }
+
+    const textBlock = response.content?.find((b) => b.type === 'text');
+    if (!textBlock) throw new Error('No text response from model.');
+
+    res.json({
+      answer: textBlock.text,
+      model,
+      tokensUsed: response.usage ?? {},
+    });
+  } catch (err) {
+    console.error('[demo/follow-up]', err.message);
+    res.status(500).json({ error: `Failed to answer follow-up: ${err.message}` });
+  }
+});
+
 module.exports = router;
