@@ -25,6 +25,8 @@ desktop.ini
 
 # Logs
 logs/
+!client/src/pages/logs/
+!client/src/components/logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
