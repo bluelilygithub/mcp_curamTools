@@ -717,7 +717,14 @@ export default function DocumentAnalyzer() {
             />
             <div className="absolute" style={{ bottom: 8, right: 8 }}>
               <MicButton
-                onResult={(t) => setCustomPrompt((prev) => (prev ? prev + ' ' : '') + t)}
+                onResult={(t) => setCustomPrompt((prev) => {
+                  const base = (prev ?? '').replace(/\s*\[.*?\]$/, '').trim();
+                  return base ? base + ' ' + t : t;
+                })}
+                onPartial={(t) => setCustomPrompt((prev) => {
+                  const base = (prev ?? '').replace(/\s*\[.*?\]$/, '').trim();
+                  return base ? base + ' [' + t + ']' : '[' + t + ']';
+                })}
                 size={14}
               />
             </div>
@@ -859,7 +866,14 @@ export default function DocumentAnalyzer() {
                   />
                   <div className="absolute" style={{ bottom: 8, right: 8 }}>
                     <MicButton
-                      onResult={(t) => setFollowUpQuestion((prev) => (prev ? prev + ' ' : '') + t)}
+                      onResult={(t) => setFollowUpQuestion((prev) => {
+                        const base = (prev ?? '').replace(/\s*\[.*?\]$/, '').trim();
+                        return base ? base + ' ' + t : t;
+                      })}
+                      onPartial={(t) => setFollowUpQuestion((prev) => {
+                        const base = (prev ?? '').replace(/\s*\[.*?\]$/, '').trim();
+                        return base ? base + ' [' + t + ']' : '[' + t + ']';
+                      })}
                       size={14}
                     />
                   </div>
