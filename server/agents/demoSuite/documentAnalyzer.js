@@ -27,11 +27,34 @@ const { promisify } = require('util');
 
 const execFileAsync = promisify(execFile);
 
-const { getProvider }    = require('../../platform/AgentOrchestrator');
-const AgentConfigService = require('../../platform/AgentConfigService');
-const StorageService     = require('../../services/StorageService');
+const { getProvider }       = require('../../platform/AgentOrchestrator');
+const AgentConfigService    = require('../../platform/AgentConfigService');
+const StorageService        = require('../../services/StorageService');
+const { TransactionLogger,
+        declareAgentFields } = require('../../platform/TransactionLogger');
 
 const TOOL_SLUG         = 'demo-document-analyzer';
+
+// ── Declare agent-specific metadata fields for Container 2 ────────────────
+// These fields appear as dynamic columns in the Agent Event Log UI.
+// When building a new agent, replace this block with your own field declarations.
+// Fire-and-forget: the DB pool may not be ready at module load time,
+// so we catch and log any errors silently.
+declareAgentFields(TOOL_SLUG, [
+  { key: 'file_name', label: 'File Name', type: 'text' },
+  { key: 'file_hash', label: 'File Hash', type: 'text' },
+  { key: 'mime_type', label: 'MIME Type', type: 'text' },
+  { key: 'document_type', label: 'Document Type', type: 'badge', options: ['contract', 'specification', 'scope_of_work', 'RFI', 'report', 'drawing', 'other'] },
+  { key: 'result', label: 'Result', type: 'badge', options: ['clean', 'injection_detected'] },
+  { key: 'rules_evaluated', label: 'Rules Evaluated', type: 'number' },
+  { key: 'rules_matched', label: 'Rules Matched', type: 'number' },
+  { key: 'model', label: 'Model', type: 'text' },
+  { key: 'image_pages', label: 'Image Pages', type: 'number' },
+  { key: 'deterministic_count', label: 'Deterministic', type: 'number' },
+  { key: 'probabilistic_count', label: 'Probabilistic', type: 'number' },
+  { key: 'total_findings', label: 'Total Findings', type: 'number' },
+]).catch(err => console.warn(`[${TOOL_SLUG}] Field declaration deferred (DB not ready):`, err.message));
+
 const ANTHROPIC_MAX_PX  = 7900;
 const DEFAULT_PDF_DPI   = 150;
 const DEFAULT_MAX_PAGES = 10;
@@ -246,8 +269,25 @@ async function runDocumentAnalyzer(context) {
   const ts       = () => new Date().toISOString();
   const trace    = [];
 
+  // ── Transaction Logger — Container 1 + Container 2 ─────────────────────
+  const logger = new TransactionLogger({
+    orgId,
+    agentSlug: TOOL_SLUG,
+  });
+  await logger.start({
+    action: 'document_analysis',
+    documentRef: fileName,
+    metadata: { fileHash, mimeType, fileSize: fileBuf.length },
+  });
+
   // ── Stage 0: Input sanitisation ────────────────────────────────────────
   emit('Sanitising input…');
+  await logger.step('input_sanitisation', 'Input Sanitisation', `File: ${fileName}`, {
+    file_name: fileName,
+    file_hash: fileHash,
+    mime_type: mimeType,
+    result: 'clean',
+  });
   console.log(`[documentAnalyzer] fileName="${fileName}" mimeType="${mimeType}" fileSize=${fileBuf.length}`);
   const nameCheck     = scanInjection(fileName);
   console.log(`[documentAnalyzer] nameCheck.clean=${nameCheck.clean}`);
@@ -268,6 +308,10 @@ async function runDocumentAnalyzer(context) {
 
   // ── Rasterise PDF or pass image directly ───────────────────────────────
   emit('Processing document…');
+  await logger.step('document_processing', 'Document Processing',
+    mimeType === 'application/pdf' ? 'Rasterising PDF pages…' : 'Preparing image…',
+    { mime_type: mimeType, file_size: fileBuf.length }
+  );
   let imageParts;
   if (mimeType === 'application/pdf') {
     const pages = await pdfToImages(fileBuf);
@@ -287,6 +331,10 @@ async function runDocumentAnalyzer(context) {
   // Uses direct provider.chat() because the orchestrator doesn't support image content.
   // Fallback model is handled inline: if primary fails, retry once with fallback.
   emit('Stage 2: Running probabilistic analysis…');
+  await logger.step('probabilistic_analysis', 'Probabilistic Analysis',
+    `Running vision model on ${imageParts.length} page(s)…`,
+    { model: adminConfig.model ?? 'default', image_pages: imageParts.length }
+  );
   const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
   const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(orgId).catch(() => null);
   const model    = orgDefaultModel ?? 'deepseek-chat';
@@ -432,6 +480,11 @@ async function runDocumentAnalyzer(context) {
   const corpus = [extractedText, ...(parsed.findings ?? []).map((f) => f.excerpt ?? '')].join('\n');
   const detFindings = runDeterministic(corpus);
 
+  await logger.step('deterministic_rules', 'Deterministic Rules',
+    `${detFindings.length} of ${RULES.length} rules matched`,
+    { rules_evaluated: RULES.length, rules_matched: detFindings.length }
+  );
+
   trace.push({
     step:            'deterministic_rules',
     timestamp:       ts(),
@@ -515,6 +568,18 @@ async function runDocumentAnalyzer(context) {
     // Surface the error in the result so the UI can show it
     s3Info = { error: s3Err.message };
   }
+
+  // ── Complete the transaction ──────────────────────────────────────────
+  await logger.complete({
+    outcome: 'success',
+    summary: `Analysed ${fileName}: ${detFindings.length} deterministic + ${filteredProb.length} probabilistic findings`,
+    metadata: {
+      deterministic_count: detFindings.length,
+      probabilistic_count: filteredProb.length,
+      total_findings: allFindings.length,
+      document_type: parsed.document_type ?? 'unknown',
+    },
+  });
 
   return {
     result: {

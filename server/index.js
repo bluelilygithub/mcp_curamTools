@@ -63,6 +63,7 @@ app.use('/api/export-log',    require('./routes/exportLog'));
 app.use('/api/export',        require('./routes/export'));
 app.use('/api/demo',          require('./routes/demo'));
 app.use('/api/settings',      require('./routes/settings'));
+app.use('/api/logs',          require('./routes/logs'));
 
 
 // ── Static files (production) ──────────────────────────────────────────────

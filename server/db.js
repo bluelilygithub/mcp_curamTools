@@ -636,6 +636,81 @@ async function initSchema() {
       )
     `);
 
+    // ── Universal Transaction Log ──────────────────────────────────────────────
+    // Container 1: platform-wide ledger that every agent writes to.
+    // Fixed schema — never changes regardless of which agent is writing.
+    // session_id links to agent-specific event logs (Container 2).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS transaction_logs (
+        id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id       INTEGER     NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        session_id   UUID        NOT NULL,
+        agent_slug   TEXT        NOT NULL,
+        action       TEXT        NOT NULL,
+        document_ref TEXT,
+        outcome      TEXT        NOT NULL,
+        status       TEXT        NOT NULL DEFAULT 'completed'
+                         CHECK (status IN ('started', 'completed', 'failed', 'skipped')),
+        metadata     JSONB       DEFAULT '{}',
+        created_at   TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_transaction_logs_org_agent
+        ON transaction_logs(org_id, agent_slug, created_at DESC)
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_transaction_logs_session
+        ON transaction_logs(session_id)
+    `);
+
+    // ── Agent-Specific Event Log ───────────────────────────────────────────────
+    // Container 2: per-agent log with consistent layout but per-agent metadata fields.
+    // fields JSONB holds the agent-declared metadata (e.g. document_type, model, tokens_used).
+    // session_id links back to transaction_logs (Container 1).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS agent_event_logs (
+        id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id          INTEGER     NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        session_id      UUID        NOT NULL,
+        agent_slug      TEXT        NOT NULL,
+        event_type      TEXT        NOT NULL,
+        event_label     TEXT,
+        event_detail    TEXT,
+        event_timestamp TIMESTAMPTZ DEFAULT NOW(),
+        fields          JSONB       DEFAULT '{}'
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_agent_event_logs_org_agent
+        ON agent_event_logs(org_id, agent_slug, event_timestamp DESC)
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_agent_event_logs_session
+        ON agent_event_logs(session_id)
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_agent_event_logs_type
+        ON agent_event_logs(org_id, agent_slug, event_type)
+    `);
+
+    // ── Agent Field Declarations ───────────────────────────────────────────────
+    // When building a new agent, declare its tracked fields here.
+    // The UI reads this to render the correct columns/filters for Container 2.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS agent_field_declarations (
+        id           SERIAL      PRIMARY KEY,
+        agent_slug   TEXT        NOT NULL UNIQUE,
+        fields       JSONB       NOT NULL DEFAULT '[]',
+        updated_at   TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
     await client.query('COMMIT');
 
     // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)

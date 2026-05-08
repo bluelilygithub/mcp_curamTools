@@ -10,6 +10,8 @@ import LoginPage from './pages/LoginPage';
 import DemoDashboardPage from './pages/demo/DemoDashboardPage';
 import DocumentAnalyzer from './pages/demo/DocumentAnalyzer';
 import DecisionLogPage from './pages/demo/DecisionLogPage';
+import TransactionLogPage from './pages/logs/TransactionLogPage';
+import AgentEventLogPage from './pages/logs/AgentEventLogPage';
 import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './pages/SettingsPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
@@ -99,6 +101,10 @@ export default function App() {
                   <Route path="/admin/usage" element={<AdminUsagePage />} />
                   <Route path="/admin/claude-sessions" element={<AdminClaudeSessionPage />} />
                 </Route>
+
+                {/* Logs (both demo and internal) */}
+                <Route path="/logs/transactions" element={<TransactionLogPage />} />
+                <Route path="/logs/events" element={<AgentEventLogPage />} />
 
                 {/* Demo org routes */}
                 <Route path="/demo/dashboard" element={<DemoDashboardPage />} />
