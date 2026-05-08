@@ -489,7 +489,7 @@ export default function DocumentAnalyzer() {
   const [customPrompt, setCustomPrompt] = useState('');
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpQuestion, setFollowUpQuestion] = useState('');
-  const [followUpAnswer, setFollowUpAnswer] = useState(null);
+  const [followUpHistory, setFollowUpHistory] = useState([]);  // array of { question, answer, model }
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [followUpError, setFollowUpError] = useState('');
   const fileInputRef = useRef(null);
@@ -780,6 +780,115 @@ export default function DocumentAnalyzer() {
             </div>
           )}
 
+          {/* ── Follow-up Q&A section — immediately after LLM response ──────── */}
+          {/* Follow-up history — all previous Q&A pairs */}
+          {followUpHistory.map((item, i) => (
+            <div key={i} className="space-y-3">
+              {/* Question */}
+              <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>
+                  Follow-up question #{i + 1}
+                </p>
+                <p className="text-sm" style={{ color: 'var(--color-text)' }}>{item.question}</p>
+              </div>
+              {/* Answer */}
+              <div className="rounded-xl p-4" style={{ background: '#f0f9ff', border: '1px solid #bae6fd' }}>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: '#0369a1' }}>
+                  Answer
+                </p>
+                <MarkdownRenderer text={item.answer} />
+                {item.model && (
+                  <p className="text-xs mt-2" style={{ color: 'var(--color-muted)' }}>
+                    Model: {item.model}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {/* Follow-up input box */}
+          <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+            {!followUpOpen ? (
+              <button
+                onClick={() => setFollowUpOpen(true)}
+                className="w-full py-2 rounded-xl text-sm font-medium transition-colors"
+                style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px dashed var(--color-border)', cursor: 'pointer' }}
+              >
+                + Ask a follow-up question
+              </button>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+                    Follow-up question
+                  </p>
+                  <button
+                    onClick={() => { setFollowUpOpen(false); setFollowUpQuestion(''); setFollowUpError(''); }}
+                    className="text-xs"
+                    style={{ color: 'var(--color-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+
+                <textarea
+                  rows={3}
+                  placeholder="Ask anything about the document — e.g. What are the key payment terms? Is there a dispute resolution clause?"
+                  value={followUpQuestion}
+                  onChange={(e) => { setFollowUpQuestion(e.target.value); setFollowUpError(''); }}
+                  className="w-full text-sm rounded-xl p-3 resize-none"
+                  style={{
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-bg)',
+                    color: 'var(--color-text)',
+                    fontFamily: 'inherit',
+                    outline: 'none',
+                  }}
+                />
+
+                <button
+                  onClick={async () => {
+                    if (!followUpQuestion.trim() || !runId) return;
+                    setFollowUpLoading(true);
+                    setFollowUpError('');
+                    try {
+                      const res = await api.post(`/demo/runs/${runId}/follow-up`, { question: followUpQuestion.trim() });
+                      setFollowUpHistory((prev) => [...prev, { question: followUpQuestion.trim(), answer: res.answer, model: res.model }]);
+                      setFollowUpQuestion('');
+                      setFollowUpOpen(false);
+                    } catch (err) {
+                      setFollowUpError(err.message);
+                    } finally {
+                      setFollowUpLoading(false);
+                    }
+                  }}
+                  disabled={followUpLoading || !followUpQuestion.trim() || !runId}
+                  className="w-full py-2 rounded-xl text-sm font-semibold transition-colors"
+                  style={
+                    followUpLoading || !followUpQuestion.trim() || !runId
+                      ? { background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: 'not-allowed' }
+                      : { background: 'var(--color-primary)', color: '#fff', cursor: 'pointer' }
+                  }
+                >
+                  {followUpLoading ? 'Getting answer…' : 'Ask'}
+                </button>
+
+                {followUpError && (
+                  <p className="text-xs" style={{ color: '#dc2626' }}>{followUpError}</p>
+                )}
+
+                {!runId && (
+                  <p className="text-xs" style={{ color: '#d97706' }}>
+                    Run ID not available — follow-up questions require the server to confirm the run was saved.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Findings and analysis details (bottom of page) ─────────────── */}
+          <hr style={{ border: 'none', borderTop: '1px solid var(--color-border)', margin: '1rem 0' }} />
+
           {/* Two findings panels */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Deterministic panel */}
@@ -936,99 +1045,6 @@ export default function DocumentAnalyzer() {
                 </span>
               )}
             </div>
-          </div>
-
-          {/* ── Follow-up question ──────────────────────────────────────────── */}
-          <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-            {!followUpOpen ? (
-              <button
-                onClick={() => setFollowUpOpen(true)}
-                className="w-full py-2 rounded-xl text-sm font-medium transition-colors"
-                style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px dashed var(--color-border)', cursor: 'pointer' }}
-              >
-                + Ask a follow-up question
-              </button>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
-                    Follow-up question
-                  </p>
-                  <button
-                    onClick={() => { setFollowUpOpen(false); setFollowUpQuestion(''); setFollowUpAnswer(null); setFollowUpError(''); }}
-                    className="text-xs"
-                    style={{ color: 'var(--color-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-
-                <textarea
-                  rows={3}
-                  placeholder="Ask anything about the document — e.g. What are the key payment terms? Is there a dispute resolution clause?"
-                  value={followUpQuestion}
-                  onChange={(e) => { setFollowUpQuestion(e.target.value); setFollowUpError(''); }}
-                  className="w-full text-sm rounded-xl p-3 resize-none"
-                  style={{
-                    border: '1px solid var(--color-border)',
-                    background: 'var(--color-bg)',
-                    color: 'var(--color-text)',
-                    fontFamily: 'inherit',
-                    outline: 'none',
-                  }}
-                />
-
-                <button
-                  onClick={async () => {
-                    if (!followUpQuestion.trim() || !runId) return;
-                    setFollowUpLoading(true);
-                    setFollowUpError('');
-                    setFollowUpAnswer(null);
-                    try {
-                      const res = await api.post(`/demo/runs/${runId}/follow-up`, { question: followUpQuestion.trim() });
-                      setFollowUpAnswer(res);
-                    } catch (err) {
-                      setFollowUpError(err.message);
-                    } finally {
-                      setFollowUpLoading(false);
-                    }
-                  }}
-                  disabled={followUpLoading || !followUpQuestion.trim() || !runId}
-                  className="w-full py-2 rounded-xl text-sm font-semibold transition-colors"
-                  style={
-                    followUpLoading || !followUpQuestion.trim() || !runId
-                      ? { background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: 'not-allowed' }
-                      : { background: 'var(--color-primary)', color: '#fff', cursor: 'pointer' }
-                  }
-                >
-                  {followUpLoading ? 'Getting answer…' : 'Ask'}
-                </button>
-
-                {followUpError && (
-                  <p className="text-xs" style={{ color: '#dc2626' }}>{followUpError}</p>
-                )}
-
-                {!runId && (
-                  <p className="text-xs" style={{ color: '#d97706' }}>
-                    Run ID not available — follow-up questions require the server to confirm the run was saved.
-                  </p>
-                )}
-
-                {followUpAnswer && (
-                  <div className="rounded-xl p-4" style={{ background: '#f0f9ff', border: '1px solid #bae6fd' }}>
-                    <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: '#0369a1' }}>
-                      Answer
-                    </p>
-                    <MarkdownRenderer text={followUpAnswer.answer} />
-                    {followUpAnswer.model && (
-                      <p className="text-xs mt-2" style={{ color: 'var(--color-muted)' }}>
-                        Model: {followUpAnswer.model}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </>
       )}
