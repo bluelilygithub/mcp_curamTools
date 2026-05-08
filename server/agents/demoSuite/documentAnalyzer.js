@@ -166,7 +166,8 @@ Return this exact JSON structure — no markdown fences, no explanation, just th
       "category": "obligation | risk_transfer | ambiguous_language | unusual_clause | missing_clause | parties_and_obligations"
     }
   ],
-  "summary": "2-3 sentence plain English overview of the document and its key risk areas"
+  "summary": "2-3 sentence plain English overview of the document and its key risk areas",
+  "custom_response": "If the user provided additional instructions, answer them directly here in plain English. Otherwise omit this field."
 }
 
 Focus findings on:
@@ -465,6 +466,7 @@ async function runDocumentAnalyzer(context) {
         trace,
         sanitisation,
         s3:                     s3Info,    // S3 storage info if saved
+        custom_response:        parsed.custom_response ?? null,  // answer to user's custom prompt
       },
     },
     tokensUsed,

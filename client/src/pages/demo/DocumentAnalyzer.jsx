@@ -629,6 +629,7 @@ export default function DocumentAnalyzer() {
   const tokensUsed     = runResult?.tokensUsed;
   const s3Info         = runResult?.s3 ?? runResult?.data?.s3 ?? null;
   const s3Error        = s3Info?.error ?? null;
+  const customResponse = runResult?.custom_response ?? runResult?.data?.custom_response ?? null;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -760,6 +761,16 @@ export default function DocumentAnalyzer() {
             <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
               <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>Summary</p>
               <p className="text-sm" style={{ color: 'var(--color-text)' }}>{runResult.summary}</p>
+            </div>
+          )}
+
+          {/* Custom response */}
+          {customResponse && (
+            <div className="rounded-xl p-4" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: '#92400e' }}>
+                Response to your instructions
+              </p>
+              <p className="text-sm" style={{ color: '#78350f' }}>{customResponse}</p>
             </div>
           )}
 
