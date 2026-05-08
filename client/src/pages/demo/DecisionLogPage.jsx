@@ -342,27 +342,20 @@ function RunDetail({ run, getIcon }) {
     });
   }
 
-  // 3. File download + S3 save decision
+  // 3. Original file — single entry with download and/or S3 link
   if (data.file_data) {
+    const detailParts = [`${data.file_name ?? 'Document'} — available for download`];
+    if (s3?.url) {
+      detailParts.push(`Also saved to S3: ${s3.storageKey}`);
+    }
     logEntries.push({
       type: 'decision',
       icon: 'download',
       label: 'Original File',
-      detail: `${data.file_name ?? 'Document'} — available for download`,
+      detail: detailParts.join(' · '),
       timestamp: trace[trace.length - 1]?.timestamp ?? run.completed_at,
       link: `/api/demo/runs/${run.id}/download`,
       linkLabel: 'Download file →',
-    });
-  }
-  if (s3?.url) {
-    logEntries.push({
-      type: 'decision',
-      icon: 'archive',
-      label: 'S3 Storage',
-      detail: `Saved to ${s3.storageKey}`,
-      timestamp: trace[trace.length - 1]?.timestamp ?? run.completed_at,
-      link: s3.url,
-      linkLabel: 'Open from S3 →',
     });
   }
 
