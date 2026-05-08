@@ -640,6 +640,7 @@ async function initSchema() {
     // Container 1: platform-wide ledger that every agent writes to.
     // Fixed schema — never changes regardless of which agent is writing.
     // session_id links to agent-specific event logs (Container 2).
+    // prompt_text and response_text capture the LLM interaction for auditability.
     await client.query(`
       CREATE TABLE IF NOT EXISTS transaction_logs (
         id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -652,9 +653,14 @@ async function initSchema() {
         status       TEXT        NOT NULL DEFAULT 'completed'
                          CHECK (status IN ('started', 'completed', 'failed', 'skipped')),
         metadata     JSONB       DEFAULT '{}',
+        prompt_text  TEXT,
+        response_text TEXT,
         created_at   TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    // Idempotent column additions for existing installs
+    await client.query(`ALTER TABLE transaction_logs ADD COLUMN IF NOT EXISTS prompt_text TEXT`);
+    await client.query(`ALTER TABLE transaction_logs ADD COLUMN IF NOT EXISTS response_text TEXT`);
 
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_transaction_logs_org_agent

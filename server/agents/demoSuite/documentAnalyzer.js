@@ -383,6 +383,14 @@ async function runDocumentAnalyzer(context) {
   const textBlock  = response.content?.find((b) => b.type === 'text');
   if (!textBlock) throw new Error('No text response from model.');
 
+  // ── Capture prompt and response for auditability ──────────────────────
+  const assembledPrompt = `System: ${SYSTEM_PROMPT}\n\nUser: Analyse this engineering document (${imageParts.length} page(s)).${customPrompt?.trim() ? `\n\nAdditional instructions from the reviewer:\n${customPrompt.trim()}` : ''}`;
+  const llmResponse = textBlock.text;
+
+  // Log to Container 1 (transaction_logs)
+  await logger.logPrompt(assembledPrompt);
+  await logger.logResponse(llmResponse);
+
   // ── Robust JSON extraction ──────────────────────────────────────────────
   // The model may return JSON with unescaped characters in string values
   // (especially extracted_text which contains raw document text).
@@ -584,6 +592,8 @@ async function runDocumentAnalyzer(context) {
   return {
     result: {
       summary,
+      prompt_text:  assembledPrompt,  // captured for Decision Log display
+      response_text: llmResponse,     // captured for Decision Log display
       data: {
         document_type:          parsed.document_type ?? 'unknown',
         file_name:              fileName,

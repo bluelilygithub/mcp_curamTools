@@ -59,6 +59,36 @@ class TransactionLogger {
   }
 
   /**
+   * Record the prompt text sent to the LLM.
+   * Stores it on the transaction_logs row for auditability.
+   *
+   * @param {string} prompt — the full prompt text sent to the model
+   * @returns {Promise<void>}
+   */
+  async logPrompt(prompt) {
+    if (!this._txId) throw new Error('TransactionLogger: must call start() before logPrompt()');
+    await pool.query(
+      `UPDATE transaction_logs SET prompt_text = $1 WHERE id = $2`,
+      [prompt, this._txId]
+    );
+  }
+
+  /**
+   * Record the response text received from the LLM.
+   * Stores it on the transaction_logs row for auditability.
+   *
+   * @param {string} response — the full response text from the model
+   * @returns {Promise<void>}
+   */
+  async logResponse(response) {
+    if (!this._txId) throw new Error('TransactionLogger: must call start() before logResponse()');
+    await pool.query(
+      `UPDATE transaction_logs SET response_text = $1 WHERE id = $2`,
+      [response, this._txId]
+    );
+  }
+
+  /**
    * Container 2: Record an agent-specific event.
    * Each event is a row in agent_event_logs with the agent's declared fields in `fields`.
    *

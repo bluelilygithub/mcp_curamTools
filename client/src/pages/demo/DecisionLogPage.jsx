@@ -297,6 +297,8 @@ function RunDetail({ run, getIcon }) {
   const tokensUsed = result.tokensUsed ?? detail?.tokens_used;
   const costAud    = result.costAud ?? detail?.cost_aud;
   const s3         = data.s3 ?? run.s3 ?? null;
+  const promptText  = result.prompt_text ?? null;
+  const responseText = result.response_text ?? null;
 
   // Build the decision log entries
   const logEntries = [];
@@ -476,6 +478,47 @@ function RunDetail({ run, getIcon }) {
           </div>
         ))}
       </div>
+
+      {/* Prompt & Response section */}
+      {(promptText || responseText) && (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+            Prompt & Response
+          </p>
+          {promptText && (
+            <div>
+              <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-muted)' }}>Prompt sent to model</p>
+              <pre
+                className="rounded-lg p-3 text-xs leading-relaxed overflow-x-auto whitespace-pre-wrap max-h-64 overflow-y-auto"
+                style={{
+                  background: 'var(--color-bg)',
+                  color: 'var(--color-text)',
+                  border: '1px solid var(--color-border)',
+                  fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                }}
+              >
+                {promptText}
+              </pre>
+            </div>
+          )}
+          {responseText && (
+            <div>
+              <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-muted)' }}>LLM response</p>
+              <pre
+                className="rounded-lg p-3 text-xs leading-relaxed overflow-x-auto whitespace-pre-wrap max-h-64 overflow-y-auto"
+                style={{
+                  background: 'var(--color-bg)',
+                  color: 'var(--color-text)',
+                  border: '1px solid var(--color-border)',
+                  fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                }}
+              >
+                {responseText}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
