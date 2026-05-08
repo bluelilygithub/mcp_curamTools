@@ -9,6 +9,7 @@
  */
 import { useEffect, useState, useCallback } from 'react';
 import { useIcon } from '../../providers/IconProvider';
+import { useSearchParams, Link } from 'react-router-dom';
 import api from '../../api/client';
 import LogTable from '../../components/logs/LogTable';
 import InlineBanner from '../../components/ui/InlineBanner';
@@ -24,21 +25,27 @@ const TRANSACTION_COLUMNS = [
 
 export default function TransactionLogPage() {
   const getIcon = useIcon();
+  const [searchParams] = useSearchParams();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const sessionFilter = searchParams.get('session_id') || '';
+
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get('/logs/transactions?limit=200');
+      const url = sessionFilter
+        ? `/logs/transactions?session_id=${encodeURIComponent(sessionFilter)}&limit=200`
+        : '/logs/transactions?limit=200';
+      const data = await api.get(url);
       setTransactions(data.transactions ?? []);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionFilter]);
 
   useEffect(() => { fetchTransactions(); }, [fetchTransactions]);
 
@@ -97,7 +104,7 @@ function TransactionDetail({ tx, getIcon }) {
     <div className="p-4 space-y-3">
       {/* Metadata grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <MetaItem label="Session ID" value={tx.session_id} mono />
+        <MetaItem label="Session ID" value={tx.session_id} mono linkTo={`/demo/logs/events?session_id=${tx.session_id}`} />
         <MetaItem label="Transaction ID" value={tx.id} mono />
         <MetaItem label="Agent" value={tx.agent_slug} />
         <MetaItem label="Action" value={tx.action} />
@@ -148,19 +155,32 @@ function TransactionDetail({ tx, getIcon }) {
   );
 }
 
-function MetaItem({ label, value, mono }) {
+function MetaItem({ label, value, mono, linkTo }) {
   return (
     <div className="rounded-lg p-2" style={{ background: 'var(--color-bg)' }}>
       <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{label}</p>
-      <p
-        className="text-xs font-medium mt-0.5 truncate"
-        style={{
-          color: 'var(--color-text)',
-          fontFamily: mono ? "'SF Mono', 'Fira Code', monospace" : undefined,
-        }}
-      >
-        {value ?? '—'}
-      </p>
+      {linkTo && value ? (
+        <Link
+          to={linkTo}
+          className="text-xs font-medium mt-0.5 truncate block hover:underline"
+          style={{
+            color: 'var(--color-primary)',
+            fontFamily: mono ? "'SF Mono', 'Fira Code', monospace" : undefined,
+          }}
+        >
+          {value}
+        </Link>
+      ) : (
+        <p
+          className="text-xs font-medium mt-0.5 truncate"
+          style={{
+            color: 'var(--color-text)',
+            fontFamily: mono ? "'SF Mono', 'Fira Code', monospace" : undefined,
+          }}
+        >
+          {value ?? '—'}
+        </p>
+      )}
     </div>
   );
 }

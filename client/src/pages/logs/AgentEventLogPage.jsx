@@ -13,6 +13,7 @@
  */
 import { useEffect, useState, useCallback } from 'react';
 import { useIcon } from '../../providers/IconProvider';
+import { useSearchParams, Link } from 'react-router-dom';
 import api from '../../api/client';
 import LogTable from '../../components/logs/LogTable';
 import InlineBanner from '../../components/ui/InlineBanner';
@@ -27,27 +28,30 @@ const BASE_COLUMNS = [
 
 export default function AgentEventLogPage() {
   const getIcon = useIcon();
+  const [searchParams] = useSearchParams();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [agentFields, setAgentFields] = useState({}); // slug -> field declarations
   const [selectedAgent, setSelectedAgent] = useState('');
 
+  const sessionFilter = searchParams.get('session_id') || '';
+
   // Fetch events
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const url = selectedAgent
-        ? `/logs/events?agent_slug=${encodeURIComponent(selectedAgent)}&limit=200`
-        : '/logs/events?limit=200';
-      const data = await api.get(url);
+      const params = new URLSearchParams({ limit: '200' });
+      if (selectedAgent) params.set('agent_slug', selectedAgent);
+      if (sessionFilter) params.set('session_id', sessionFilter);
+      const data = await api.get(`/logs/events?${params.toString()}`);
       setEvents(data.events ?? []);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [selectedAgent]);
+  }, [selectedAgent, sessionFilter]);
 
   // Fetch agent field declarations
   const fetchAgentFields = useCallback(async () => {
@@ -159,7 +163,7 @@ function EventDetail({ ev, agentFields, getIcon }) {
       {/* Core metadata */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetaItem label="Event ID" value={ev.id} mono />
-        <MetaItem label="Session ID" value={ev.session_id} mono />
+        <MetaItem label="Session ID" value={ev.session_id} mono linkTo={`/demo/logs/transactions?session_id=${ev.session_id}`} />
         <MetaItem label="Agent" value={ev.agent_slug} />
         <MetaItem label="Type" value={ev.event_type} />
       </div>
@@ -212,19 +216,32 @@ function EventDetail({ ev, agentFields, getIcon }) {
   );
 }
 
-function MetaItem({ label, value, mono }) {
+function MetaItem({ label, value, mono, linkTo }) {
   return (
     <div className="rounded-lg p-2" style={{ background: 'var(--color-bg)' }}>
       <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{label}</p>
-      <p
-        className="text-xs font-medium mt-0.5 truncate"
-        style={{
-          color: 'var(--color-text)',
-          fontFamily: mono ? "'SF Mono', 'Fira Code', monospace" : undefined,
-        }}
-      >
-        {value ?? '—'}
-      </p>
+      {linkTo && value ? (
+        <Link
+          to={linkTo}
+          className="text-xs font-medium mt-0.5 truncate block hover:underline"
+          style={{
+            color: 'var(--color-primary)',
+            fontFamily: mono ? "'SF Mono', 'Fira Code', monospace" : undefined,
+          }}
+        >
+          {value}
+        </Link>
+      ) : (
+        <p
+          className="text-xs font-medium mt-0.5 truncate"
+          style={{
+            color: 'var(--color-text)',
+            fontFamily: mono ? "'SF Mono', 'Fira Code', monospace" : undefined,
+          }}
+        >
+          {value ?? '—'}
+        </p>
+      )}
     </div>
   );
 }

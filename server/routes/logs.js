@@ -31,7 +31,7 @@ router.use(requireAuth);
 // Query params: agent_slug, status, action, limit (default 50), offset
 router.get('/transactions', async (req, res) => {
   try {
-    const { agent_slug, status, action, limit = 50, offset = 0 } = req.query;
+    const { agent_slug, status, action, session_id, limit = 50, offset = 0 } = req.query;
     const params = [req.user.orgId];
     const conditions = ['org_id = $1'];
     let idx = 2;
@@ -47,6 +47,10 @@ router.get('/transactions', async (req, res) => {
     if (action) {
       conditions.push(`action ILIKE $${idx++}`);
       params.push(`%${action}%`);
+    }
+    if (session_id) {
+      conditions.push(`session_id = $${idx++}`);
+      params.push(session_id);
     }
 
     const cappedLimit = Math.min(parseInt(limit, 10) || 50, 200);
@@ -147,7 +151,7 @@ router.get('/transactions/:id', async (req, res) => {
 // Query params: agent_slug, event_type, limit (default 50), offset
 router.get('/events', async (req, res) => {
   try {
-    const { agent_slug, event_type, limit = 50, offset = 0 } = req.query;
+    const { agent_slug, event_type, session_id, limit = 50, offset = 0 } = req.query;
     const params = [req.user.orgId];
     const conditions = ['org_id = $1'];
     let idx = 2;
@@ -159,6 +163,10 @@ router.get('/events', async (req, res) => {
     if (event_type) {
       conditions.push(`event_type = $${idx++}`);
       params.push(event_type);
+    }
+    if (session_id) {
+      conditions.push(`session_id = $${idx++}`);
+      params.push(session_id);
     }
 
     const cappedLimit = Math.min(parseInt(limit, 10) || 50, 200);
