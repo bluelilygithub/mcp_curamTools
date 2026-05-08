@@ -185,7 +185,7 @@ export default function LogTable({ columns, rows, loading, onExport, renderDetai
         </div>
       ) : (
         <div
-          className="rounded-xl overflow-hidden"
+          className="rounded-xl"
           style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
         >
           <table className="w-full text-left" style={{ borderCollapse: 'collapse' }}>
@@ -210,39 +210,50 @@ export default function LogTable({ columns, rows, loading, onExport, renderDetai
               </tr>
             </thead>
             <tbody>
-              {paged.map((row) => (
-                <tr
-                  key={row.id}
-                  style={{ borderBottom: '1px solid var(--color-border)' }}
-                  className="hover:opacity-80 transition-opacity"
-                >
-                  {renderDetail && (
-                    <td className="px-1 py-2">
-                      <button
-                        onClick={() => setExpandedRow(expandedRow === row.id ? null : row.id)}
-                        className="flex items-center justify-center bg-transparent border-none cursor-pointer"
-                        style={{ color: 'var(--color-muted)', width: 24, height: 24 }}
-                      >
-                        {getIcon(expandedRow === row.id ? 'chevron-down' : 'chevron-right', { size: 12 })}
-                      </button>
+              {paged.map((row) => {
+                const isExpanded = expandedRow === row.id;
+                return (
+                  <tr
+                    key={row.id}
+                    style={{
+                      borderBottom: isExpanded ? 'none' : '1px solid var(--color-border)',
+                      background: isExpanded ? 'rgba(var(--color-primary-rgb), 0.03)' : undefined,
+                    }}
+                    className="hover:opacity-80 transition-opacity"
+                  >
+                    {renderDetail && (
+                      <td className="px-1 py-2">
+                        <button
+                          onClick={() => setExpandedRow(isExpanded ? null : row.id)}
+                          className="flex items-center justify-center bg-transparent border-none cursor-pointer"
+                          style={{ color: 'var(--color-muted)', width: 24, height: 24 }}
+                        >
+                          {getIcon(isExpanded ? 'chevron-down' : 'chevron-right', { size: 12 })}
+                        </button>
+                      </td>
+                    )}
+                    {columns.map((col) => (
+                      <td key={col.key} className="px-3 py-2">
+                        <CellValue value={row[col.key]} type={col.type} options={col.options} />
+                      </td>
+                    ))}
+                  </tr>
+                );
+                })}
+              {/* Expanded detail row inside tbody */}
+              {expandedRow && renderDetail && (() => {
+                const row = paged.find((r) => r.id === expandedRow);
+                if (!row) return null;
+                return (
+                  <tr key={`detail-${expandedRow}`}>
+                    <td colSpan={columns.length + 1} style={{ padding: 0, borderBottom: '1px solid var(--color-border)' }}>
+                      {renderDetail(row)}
                     </td>
-                  )}
-                  {columns.map((col) => (
-                    <td key={col.key} className="px-3 py-2">
-                      <CellValue value={row[col.key]} type={col.type} options={col.options} />
-                    </td>
-                  ))}
-                </tr>
-              ))}
+                  </tr>
+                );
+              })()}
             </tbody>
           </table>
-
-          {/* Expanded detail */}
-          {expandedRow && renderDetail && (
-            <div style={{ borderTop: '1px solid var(--color-border)' }}>
-              {renderDetail(paged.find((r) => r.id === expandedRow))}
-            </div>
-          )}
         </div>
       )}
 

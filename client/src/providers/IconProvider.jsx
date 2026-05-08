@@ -81,6 +81,8 @@ import {
   Image,
   Archive,
   Building2,
+  List,
+  MessageCircle,
 } from 'lucide-react';
 
 const semanticMap = {
@@ -187,6 +189,12 @@ const semanticMap = {
   // Toggle
   'toggle-on': ToggleRight,
   'toggle-off': ToggleLeft,
+
+  // Lists
+  list: List,
+
+  // Communication
+  'message-circle': MessageCircle,
 };
 
 const IconContext = createContext(null);
