@@ -52,6 +52,21 @@
 
 ---
 
+## 2026-05-08 — S3 Presigned URL Expiration — 7-Day AWS SigV4 Limit
+
+**Context:** The document analyzer's "Save to AWS S3" feature was generating presigned URLs with a 1-year expiration (`365 * 24 * 3600` seconds). AWS Signature Version 4 presigned URLs have a hard maximum expiration of 7 days (604,800 seconds). The 1-year value caused `StorageService.getSignedUrl` to throw `Signature version 4 presigned URLs must have an expiration date less than one week in the future` on every document analysis run. The error was caught as non-fatal (S3 save is already wrapped in try/catch), so document analysis itself was never blocked — but the error log was noisy and the signed URL was never generated.
+
+**Options considered:**
+1. Change to 7 days (AWS maximum)
+2. Change to 1 hour (more secure, matches Media Generator pattern)
+3. Remove presigned URL generation entirely (return S3 key only)
+
+**Decision:** Option 1 — 7 days.
+
+**Rationale:** 7 days is the AWS-imposed maximum. A shorter expiry (e.g. 1 hour) would break the use case: the demo user needs to download the file later without re-running the analysis. The 7-day window matches the existing convention used by the demo route's save-to-s3 endpoint. The Media Generator's 1-hour expiry is a different use case (immediate download after generation).
+
+---
+
 ## 2026-05-08 — Decision Log Page Run History Viewer
 
 **Context:** Demo users need to see their past document analyzer runs in a readable format, not raw JSON.

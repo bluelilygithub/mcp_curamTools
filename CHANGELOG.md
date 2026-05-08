@@ -25,6 +25,18 @@
 
 ---
 
+## 2026-05-08 — Fix: S3 presigned URL expiration reduced from 1 year to 7 days (AWS SigV4 limit)
+
+### Fixed
+- **`server/agents/demoSuite/documentAnalyzer.js`** — S3 presigned URL `expiresIn` changed from `365 * 24 * 3600` (1 year) to `7 * 24 * 3600` (7 days). AWS Signature Version 4 presigned URLs have a maximum expiration of 7 days. The 1-year value caused a non-fatal S3 save error on every document analysis run. The S3 save is already non-fatal (caught and logged as a warning), so document analysis itself was never blocked — but the error log is now eliminated and the signed URL is generated successfully.
+
+### Open / next
+- Run provisioning SQL to create Curam Engineering org (if not done already)
+- Invite demo user via Admin > Users, select Curam Engineering org
+- Demo user logs in → routed to DemoShell + document-analyzer agent
+
+---
+
 ## 2026-05-08 — Documentation: DEMO-AGENTS.md + DECISIONS.md entries for document-analyzer session
 
 ### Built

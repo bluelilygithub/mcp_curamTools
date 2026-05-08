@@ -4,6 +4,7 @@ import { useIcon } from '../../providers/IconProvider';
 import { exportPdf } from '../../utils/exportService';
 import useAuthStore from '../../stores/authStore';
 import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
+import MicButton from '../../components/ui/MicButton';
 
 const SLUG = 'demo-document-analyzer';
 const LOW_CONFIDENCE = 0.7;
@@ -698,20 +699,29 @@ export default function DocumentAnalyzer() {
           <label className="text-xs font-medium" style={{ color: 'var(--color-muted)' }}>
             Custom instructions (optional)
           </label>
-          <textarea
-            rows={3}
-            placeholder="e.g. Focus specifically on payment terms and liability caps…"
-            value={customPrompt}
-            onChange={(e) => setCustomPrompt(e.target.value)}
-            className="w-full text-sm rounded-xl p-3 resize-none"
-            style={{
-              border: '1px solid var(--color-border)',
-              background: 'var(--color-surface)',
-              color: 'var(--color-text)',
-              fontFamily: 'inherit',
-              outline: 'none',
-            }}
-          />
+          <div className="relative">
+            <textarea
+              rows={3}
+              placeholder="e.g. Focus specifically on payment terms and liability caps…"
+              value={customPrompt}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+              className="w-full text-sm rounded-xl p-3 resize-none"
+              style={{
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-surface)',
+                color: 'var(--color-text)',
+                fontFamily: 'inherit',
+                outline: 'none',
+                paddingRight: 36,
+              }}
+            />
+            <div className="absolute" style={{ bottom: 8, right: 8 }}>
+              <MicButton
+                onResult={(t) => setCustomPrompt((prev) => (prev ? prev + ' ' : '') + t)}
+                size={14}
+              />
+            </div>
+          </div>
         </div>
       )}
 
@@ -831,20 +841,29 @@ export default function DocumentAnalyzer() {
                   </button>
                 </div>
 
-                <textarea
-                  rows={3}
-                  placeholder="Ask anything about the document — e.g. What are the key payment terms? Is there a dispute resolution clause?"
-                  value={followUpQuestion}
-                  onChange={(e) => { setFollowUpQuestion(e.target.value); setFollowUpError(''); }}
-                  className="w-full text-sm rounded-xl p-3 resize-none"
-                  style={{
-                    border: '1px solid var(--color-border)',
-                    background: 'var(--color-bg)',
-                    color: 'var(--color-text)',
-                    fontFamily: 'inherit',
-                    outline: 'none',
-                  }}
-                />
+                <div className="relative">
+                  <textarea
+                    rows={3}
+                    placeholder="Ask anything about the document — e.g. What are the key payment terms? Is there a dispute resolution clause?"
+                    value={followUpQuestion}
+                    onChange={(e) => { setFollowUpQuestion(e.target.value); setFollowUpError(''); }}
+                    className="w-full text-sm rounded-xl p-3 resize-none"
+                    style={{
+                      border: '1px solid var(--color-border)',
+                      background: 'var(--color-bg)',
+                      color: 'var(--color-text)',
+                      fontFamily: 'inherit',
+                      outline: 'none',
+                      paddingRight: 36,
+                    }}
+                  />
+                  <div className="absolute" style={{ bottom: 8, right: 8 }}>
+                    <MicButton
+                      onResult={(t) => setFollowUpQuestion((prev) => (prev ? prev + ' ' : '') + t)}
+                      size={14}
+                    />
+                  </div>
+                </div>
 
                 <button
                   onClick={async () => {
