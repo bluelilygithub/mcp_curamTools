@@ -3,6 +3,7 @@ import api from '../../api/client';
 import { useIcon } from '../../providers/IconProvider';
 import { exportPdf } from '../../utils/exportService';
 import useAuthStore from '../../stores/authStore';
+import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
 
 const SLUG = 'demo-document-analyzer';
 const LOW_CONFIDENCE = 0.7;
@@ -760,7 +761,7 @@ export default function DocumentAnalyzer() {
           {runResult.summary && (
             <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
               <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>Summary</p>
-              <p className="text-sm" style={{ color: 'var(--color-text)' }}>{runResult.summary}</p>
+              <MarkdownRenderer text={runResult.summary} />
             </div>
           )}
 
@@ -770,7 +771,7 @@ export default function DocumentAnalyzer() {
               <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: '#92400e' }}>
                 Response to your instructions
               </p>
-              <p className="text-sm" style={{ color: '#78350f' }}>{customResponse}</p>
+              <MarkdownRenderer text={customResponse} />
             </div>
           )}
 
