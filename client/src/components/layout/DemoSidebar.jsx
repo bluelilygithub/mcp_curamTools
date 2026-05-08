@@ -50,8 +50,8 @@ export default function DemoSidebar({ mobileOpen, onClose }) {
             History
           </p>
           <NavItem to="/demo/decision-log" icon="file-text" label="Decision Log" onClick={onLinkClick} />
-          <NavItem to="/logs/transactions" icon="activity" label="Transaction Log" onClick={onLinkClick} />
-          <NavItem to="/logs/events" icon="list" label="Agent Event Log" onClick={onLinkClick} />
+          <NavItem to="/demo/logs/transactions" icon="activity" label="Transaction Log" onClick={onLinkClick} />
+          <NavItem to="/demo/logs/events" icon="list" label="Agent Event Log" onClick={onLinkClick} />
         </div>
       </div>
 

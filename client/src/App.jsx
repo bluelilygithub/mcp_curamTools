@@ -102,14 +102,12 @@ export default function App() {
                   <Route path="/admin/claude-sessions" element={<AdminClaudeSessionPage />} />
                 </Route>
 
-                {/* Logs (both demo and internal) */}
-                <Route path="/logs/transactions" element={<TransactionLogPage />} />
-                <Route path="/logs/events" element={<AgentEventLogPage />} />
-
-                {/* Demo org routes */}
-                <Route path="/demo/dashboard" element={<DemoDashboardPage />} />
-                <Route path="/demo/run/demo-document-analyzer" element={<DocumentAnalyzer />} />
-                <Route path="/demo/decision-log" element={<DecisionLogPage />} />
+				{/* Demo org routes */}
+				<Route path="/demo/dashboard" element={<DemoDashboardPage />} />
+				<Route path="/demo/run/demo-document-analyzer" element={<DocumentAnalyzer />} />
+				<Route path="/demo/decision-log" element={<DecisionLogPage />} />
+				<Route path="/demo/logs/transactions" element={<TransactionLogPage />} />
+				<Route path="/demo/logs/events" element={<AgentEventLogPage />} />
               </Route>
             </Route>
 
