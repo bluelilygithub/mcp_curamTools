@@ -1005,4 +1005,4 @@ Four deviations from established platform patterns were introduced and then corr
 - Implement resource-based prompts for AI agents
 - Create resource usage analytics
 - Test resource discovery with actual connected servers
-- Consider automatic resource registration on discovery
+- Consider automatic resource registration on discovery..
