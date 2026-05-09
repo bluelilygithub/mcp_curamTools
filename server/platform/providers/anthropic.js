@@ -157,4 +157,4 @@ async function chat({ model, max_tokens, system, messages, tools, thinking }) {
   };
 }
 
-module.exports = { chat };
+module.exports = { chat, supportsVision: true };

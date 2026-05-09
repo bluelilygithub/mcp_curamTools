@@ -344,6 +344,10 @@ async function runDocumentAnalyzer(context) {
 
   async function callModel(modelId) {
     const provider = getProvider(modelId, customProviders);
+    // Check if the provider supports vision/images
+    if (provider.supportsVision === false) {
+      throw new Error(`Model "${modelId}" does not support vision/image analysis. Please configure a vision-capable model (e.g. Claude, Gemini) in Admin > Agents for the Document Analyzer.`);
+    }
     // Build the text portion of the user message
     let userText = `Analyse this engineering document (${imageParts.length} ${imageParts.length === 1 ? 'page' : 'pages'}). Return the JSON as specified.`;
     if (customPrompt?.trim()) {

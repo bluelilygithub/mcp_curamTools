@@ -208,4 +208,4 @@ async function chat({ model, max_tokens, system, messages, tools }) {
   return convertResponse(responseBody);
 }
 
-module.exports = { chat };
+module.exports = { chat, supportsVision: true };

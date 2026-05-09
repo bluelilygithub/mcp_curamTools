@@ -180,6 +180,7 @@ function convertResponse(oaiBody, label) {
  */
 function createAdapter({ hostname, path: apiPath, envVar, label }) {
   return {
+    supportsVision: false,
     async chat({ model, max_tokens, system, messages, tools }) {
       const apiKey = process.env[envVar];
       if (!apiKey) throw new Error(`${label} API key (${envVar}) is not set.`);
