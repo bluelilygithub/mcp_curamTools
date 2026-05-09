@@ -32,6 +32,7 @@ const AgentConfigService    = require('../../platform/AgentConfigService');
 const StorageService        = require('../../services/StorageService');
 const { TransactionLogger,
         declareAgentFields } = require('../../platform/TransactionLogger');
+const { scanInjection }     = require('../../utils/sanitize');
 
 const TOOL_SLUG         = 'demo-document-analyzer';
 
@@ -109,32 +110,9 @@ const RULES = [
   },
 ];
 
-// ── Prompt injection scan ───────────────────────────────────────────────────
-// Scans file names for known prompt injection patterns.
-// Patterns are deliberately narrow to avoid false positives on legitimate
-// engineering document text (e.g. "The stormwater system: you must ensure…"
-// is normal specification language, not an injection attempt).
-// Only patterns that are extremely unlikely to appear in legitimate
-// engineering documents are included.
-const INJECTION_PATTERNS = [
-  /ignore\s+(previous|above|prior)\s+instructions?\s+(and|\.|$)/gi,
-  /\[INST\]/g,
-  /<\|im_start\|>/g,
-  /forget\s+(all\s+)?(your\s+)?(instructions?|training|guidelines)/gi,
-  /disregard\s+(all\s+)?(previous|prior)\s+(instructions?|directions)/gi,
-];
-
-function scanInjection(text) {
-  for (const re of INJECTION_PATTERNS) {
-    re.lastIndex = 0;
-    const hit = re.test(text);
-    re.lastIndex = 0;
-    if (hit) return { clean: false };
-  }
-  return { clean: true };
-}
-
 // ── Deterministic analysis ──────────────────────────────────────────────────
+// Note: scanInjection() is imported from server/utils/sanitize.js
+
 function runDeterministic(text) {
   const findings = [];
   for (const rule of RULES) {
@@ -337,7 +315,10 @@ async function runDocumentAnalyzer(context) {
   );
   const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
   const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(orgId).catch(() => null);
-  const model    = orgDefaultModel ?? 'deepseek-chat';
+  if (!orgDefaultModel) {
+    throw new Error('No model configured for Document Analyzer. Set a vision-capable model (e.g. Claude, Gemini) in Admin > Agents or Admin > Settings > Models.');
+  }
+  const model    = orgDefaultModel;
   const maxTokens = adminConfig.max_tokens ?? 8192;
   const fallback  = adminConfig.fallback_model ?? null;
 

@@ -808,6 +808,18 @@ All inline styles include `fontFamily: 'inherit'` to respect the user's platform
 
 ---
 
+### Shared Sanitization Utility + Vision Model Enforcement
+**Date:** 2026-05-10
+**Status:** Settled
+**Context:** The document analyzer had inline prompt-injection detection patterns duplicated in the agent file. The last attempt to extract them into a shared utility (`server/utils/sanitize.js`) was reverted together with the `supportsVision` checks because DeepSeek (default model) doesn't support images, causing hallucinated responses. The revert was correct — the file upload itself wasn't broken, but the analysis was returning garbage because DeepSeek silently dropped image blocks.
+**Decision (sanitize.js):** A shared `server/utils/sanitize.js` utility exists as a platform standard. It exports `scanInjection(text)` → `{ clean: boolean }`, `sanitiseFileName(name)`, and `sanitiseText(text)`. Any agent can import and use it. The patterns are deliberately narrow to avoid false positives on legitimate engineering/business text. The scan targets user-supplied filenames and custom prompt text — NOT document content (which is the analysis target, not an injection vector).
+**Decision (vision model enforcement):** Provider adapters export `supportsVision: true | false` (Anthropic, Gemini = true; DeepSeek, OpenAI-compatible = false). The document analyzer's `callModel()` checks `provider.supportsVision === false` before sending images. If the configured model doesn't support vision, a clear error is thrown: "Model 'X' does not support vision/image analysis. Please configure a vision-capable model (e.g. Claude, Gemini) in Admin > Agents."
+**Decision (no hardcoded model fallback):** The old `const model = orgDefaultModel ?? 'deepseek-chat'` hardcode is removed. If no model is configured in Admin > Agents or Admin > Settings > Models, a clear error is thrown telling the user what to do. No code-level default masks the issue.
+**Rationale:** The previous `'deepseek-chat'` hardcode silently caused hallucinated analysis when the model was DeepSeek (no vision support). Clear errors are better than silent failures. The shared sanitize utility makes injection-scanning reusable across agents without code duplication.
+**References:** `server/utils/sanitize.js`; `server/agents/demoSuite/documentAnalyzer.js` (import from sanitize, vision check in callModel, no hardcoded default); `server/platform/providers/anthropic.js`, `gemini.js`, `openai-compatible.js` (supportsVision exports).
+
+---
+
 ## Open Questions
 
 _(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_

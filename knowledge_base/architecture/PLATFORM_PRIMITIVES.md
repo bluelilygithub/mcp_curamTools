@@ -191,6 +191,37 @@ Standard UI primitives in `client/src/components/ui/`.
 
 ## Utilities
 
+### sanitize (shared prompt-injection detection)
+
+**Type:** Shared Utility  
+**Location:** `server/utils/sanitize.js`
+
+Standardised prompt-injection detection for all agents that accept user-provided text or filenames. Import and call before sending user content to an LLM.
+
+**Interface:**
+```js
+const { scanInjection, sanitiseFileName, sanitiseText } = require('../../utils/sanitize');
+
+const check = scanInjection(userInput);
+if (!check.clean) throw new Error('Input rejected: prompt injection detected.');
+```
+
+**Principle:** Patterns are deliberately narrow to avoid false positives on legitimate engineering/business text (e.g. "the stormwater system: you must ensure…" is normal specification language). Only patterns extremely unlikely to appear in legitimate documents are included. The scan targets user-supplied filenames and custom prompt text — NOT the document body.
+
+**Methods:**
+- `scanInjection(text)` → `{ clean: boolean }` — checks text against known injection patterns
+- `sanitiseFileName(name)` → `string` — strips null bytes and control characters
+- `sanitiseText(text)` → `string` — strips null bytes and control characters (preserves newlines)
+
+**Usage pattern (documentAnalyzer.js):**
+```js
+const { scanInjection } = require('../../utils/sanitize');
+const nameCheck = scanInjection(fileName);
+if (!nameCheck.clean) throw new Error('Input rejected: prompt injection pattern detected.');
+```
+
+---
+
 ### extractToolData
 Walks AgentOrchestrator trace and keys tool results by tool name into a JSONB-ready object.
 

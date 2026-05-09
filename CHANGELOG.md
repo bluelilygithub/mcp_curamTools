@@ -25,6 +25,23 @@
 
 ---
 
+## 2026-05-10 — Re-introduce shared sanitize utility + vision model enforcement for document analyzer
+
+### Built
+- `server/utils/sanitize.js` — shared prompt-injection detection utility, extracted from inline code in documentAnalyzer.js. Available for all agents as a platform standard.
+- Documented as a platform primitive in `PLATFORM_PRIMITIVES.md`.
+
+### Fixed
+- Removed hardcoded `'deepseek-chat'` fallback from documentAnalyzer.js. If no model is configured in Admin > Agents, a clear error is thrown telling the user to set a vision-capable model.
+- Re-added `supportsVision` checks: provider adapters (anthropic.js, gemini.js = true; openai-compatible.js = false) are already in place.
+- The document analyzer's `callModel()` checks `provider.supportsVision === false` and throws a clear error if the configured model (e.g. DeepSeek) doesn't support image analysis.
+
+### Open / next
+- Document Analyzer default model must be set in Admin > Agents or Admin > Settings > Models. The old `'deepseek-chat'` hardcode no longer masks the issue.
+- Demo users should configure Claude or Gemini in their agent config for document analysis to work.
+
+---
+
 ## 2026-05-08 — Fix: S3 presigned URL expiration reduced from 1 year to 7 days (AWS SigV4 limit)
 
 ### Fixed
