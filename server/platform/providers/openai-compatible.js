@@ -107,7 +107,6 @@ function convertMessages(messages) {
     } else {
       // user role — may contain tool_result blocks
       const toolResults = msg.content.filter((b) => b.type === 'tool_result');
-      const textBlocks  = msg.content.filter((b) => b.type === 'text');
 
       for (const tr of toolResults) {
         const content = typeof tr.content === 'string'
@@ -116,8 +115,21 @@ function convertMessages(messages) {
         result.push({ role: 'tool', tool_call_id: tr.tool_use_id, content });
       }
 
-      if (textBlocks.length) {
-        result.push({ role: 'user', content: textBlocks.map((b) => b.text).join('') });
+      const userContent = [];
+      for (const b of msg.content) {
+        if (b.type === 'text') {
+          userContent.push({ type: 'text', text: b.text });
+        } else if (b.type === 'image') {
+          userContent.push({
+            type: 'image_url',
+            image_url: { url: `data:${b.source.media_type};base64,${b.source.data}` },
+          });
+        }
+      }
+
+      if (userContent.length > 0) {
+        // If it's just text, we can send a string or an array of parts. An array is standard for Vision.
+        result.push({ role: 'user', content: userContent });
       }
     }
   }
