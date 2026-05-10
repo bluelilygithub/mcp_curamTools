@@ -495,10 +495,16 @@ async function updateAdminConfig(slug, patch, updatedBy) {
 
 async function getOrgDefaultModel(orgId) {
   try {
-    const res = await pool.query(
+    let res = await pool.query(
       `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'default_model' LIMIT 1`,
       [orgId]
     );
+    // If the org hasn't set a default model, fallback to the global admin org (org 1)
+    if (res.rows.length === 0 && orgId !== 1) {
+      res = await pool.query(
+        `SELECT value FROM system_settings WHERE org_id = 1 AND key = 'default_model' LIMIT 1`
+      );
+    }
     return res.rows[0]?.value?.model_id ?? null;
   } catch (err) {
     console.error('[AgentConfigService] getOrgDefaultModel error:', err.message);
@@ -521,10 +527,16 @@ async function updateOrgDefaultModel(orgId, modelId, updatedBy) {
 
 async function getOrgFallbackModel(orgId) {
   try {
-    const res = await pool.query(
+    let res = await pool.query(
       `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'fallback_model' LIMIT 1`,
       [orgId]
     );
+    // If the org hasn't set a fallback model, fallback to the global admin org (org 1)
+    if (res.rows.length === 0 && orgId !== 1) {
+      res = await pool.query(
+        `SELECT value FROM system_settings WHERE org_id = 1 AND key = 'fallback_model' LIMIT 1`
+      );
+    }
     return res.rows[0]?.value?.model_id ?? null;
   } catch (err) {
     console.error('[AgentConfigService] getOrgFallbackModel error:', err.message);
