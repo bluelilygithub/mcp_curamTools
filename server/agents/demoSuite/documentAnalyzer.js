@@ -336,8 +336,9 @@ async function runDocumentAnalyzer(context) {
       }
       if (!cachedPdfText) {
         emit(`Model ${modelId} is text-only. Extracting text via pdf-parse…`);
-        const pdfParse = require('pdf-parse');
-        const pdfData = await pdfParse(fileBuf);
+        const { PDFParse } = require('pdf-parse');
+        const parser = new PDFParse({ data: fileBuf });
+        const pdfData = await parser.getText();
         cachedPdfText = pdfData.text;
       }
       contentBlocks = [{ type: 'text', text: `[Document Content:]\n${cachedPdfText}\n\n` }];
