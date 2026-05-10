@@ -299,14 +299,26 @@ function getDefaultAgentConfig(slug) {
  */
 async function getAgentConfig(orgId, slug) {
   try {
-    const res = await pool.query(
+    let res = await pool.query(
       `SELECT config, intelligence_profile, custom_prompt
          FROM agent_configs
         WHERE org_id = $1 AND slug = $2 AND customer_id IS NULL`,
       [orgId, slug]
     );
+    
+    // If the org hasn't set an agent config, fallback to the global admin org (org 1)
+    if (res.rows.length === 0 && orgId !== 1) {
+      res = await pool.query(
+        `SELECT config, intelligence_profile, custom_prompt
+           FROM agent_configs
+          WHERE org_id = 1 AND slug = $1 AND customer_id IS NULL`,
+        [slug]
+      );
+    }
+    
     const defaults = getDefaultAgentConfig(slug);
     if (res.rows.length === 0) return { ...defaults, intelligence_profile: null, custom_prompt: null };
+    
     const { config, intelligence_profile, custom_prompt } = res.rows[0];
     return {
       ...defaults,

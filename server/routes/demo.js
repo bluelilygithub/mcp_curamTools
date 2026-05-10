@@ -463,7 +463,7 @@ The reviewer now asks:
 
 ${question.trim()}
 
-Answer the question directly using the context above. If the question is unrelated to the document, answer it to the best of your ability based on your general engineering knowledge. Use markdown formatting — headings (##), bullet lists, bold, and paragraphs — to structure your response clearly.`;
+Answer the question directly using the context above. Use markdown formatting — headings (##), bullet lists, bold, and paragraphs — to structure your response clearly.`;
 
     // Get provider and model config
     const AgentConfigService = require('../platform/AgentConfigService');
@@ -476,12 +476,16 @@ Answer the question directly using the context above. If the question is unrelat
     const maxTokens = adminConfig.max_tokens ?? 4096;
     const fallback  = adminConfig.fallback_model ?? null;
 
+    const { buildSystemPrompt } = require('../agents/demoDocumentAnalyzer/prompt');
+    const agentConfig = await AgentConfigService.getAgentConfig(req.user.orgId, 'demo-document-analyzer').catch(() => ({}));
+    const systemPrompt = buildSystemPrompt(agentConfig);
+
     async function callModel(modelId) {
       const provider = getProvider(modelId, customProviders);
       return provider.chat({
         model: modelId,
         max_tokens: maxTokens,
-        system: 'You are a specialist engineering document analyst. Answer the reviewer\'s follow-up question using the provided context.',
+        system: systemPrompt,
         messages: [{ role: 'user', content: [{ type: 'text', text: contextPrompt }] }],
       });
     }

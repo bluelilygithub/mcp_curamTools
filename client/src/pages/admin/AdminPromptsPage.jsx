@@ -128,6 +128,13 @@ const AGENTS = [
     usedIn: 'Admin › SQL Console → NLP tab.',
     purpose: 'Receives the question and the live database schema, returns a single valid PostgreSQL query. Returns -- CANNOT_ANSWER: <reason> when the question requires data not present in the platform database (e.g. WordPress/CRM enquiry data). Schema and question are always injected at runtime after the instructions — include {{schema}} and {{question}} placeholders if writing a fully custom prompt, or omit them to have them appended automatically.',
   },
+  {
+    slug: 'demo-document-analyzer',
+    title: 'Document Analyzer — Follow-up Q&A',
+    description: 'Bounds follow-up questions to the content of the analysed document.',
+    usedIn: 'Demo › Document Analyzer — follow-up question panel (shown after a document analysis run completes).',
+    purpose: 'Applied as the system prompt when a reviewer asks a follow-up question about a previously analysed document. By default, restricts the AI to only answer questions about the uploaded document — its clauses, parties, findings, and risks. Edit this prompt to adjust the scope, tone, or domain focus of follow-up responses.',
+  },
 ];
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
