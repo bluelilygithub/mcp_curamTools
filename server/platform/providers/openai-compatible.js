@@ -116,10 +116,12 @@ function convertMessages(messages) {
       }
 
       const userContent = [];
+      let hasImage = false;
       for (const b of msg.content) {
         if (b.type === 'text') {
           userContent.push({ type: 'text', text: b.text });
         } else if (b.type === 'image') {
+          hasImage = true;
           userContent.push({
             type: 'image_url',
             image_url: { url: `data:${b.source.media_type};base64,${b.source.data}` },
@@ -128,8 +130,13 @@ function convertMessages(messages) {
       }
 
       if (userContent.length > 0) {
-        // If it's just text, we can send a string or an array of parts. An array is standard for Vision.
-        result.push({ role: 'user', content: userContent });
+        if (!hasImage) {
+          // DeepSeek and some other models strictly require a string if there are no images
+          const combinedText = userContent.map(u => u.text).join('\n\n');
+          result.push({ role: 'user', content: combinedText });
+        } else {
+          result.push({ role: 'user', content: userContent });
+        }
       }
     }
   }

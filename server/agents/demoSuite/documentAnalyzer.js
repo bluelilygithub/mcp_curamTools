@@ -336,10 +336,16 @@ async function runDocumentAnalyzer(context) {
       }
       if (!cachedPdfText) {
         emit(`Model ${modelId} is text-only. Extracting text via pdf-parse…`);
-        const { PDFParse } = require('pdf-parse');
-        const parser = new PDFParse({ data: fileBuf });
-        const pdfData = await parser.getText();
-        cachedPdfText = pdfData.text;
+        try {
+          const { PDFParse } = require('pdf-parse');
+          const parser = new PDFParse({ data: fileBuf });
+          const pdfData = await parser.getText();
+          cachedPdfText = pdfData.text;
+          emit(`Text extracted successfully (${cachedPdfText.length} chars).`);
+        } catch (err) {
+          emit(`Error extracting text: ${err.message}`);
+          throw err;
+        }
       }
       contentBlocks = [{ type: 'text', text: `[Document Content:]\n${cachedPdfText}\n\n` }];
       userText = `Analyse this engineering document text. Return the JSON as specified.`;
