@@ -314,7 +314,7 @@ async function runDocumentAnalyzer(context) {
   // Fallback model is handled inline: if primary fails, retry once with fallback.
   emit('Stage 2: Running probabilistic analysis…');
   await logger.step('probabilistic_analysis', 'Probabilistic Analysis',
-    `Running vision model on ${imageParts.length} page(s)…`,
+    `Running model on document…`,
     { model: adminConfig.model ?? 'default', image_pages: imageParts.length }
   );
   const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
@@ -322,24 +322,44 @@ async function runDocumentAnalyzer(context) {
   const maxTokens = adminConfig.max_tokens ?? 8192;
   const fallback  = adminConfig.fallback_model ?? null;
 
+  let cachedPdfText = null;
 
   async function callModel(modelId) {
     const provider = getProvider(modelId, customProviders);
-    // Build the text portion of the user message
-    let userText = `Analyse this engineering document (${imageParts.length} ${imageParts.length === 1 ? 'page' : 'pages'}). Return the JSON as specified.`;
+    
+    let contentBlocks = [];
+    let userText = '';
+
+    if (provider.supportsVision === false) {
+      if (mimeType !== 'application/pdf') {
+        throw new Error(`Model "${modelId}" does not support vision analysis. Cannot analyze image files.`);
+      }
+      if (!cachedPdfText) {
+        emit(`Model ${modelId} is text-only. Extracting text via pdf-parse…`);
+        const pdfParse = require('pdf-parse');
+        const pdfData = await pdfParse(fileBuf);
+        cachedPdfText = pdfData.text;
+      }
+      contentBlocks = [{ type: 'text', text: `[Document Content:]\n${cachedPdfText}\n\n` }];
+      userText = `Analyse this engineering document text. Return the JSON as specified.`;
+    } else {
+      contentBlocks = [...imageParts];
+      userText = `Analyse this engineering document (${imageParts.length} ${imageParts.length === 1 ? 'page' : 'pages'}). Return the JSON as specified.`;
+    }
+
     if (customPrompt?.trim()) {
       userText += `\n\nAdditional instructions from the reviewer:\n${customPrompt.trim()}`;
     }
+    
+    contentBlocks.push({ type: 'text', text: userText });
+
     return provider.chat({
       model: modelId,
       max_tokens: maxTokens,
       system: SYSTEM_PROMPT,
       messages: [{
         role: 'user',
-        content: [
-          ...imageParts,
-          { type: 'text', text: userText },
-        ],
+        content: contentBlocks,
       }],
     });
   }
