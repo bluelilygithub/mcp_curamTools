@@ -442,11 +442,9 @@ router.post('/runs/:runId/follow-up', async (req, res) => {
       .map((f) => `- [${f.stage}] ${f.label} (confidence: ${f.confidence}): ${f.description ?? ''}`)
       .join('\n');
 
-    const contextPrompt = `You are a specialist in engineering contract and document review for Australian and New Zealand projects.
+    const contextPrompt = `The following context is from a previously analysed document.
 
-You previously analysed the document "${fileName}" (type: ${documentType}).
-
-Here is the context from that analysis:
+Document: "${fileName}" (type: ${documentType})
 
 ## Summary
 ${summary}
@@ -459,11 +457,9 @@ ${findingsContext || 'No findings were identified.'}
 
 ---
 
-The reviewer now asks:
+Reviewer question: ${question.trim()}
 
-${question.trim()}
-
-Answer the question directly using the context above. Use markdown formatting — headings (##), bullet lists, bold, and paragraphs — to structure your response clearly.`;
+If this question is about the document above, answer it directly using the context provided. If it is unrelated to this document, decline and explain that you can only answer questions about the analysed document. Use markdown formatting in your response.`;
 
     // Get provider and model config
     const AgentConfigService = require('../platform/AgentConfigService');
