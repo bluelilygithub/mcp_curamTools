@@ -185,17 +185,29 @@ function convertResponse(oaiBody, label) {
  * Create an OpenAI-compatible provider adapter.
  *
  * @param {object} opts
- * @param {string} opts.hostname  — API hostname, e.g. 'api.openai.com'
- * @param {string} opts.path      — API path, e.g. '/v1/chat/completions'
- * @param {string} opts.envVar    — Name of the API key environment variable
- * @param {string} opts.label     — Human-readable name used in error messages
+ * @param {string} opts.hostname       — API hostname, e.g. 'api.openai.com'
+ * @param {string} opts.path           — API path, e.g. '/v1/chat/completions'
+ * @param {string} opts.envVar         — Name of the API key environment variable
+ * @param {string} opts.label          — Human-readable name used in error messages
+ * @param {boolean} opts.supportsVision — Whether this provider supports image inputs
  */
-function createAdapter({ hostname, path: apiPath, envVar, label }) {
+function createAdapter({ hostname, path: apiPath, envVar, label, supportsVision = false }) {
   return {
-    supportsVision: false,
+    supportsVision,
     async chat({ model, max_tokens, system, messages, tools }) {
       const apiKey = process.env[envVar];
       if (!apiKey) throw new Error(`${label} API key (${envVar}) is not set.`);
+
+      // If the provider doesn't support vision, check if any images are present
+      // and throw a clean error rather than failing at the API level.
+      if (!supportsVision) {
+        const hasImages = messages.some((m) =>
+          Array.isArray(m.content) && m.content.some((b) => b.type === 'image')
+        );
+        if (hasImages) {
+          throw new Error(`${label} does not support vision/image inputs. Please configure a vision-capable model for this document analysis.`);
+        }
+      }
 
       const body = {
         model,
