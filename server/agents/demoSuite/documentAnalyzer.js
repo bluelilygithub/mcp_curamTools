@@ -314,32 +314,7 @@ async function runDocumentAnalyzer(context) {
     { model: adminConfig.model ?? 'default', image_pages: imageParts.length }
   );
   const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
-  const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(orgId).catch(() => null);
-  const fallbackModel  = adminConfig.fallback_model ?? await AgentConfigService.getOrgFallbackModel(orgId).catch(() => null);
-
-  // Resolve a vision-capable model from the chain: per-agent config → org default → org fallback
-  function resolveVisionModel() {
-    const candidates = [
-      { id: orgDefaultModel, source: 'default model' },
-      { id: fallbackModel,   source: 'fallback model' },
-    ];
-    for (const c of candidates) {
-      if (!c.id) continue;
-      const provider = getProvider(c.id, customProviders);
-      if (provider.supportsVision !== false) return c.id;
-    }
-    return null;
-  }
-
-  const model = resolveVisionModel();
-  if (!model) {
-    throw new Error(
-      'Document Analyzer requires a vision-capable model. ' +
-      'Your default model "' + (orgDefaultModel ?? 'none') + '" does not support image analysis. ' +
-      'Go to Settings → Models and set a vision-capable default model (e.g. claude-sonnet-4-6, gemini-2.0-flash).'
-    );
-  }
-
+  const model    = adminConfig.model ?? 'deepseek-chat';
   const maxTokens = adminConfig.max_tokens ?? 8192;
   const fallback  = adminConfig.fallback_model ?? null;
 
