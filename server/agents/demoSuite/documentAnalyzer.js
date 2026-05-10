@@ -315,17 +315,37 @@ async function runDocumentAnalyzer(context) {
   );
   const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
   const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(orgId).catch(() => null);
-  const model    = orgDefaultModel ?? 'claude-sonnet-4-6';
+  const fallbackModel  = adminConfig.fallback_model ?? await AgentConfigService.getOrgFallbackModel(orgId).catch(() => null);
+
+  // Resolve a vision-capable model from the chain: per-agent config → org default → org fallback
+  function resolveVisionModel() {
+    const candidates = [
+      { id: orgDefaultModel, source: 'default model' },
+      { id: fallbackModel,   source: 'fallback model' },
+    ];
+    for (const c of candidates) {
+      if (!c.id) continue;
+      const provider = getProvider(c.id, customProviders);
+      if (provider.supportsVision !== false) return c.id;
+    }
+    return null;
+  }
+
+  const model = resolveVisionModel();
+  if (!model) {
+    throw new Error(
+      'Document Analyzer requires a vision-capable model. ' +
+      'Your default model "' + (orgDefaultModel ?? 'none') + '" does not support image analysis. ' +
+      'Go to Settings → Models and set a vision-capable default model (e.g. claude-sonnet-4-6, gemini-2.0-flash).'
+    );
+  }
+
   const maxTokens = adminConfig.max_tokens ?? 8192;
   const fallback  = adminConfig.fallback_model ?? null;
 
 
   async function callModel(modelId) {
     const provider = getProvider(modelId, customProviders);
-    // Check if the provider supports vision/images
-    if (provider.supportsVision === false) {
-      throw new Error(`Model "${modelId}" does not support vision/image analysis. Please configure a vision-capable model (e.g. Claude, Gemini) in Admin > Agents for the Document Analyzer.`);
-    }
     // Build the text portion of the user message
     let userText = `Analyse this engineering document (${imageParts.length} ${imageParts.length === 1 ? 'page' : 'pages'}). Return the JSON as specified.`;
     if (customPrompt?.trim()) {
