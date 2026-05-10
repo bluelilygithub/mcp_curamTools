@@ -1,599 +1,825 @@
 # DECISIONS.md
 
-**Project Context:** Internal learning project for one organisation, solo developer. See [PROJECT_IDENTITY.md](../core/PROJECT_IDENTITY.md).
+## Project Context
+**This is an internal learning project for one organisation, built and maintained by a solo developer.** Architectural decisions are made within this context. Read [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md) for the full context.
 
-> **Primary reader:** AI + human. Read before making changes that touch the listed areas.
-> **Format:** Date · Context · Options considered · Decision · Rationale.
+## Foundational References
+- **TOOLSFORGE_README.md** — ToolsForge platform and agent feature inventory
+- **Learnings-ToolsForge.md** — ToolsForge technical patterns and implementation knowledge
+- **README  -- very important.md** — Curam Vault feature inventory (predecessor single-user app)
+- **LEARNINGS--very important.md** — Curam Vault technical patterns and reusable patterns
 
----
-
-## 2026-05-08 — Default & Fallback Model Management
-
-**Context:** Need a Settings > Models tab where org admins can set a default LLM model and a fallback model for the org. The fallback is used when the default is unavailable (e.g. rate-limited, down).
-
-**Options considered:**
-1. Store in `system_settings` as `default_model` and `fallback_model` keys
-2. Add columns to `organizations` table
-3. Store in `agent_configs` as a special slug
-
-**Decision:** Option 1 — `system_settings` with keys `default_model` and `fallback_model`.
-
-**Rationale:** `system_settings` is already the canonical store for org-level configuration. No schema migration needed (JSONB key-value pattern). The Settings > Models tab reads/writes these via `GET/PUT /api/settings/default-model` and `GET/PUT /api/settings/fallback-model`.
+These files are the source of truth. The documents below derive from them and reference them by name rather than duplicating their content.
 
 ---
 
-## 2026-05-08 — Document Analyzer File Upload via Base64 JSON Body
-
-**Context:** The document analyzer needs to accept file uploads (PDF, DOCX, images) from the browser. The platform's `createAgentRoute` expects a JSON body — it does not support multipart/form-data.
-
-**Options considered:**
-1. Add multer middleware to `createAgentRoute`
-2. Client converts file to base64, sends in JSON body
-3. Two-step: upload to S3 first, then reference the URL
-
-**Decision:** Option 2 — base64 in JSON body.
-
-**Rationale:** Zero server-side changes to `createAgentRoute`. No multer dependency. Works within the existing SSE streaming contract. 9 MB client-side limit prevents abuse. The base64 overhead (~33%) is acceptable for demo-scale files.
+### Multi-Org User Management — Org Selector on Invite, Organisations Admin Page
+**Date:** 2026-05-06
+**Status:** Settled
+**Context:** The demo layer requires users to be created in different orgs (e.g. Curam Engineering demo org vs internal org). The existing invite route hardcoded `req.user.orgId` — no way to invite a user into a different org via the UI. Admins also had no way to create new orgs without running raw SQL.
+**Decision (invite org selector):** `POST /api/admin/users/invite` accepts an optional `orgId` body param. If provided, `createInvitation` uses it; otherwise falls back to `req.user.orgId`. No extra auth check — the route already requires `org_admin`. The InviteModal fetches `/admin/organizations` and shows the dropdown only when more than one org exists, so single-org installs see no change.
+**Decision (organisations page):** `GET /api/admin/organizations` returns all orgs (no org_id filter — platform-wide list). `POST /api/admin/organizations` creates a new org with name + org_type. UI lives at `/admin/organizations`, linked from the sidebar above Users. No edit/delete on orgs for now — not needed.
+**Rationale:** Keeping invite flow simple — one extra dropdown, no separate invite-by-org route. The org list is platform-wide by design; admins managing demo clients need visibility of all orgs, not just their own.
+**References:** `server/routes/admin.js` — organizations section; `client/src/pages/admin/AdminOrganizationsPage.jsx`; `client/src/pages/admin/AdminUsersPage.jsx` InviteModal.
 
 ---
 
-## 2026-05-08 — Document Analyzer Save to AWS S3
-
-**Context:** After analysis, the user should be able to save the original uploaded file to AWS S3 for permanent storage.
-
-**Options considered:**
-1. Upload to S3 during the initial file upload (before analysis)
-2. Upload to S3 on demand after analysis completes
-3. Store file in PostgreSQL as BYTEA
-
-**Decision:** Option 2 — on-demand save after analysis.
-
-**Rationale:** S3 storage costs money — don't store files the user doesn't explicitly save. The original file data is already in `agent_runs.result.file_data` (base64), so it can be uploaded to S3 at any time. The "Save to AWS" button is idempotent (checks `s3_key` in result before re-uploading).
+### Demo Layer — Multi-Tenant Org Branching, Catalog-vs-Manifest Split, OrgShell Pattern
+**Date:** 2026-05-05
+**Status:** Settled
+**Context:** The platform needed to serve external client demo orgs from the same repo and deployment, showing them a completely different UI (agent cards, not Blue Lily tools) without polluting the internal app. Three questions required explicit decisions: (1) how to distinguish demo orgs from internal orgs, (2) where to store the "which agents does this org get" configuration, and (3) how to branch the React layout without touching every existing file.
+**Decision (org_type column):** Add `org_type TEXT NOT NULL DEFAULT 'internal'` to the `organizations` table with a `CHECK (org_type IN ('internal', 'demo'))` constraint. `org_type` is propagated through the session middleware (`requireAuth`) and all three auth response shapes (login, register, profile). The client `authStore` persists `orgType` automatically — no extra API call needed after login.
+**Decision (catalog vs manifest split):** Agent catalog (`DEMO_CATALOG`) is code-registered in `server/demo/demoCatalog.js` — catalog entries are tied to deployed agent code, not runtime data. Per-org agent assignment lives in the DB table `org_agent_manifest` (slug, enabled, label, description, sort_order, is_configured). This mirrors the precedent of `AGENT_DEFAULTS` (code constant) + `agent_configs` (DB). Adding a new demo agent requires a code deploy; assigning it to a client org requires only an admin DB action.
+**Decision (OrgShell layout branching):** A single new component `OrgShell.jsx` replaces `AppShell` on the authenticated shell route in `App.jsx`. `OrgShell` reads `user.orgType` from `authStore`; internal orgs get `AppShell` unchanged, demo orgs get `DemoShell` (separate layout, separate sidebar, no `Sidebar.jsx` or `tools.js` imports). This is a one-time wiring change — after it, adding a new demo agent touches only files inside the `demoSuite/` silo. Sidebar.jsx requires zero modification.
+**Decision (additive wiring only):** The four unavoidable wiring files (db.js, requireAuth.js, auth.js, index.js, App.jsx) receive only new lines — no existing lines changed. `Sidebar.jsx` and `tools.js` are untouched because demo orgs never render the internal sidebar.
+**Rationale:** Keeping both org types in one repo avoids a separate deployment pipeline. The `org_type` column costs one JOIN column. The catalog/manifest split avoids DB FK constraints on slugs that may not yet exist in the catalog. The OrgShell pattern isolates demo layout changes to a single decision point — the authenticated shell route.
+**Constraints it must not violate:** `org_id` must always come from `req.user.orgId`, never from a request param. Catalog entries must be code-registered (not DB) because they are tied to deployed agent code. Demo agents must use `createAgentRoute` and `AgentOrchestrator` unmodified — they inherit auth, org scoping, usage logging, and PDF handling automatically.
+**References:** `server/db.js` (org_type migration + org_agent_manifest); `server/middleware/requireAuth.js`; `server/routes/auth.js`; `server/demo/demoCatalog.js`; `server/routes/demo.js`; `client/src/components/layout/OrgShell.jsx`; `client/src/components/layout/DemoShell.jsx`; `client/src/components/layout/DemoSidebar.jsx`.
 
 ---
 
-## 2026-05-08 — S3 Presigned URL Expiration — 7-Day AWS SigV4 Limit
+### WP Theme Extractor — External URL Fetch + JSON File Generation Pattern
+**Date:** 2026-05-03
+**Status:** Settled
+**Context:** The WP Theme Extractor needs to fetch arbitrary external URLs, send the HTML to Claude, and get back multiple WordPress PHP/CSS files in a single agent run. Two questions required explicit decisions: (1) how to fetch external URLs reliably on Railway, and (2) how to get Claude to return structured file content without tool use.
+**Decision (URL fetch):** Use `https.request` / `http.request` (Node built-ins), never `fetch()`. Handle HTTP/HTTPS, up to 5 redirects, 20s timeout, and hard 100KB truncation. Strip scripts/comments in Node.js before sending — reduces tokens and avoids prompt injection risk from embedded `<script>` content.
+**Decision (structured output):** Prompt Claude to return ONLY a JSON object with exact file-content keys. Parse using the CLAUDE.md-documented pattern: strip markdown fences, find first `{` and last `}`, `JSON.parse` that slice only. This is more reliable than asking for separate tool calls per file and avoids the ReAct overhead for a fixed-output task.
+**Decision (16384 max_tokens):** 9 PHP/CSS files averaging 200–500 lines each can exceed the platform default of 8192 output tokens. The agent defaults to 16384 and allows admin override. This is the only agent with a higher default — justified by the multi-file output requirement.
+**Rationale:** Pre-fetch + single Claude call is ~10× cheaper than a ReAct loop. External URL fetching is a new pattern for this codebase — using `https.request` is consistent with the MailChannels and Gemini API patterns documented in CLAUDE.md. JSON file output avoids multiple API calls and keeps the agent result self-contained in a single `agent_runs` row.
+**Constraints it must not violate:** URL fetch must use `https.request`, not `fetch` (Railway). HTML truncation must happen before the model call, not after. JSON parse must use the fence-strip + brace-find pattern, not a plain `JSON.parse(text)` which breaks when the model adds explanatory text. The 16384 token override must be set per-agent, not as a platform default change.
+**References:** `server/agents/wpThemeExtractor/index.js`; `server/agents/wpThemeExtractor/prompt.js`; `server/CLAUDE.md` — "fetch silently fails on Railway" and "Strip markdown fences AND surrounding text when parsing model JSON output" rules.
 
+---
+
+### Mandatory Reference Read Before Writing Any New Agent or Page
+**Date:** 2026-04-21
+**Status:** Settled
+**Context:** During the `not-interested-report` build session, five deviations from established platform patterns were introduced — all traceable to the same root cause: the session-start instructions told the AI to read the `.md` specification files, but said nothing about reading existing code implementations. Critical patterns (Bearer token auth, `api.get()` return shape, `agent_runs` row structure, `persistRun` status values) are not documented in any `.md` file — they exist only in the working code. An AI starting cold cannot infer them from specifications alone.
+**Decision:** Before writing any new agent (`server/agents/<slug>/index.js`), the AI must read `server/agents/adsAttributionSummary/index.js` as the canonical pre-fetch reference. Before writing any new frontend tool page, the AI must read `client/src/pages/tools/DiamondPlateDataPage.jsx` and `client/src/api/client.js`. These reads are not optional and must precede writing. The rule is codified in `auto-agent-instructions.txt`.
+**Rationale:** The `.md` files document architecture and decisions. The code documents implementation. Both are required context. Documentation-only reading produces code that is architecturally correct but implementationally broken. The specific patterns that cannot be derived from documentation alone: `api.stream()` requires Bearer token (not cookies); `api.get()` returns the JSON body directly with no wrapper; history rows are `{ result: { summary } }` not `{ summary }`; `persistRun` status is `'complete'` not `'success'`; pre-fetch agent context must include `startDate` and `endDate`.
+**Constraints it must not violate:** The reference reads must happen before writing, not after. Reading a reference after writing introduces confirmation bias — the deviation is already committed. The rule applies even for agents that appear straightforward; the patterns that break are the subtle ones that only appear correct until run.
+**References:** `auto-agent-instructions.txt` — mandatory reference read section; `server/agents/adsAttributionSummary/index.js`; `client/src/pages/tools/DiamondPlateDataPage.jsx`; `client/src/api/client.js`.
+
+---
+
+### agent_runs as the Single History Table for All Agents
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** Multiple agents will write execution history. Without a shared table, each new agent would require a new schema table, increasing schema surface area and complicating cross-agent queries.
+**Decision:** All agent run history is written to a single `agent_runs` table. The `slug` column is the discriminator between agents. No agent-specific history tables exist or should be created.
+**Rationale:** Adding a new agent requires zero schema changes — the table accepts any slug. The composite index on `(org_id, slug, run_at DESC)` makes per-agent history queries efficient regardless of how many agents are writing to the same table.
+**Constraints it must not violate:** `persistRun` must be the only code path that writes to `agent_runs`. Neither agent code nor agent route code may write to `agent_runs` directly. History must be consistent whether a run is triggered via HTTP or cron.
+**References:** `README  -- very important.md` — "agent_runs Is the Only History Table" section; `LEARNINGS--very important.md` — "The Single Write Path" and "agent_runs Is the Only History Table" sections.
+
+---
+
+### createAgentRoute as the Platform Routing Primitive
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** Each agent needs HTTP endpoints for triggering a run (SSE) and retrieving history. Without a factory, every agent would write its own route file with duplicated auth middleware, SSE header setup, error handling, and persistence logic.
+**Decision:** All agent HTTP endpoints are created by calling `createAgentRoute({ slug, runFn, requiredPermission })`. No agent writes its own router code. The factory owns all plumbing: auth middleware, SSE header setup, progress/result/error event emission, `[DONE]` on both success and error paths, and history persistence to `agent_runs`.
+**Rationale:** A new agent needs only `tools.js`, `prompt.js`, `index.js`, and a four-line route file that calls `createAgentRoute`. Agent authors write zero routing code.
+**Constraints it must not violate:** Agent-specific code must not be placed in `createAgentRoute.js`. The factory must remain generic. Admin config enforcement (kill switch, model, token limits) is loaded inside the factory before every run — no agent can bypass it.
+**References:** `README  -- very important.md` — `createAgentRoute` section and "createAgentRoute — Admin Config Enforcement" section; `LEARNINGS--very important.md` — "The Registration Contract" section.
+
+---
+
+### AgentScheduler as the Platform Cron Primitive
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** Agents need scheduled (cron) execution in addition to manual HTTP-triggered runs. Without a shared scheduler, each agent would manage its own node-cron setup, producing duplicate code and inconsistent history records.
+**Decision:** All agent cron scheduling uses `AgentScheduler` at `server/platform/AgentScheduler.js`. This lightweight wrapper calls `runFn` on each tick and persists results to `agent_runs` via the shared `persistRun` function. Schedule changes call `AgentScheduler.updateSchedule(slug, newSchedule)` which takes effect immediately without a server restart.
+**Rationale:** The scheduler is zero agent-specific code. It resolves `orgId` from the DB if omitted, handles errors without crashing the process, and shares the same `persistRun` write path as the HTTP route — ensuring history is consistent regardless of trigger source.
+**Constraints it must not violate:** Agent code must not configure node-cron directly. All cron jobs must go through `AgentScheduler`. `persistRun` must remain the single write path to `agent_runs` for both scheduled and HTTP-triggered runs.
+**References:** `README  -- very important.md` — `AgentScheduler.register` section and `AgentScheduler` Hot-Reload section; `LEARNINGS--very important.md` — `AgentScheduler` Hot-Reload section; `Learnings-ToolsForge.md` — "AgentScheduler — Implementation Notes" section.
+
+---
+
+### No New npm Packages Without Explicit Confirmation
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** A missing Recharts dependency was silently replaced with a bespoke SVG implementation buried in an agent-specific folder, producing a non-reusable one-off and violating the platform-first principle. A missing `googleapis` dependency caused Railway deploy failures because the package was installed at the project root rather than inside `server/`, where the Dockerfile copies from.
+**Decision:** When an assumed dependency is missing, stop and surface the missing dependency to the user and wait for direction before writing any workaround. Do not silently create alternative implementations. Every `require(pkg)` in `server/` must be backed by an entry in `server/package.json`; always run `cd server && npm install <pkg>`, never `npm install <pkg>` from the project root.
+**Rationale:** Silent workarounds encode agent-specific behaviour in platform-level locations or create non-reusable one-offs. Railway deploys only from `server/` — root-level installs are invisible to the container build.
+**Constraints it must not violate:** No new npm package may be added to the server or client without explicit user confirmation. When a workaround is genuinely needed (zero-dependency fallback), it must be placed as a platform primitive with generic props, not in an agent-specific folder.
+**References:** `LEARNINGS--very important.md` — "The Recharts Lesson" section and "Railway Deploy — Missing Dependency (googleapis)" section.
+
+---
+
+### All Monetary Values in AUD
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** Google Ads API returns all monetary values in micros (millionths of the currency unit as an integer). Storing or displaying raw micros would require every consumer to know the conversion factor.
+**Decision:** All monetary values returned by `GoogleAdsService` are in AUD. Conversion from `cost_micros` is performed inside the service (÷ 1,000,000) before returning to callers. The unit AUD must be documented explicitly on every field that carries a monetary value.
+**Rationale:** Consistent currency denomination at the service boundary means no consumer needs to know the micros convention. The platform currency is AUD.
+**Constraints it must not violate:** Raw micros must never be stored in the DB or returned to the UI without the unit being explicitly documented. Conversion must happen inside `GoogleAdsService`, not at call sites.
+**References:** `Learnings-ToolsForge.md` — "`cost_micros` pattern" bullet; `TOOLSFORGE_README.md` — GoogleAdsService description: "All monetary values returned in AUD (cost_micros ÷ 1,000,000)."
+
+---
+
+### Backwards Compatibility Required for All Changes to Platform Primitives
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** Platform primitives (`createAgentRoute`, `AgentScheduler`, `persistRun`, `MarkdownRenderer`, `LineChart`, the `agent_runs` schema) are consumed by all existing and future agents. A breaking change to any primitive breaks every agent that depends on it.
+**Decision:** All changes to platform primitives must be backwards compatible. Existing agents must continue to function without modification after any platform update.
+**Rationale:** The platform-first principle: every abstraction must be reusable by future agents, and existing agents must not be broken by platform evolution. The AgentOrchestrator bug fix (stripping internal fields before sending to Anthropic) is an example: the fix was applied once to the platform and applied to all future agents with no per-agent workaround needed.
+**Constraints it must not violate:** No platform primitive may be modified in a way that requires existing agent code to be updated. New capabilities are additive. Tool names in registered tools must be stable because they are used as keys by `extractToolData` and read directly by the UI (`run.data.<tool_name>`).
+**References:** `LEARNINGS--very important.md` — "extractToolData — Generic JSONB Storage from the Trace" (tool naming stability); `Learnings-ToolsForge.md` — "Wiring Domain Services into the Agent Platform" (AgentOrchestrator bug fix applies to all future agents); `README  -- very important.md` — "All primitives are reusable by any future agent."
+
+---
+
+### Account Intelligence Profile — Typed Schema with Shared Base Plus Agent-Specific Extension Field
+**Date:** 2026-03-28
+**Status:** Open Question — not evidenced in source files
+**Context:** Decision item listed for documentation.
+**Decision:** Not populated — no reference to "Account Intelligence Profile", typed schema, shared base, or extension field was found in any of the four source files.
+**References:** None found.
+
+---
+
+### Account Intelligence Profile Build Sequence — v0.3.1 Correctness Patch Before v0.4.0 Feature Work
+**Date:** 2026-03-28
+**Status:** Open Question — not evidenced in source files
+**Context:** Decision item listed for documentation.
+**Decision:** Not populated — no reference to "v0.3.1", "v0.4.0", "correctness patch", or a sequenced build plan was found in any of the four source files.
+**References:** None found.
+
+---
+
+### Config Authority Split — Admin Settings vs Agent Settings
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** An agent has two categories of settings with different authority levels: cost and security guardrails (model, max tokens, kill switch) that only an administrator should control, and analytical/scheduling settings (lookback days, thresholds, schedule) that an operator configures. Mixing them into one store or one page creates ambiguity about who has authority over what.
+**Decision:** Config is split across two stores with separate access controls. Admin settings (model, max tokens, max iterations, kill switch) are stored in `system_settings` under key `agent_<slug>`, accessible only to `org_admin`. Agent/operator settings (schedule, analytical thresholds, lookback) are stored in `agent_configs` (one row per `(org_id, slug)`), readable by any authenticated user and writable by `org_admin`. Admin and operator settings are presented on separate UI pages: `/admin/agents` for admin guardrails; the Agent Settings panel inside the tool page for operational settings.
+**Rationale:** An operator must never accidentally or intentionally change cost guardrails while editing analytical thresholds. Separate tables with separate API routes enforce this at the server layer. `AgentConfigService` is the canonical access pattern — agent and route code never read from either table directly.
+**Constraints it must not violate:** Agent code must read config through `AgentConfigService`, not by querying `system_settings` or `agent_configs` directly. Admin config enforcement (kill switch, model, token limits) is applied inside `createAgentRoute` before any agent code runs. No agent can bypass admin guardrails.
+**References:** `LEARNINGS--very important.md` — "Two-Store Config Pattern — Admin vs Agent Settings" section and "Admin/Operator Settings Boundary — UI Design" section; `README  -- very important.md` — "Agent Configuration System" and `AgentConfigService` sections.
+
+---
+
+### Every New Abstraction Must Be Reusable by Future Agents, Not Google Ads Specific
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** The first domain agent (Google Ads Monitor) produced several components and utilities. Without a platform-first rule, these would accumulate as agent-specific one-offs that cannot be reused by the second, third, or later agents.
+**Decision:** Every abstraction built during agent development must be designed as a platform primitive with generic props/interface, not as an agent-specific implementation. If a component or utility is only needed by one agent but is broadly applicable (charts, markdown rendering, progress indicators), it must be placed in the platform layer (`client/src/components/`, `client/src/components/charts/`, `server/platform/`) with a generic interface. Agent-specific code belongs only in the agent's own folder.
+**Rationale:** The Recharts lesson is the canonical example: a bespoke SVG chart was placed in an agent-specific folder. The correct resolution was to promote it to `client/src/components/charts/LineChart.jsx` with a generic prop interface (`data`, `xKey`, `leftKey`, `rightKey`, `leftFormat`, `rightFormat`, `leftColor`, `rightColor`) so any future agent can use it. `MarkdownRenderer` follows the same principle: one rendering component for all LLM text output, improvements propagate everywhere.
+**Constraints it must not violate:** No platform-level file (`createAgentRoute.js`, `MarkdownRenderer.jsx`, `LineChart.jsx`) may contain agent-specific logic. The convention is absolute: if a component displays LLM-generated text, it uses `MarkdownRenderer`. If a component charts time-series data, it uses `LineChart` or `PerformanceChart` (Recharts). Agent authors do not write their own renderers or chart implementations.
+**References:** `LEARNINGS--very important.md` — "The Recharts Lesson" section and "MarkdownRenderer — Platform Primitive for LLM Output" section; `README  -- very important.md` — "All primitives are reusable by any future agent."
+
+---
+
+### Account Intelligence Profile — Typed Schema with Shared Base Plus Agent-Specific Extension Field
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** The Google Ads Monitor agent produced a damning campaign critique while ignoring a 7x ROAS and 10% conversion rate at account level. The agent had no baseline for what good looks like — it applied its analytical heuristics to per-campaign data without any knowledge of declared account-level targets or business context. Any agent analysing business data faces this correctness gap if it has no access to the operator's declared objectives.
+**Decision:** A typed `intelligence_profile` JSONB column is added to the `agent_configs` table (idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). The profile has a shared base (all agents): `targetROAS`, `targetCPA`, `businessContext`, `analyticalGuardrails`. Plus an `agentSpecific` extension field (open JSONB, agent-owned keys). Google Ads agent uses: `conversionRateBaseline`, `averageOrderValue`, `typicalConversionLagDays`. The profile is formatted by the platform primitive `buildAccountContext(profile, agentSlug)` and injected as the first block of the system prompt before any analytical instructions.
+**Rationale:** Storing the profile in `agent_configs` (not a new table) follows the existing two-store config pattern. The shared-base-plus-extension shape keeps `buildAccountContext` generic and reusable by every future agent without modification. Injecting the context block first means Claude sees declared targets before reading any data or analytical heuristics — ensuring the profile has maximum influence on reasoning.
+**Constraints it must not violate:** `buildAccountContext` must contain no agent-specific logic — the `agentSpecific` extension field is the mechanism for agent-owned data. The profile must be returned by `AgentConfigService.getAgentConfig()` as part of the merged config (no separate API call). Agents must still function correctly when the profile is null or empty (function returns `''`, prompt starts with the role block).
+**References:** `server/platform/buildAccountContext.js`; `server/agents/googleAdsMonitor/prompt.js`; `server/db.js` (ALTER TABLE); `client/src/pages/AdminAgentsPage.jsx` (IntelligenceProfileSection).
+
+---
+
+### Account Intelligence Profile Build Sequence — v0.3.1 Correctness Patch Before v0.4.0 Feature Work
+**Date:** 2026-03-28
+**Status:** Confirmed — build complete, acceptance test passed
+**Context:** The agent platform was functional (v0.2.0) but produced analytically incorrect output: a 7x ROAS account was flagged for campaigns that were in fact performing strongly. Shipping additional features on top of incorrect analytical reasoning would compound the problem. A correctness patch was required before any v0.4.0 feature work.
+**Decision:** v0.3.1 shipped as a four-deliverable correctness patch only: (1) `intelligence_profile` column on `agent_configs`, (2) `buildAccountContext` platform utility, (3) Intelligence Profile panel on AdminAgentsPage, (4) prompt restructure with account context block first and baseline-verification instruction last. No features beyond these four were added.
+**Rationale:** Correctness before features. A broken analytical baseline contaminates every recommendation the agent produces. Fixing it is a higher-priority prerequisite than adding new capabilities.
+**Constraints it must not violate:** Scope was fixed to four deliverables. `createAgentRoute`, `AgentScheduler`, `persistRun`, and `agent_runs` schema were not modified. No new npm packages were added. No new tables were created.
+
+**Acceptance test — confirmed passed 2026-03-28:**
+1. ✅ `agent_configs` table has `intelligence_profile` column (idempotent `ADD COLUMN IF NOT EXISTS`)
+2. ✅ `buildAccountContext` returns a non-empty string for a populated profile and `''` for null/`{}` — verified by smoke test (all assertions pass)
+3. ✅ `IntelligenceProfileSection` renders in `AdminAgentsPage` and saves via `PUT /api/agent-configs/:slug` using the existing endpoint
+4. ✅ `prompt.js` opens with the account context block (when profile is set) followed by role, data sources, analytical instructions, output format, and baseline-verification instruction
+5. ⏳ Live account run against a declared 7x ROAS baseline — pending first run after Railway deploy
+
+**References:** `server/platform/buildAccountContext.js`; `server/agents/googleAdsMonitor/prompt.js`; `server/db.js`; `client/src/pages/AdminAgentsPage.jsx`.
+
+---
+
+### Known Limitation — Single Account, No Campaign-Specific Queries
+**Date:** 2026-03-28
+**Status:** Accepted — deferred to MCP rebuild
+**Context:** Google Ads Monitor v0.3.1 runs a single monolithic report against one hardcoded account. No mechanism exists to scope analysis to a specific campaign or run comparative queries across campaigns.
+**Decision:** Not fixed in ToolsForge. Deferred to MCP project where campaigns become discrete Resources and campaign-specific queries become parameterised tool calls.
+**Rationale:** Fixing this within the current ToolsForge agent architecture would require significant redesign of the tool layer. The MCP rebuild provides a cleaner structural solution — campaigns as Resources is idiomatic MCP and the correct long-term approach.
+**Constraints it must not violate:** No partial fix to be made in ToolsForge that would create migration friction for the MCP rebuild.
+**Impact:** Single-account, single-report-type limitation remains in production.
+**References:** None — deferred, not yet implemented.
+
+---
+
+### MCP_curamTools Scaffold — Resolved Annotation Decisions
+**Date:** 2026-03-28
+**Status:** Settled — all SECTION-ANNOTATION.md items resolved in the first scaffold session
+
+| Decision | Resolution |
+|---|---|
+| Toast z-index | `z-[9999]` — adopted Vault's value |
+| Corner radius | `rounded-xl` buttons/inputs, `rounded-2xl` containers/modals |
+| Modal dismiss | Backdrop + Escape + explicit × close button |
+| TopNav height | 56px (h-14) |
+| `Button` component | **Created** — `Button.jsx` with variants: primary, secondary, danger, icon, toggle |
+| Markdown renderer | Custom zero-dependency renderer with fenced code block support added (platform will return code from agents) |
+| Assistant message avatar | None — multi-tenant workspace signal |
+| Transition duration | `transitionDuration: { DEFAULT: '200ms' }` set in tailwind.config.js |
+| `:focus-visible` ring | Global `*:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }` in index.css |
+| Tailwind CSS variable mapping | Configured — bg-bg, text-primary, border-border etc. in tailwind.config.js |
+
+---
+
+### persistRun Separation — Own File in platform/
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** PLATFORM-PRIMITIVES.md documented persistRun as exported from createAgentRoute.js. The MCP_curamTools scaffold spec lists it as a separate file `server/platform/persistRun.js`.
+**Decision:** `persistRun` lives in `server/platform/persistRun.js` and is imported by both `createAgentRoute.js` and `AgentScheduler.js`. This is cleaner and makes the single-write-path contract more explicit.
+
+---
+
+### agent_runs Schema — Simplified for MCP
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** ToolsForge agent_runs had separate columns (summary, data, suggestions, duration_ms, token_count). The MCP scaffold uses a consolidated `result JSONB` column that holds all of these as a structured object `{ summary, data, suggestions, tokensUsed }`.
+**Decision:** `result JSONB` replaces the separate columns. This reduces schema surface area. The `persistRun` function writes the full result object. UI reads `run.result.summary`, `run.result.data`, `run.result.suggestions`.
+
+---
+
+### Zustand Store Keys
+**Date:** 2026-03-28
+**Status:** Settled
+**Context:** SECTION-5-UX.md specified `curam-mcp-auth`. The session scaffold prompt specified `mcp-curamtools-auth`. The scaffold prompt is the authority.
+**Decision:** Storage keys are `mcp-curamtools-auth`, `mcp-curamtools-settings`, `mcp-curamtools-tool`.
+
+---
+
+### Three-Pillar Architectural Roadmap — Staged Implementation
+**Date:** 2026-03-29
+**Status:** Settled — All three stages complete
+**Context:** Analysis of the platform's architectural gaps identified three foundational pillars required before any domain agents are built. These pillars were absent from the initial scaffold and must be implemented in sequence because each stage provides the foundation the next one builds on.
+**Decision:** Implement in three discrete stages:
+- **Stage 1 — Multi-Server Discovery (MCPRegistry):** DB-backed registry + connection lifecycle. ✅ Complete.
+- **Stage 2 — Resource-Level Permissions:** `mcp_resources` + `resource_permissions` tables, `PermissionService` extension, admin API surface. ✅ Complete.
+- **Stage 3 — Budget-Aware Circuit Breaker:** `CostGuardService` + budget integration in `createAgentRoute` + org-level daily budget in `system_settings`. ✅ Complete.
+**Rationale:** Each stage is independently deliverable and testable. Agents should not be built until all three stages are complete — building agents on an incomplete platform foundation creates migration friction later.
+**Constraints it must not violate:** Stage 2 must not require changes to `mcp_servers` table schema. Stage 3 must not require changes to `createAgentRoute`'s public interface (`{ slug, runFn, requiredPermission }`).
+
+---
+
+### Stage 1 — Multi-Server Discovery via MCPRegistry
+**Date:** 2026-03-29
+**Status:** Settled — Complete
+**Context:** The initial platform scaffold had an inbound MCP server (`mcpServer.js`) but no mechanism to connect *to* remote MCP servers. Tool slugs were hardcoded. As agents grow, each would need to manage its own transport connections, duplicating code and bypassing security boundaries.
+**Decision:** `MCPRegistry` singleton at `server/platform/mcpRegistry.js` is the only code path that connects to remote MCP servers. All connections are DB-backed (via `mcp_servers` table) and org-scoped. The registry exposes `register`, `deregister`, `list`, `get`, `connect`, `disconnect`, `send` — agents never construct their own HTTP or stdio transports.
+**Rationale:** Centralising connection management in a platform primitive means security (org scoping, ownership validation) is enforced once and applies to all future agents automatically. Stage 2 resource permissions can query `MCPRegistry.get(orgId, serverId)` as its scope check without touching transport code.
+**Constraints it must not violate:** `org_id` must be sourced from `req.user.org_id` (verified session context) — never from request body or query params. Every DB operation and every `send()` call validates the `(org_id, serverId)` pair. Connection cleanup (`disconnectAll()`) must run on SIGTERM/SIGINT before process exit.
+**References:** `server/platform/mcpRegistry.js`; `server/db.js` (`mcp_servers` table); `server/index.js` (graceful shutdown wiring).
+
+---
+
+### Stage 2 — Resource-Level Permissions
+**Date:** 2026-03-29
+**Status:** Settled — Complete
+**Context:** MCPRegistry provided org-scoped server connections but no control over which users or roles could access specific resource URIs within those servers. Without this layer, any authenticated user with access to an agent could implicitly reach any resource the agent's server exposes.
+**Decision:** Two new tables (`mcp_resources`, `resource_permissions`) and four new `PermissionService` methods establish resource URI-level access control. `canAccessResource(userId, resourceUri, orgId)` is the single check point. Deny-wins resolution: any deny rule overrides all allow rules. No matching rule is an implicit deny — the platform is default-deny for resources.
+**Rationale:** Default-deny is the correct posture for a multi-tenant platform handling business-sensitive data. Admins explicitly grant access rather than revoke it.
+**Constraints it must not violate:** `org_admin` bypasses all resource permission checks unconditionally. `resource_uri` is stored as denormalised TEXT in `resource_permissions` (not FK) — this allows permissions to exist before a resource record is explicitly registered and prevents cascade deletes from silently removing permissions. `org_id` is always from session context at every call site.
+**References:** `server/db.js` (`mcp_resources`, `resource_permissions`); `server/services/PermissionService.js`; `server/routes/adminMcp.js`.
+
+---
+
+### resource_uri Denormalisation — TEXT Not FK
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `resource_permissions.resource_uri` could reference `mcp_resources.id` as a FK. This would enforce referential integrity but would prevent setting permissions before a resource record exists and would cascade-delete permissions if a resource record is cleaned up.
+**Decision:** `resource_uri` is stored as TEXT in `resource_permissions`. Permissions can be pre-set before a resource is registered. Deleting a resource record does not delete its permissions.
+**Rationale:** Permissions are security data. Losing them silently because a resource record was deleted is worse than having orphan permission rows. Orphan rows are harmless — they simply never match a real resource.
+
+---
+
+### user_id XOR role_name — Partial Indexes Over UNIQUE NULLS NOT DISTINCT
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `resource_permissions` requires that exactly one of `user_id` or `role_name` is set. A standard `UNIQUE(org_id, resource_uri, user_id, role_name)` cannot handle NULL distinctness correctly in PostgreSQL — two rows with the same user_id and NULL role_name would both be allowed. PostgreSQL 15 introduced `UNIQUE NULLS NOT DISTINCT` but partial indexes are more explicit.
+**Decision:** Two partial unique indexes: `idx_resource_perm_user` on `(org_id, resource_uri, user_id) WHERE user_id IS NOT NULL` and `idx_resource_perm_role` on `(org_id, resource_uri, role_name) WHERE role_name IS NOT NULL`. A CHECK constraint enforces the XOR at insert time. The `ON CONFLICT` upsert syntax uses the column-predicate form matching the partial index.
+**Rationale:** Explicit over clever. The partial index approach is readable, portable to older PG versions if needed, and makes the intent self-documenting.
+
+---
+
+### org_id Is Never Sourced from User-Supplied Data
+**Date:** 2026-03-29
+**Status:** Settled — applies to all platform primitives
+**Context:** Stage 1 formalises a security rule that was implicit in the auth and agent layers but not yet documented as a platform-wide constraint.
+**Decision:** `org_id` is always sourced from `req.user.org_id` (attached by `requireAuth` middleware from the verified session token). It is never read from `req.body`, `req.params`, or `req.query`. This applies to `MCPRegistry`, `AgentConfigService`, `persistRun`, and every future platform primitive.
+**Rationale:** Allowing org_id in user-supplied data would let a user scope their request to another organisation's data by manipulating the payload. The session token is the only trusted source of org identity.
+**Constraints it must not violate:** No route handler may pass `req.body.orgId` or `req.params.orgId` to any platform primitive. The linting rule: if a function accepts `orgId` as its first parameter, the call site must read it from `req.user.org_id`.
+
+---
+
+### Stage 3 — Budget-Aware Circuit Breaker
+**Date:** 2026-03-29
+**Status:** Settled — Complete
+**Context:** Stages 1 and 2 established server discovery and resource permissions. Stage 3 adds cost safety: without a budget guardrail, an agent making recursive or expensive MCP tool calls can exceed budget before `max_tokens` kicks in. Two enforcement layers are required: per-task (configurable per agent by admin) and daily org-wide (a ceiling across all agents).
+**Decision:** `CostGuardService` (`server/services/CostGuardService.js`) is the single enforcement point. It exports `computeCostAud`, `getDailyOrgSpendAud`, `check`, and `BudgetExceededError`. `createAgentRoute` loads budget context once at run start and calls `check()` after each accumulation event and again post-run with the definitive token count. `max_task_budget_aud` is added to `ADMIN_DEFAULTS._platform` in `AgentConfigService.js`. Daily org budget lives in `system_settings` under key `platform_budget`. `costAud` is written to `agent_runs.result` JSONB on every successful run.
+**Rationale:** Separating per-task and daily org limits allows fine-grained control without coupling them. The pure-function design of `check()` (no DB queries mid-stream) keeps latency low. Persisting `costAud` in the result payload means the UI can display actual run cost without recomputing from tokens.
+**Constraints it must not violate:** `createAgentRoute` public interface (`{ slug, runFn, requiredPermission }`) must not change. Existing agents with no token reporting must still receive post-run checks — the mid-run enforcement is opt-in via the `emit` second param. `check()` must remain a pure function with no async behaviour.
+**References:** `server/services/CostGuardService.js`; `server/platform/createAgentRoute.js`; `server/platform/AgentConfigService.js`.
+
+---
+
+### Pure-function check() — daily spend loaded once at run start
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** A naive circuit breaker design would query `usage_logs` on every `emit()` call to get the current daily spend. At high emit frequency this produces O(n) DB queries per run — unnecessary load that grows with run length.
+**Decision:** `getDailyOrgSpendAud(orgId)` is called exactly once at run start and the result is stored in a local variable. `CostGuardService.check()` receives the pre-loaded `dailyOrgSpendAud` as a parameter and performs no DB queries — it is a pure synchronous function. The pre-loaded spend is a snapshot; if another concurrent run for the same org finishes mid-stream, the snapshot is slightly stale. This is accepted: the daily limit is a soft ceiling, not a hard transaction guarantee.
+**Rationale:** A single DB query at run start vs O(n) queries during a run is the correct tradeoff for an operational safety guardrail. Perfect atomicity would require pessimistic locking across all concurrent agent runs — unacceptable complexity for a soft budget limit.
+**Constraints it must not violate:** `check()` must never perform IO. It accepts `{ taskCostAud, maxTaskBudgetAud, dailyOrgSpendAud, maxDailyBudgetAud }` and throws or returns synchronously. Callers own the accumulation and snapshotting.
+
+---
+
+### Opt-in mid-run enforcement via emit second param
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `createAgentRoute`'s `emit` callback already streams progress text to the SSE client. Existing agents call `emit(text)`. Adding mandatory budget accumulation to `emit` would require every existing agent to supply token counts — a breaking change. Budget enforcement must be additive.
+**Decision:** `emit` is extended to accept an optional second parameter: `emit(text, partialTokensUsed)`. If `partialTokensUsed` is provided, `createAgentRoute` accumulates the cost and calls `CostGuardService.check()`. If omitted (existing agents), no mid-run check occurs. A definitive post-run check always runs using the final `tokensUsed` returned by `runFn` — this catches over-budget runs even for agents that never pass `partialTokensUsed` to `emit`.
+**Rationale:** Backwards compatible — zero changes required to existing agents. New agents opt in to granular mid-run enforcement by supplying `partialTokensUsed`. The post-run check provides a safety net regardless.
+**Constraints it must not violate:** The `emit(text)` single-argument form must continue to work exactly as before. `BudgetExceededError` thrown inside `emit` must propagate through `runFn` to the existing catch block — no new error paths in `createAgentRoute`.
+
+---
+
+### costAud persisted in agent_runs.result
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `agent_runs.result` is a JSONB column holding `{ summary, data, suggestions, tokensUsed }`. Without storing computed cost, the UI would need to recompute AUD cost from `tokensUsed` using the current rate constant — coupling the UI to the cost model and producing stale values if rates change.
+**Decision:** `costAud` (a number, AUD, rounded to 6 decimal places) is added to the `result` JSONB on every run. The value is the definitive post-run cost computed by `CostGuardService.computeCostAud(tokensUsed)`.
+**Rationale:** Storing the computed value at run time is the correct pattern: it locks in the rate that was in effect, avoids recomputation in every UI consumer, and allows historical cost display without coupling the UI to the cost model. `result` JSONB is the right location — no schema change required.
+**Constraints it must not violate:** `costAud` is stored as AUD, consistent with the platform-wide monetary convention. It must be computed from the definitive post-run `tokensUsed`, not from mid-run accumulated estimates.
+
+---
+
+### Stage 4 — Admin MCP UI Integration
+**Date:** 2026-03-29
+**Status:** Settled — Complete
+**Context:** Stages 1–3 built the backend APIs for MCP server discovery, resource-level permissions, and budget enforcement. None of that work was operable without a UI — an admin had to use raw curl to register servers, resources, or permissions. Stage 4 closes the gap.
+**Decision:** Two new admin pages built as React components following the existing admin page pattern. No new backend routes, no schema changes, no new packages. UI only.
+- `AdminMcpServersPage` (`/admin/mcp-servers`) — register, connect/disconnect, delete MCP servers
+- `AdminMcpResourcesPage` (`/admin/mcp-resources`) — register resources, manage permissions (two sections, one page)
+Both pages added to `App.jsx` under the existing `RequireRole(['org_admin'])` guard and to `Sidebar.jsx` under the Admin section.
+**Rationale:** Building the UI last (after the API is stable) means the UI is built against a known, tested interface. The two-section layout of AdminMcpResourcesPage (resources + permissions together) reflects the operational workflow: an admin registers a resource and then immediately sets permissions — they are adjacent operations.
+**Constraints it must not violate:** Admin pages never call platform primitives directly — all data access goes through the `/api/admin/*` routes. `org_id` continues to be sourced from `req.user.orgId` on the server; the UI never sends an `orgId` in the request body.
+
+---
+
+### UsageLogger as the Single Write Path to usage_logs
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** The `usage_logs` table was defined in the platform scaffold and read by `CostGuardService.getDailyOrgSpendAud()` for budget enforcement. No code was writing to it — the Admin Logs page was always empty and the daily budget check always saw zero spend regardless of actual usage.
+**Decision:** `UsageLogger` (`server/services/UsageLogger.js`) is the only code path that writes to `usage_logs`. It is called from `createAgentRoute` on the success path, fire-and-forget (logging failures must never affect agent responses). No agent code or route code may write to `usage_logs` directly.
+**Rationale:** Mirroring the `persistRun`/`agent_runs` pattern: one table, one write path, enforced at the platform layer. Calling from `createAgentRoute` means every agent gets usage logging automatically with zero per-agent code.
+**Constraints it must not violate:** `logUsage` must remain fire-and-forget at the call site. A failure to log must never surface as an agent error. `org_id` must be sourced from `req.user.orgId`, never from user-supplied input.
+**References:** `server/services/UsageLogger.js`; `server/platform/createAgentRoute.js`; `server/services/CostGuardService.js` (`getDailyOrgSpendAud` reads this table).
+
+---
+
+### Admin UI Parity with ToolsForge
+**Date:** 2026-03-29
+**Status:** Ongoing
+**Context:** MCP_curamTools was scaffolded with functional but minimal admin pages. ToolsForge, the predecessor single-tenant platform, has richer admin UI developed over many iterations. Rather than reinventing, the decision is to port ToolsForge admin features selectively — adopting what works and replacing ToolsForge-specific patterns with MCP_curamTools equivalents.
+**Decision:** Each admin page is brought to ToolsForge feature parity in turn, then adapted: ToolsForge component patterns (raw `<button>` with inline styles) are replaced with MCP_curamTools primitives (`Button`, `Modal`, `InlineBanner`). ToolsForge-specific backend calls (different route paths, different response shapes) are mapped to MCP_curamTools routes. Feature additions that don't apply (ToolsForge tool-access per-user roles) are replaced with MCP_curamTools equivalents (org-role grant/revoke).
+**Pages ported (in order):** Email Templates (tabs, preview iframe, click-to-insert variables, auto-generate plain text) → Models (add/edit/delete/reset, API key status, per-model test) → Users (Manage Access modal replacing separate Edit + Delete modals, role toggle, profile editing).
+**Constraints it must not violate:** No ToolsForge-specific route paths or response shapes in MCP_curamTools. `org_id` always from `req.user.orgId`. PermissionService is the only code path for role grants/revocations.
+
+---
+
+### Role Management HTTP Endpoints
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** The Users page needs to grant and revoke the `org_admin` role without a full user update (`PUT /users/:id` replaces the entire role). A finer-grained API is needed so the UI can toggle admin independently of other profile edits.
+**Decision:** Three endpoints are added to `server/routes/admin.js`: `GET /users/:id/roles` (returns current role assignments), `POST /users/:id/grant-role` (grants a named role at a given scope), `POST /users/:id/revoke-role` (revokes it). These are thin wrappers over `PermissionService.getUserRoles`, `grantRole`, and `revokeRole` — no permission logic lives in the route handler.
+**Rationale:** Matches the pattern from ToolsForge (`grant-role`/`revoke-role` sub-resource endpoints). Keeps PermissionService as the single write path for all role changes. Guarded by the existing `router.use(requireAuth, requireRole(['org_admin']))` — no per-route middleware needed. Self-demotion is blocked server-side.
+**Constraints it must not violate:** An admin may not grant/revoke their own `org_admin` role (server enforces). `org_id` scoping — the target user must belong to `req.user.orgId`. PermissionService functions are the only callers of role SQL.
+**References:** `server/services/PermissionService.js` (`grantRole`, `revokeRole`, `getUserRoles`); `server/routes/admin.js`.
+
+---
+
+### Admin Diagnostics Page
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** Operators need a way to verify that all external integrations (database, AI API, email, MCP servers, Google APIs) are correctly configured without diving into Railway logs or running manual curl commands.
+**Decision:** A `POST /admin/diagnostics` route in `server/routes/admin.js` runs all checks server-side and returns a JSON array of `{ name, ok, detail }` objects. The frontend page (`client/src/pages/admin/AdminDiagnosticsPage.jsx`) shows the results in a pass/fail table triggered by a "Run Checks" button.
+**Rationale:** Server-side execution means secrets never leave the server. A single endpoint covers all checks. The MailChannels check uses `https.request` (not `fetch`) — consistent with the fix in `EmailService.js` and the railway+undici+MailChannels incompatibility. The MCP Registry check (`MCPRegistry.list(orgId)`) is the MCP-specific addition over the ToolsForge equivalent.
+**Checks (in order):** Database (`SELECT NOW()`), Anthropic API (minimal haiku call), MailChannels (`https.request` probe — 401/403 = bad key, 4xx = key valid), MCP Registry (connected server count), Google OAuth (token refresh), Google Ads API (GAQL minimal query), Google Analytics GA4 (minimal report).
+**Constraints it must not violate:** The route is protected by `router.use(requireAuth, requireRole(['org_admin']))` — no additional middleware needed. The diagnostics route must never perform side effects (no emails sent, no data written). Run checks are always initiated manually — no scheduling.
+**References:** `server/routes/admin.js` (POST /diagnostics); `client/src/pages/admin/AdminDiagnosticsPage.jsx`.
+
+---
+
+### Org Structure — Departments, Custom Roles, and Per-User Default Model
+**Date:** 2026-03-29
+**Status:** Settled — Complete
+**Context:** ToolsForge had a flat user model: every user had exactly one of two roles (`admin` or `member`). MCP_curamTools needs to support organisations with internal structure — multiple teams (departments), varied responsibilities (custom roles), and different tool preferences (default model). This is the first feature that goes beyond ToolsForge parity.
+**Decision:** Three orthogonal additions to the user model, all scoped to `org_id`:
+1. **Departments** (`departments` + `user_departments` tables) — named groups with a colour, many-to-many with users. An admin creates and edits departments on `/admin/departments`; assigns users via the Manage modal on `/admin/users`. Pure grouping — no access control implications.
+2. **Custom Org Roles** (`org_roles` table + `user_roles` rows) — admin-defined named roles beyond `org_admin`/`org_member`. The role `name` (slug) is auto-derived from `label` via `toSlug()` at creation and is immutable thereafter — it becomes the `role_name` key in `user_roles` (`scope_type = 'global'`), making it compatible with `requireRole()` checks and `resource_permissions`. An admin creates and edits roles on `/admin/org-roles`; assigns users via the Manage modal.
+3. **Default Model** (`default_model_id` column on `users`) — the user's preferred LLM. Set per-user in the Manage modal's Default Model section via `PUT /users/:id`. Persisted as a model ID string; the UI shows a select of enabled models.
+**Rationale:** Departments answer "who is this user?" for display and reporting without coupling to access control. Custom roles answer "what can this user do?" using the existing `user_roles` + `PermissionService` infrastructure — no new permission code required. Per-user default model answers "which model does this user prefer?" with a single column, no separate table needed.
+**Constraints it must not violate:** Custom org role assignments via `PUT /users/:id/org-roles` must only touch custom roles — the route first queries all valid org_role names for the org and restricts its DELETE/INSERT to that set, leaving `org_admin`/`org_member` assignments untouched. `PermissionService.grantRole`/`revokeRole` remain the only code paths for all role mutations. `org_id` is always from `req.user.orgId`. Role name slugs are stable and immutable after creation — they are used as role_name keys in user_roles and resource_permissions.
+**Schema additions (all idempotent):**
+- `ALTER TABLE users ADD COLUMN IF NOT EXISTS default_model_id TEXT`
+- `CREATE TABLE IF NOT EXISTS departments (id, org_id, name, description, color, UNIQUE(org_id, name))`
+- `CREATE TABLE IF NOT EXISTS user_departments (user_id, department_id, PRIMARY KEY(user_id, department_id))`
+- `CREATE TABLE IF NOT EXISTS org_roles (id, org_id, name, label, description, color, UNIQUE(org_id, name))`
+- `CREATE INDEX IF NOT EXISTS idx_user_departments_user_id ON user_departments(user_id)`
+**API surface (all under `router.use(requireAuth, requireRole(['org_admin']))`):**
+- `GET/POST /admin/departments`, `PUT/DELETE /admin/departments/:id`
+- `GET/POST /admin/org-roles`, `PUT/DELETE /admin/org-roles/:id`
+- `GET/PUT /admin/users/:id/departments`
+- `GET/PUT /admin/users/:id/org-roles`
+- `GET /admin/users/:id/roles` (existing, now also returns custom org role assignments)
+**References:** `server/db.js`; `server/routes/admin.js`; `client/src/pages/admin/AdminDepartmentsPage.jsx`; `client/src/pages/admin/AdminOrgRolesPage.jsx`; `client/src/pages/admin/AdminUsersPage.jsx` (ManageModal).
+
+---
+
+### toSlug — Role Name Immutability Contract
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** Custom org role names are used as `role_name` keys in `user_roles` and `resource_permissions`. If a role's slug could be renamed, all existing user assignments and resource permissions referencing the old name would become orphaned — no FK constraint catches this because `role_name` is stored as denormalised TEXT.
+**Decision:** The `name` (slug) field of an org role is set once at creation via `toSlug(label)` and cannot be modified thereafter. The `PUT /admin/org-roles/:id` route accepts only `label`, `description`, and `color` — the `name` field is ignored. The UI shows the auto-generated slug during creation with the note "immutable after creation" and shows the fixed slug on the edit form.
+**toSlug implementation:** `label.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')`
+**Rationale:** Immutability is the correct posture for any value used as a join key in other tables without FK enforcement. Changing the slug would silently orphan all downstream references. The UI shows the slug prominently so admins can verify the generated key before committing.
+**Constraints it must not violate:** The server-side `PUT /org-roles/:id` must never update the `name` column. The `DELETE /org-roles/:id` handler must clean up `user_roles` rows for the role's name before deleting the org_roles row — in that order, within a transaction if possible.
+**References:** `server/routes/admin.js` (`PUT /admin/org-roles/:id`, `DELETE /admin/org-roles/:id`); `client/src/pages/admin/AdminOrgRolesPage.jsx` (`toSlug`).
+
+---
+
+### Google Ads Monitor — First Agent Migration
+**Date:** 2026-03-29
+**Status:** Settled — Complete
+**Context:** Google Ads Monitor was the sole agent in ToolsForge. Migrating it to MCP_curamTools required introducing the agent execution engine (AgentOrchestrator) and adapting the tool pattern to the new platform primitives.
+**Decision:** Three layers introduced:
+1. **`server/platform/AgentOrchestrator.js`** — platform primitive shared by all agents. ReAct loop: call Claude → parse tool_use blocks → execute tools → feed results back. Strips `execute`, `requiredPermissions`, `toolSlug` from tool defs before sending to Anthropic. Preserves full assistant response content (including thinking blocks) per Anthropic API requirement. Token usage accumulated across all iterations. `onStep` callback maps directly to `createAgentRoute`'s `emit` — agents opt in to mid-run budget checks by passing it.
+2. **`server/services/GoogleAdsService.js` + `GoogleAnalyticsService.js`** — shared domain services. Placed in `services/` not in the agent folder because future ads agents will reuse them. Google Ads uses direct `fetch` to REST API v23; GA4 uses direct `fetch` to Data API v1beta. Both use `googleapis` only for OAuth2 token rotation. All monetary values in AUD (÷ 1,000,000).
+3. **`server/agents/googleAdsMonitor/`** — agent folder: `tools.js` (4 tool definitions exported as array), `prompt.js` (`buildSystemPrompt(config)`), `index.js` (`runGoogleAdsMonitor` — the runFn).
+**No ToolRegistry or StateManager**: ToolsForge's `ToolRegistry` singleton was a pre-registration pattern; with a single agent there is no cross-agent tool sharing to enforce. The agent's `tools.js` exports the array directly; `index.js` passes it to `agentOrchestrator.run()`. `toolSlug` annotation is preserved on each tool definition for forward-compatibility when a registry is introduced. `StateManager`/`agent_conclusions` pattern deferred — `agent_runs` serves the history purpose; conclusions can be added when needed.
+**runFn context adaptation**: ToolsForge's `runFn` received model/maxTokens as top-level context fields. MCP_curamTools's `createAgentRoute` passes them inside `context.adminConfig`. The agent's `index.js` reads `context.adminConfig.model`, `context.adminConfig.max_tokens`, `context.adminConfig.max_iterations`.
+**Days resolution**: `req.body.days` (UI selection) > `config.lookback_days` (operator default) > `30` (hardcoded fallback). Priority order is preserved from ToolsForge.
+**Frontend**: `GoogleAdsMonitorPage` with tab layout (Results / History / Settings). Uses platform primitives: `LineChart` for spend+conversions chart, `MarkdownRenderer` for summary, `Button`/`InlineBanner`. Sub-components (`CampaignPerformanceTable`, `SearchTermsTable`, `AISuggestionsPanel`) are tool-scoped — placed under `pages/tools/GoogleAdsMonitor/` not in `components/` as they are specific to this agent's data shape.
+**Constraints it must not violate:** `AgentOrchestrator` must remain zero agent-specific code. `GoogleAdsService`/`GoogleAnalyticsService` must be importable by any future ads agent with no modification. New ads agents add their own tools.js and register into the tools array; no platform file changes needed.
+**References:** `server/platform/AgentOrchestrator.js`; `server/services/GoogleAdsService.js`; `server/services/GoogleAnalyticsService.js`; `server/agents/googleAdsMonitor/`; `server/routes/agents.js`; `client/src/pages/tools/GoogleAdsMonitorPage.jsx`.
+
+---
+
+### Ads Agent Namespace — Shared Services, Isolated Tools
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** The intent is to build multiple Google Ads agents (e.g. keyword research, bid optimisation, audience analysis). Each will be a separate agent with its own `tools.js`, `prompt.js`, and `index.js`. They must not share tool definitions to preserve toolSlug scoping, but they should share the underlying API clients.
+**Decision:** `GoogleAdsService` and `GoogleAnalyticsService` are platform-level domain services (`server/services/`). Each agent imports them directly in its own `tools.js`. There is no "ads platform layer" abstraction — direct imports are sufficient and avoid premature abstraction. If a third service is needed (e.g. Google Merchant Centre), it follows the same pattern: new file in `server/services/`, imported by agents that need it.
+**Constraints it must not violate:** Agents must not share tool definition objects (same object with two toolSlugs). Each agent defines its own tools even if the underlying `execute()` call is identical — this keeps toolSlug scoping clean and allows per-agent prompt tuning of tool descriptions.
+
+---
+
+### Google Ads Monitor — Date Range Resolution
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** The initial agent accepted only a `days` (integer) parameter from the UI. The user required date pickers (from/to) so specific date ranges could be selected, not just rolling lookback windows.
+**Decision:** Both `GoogleAdsService` and `GoogleAnalyticsService` accept either form via a `resolveRange(options)` helper. If `options` is an object with `startDate`/`endDate`, those are used directly. If it is a number (or `{ days }` object), the date range is computed from today. The agent's `tools.js` exposes a `rangeOrDays(context, input)` helper that picks `context.startDate`/`context.endDate` (set from `req.body` by `index.js`) over any fallback — this is the canonical priority order:
+1. `req.body.startDate` / `req.body.endDate` (UI date pickers)
+2. `req.body.days` (UI legacy or days preset buttons)
+3. `config.lookback_days` (operator default)
+4. `30` (hardcoded fallback)
+
+**Rationale:** Backward compatibility: existing callers passing a number continue to work. The services are reusable by future agents that need either convention.
+**Constraints it must not violate:** `resolveRange` must live inside each service file, not in the agent — agents call service methods, not `resolveRange` directly. `rangeOrDays` in `tools.js` must always prefer context-level dates over tool input dates (context has already resolved the correct range before tools execute).
+
+---
+
+### Scheduled Runs — Empty Config Detection
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `AgentScheduler` passes `config: {}` and `adminConfig: {}` to `runFn` on cron ticks because no HTTP request context exists. If an agent reads config from `context.config` without checking, it silently falls back to all hardcoded defaults and ignores the operator's saved settings.
+**Decision:** Each agent's `index.js` detects empty config objects and loads from DB:
+```js
+const config = Object.keys(context.config ?? {}).length > 0
+  ? context.config
+  : await AgentConfigService.getAgentConfig(orgId, TOOL_SLUG);
+
+const adminConfig = Object.keys(context.adminConfig ?? {}).length > 0
+  ? context.adminConfig
+  : await AgentConfigService.getAdminConfig(TOOL_SLUG);
+```
+**Rationale:** The scheduler passes empty objects (not null/undefined) because the route factory contract defines those fields. Length-checking is the idiomatic way to detect "not populated" from "populated but empty". This pattern must be copied verbatim into every new agent's `index.js`.
+**Constraints it must not violate:** The check must use `Object.keys(...).length > 0`, not `context.config ?? {}` — the latter always trusts the passed value even if empty.
+
+---
+
+### MarkdownRenderer — Prop Is `text`, Not `content`
+**Date:** 2026-03-29
+**Status:** Settled — enforced
+**Context:** `MarkdownRenderer` was built with a `text` prop. The initial `GoogleAdsMonitorPage` passed `content=` by analogy with other components, producing a silently empty analysis block. No runtime error was thrown.
+**Decision:** The `MarkdownRenderer` prop name is `text`. All callers must use `<MarkdownRenderer text={value} />`. No aliasing or alternate prop names.
+**Rationale:** Prop name mismatch is silent in React — the component renders empty without warning. Enforcing a single canonical name prevents recurrence. Any future refactor of the component must maintain `text` for backward compatibility.
+**Constraints it must not violate:** Do not add a `content` alias to `MarkdownRenderer`. If the prop name ever needs to change, update all call sites simultaneously.
+
+---
+
+### Number and Date Formatting Standards
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** Initial agent UI rendered raw floats (`$1234.5678`), missing thousands separators, and ISO date strings (`2026-03-01`). The user specified: comma-formatted integers, 2dp AUD currency, dd/mm/yyyy dates, and no monospace fonts except for code/search terms.
+**Decision:** All agent UI pages and sub-components use these helpers (defined inline or imported from a shared module when multiple components need them):
+```js
+const fmtNum = (n) => Math.round(n ?? 0).toLocaleString('en-AU');
+const fmtAud = (n) => `$${Number(n ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtDate = (s) => {
+  if (!s) return '—';
+  if (s.includes('T') || s.includes(' ')) return new Date(s).toLocaleString('en-AU');
+  const [y, m, d] = s.split('-');
+  return `${d}/${m}/${y}`;
+};
+```
+All inline styles include `fontFamily: 'inherit'` to respect the user's platform font setting. Monospace font for search query terms uses `fontFamily: 'var(--font-mono, monospace)'` — not the string `'monospace'`.
+**Constraints it must not violate:** `toFixed(2)` alone is not acceptable for currency — it lacks thousands separators. `toLocaleString()` without a locale argument is not acceptable — it produces locale-specific output that differs between environments. Always pass `'en-AU'` explicitly.
+
+---
+
+### Google Ads Monitor — UX Features
+**Date:** 2026-03-29
+**Status:** Settled — Complete
+**Context:** The initial UI showed no feedback during the 60–90 second agent run, used non-system fonts, had no data export, and accepted only preset day buttons.
+**Decision:** The following UX features were implemented in `GoogleAdsMonitorPage.jsx`:
+- **Animated progress bar** — CSS keyframe indeterminate animation (`@keyframes _ads_slide`), injected via `<style>` tag. No new npm packages.
+- **Run duration message** — "This may take 60–90 seconds. Please don't navigate away." displayed while running.
+- **Navigation guard** — `beforeunload` event listener added when run starts, removed on completion.
+- **Date pickers** — From/To `<input type="date">` fields replace the days-only UI. Preset buttons (7d / 14d / 30d / 90d) fill the date pickers rather than submitting directly.
+- **Export to CSV** — Client-side `Blob` download of campaign and search term data. No server round-trip.
+- **Print/PDF** — `window.print()`. Browser handles PDF generation; no jsPDF dependency.
+- **Email report** — Modal with pre-filled recipient (logged-in user's email). Calls `POST /api/agents/google-ads-monitor/email` which builds an HTML + plain-text email with campaign table and sends via `EmailService`.
+**Constraints it must not violate:** No new npm packages for any of these features. All inline styles must include `fontFamily: 'inherit'`. PDF export relies on browser print — no custom print CSS is required for correctness, though `@media print` rules may be added later to hide nav/controls.
+
+---
+
+### Email Report Endpoint Pattern
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** Agent reports need to be emailable from the UI without requiring a separate email microservice or new package.
+**Decision:** Each agent that supports email reporting adds a `POST /api/agents/:slug/email` route directly in `server/routes/agents.js`. The route accepts `{ to, result, startDate, endDate }` and builds an inline HTML email (no template engine). Campaign/data table rows are built with inline styles (email clients strip `<style>` tags). Summary markdown is converted to simple HTML via regex replacements in the route handler — no `marked` or `rehype` dependency. The route calls `EmailService.send({ to, subject, html, text })`.
+**Rationale:** Keeps the email route co-located with the agent's other route registrations. Inline styles are mandatory for email HTML — CSS classes are stripped by most clients. The regex conversion is sufficient for the headings/bold/list subset used in agent summaries.
+**Constraints it must not violate:** Email routes must use `requireAuth` but do not require `requiredPermission` — any user who can see the report can email it. Email route handlers must not call `persistRun` or `emit` — they are not agent runs. `https.request` (not `fetch`) must be used for MailChannels on Railway — `fetch` via `undici` silently fails on Railway's network layer.
+
+---
+
+### Multi-Customer Scheduled Runs — Option A (Agent Returns Array)
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `AgentScheduler._tick` calls `runFn` once and persists one `agent_runs` row. With multi-customer support, each customer needs its own row so the history UI and cost tracking can be scoped per customer. Three options were considered: (A) agent loops internally and returns an array; (B) scheduler enumerates customers and calls `runFn` once per customer; (C) a new scheduler variant for multi-account agents.
+**Decision:** Option A — the agent's `runFn` loops over active customers and returns an array of `{ customerId, result, status, error }` objects. `AgentScheduler._tick` detects an array return and persists one `agent_runs` row per element (with `customer_id` populated), closing the initial placeholder row with `{ multi: true, count: N }`. Existing agents returning a single object are unchanged.
+**Rationale:** Option A keeps the scheduler generic with zero agent-specific knowledge. Option B would require the scheduler to know about customer enumeration. Option C adds API surface. Array detection (`Array.isArray(outcome)`) is a backward-compatible, minimal signal.
+**Constraints it must not violate:** Single-object-returning agents must continue to produce exactly one `agent_runs` row with no `customer_id`. Multi-customer array return must never be used for non-customer reasons — the array shape is a contract meaning "one entry per customer run". Each array element must include `{ customerId, status }` at minimum.
+
+---
+
+### agent_configs Multi-Customer — Partial Index ON CONFLICT Syntax
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** Adding per-customer agent configs required multiple rows per `(org_id, slug)` — one for the org default (`customer_id IS NULL`) and one per customer. The existing `UNIQUE(org_id, slug)` constraint prevents this. The same partial-index pattern from `resource_permissions` (`user_id XOR role_name`) applies here.
+**Decision:** The `UNIQUE(org_id, slug)` constraint on `agent_configs` is dropped and replaced with two partial unique indexes:
+- `idx_agent_configs_org_slug_default` on `(org_id, slug) WHERE customer_id IS NULL`
+- `idx_agent_configs_org_slug_customer` on `(org_id, slug, customer_id) WHERE customer_id IS NOT NULL`
+
+`updateAgentConfig` ON CONFLICT clause changes from `ON CONFLICT (org_id, slug)` to `ON CONFLICT (org_id, slug) WHERE customer_id IS NULL`. `updateAgentConfigForCustomer` uses `ON CONFLICT (org_id, slug, customer_id) WHERE customer_id IS NOT NULL`. Both forms follow the column-predicate syntax required for partial indexes — `ON CONFLICT ON CONSTRAINT` does not work for partial indexes.
+**Rationale:** Consistent with the `resource_permissions` pattern already in the codebase. Explicit WHERE predicate in ON CONFLICT is more readable than relying on constraint name lookup.
+**Constraints it must not violate:** The DROP CONSTRAINT step must use `DROP CONSTRAINT IF EXISTS` — both new and existing installs must be handled idempotently. The `customer_id` column defaults to NULL so existing rows (org defaults) satisfy the `WHERE customer_id IS NULL` index automatically.
+
+---
+
+### substitutePromptVars — `{{variable}}` Syntax
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** Operator-authored `custom_prompt` text needs variable substitution (e.g. inject customer name). The syntax must be consistent with the existing email template convention.
+**Decision:** `server/platform/substitutePromptVars.js` exports `substitutePromptVars(template, vars)`. Placeholders use double braces: `{{variable_name}}`. Unknown placeholders are left as-is (no silent data loss). The function is a pure string transform — no async, no DB access.
+**Rationale:** Double braces match the `EmailTemplateService` convention already in use. Single braces would conflict with JavaScript template literals in source code. Leaving unknown placeholders intact means a misconfigured custom_prompt produces visible `{{variable}}` text rather than silent empty substitution — easier to debug.
+**Constraints it must not violate:** `substitutePromptVars` must remain a pure function with no side effects. It must not throw for null/undefined templates — return the input as-is. The `{{}}` syntax is the only supported form — do not add `{variable}` or `$variable` variants.
+
+---
+
+### custom_prompt — Injected After Analysis Sections, Before Closing Instruction
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** Operators need to inject account-specific instructions (e.g. "prioritise brand campaigns", "ignore test campaign") into the agent's reasoning without replacing the full prompt. The injection point determines how much influence the custom text has relative to the analytical framework.
+**Decision:** `custom_prompt` is injected as a `## Operator Instructions` block appended after all output format sections, immediately before the final baseline-verification instruction. In `buildSystemPrompt(config, customerVars)`, it appears at the end of the returned string so it does not disrupt the structured prompt sections but is still present when Claude forms its final recommendations. `substitutePromptVars` is applied before injection to resolve `{{customer_name}}` and `{{customer_id}}` variables.
+**Rationale:** Appending at the end ensures the analytical framework and output format are fully established before Claude reads the operator's additions. Placing it before the baseline-verification instruction means operator instructions are contextualised by the account targets, not placed above them.
+**Constraints it must not violate:** `custom_prompt` must never replace the role block, data source block, or output format block — it is additive only. If `custom_prompt` is null or empty, the prompt must be identical to a run with no custom_prompt set.
+
+---
+
+### user_roles Table Requires Partial Unique Indexes (not a plain UNIQUE constraint)
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `scope_id` is nullable. A standard `UNIQUE(user_id, role_name, scope_type, scope_id)` does not deduplicate NULL scope_id rows because SQL treats `NULL != NULL`. The bootstrap code in `db.js` was running `INSERT ... ON CONFLICT DO NOTHING` on every server start, but the conflict never fired — so a new `org_admin` row was inserted for user 1 on every restart.
+**Decision:** Two partial unique indexes replace a single unique constraint: `uq_user_roles_no_scope` on `(user_id, role_name, scope_type) WHERE scope_id IS NULL`, and `uq_user_roles_with_scope` on `(user_id, role_name, scope_type, scope_id) WHERE scope_id IS NOT NULL`. A dedup DELETE (keep MIN(id) per logical combination) runs before the index creation so the migration is idempotent even on a dirty table.
+**Rationale:** Partial indexes are the standard PostgreSQL pattern for unique constraints on nullable columns. The dedup must precede index creation — creating a unique index on a table with duplicates fails immediately.
+**Constraints it must not violate:** The dedup DELETE must always appear before the `CREATE UNIQUE INDEX` statements in `db.js`. Any future `INSERT INTO user_roles` that wants idempotent behaviour must use `ON CONFLICT (user_id, role_name, scope_type) WHERE scope_id IS NULL DO NOTHING` (explicit conflict target), not bare `ON CONFLICT DO NOTHING`.
+
+---
+
+### Admin Route Responses Must Be Plain Arrays, Not Wrapped Objects
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** `POST /admin/diagnostics` was returning `{ results: [...] }` but the frontend called `.filter()` directly on the response, expecting a plain array. This caused a `TypeError: e.filter is not a function` crash.
+**Decision:** Admin routes that return lists must use `res.json(array)` not `res.json({ key: array })`. The frontend API client returns `response.json()` directly — there is no unwrapping layer.
+**Rationale:** Consistent with every other list-returning route in the platform. Wrapping adds no value and breaks array methods used in components.
+**Constraints it must not violate:** If a route needs to return both a list and metadata (e.g. pagination), the metadata must be in a separate field and the component must explicitly destructure it. The list itself must never be the sole content of a wrapper object unless the component is written to unwrap it.
+
+---
+
+### NLP-to-SQL Pattern: Schema Introspection → SQL Generation → Answer Generation
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** The SQL Console NLP mode needs to translate natural language questions into SQL and execute them. The raw row results are not meaningful to speak aloud or present as a direct answer.
+**Decision:** Three steps per NLP query: (1) Query `information_schema` dynamically for live schema. (2) Call the org's configured model to generate SQL — returns raw SQL only, no markdown. (3) After execution, call `claude-haiku-4-5-20251001` with the question + result rows (capped at 20) to generate a 1–2 sentence plain-English answer. The answer is returned as `answer` in the response and passed to `ReadAloudButton`. SQL generation uses the admin-configured model (`getDefaultModel(orgId)`); answer generation always uses Haiku for speed and cost.
+**Rationale:** Separating SQL generation (needs full schema context, benefits from a capable model) from answer generation (needs only the question + small result set, fast and cheap) is more efficient and more accurate than trying to do both in one call. The plain-English answer is what users want to hear — not "Row 1: email is john@…".
+**Constraints it must not violate:** Schema introspection must always be live — never cached or hardcoded. The answer generation step must not be used for the SQL generation step (Haiku may produce lower-quality SQL). Row count passed to the answer call must be capped (currently 20) to avoid large token bills.
+
+---
+
+### Voice Primitives Are Platform-Level, Not Feature-Level
+**Date:** 2026-03-29
+**Status:** Settled
+**Context:** The SQL Console NLP mode needed mic input and read-aloud. Voice features will be needed in any future NLP-capable UI in the platform.
+**Decision:** Voice is implemented as four reusable platform primitives: `useSpeechInput` (hook), `useReadAloud` (hook), `MicButton` (component), `ReadAloudButton` (component), plus `stripForSpeech` (utility). All live in `client/src/hooks/`, `client/src/components/ui/`, and `client/src/utils/` respectively. Feature pages import these primitives — they do not implement their own speech logic.
+**Rationale:** Consistent voice UX across all NLP features. One place to fix browser quirks (e.g. `stoppedRef` guard against Chrome's async `onend` after `cancel()`). Both components return `null` when the Web Speech API is unsupported — safe to add unconditionally.
+**Constraints it must not violate:** No feature page may use `SpeechRecognition` or `speechSynthesis` directly. All text passed to `ReadAloudButton` is auto-stripped by `stripForSpeech` inside `useReadAloud` — callers must not pre-strip. `MicButton` renders null on unsupported browsers; callers must not conditionally render it themselves.
+
+---
+
+### WordPress as a Stdio MCP Server
+**Date:** 2026-03-30
+**Status:** Settled
+**Context:** WordPress data (posts, users) needs to be accessible to platform agents without coupling agent code to the WordPress REST API. The platform already has MCPRegistry and stdio transport support.
+**Decision:** WordPress is implemented as a standalone Node.js stdio MCP server at `server/mcp-servers/wordpress.js`. It exposes 4 tools (`wp_get_user`, `wp_list_users`, `wp_list_posts`, `wp_get_post`). Registered in Admin > MCP Servers as transport `stdio` with `config: { "command": "node", "args": ["mcp-servers/wordpress.js"] }`. Credentials are env vars (`WP_URL`, `WP_USER`, `WP_APP_VAR`). A WordPress API check was added to the diagnostics suite.
+**Rationale:** Demonstrates the core MCP principle — tools live outside the model and outside agent code. Any future agent can call WordPress tools via `MCPRegistry.send()` without knowing the REST API. The stdio transport runs the server as an isolated child process.
+**Constraints it must not violate:** The `args` path is relative to the server CWD (`/app/server` on Railway) — use `mcp-servers/wordpress.js`, not `server/mcp-servers/wordpress.js`. The server must only write JSON-RPC to stdout — `console.log` corrupts the stream. If the process exits before writing to stdout, the connection promise now rejects immediately (fixed in `mcpRegistry.js`) rather than hanging.
+
+---
+
+### Admin Logs Page: Two-Tab Layout (Usage + Server)
+**Date:** 2026-03-30
+**Status:** Settled
+**Context:** `AdminLogsPage` only showed AI usage logs. Server-side events (errors, warnings, connection failures) were invisible in the UI. ToolsForge had a server log viewer backed by `app_logs` + Winston.
+**Decision:** `AdminLogsPage` now has two tabs. "Usage Logs" retains the existing token/cost table. "Server Logs" is a new tab querying `app_logs` via `GET /admin/server-logs`, with level filter, search, auto-refresh (15s), pagination, and expandable meta JSON. The `app_logs` table and `server/utils/logger.js` (Winston + DBTransport) were ported from ToolsForge.
+**Rationale:** Server logs are essential for diagnosing MCP connection failures and agent errors without accessing Railway's raw log stream.
+**Constraints it must not violate:** All application logging uses `logger` from `utils/logger.js` — never `console.log` for events that should appear in the viewer. `DBTransport` uses `setImmediate` and silently catches errors so a DB failure never blocks the logging pipeline.
+
+---
+
+### Profitability Suite — Siloed Architecture
+**Date:** 2026-04-23
+**Status:** Settled
+**Context:** The project is moving from basic reporting to high-level Business Intelligence. New tools like the "Profitability Oracle" and "Ads Setup Architect" require a distinct space to separate strategic analysis from daily monitoring.
+**Decision:** Established a `profitabilitySuite` directory silo in both `server/agents/` and `client/src/pages/`. The suite uses a "Suite Dashboard" experience with filtered tool registries and specialized UI components.
+**Rationale:** Keeps the codebase organized as it grows. Allows for a "premium" separate dashboard feel while reusing the core platform primitives (auth, storage, MCP registry).
+**Constraints it must not violate:** Must reuse existing `AgentOrchestrator` and `createAgentRoute` patterns. Should not duplicate configuration that can be shared via `AgentConfigService`.
+
+---
+
+### Live Verification Mandate (CRITICAL)
+**Date:** 2026-04-23
+**Status:** Settled
+**Context:** Agents often rely on historical report summaries from the knowledge base, which can lead to "hallucinating" that the account is in a state that has since changed.
+**Decision:** Introduced a "Live Verification Mandate" in the system prompts for the Ads Setup Architect and Conversation agents. They MUST use live tools (`ads_get_ad_group_ads`, `ads_get_ad_asset_performance`) to verify the current account state before making claims or proposing changes.
+**Rationale:** Ensures data integrity and user trust. Distinguishes between "what happened in the past" (reports) and "what is live now" (API).
+**Constraints it must not violate:** Every agent run that proposes copy changes must include a "Current State Assessment" based on live tool calls.
+
+---
+
+### Model Selection Guidance in UI
+**Date:** 2026-04-23
+**Status:** Settled
+**Context:** Users need to know which model to choose for complex strategic tasks. The `Admin > Models` page sets the global default, but per-tool overrides are allowed.
+**Decision:** The Ads Setup Architect UI includes a model selector that defaults to the Org Default but offers a "Settings" tab with a "Pros & Cons" breakdown for each model tier (Sonnet, Opus, GPT-4o, Gemini).
+**Rationale:** Empowers the user to make cost/quality trade-offs based on the specific task's strategic importance.
+**Constraints it must not violate:** Must respect the `Admin > Models` default as the initial state. Guidance must be grounded in the model's observed performance with the platform's tool-use patterns.
+
+---
+
+### /api/dashboard — Direct-Service Route Pattern for Pure Data Dashboards
+**Date:** 2026-04-29
+**Status:** Settled
+**Context:** The management campaign dashboard requires data from multiple `GoogleAdsService` methods in one page load, but does not need AI analysis. Running a full agent (SSE stream, `AgentOrchestrator`, `persistRun`, tool-call loop) purely to fetch and return data is wasteful — it adds latency, token cost, and `agent_runs` history rows for a non-analytical operation.
+**Decision:** A dedicated `server/routes/dashboard.js` module mounted at `/api/dashboard` calls `GoogleAdsService` methods directly via `Promise.all` and returns the full payload as JSON in a single HTTP response. No MCP round-trip, no agent lifecycle, no AI cost. Auth-gated via `requireAuth` only — no `org_admin` restriction, consistent with other tool pages.
+**Rationale:** The pre-fetch pattern in `server/CLAUDE.md` documents the same principle for agents: if you can enumerate all required data before running Claude, don't use a ReAct loop. The same logic applies when no Claude call is needed at all — skip the agent entirely and call the service directly. A plain route is the correct primitive for read-only aggregated data with no AI step.
+**Constraints it must not violate:** `/api/dashboard` routes must never call `persistRun`, `AgentOrchestrator`, or `createAgentRoute`. They are data-fetching routes, not agent routes. `googleAdsService` (the singleton) is importable from `server/services/GoogleAdsService.js` — do not instantiate a new `GoogleAdsService()` in the route. If a dashboard route ever needs AI analysis, the correct path is a pre-fetch agent, not adding a Claude call to a dashboard route.
+**References:** `server/routes/dashboard.js`; `client/src/pages/tools/CampaignDashboardPage.jsx`; `server/CLAUDE.md` (pre-fetch pattern).
+
+---
+
+### Cross-Source Reconciliation — Ads vs GA4 vs WordPress
+**Date:** 2026-04-29
+**Status:** Settled — first two checks built; thresholds pending calibration
+**Context:** The `needs_review` / `validateToolData` system catches structural failures within a single tool result. It has no mechanism to detect cross-source contradictions: Ads claiming more clicks than GA4 records across all traffic channels, or Ads reporting conversions while WordPress records zero enquiries. These are the most actionable class of errors — they are unambiguous, externally verifiable, and not detectable by any prompt engineering or bounds check within a single source.
+**Decision:** Two reconciliation checks in `server/agents/googleAdsMonitor/index.js`:
+1. **Pre-run — `reconcilePreRun(dailyPerformance, sessionsOverview)`** — pure synchronous. Ads paid clicks are always a strict subset of total GA4 sessions (paid sessions are included in the GA4 total). If `totalAdsClicks > totalGaSessions × 1.2` (20% tolerance for ad-blockers/cookieless browsers), flags `cross_source_pre_run`. Skips when Ads clicks < 10 (noise guard for near-zero-spend periods). Runs between pre-fetch and Claude call — available before the AI sees any data.
+2. **Post-run — `reconcilePostRun(orgId, startDate, endDate, totalAdsConversions)`** — async. Fetches `wp_get_enquiries` for the same date range via `getWordPressServer`. Flags `cross_source_post_run` when Ads reports ≥ 3 conversions AND (WP records 0 enquiries, OR the Ads:WP ratio exceeds 5:1). WordPress errors or missing server are caught silently — no false positives on installs where WordPress is not configured.
+**Only flags the suspicious direction:**
+- Ads clicks >> GA4 sessions = tracking breakage (impossible under working tracking). GA4 >> Ads = normal (organic/direct traffic exists).
+- Ads conversions >> WP enquiries = Ads overcounting or conversion event misconfiguration. WP >> Ads = normal (organic/direct enquiries exist outside paid).
+**Merge pattern (generic, not agent-specific):** Agent attaches failures to `result.boundsFailed`. `createAgentRoute` merges with `validateToolData` output: `[...validateToolData(toolData), ...(result?.boundsFailed ?? [])]`. Any agent can contribute reconciliation entries this way — the merge in `createAgentRoute` is now generic and applies to all agents.
+**Threshold calibration status:** 1.2× (clicks/sessions) and 5:1 (conversions/enquiries) are initial estimates. Revisit after 4–6 weeks of production runs — adjust if false-positive rate is unacceptable or if real failures are missed.
+**References:** `server/agents/googleAdsMonitor/index.js`; `server/platform/createAgentRoute.js`; see also "Deterministic Guardrails — needs_review Observability Deferred to Admin Logs Tab" below.
+
+---
+
+### Deterministic Guardrails — needs_review Observability Deferred to Admin Logs Tab
+**Date:** 2026-04-29
+**Status:** Settled — intentionally deferred
+**Context:** The `needs_review` status and `boundsFailed` payload were added to `createAgentRoute` as the foundation for deterministic data integrity checks. Three observability options were evaluated: (1) ad-hoc SQL queries via the SQL Console, (2) a `needs_review` tab or counter on the existing Admin Logs page, (3) a dedicated bounds analytics view with failure frequency charts over time.
+**Decision:** Option 1 (ad-hoc SQL) is the active approach until flagged run volume makes manual querying impractical. Option 2 (Admin Logs extension) is the planned next step, triggered when the SQL query is being run three or more times per week. Option 3 (dedicated analytics view) is deferred indefinitely — it is only justified if the Admin Logs list becomes unmanageable, which requires significantly higher run volume than this platform currently produces.
+**Rationale:** No flagged runs exist at the time of writing. Building UI for a phenomenon not yet observed in production is premature. The trigger for Option 2 is friction-based, not time-based: when manual querying becomes annoying, that is the correct signal to build the tab. Option 3 requires enough time-series data to make trend charts meaningful — at current run volume (manual + cron, single org), that threshold is unlikely to be reached. A frequency chart with 50 data points is noise.
+**Constraints it must not violate:** Do not build Option 3 in response to a single incident or a short spike in flagged runs. The deferral condition is sustained list volume, not occasional spikes. The SQL query that triggers the review is: `SELECT id, result->'boundsFailed', run_at FROM agent_runs WHERE status = 'needs_review' ORDER BY run_at DESC`.
+**References:** `server/platform/toolSchemas.js`; `server/platform/validateToolData.js`; `server/platform/createAgentRoute.js`; `client/src/components/ui/BoundsWarningPanel.jsx`.
+
+---
+
+### Demo Client Org — Curam Engineering (document-analyzer)
+**Date:** 2026-05-05
+**Status:** Settled — build planned, not yet executed
+**Context:** First external client demo org. Curam Engineering is an engineering firm. The demo showcases the `document-analyzer` agent: upload an engineering document (contract, spec, scope of work, RFI), receive structured field extraction with confidence scores and flagged clauses.
+**Decision (org creation):** Curam Engineering org created via Admin SQL Console — `INSERT INTO organizations (name, org_type) VALUES ('Curam Engineering', 'demo')` — not via a db.js seed or committed code. Client data does not belong in version control. `org_agent_manifest` row inserted the same way: `(org_id, 'document-analyzer', enabled=true, is_configured=true)`.
+**Decision (agent file):** Single file `server/agents/demoSuite/documentAnalyzer.js` — no tools.js/prompt.js split. Extraction agents with a fixed prompt and no ReAct loop do not need the three-file split; that pattern is for agents with external tool calls. Reuses `docExtractor`'s Ghostscript PDF rasterisation helpers and `getProvider` routing. Applies `getExtractionPrivacySettings` post-AI, pre-return.
+**Decision (file upload):** Client converts file to base64 and sends as JSON body `{ fileData, mimeType, fileName }` via the standard `createAgentRoute` POST /run endpoint. Body limit 10mb covers demo docs (1-5 page engineering PDFs). No multer required — avoids modifying `createAgentRoute` or adding middleware.
+**Decision (slug):** `demo-document-analyzer` — namespaced now to avoid future collision with any internal document extraction tool. `requiredPermission: 'org_member'` — demo org users hold this base role.
+**Decision (extraction prompt scope):** Generic engineering document coverage for first demo: parties and obligations, key dates and milestones, payment terms, liability clauses, scope boundaries, compliance references. Flags: risk transfer clauses, unlimited liability language, missing specification references. Prompt is tunable after first real demo run.
+**Decision (demo user):** Created via Admin > Users after server is running — not seeded in code.
+**Constraints it must not violate:** `org_id` always from `req.user.orgId`. Extraction privacy settings applied post-AI before returning result — excluded fields must never reach `agent_runs`. No modification to `createAgentRoute` or any platform primitive.
+**References:** `server/agents/demoSuite/documentAnalyzer.js` (to be built); `server/routes/agents.js` (route registration); `client/src/pages/demo/DocumentAnalyzer.jsx` (to be built); `client/src/App.jsx` (route `/demo/run/document-analyzer`).
+
+---
+
+### Default & Fallback Model Management — Settings > Models Tab
+**Date:** 2026-05-11
+**Status:** Settled
+**Context:** The platform needed a way for org admins to set a default model used by all agents (unless overridden per-agent) and a fallback model used when the primary model fails. Previously, model selection was hardcoded per-agent or relied on the first enabled model in `ai_models`. As a multi-tenant platform, tenant organisations also needed a fallback if they had not yet configured their own default model to avoid relying on hardcoded agent fallbacks.
+**Decision (storage):** Org-level default and fallback model IDs stored in `system_settings` under keys `default_model` and `fallback_model` respectively. Each stores `{ model_id: string | null }`. This reuses the existing `system_settings` pattern (org_id + key + value) — no new table needed.
+**Decision (API shape):** Two independent endpoints — `GET/PUT /api/settings/default-model` and `GET/PUT /api/settings/fallback-model` — rather than a single combined endpoint. Simpler to reason about, easier to test, and avoids merge conflicts when both are saved simultaneously.
+**Decision (UI):** Two `<select>` dropdowns in the Models tab, each listing only enabled models. Inactive-model warning (red border + warning text) shown when the selected model is disabled. "Save defaults" button saves both simultaneously via `Promise.all`. This is a separate save action from the model list save — admins can edit models without affecting defaults.
+**Decision (model resolution order):** `createAgentRoute` resolves model as: `req.body.model` → `adminConfig.model` → `getOrgDefaultModel(orgId)`. If `getOrgDefaultModel(orgId)` or `getOrgFallbackModel(orgId)` does not find a configuration for the current organisation, it automatically inherits the configuration from the global admin organisation (`org_id = 1`).
+**Rationale:** Keeping defaults at org level (not global) allows different orgs to use different models, while inheriting the global admin's configuration for new tenants removes friction. The two-store pattern (default + fallback) mirrors the existing agent-level admin config pattern.
+**References:** `server/routes/settings.js` (default-model and fallback-model endpoints); `server/platform/AgentConfigService.js` (getOrgDefaultModel, updateOrgDefaultModel, getOrgFallbackModel, updateOrgFallbackModel); `client/src/components/settings/ModelsTab.jsx` (Default & Fallback Models section).
+
+---
+
+### Document Analyzer — File Upload via Base64 JSON Body
+**Date:** 2026-05-08
+**Status:** Settled
+**Context:** The document analyzer needed file upload capability. The initial implementation used `multer` middleware, but this conflicted with `createAgentRoute`'s body parser and required modifying the route signature.
+**Decision:** Client uses `FileReader.readAsDataURL`, strips the `data:...;base64,` prefix, and sends `{ fileData, mimeType, fileName }` as a standard JSON body. No multer. 9 MB client-side limit. Works within `createAgentRoute`'s existing `express.json({ limit: '10mb' })` body parser.
+**Rationale:** Avoids modifying `createAgentRoute` or adding middleware. The base64 overhead (~33%) is acceptable for engineering documents (1-5 pages, typically < 5 MB raw). Simpler than multipart uploads and works with the existing SSE streaming pattern.
+**References:** `client/src/pages/demo/DocumentAnalyzer.jsx` — `acceptFile` validation, `handleRun` base64 conversion.
+
+---
+
+### Document Analyzer — Save to AWS S3
+**Date:** 2026-05-08
+**Status:** Settled
+**Context:** After analysis, users needed a way to permanently store the uploaded document. The ephemeral processing model (file never stored) meant the document was lost after the session.
+**Decision:** New `POST /api/demo/runs/:runId/save-to-s3` endpoint reads `file_data` and `file_name` from the run's result JSONB, uploads to S3 via `StorageService.put` under `{orgName}/{fileName}`, returns a 7-day pre-signed download URL. Idempotent — repeat calls return the same result. The S3 key prefix is the org name (not org ID) for human readability.
+**Rationale:** Reuses the existing `StorageService` (already used by Media Generator). No new AWS dependencies. The 7-day expiry balances security with usability — users can download the file without needing AWS console access. Org name as prefix makes S3 browsing human-readable.
+**References:** `server/routes/demo.js` — save-to-s3 endpoint; `client/src/pages/demo/DocumentAnalyzer.jsx` — handleSaveToS3.
+
+---
+
+### S3 Presigned URL Expiration — 7-Day AWS SigV4 Limit
+**Date:** 2026-05-08
+**Status:** Settled
 **Context:** The document analyzer's "Save to AWS S3" feature was generating presigned URLs with a 1-year expiration (`365 * 24 * 3600` seconds). AWS Signature Version 4 presigned URLs have a hard maximum expiration of 7 days (604,800 seconds). The 1-year value caused `StorageService.getSignedUrl` to throw `Signature version 4 presigned URLs must have an expiration date less than one week in the future` on every document analysis run. The error was caught as non-fatal (S3 save is already wrapped in try/catch), so document analysis itself was never blocked — but the error log was noisy and the signed URL was never generated.
-
-**Options considered:**
-1. Change to 7 days (AWS maximum)
-2. Change to 1 hour (more secure, matches Media Generator pattern)
-3. Remove presigned URL generation entirely (return S3 key only)
-
-**Decision:** Option 1 — 7 days.
-
-**Rationale:** 7 days is the AWS-imposed maximum. A shorter expiry (e.g. 1 hour) would break the use case: the demo user needs to download the file later without re-running the analysis. The 7-day window matches the existing convention used by the demo route's save-to-s3 endpoint. The Media Generator's 1-hour expiry is a different use case (immediate download after generation).
+**Decision:** Change `expiresIn` from `365 * 24 * 3600` (1 year) to `7 * 24 * 3600` (7 days) in `server/agents/demoSuite/documentAnalyzer.js`. This is the maximum allowed by AWS SigV4.
+**Rationale:** 7 days is the AWS-imposed maximum. A shorter expiry (e.g. 1 hour) would be more secure but would break the use case: the demo user needs to download the file later without re-running the analysis. The 7-day window matches the existing convention used by the Media Generator's S3 download URL endpoint (1 hour) and the demo route's save-to-s3 endpoint (7 days) — the latter is the correct reference for this use case.
+**References:** `server/agents/demoSuite/documentAnalyzer.js` — `getSignedUrl` call in the S3 save section; AWS documentation: "Presigned URLs are limited to a maximum of 7 days (604,800 seconds) when using Signature Version 4."
 
 ---
 
-## 2026-05-08 — Decision Log Page Run History Viewer
-
-**Context:** Demo users need to see their past document analyzer runs in a readable format, not raw JSON.
-
-**Options considered:**
-1. Build a dedicated Decision Log page with expandable cards and timeline
-2. Reuse the generic agent history endpoint
-3. Show runs inline on the Document Analyzer page
-
-**Decision:** Option 1 — dedicated Decision Log page.
-
-**Rationale:** The generic history endpoint returns raw JSON. A dedicated page can render the decision trace as a visual timeline, highlight key decisions (model selection, file storage, certificate readiness), and provide a better demo experience. The page is linked from the DemoShell sidebar under "History".
+### Decision Log Page — Run History Viewer
+**Date:** 2026-05-08
+**Status:** Settled
+**Context:** Users needed a way to review past document analyzer runs without re-running the analysis. The existing runs list endpoint returned minimal data.
+**Decision:** New `/demo/decision-log` page with expandable cards showing full run history. Each card shows: file name, document type, status badge, pending review count, token usage, cost, and a timeline view of all trace steps. Decision badges (amber-highlighted) for model selection, file storage, and certificate readiness. The `GET /api/demo/runs` endpoint was extended to return `tokens_used` and `cost_aud` from the result JSONB.
+**Rationale:** A dedicated history page is cleaner than adding history to the document analyzer page itself. The expandable card pattern keeps the page scannable. Decision badges provide at-a-glance status of key actions (was the file saved? was a certificate generated?).
+**References:** `client/src/pages/demo/DecisionLogPage.jsx`; `client/src/App.jsx` route `/demo/decision-log`; `client/src/components/layout/DemoSidebar.jsx` nav item; `server/routes/demo.js` runs list query.
 
 ---
 
-## 2026-05-06 — Multi-Org User Management
-
-**Context:** Need to support multiple organisations (internal + demo clients) with separate user bases. Admins need to create orgs and invite users to specific orgs.
-
-**Options considered:**
-1. Add `org_type` column to `organizations` + `org_agent_manifest` table
-2. Separate database per org
-3. Schema-level isolation (PostgreSQL schemas)
-
-**Decision:** Option 1 — `org_type` + `org_agent_manifest`.
-
-**Rationale:** Row-level isolation is sufficient for this scale. No connection pooling overhead of separate databases. No schema migration complexity of PostgreSQL schemas. The `org_type` flag enables layout branching (DemoShell vs AppShell) without separate deployments.
+### Shared Sanitization Utility + Vision Model Enforcement
+**Date:** 2026-05-10
+**Status:** Settled
+**Context:** The document analyzer had inline prompt-injection detection patterns duplicated in the agent file. The last attempt to extract them into a shared utility (`server/utils/sanitize.js`) was reverted together with the `supportsVision` checks because DeepSeek (default model) doesn't support images, causing hallucinated responses. The revert was correct — the file upload itself wasn't broken, but the analysis was returning garbage because DeepSeek silently dropped image blocks.
+**Decision (sanitize.js):** A shared `server/utils/sanitize.js` utility exists as a platform standard. It exports `scanInjection(text)` → `{ clean: boolean }`, `sanitiseFileName(name)`, and `sanitiseText(text)`. Any agent can import and use it. The patterns are deliberately narrow to avoid false positives on legitimate engineering/business text. The scan targets user-supplied filenames and custom prompt text — NOT document content (which is the analysis target, not an injection vector).
+**Decision (vision model enforcement):** Provider adapters export `supportsVision: true | false` (Anthropic, Gemini = true; DeepSeek, OpenAI-compatible = false). The document analyzer's `callModel()` checks `provider.supportsVision === false` before sending images. If the configured model doesn't support vision, a clear error is thrown: "Model 'X' does not support vision/image analysis. Please configure a vision-capable model (e.g. Claude, Gemini) in Admin > Agents."
+**Decision (no hardcoded model fallback):** The old `const model = orgDefaultModel ?? 'deepseek-chat'` hardcode is removed. If no model is configured in Admin > Agents or Admin > Settings > Models, a clear error is thrown telling the user what to do. No code-level default masks the issue.
+**Rationale:** The previous `'deepseek-chat'` hardcode silently caused hallucinated analysis when the model was DeepSeek (no vision support). Clear errors are better than silent failures. The shared sanitize utility makes injection-scanning reusable across agents without code duplication.
+**References:** `server/utils/sanitize.js`; `server/agents/demoSuite/documentAnalyzer.js` (import from sanitize, vision check in callModel, no hardcoded default); `server/platform/providers/anthropic.js`, `gemini.js`, `openai-compatible.js` (supportsVision exports).
 
 ---
 
-## 2026-05-05 — Demo Client Org — Curam Engineering
+## Open Questions
 
-**Context:** Curam Engineering is the first external demo client. Need to decide how to provision the org and what the document-analyzer agent looks like.
-
-**Options considered:**
-1. Provision via committed SQL migration
-2. Provision via Admin SQL Console at runtime
-3. Provision via API endpoint
-
-**Decision:** Option 2 — Admin SQL Console.
-
-**Rationale:** Client data (org name, manifest assignments) stays out of version control. The Admin SQL Console already exists and can run the provisioning SQL. This avoids committing client-specific data to the codebase.
-
-**Agent design decisions:**
-- Single file (`server/agents/demoSuite/documentAnalyzer.js`) — no tools.js/prompt.js split
-- Fixed prompt, no ReAct loop
-- Reuses `docExtractor` Ghostscript helpers + `getProvider`
-- Applies extraction privacy settings post-AI
-- File upload via base64 JSON body (no multer)
-- Slug: `demo-document-analyzer`, Permission: `org_member`
-
----
-
-## 2026-05-05 — Demo Layer Foundation
-
-**Context:** Need a multi-tenant demo layer where external clients can log in and see only their assigned agents, without accessing internal tools.
-
-**Options considered:**
-1. Separate deployment per client
-2. Same deployment with org branching
-3. Feature flags per user
-
-**Decision:** Option 2 — same deployment, org branching via `org_type`.
-
-**Rationale:** Single deployment is cheaper and simpler to maintain. The `org_type` flag on `organizations` enables layout branching at the `OrgShell` level. Demo users see `DemoShell` with only their manifest agents. Internal users see `AppShell` with all tools. The manifest API (`org_agent_manifest` table) controls per-org agent assignment without code changes.
-
----
-
-## 2026-05-03 — WP Theme Extractor: Pre-fetch Pattern
-
-**Context:** The WP Theme Extractor needs to fetch an external URL and send the HTML to Claude. This is a different pattern from the ReAct loop used by other agents.
-
-**Options considered:**
-1. Use the ReAct loop with a `fetch_url` tool
-2. Pre-fetch in the agent code, then call Claude once
-3. Client-side fetch, send HTML in the request body
-
-**Decision:** Option 2 — pre-fetch in agent code.
-
-**Rationale:** The ReAct loop adds latency and cost for a single fetch operation. Client-side fetch would expose CORS issues. Pre-fetching in the agent code keeps the client interface simple (just a URL) and avoids unnecessary Claude round-trips.
-
----
-
-## 2026-04-29 — Cross-Source Reconciliation
-
-**Context:** Need to detect data discrepancies between Google Ads, GA4, and WordPress CRM data.
-
-**Options considered:**
-1. Build a separate reconciliation agent
-2. Add reconciliation checks to the existing googleAdsMonitor
-3. Build a generic reconciliation framework
-
-**Decision:** Option 2 — add checks to googleAdsMonitor.
-
-**Rationale:** Reconciliation is most valuable in the context of the ads monitor report. A separate agent would need to re-fetch the same data. A generic framework is premature — only two checks exist so far. The checks are lightweight (pure functions + one WP query) and run before/after the Claude call.
-
----
-
-## 2026-04-29 — Deterministic Guardrails
-
-**Context:** Need to detect when tool data is structurally invalid (e.g. CTR > 1.0, clicks > impressions) and flag runs for review.
-
-**Options considered:**
-1. Validate in the MCP server before returning data
-2. Validate in the agent after tool execution
-3. Validate in `createAgentRoute` after the agent completes
-
-**Decision:** Option 3 — validate in `createAgentRoute`.
-
-**Rationale:** MCP servers shouldn't need to know about validation rules. Agent code shouldn't be cluttered with validation logic. `createAgentRoute` is the single chokepoint where all agent results pass through — validate once, apply to all agents.
-
----
-
-## 2026-04-28 — Conversation Agent: Tool Result Caching
-
-**Context:** The conversation agent calls tools frequently. Many tool results are identical across consecutive turns (e.g. listing campaigns twice in a row).
-
-**Options considered:**
-1. Cache in the MCP server (server-side)
-2. Cache in the AgentOrchestrator (platform-level)
-3. Cache in the conversation agent (agent-level)
-
-**Decision:** Option 2 — cache in AgentOrchestrator.
-
-**Rationale:** Platform-level caching benefits all agents, not just the conversation agent. The cache is session-scoped (5-min TTL, keyed by `orgId:userId`) — safe because tool results are deterministic within a session. Error results are never cached. Individual tools can opt out with `cacheable: false`.
-
----
-
-## 2026-04-28 — Conversation Agent: Prompt Cache Keep-Warm
-
-**Context:** Anthropic's prompt cache has a 5-minute TTL. If a user pauses mid-conversation, the next message pays the cache write premium.
-
-**Options considered:**
-1. Do nothing — accept the occasional cache write cost
-2. Ping the API every 4.5 minutes to keep the cache warm
-3. Reduce the system prompt size to fit in the minimum cache unit
-
-**Decision:** Option 2 — keep-warm ping every 4.5 minutes.
-
-**Rationale:** The keep-warm ping costs ~$0.002 AUD (cache read) vs ~$0.025 AUD for a cache write. Over an 8-hour session: ~$0.23 AUD in keep-warm pings vs potentially multiple cache writes if the user pauses. The keep-warm is implemented as a `setInterval` in the conversation view component, calling a dedicated `/keep-warm` endpoint.
-
----
-
-## 2026-04-28 — Conversation Agent: Tool Selection
-
-**Context:** The conversation agent needs access to data tools but should not expose all 30+ tools to Claude.
-
-**Options considered:**
-1. Expose all tools
-2. Select a curated subset
-3. Let the admin configure which tools are available
-
-**Decision:** Option 2 — curated subset of 25 tools.
-
-**Rationale:** 30+ tools would consume too many tokens in the system prompt and confuse Claude. The curated subset covers the most useful queries: google-ads (11), google-analytics (5), wordpress (5), platform (4), knowledge-base (2). Admin configurability is future work.
-
----
-
-## 2026-04-28 — Conversation Agent: Architecture
-
-**Context:** Need an interactive Q&A agent that can answer questions about ads, analytics, and CRM data using natural language.
-
-**Options considered:**
-1. Build as a standard agent with `createAgentRoute`
-2. Build as a separate Express router with custom session management
-3. Use the existing conversation route pattern
-
-**Decision:** Option 2 — separate Express router with custom session management.
-
-**Rationale:** The conversation agent needs multi-turn state (message history, tool result cache) that doesn't fit the `createAgentRoute` pattern (single run → result). A separate router at `/api/conversation` manages sessions, message history, and the keep-warm endpoint. The `AgentOrchestrator` is still used for the ReAct loop.
-
----
-
-## 2026-04-27 — High Intent Advisor: Suggestion Persistence
-
-**Context:** The High Intent Advisor identifies leads worth following up. These suggestions need to be stored, tracked, and acted upon.
-
-**Options considered:**
-1. Store in `agent_runs` only
-2. Store in a separate `suggestions` table
-3. Store in the CRM system via API
-
-**Decision:** Option 2 — separate `suggestions` table.
-
-**Rationale:** `agent_runs` is for run history — querying it for pending suggestions would be slow and awkward. A separate table with status tracking (pending, contacted, converted, dismissed) enables the suggestion history UI and outcome tracking. CRM API integration is fragile and CRM-specific.
-
----
-
-## 2026-04-27 — High Intent Advisor: Lead Scoring Criteria
-
-**Context:** Need to define what makes a lead "high intent" for the advisor agent.
-
-**Options considered:**
-1. Hardcode criteria in the agent code
-2. Make criteria configurable via admin settings
-3. Let Claude decide based on the data
-
-**Decision:** Option 1 — hardcode criteria in the agent code.
-
-**Rationale:** The criteria are well-understood (recent enquiry, specific services, multiple touchpoints, high-value package interest). Hardcoding keeps the agent deterministic and auditable. Configurability can be added later if needed.
-
----
-
-## 2026-04-26 — Agent Scheduler: Multi-Customer Support
-
-**Context:** The google-ads-monitor needs to run for multiple customers within an org. Each customer has separate Google Ads accounts.
-
-**Options considered:**
-1. Register separate cron jobs per customer
-2. Have the agent return an array of results
-3. Run the agent once with all customer data
-
-**Decision:** Option 2 — agent returns array of results.
-
-**Rationale:** One cron job per customer would clutter the scheduler and make it hard to see the overall schedule. Running once with all data would mix customer contexts. Returning an array lets the scheduler persist one `agent_runs` row per customer with proper isolation.
-
----
-
-## 2026-04-25 — Agent Config: Operator vs Admin Settings
-
-**Context:** Need two levels of configuration: operator (per-customer, per-agent) and admin (org-wide defaults).
-
-**Options considered:**
-1. Single config table with a type column
-2. Two separate tables: `agent_configs` and `system_settings`
-3. JSONB blob on the `organizations` table
-
-**Decision:** Option 2 — two separate tables.
-
-**Rationale:** `agent_configs` is for per-agent, per-customer settings that operators change frequently. `system_settings` is for org-wide defaults that admins set once. Separate tables make the access patterns clear and avoid a complex type-discriminated query.
-
----
-
-## 2026-04-24 — MCP Registry: Transport Abstraction
-
-**Context:** MCP servers can use SSE or stdio transport. The registry needs to handle both transparently.
-
-**Options considered:**
-1. Separate connection classes for each transport
-2. Single class with transport-type branching
-3. Factory pattern returning transport-specific adapters
-
-**Decision:** Option 1 — separate connection classes.
-
-**Rationale:** SSE and stdio have fundamentally different lifecycle management (HTTP vs child process). Separate classes (`SseConnection`, `StdioConnection`) with a common interface (`connect()`, `send()`, `disconnect()`) keeps each transport's complexity isolated. The registry delegates to the appropriate class based on `transportType`.
-
----
-
-## 2026-04-24 — MCP Registry: Soft Deregistration
-
-**Context:** When an MCP server is deregistered, should the row be deleted or marked inactive?
-
-**Options considered:**
-1. Hard delete
-2. Soft delete (`is_active = FALSE`)
-3. Archive to a separate table
-
-**Decision:** Option 2 — soft delete.
-
-**Rationale:** Hard delete loses the connection history. A separate archive table adds complexity for no benefit at this scale. `is_active = FALSE` preserves the server configuration for re-registration and provides an audit trail. The `UNIQUE(org_id, name)` constraint on active rows means re-registering updates rather than creating duplicates.
-
----
-
-## 2026-04-24 — MCP Registry: Singleton Pattern
-
-**Context:** The MCP registry manages connections to external servers. Should it be a singleton or instantiated per-request?
-
-**Options considered:**
-1. Singleton (module-level instance)
-2. Per-request instantiation
-3. Dependency injection
-
-**Decision:** Option 1 — singleton.
-
-**Rationale:** MCP connections are long-lived (SSE streams, child processes). Per-request instantiation would create duplicate connections. Dependency injection adds complexity without benefit in a single-process Express app. The singleton is initialized at startup and disconnected on SIGTERM/SIGINT.
-
----
-
-## 2026-04-24 — Permission Service: Deny-Wins Resolution
-
-**Context:** Resource permissions need a clear resolution strategy when allow and deny rules conflict.
-
-**Options considered:**
-1. Allow-wins (any allow overrides all denies)
-2. Deny-wins (any deny overrides all allows)
-3. Most-specific-wins (more specific rules override general ones)
-
-**Decision:** Option 2 — deny-wins.
-
-**Rationale:** Deny-wins is the security industry standard (AWS IAM, Azure RBAC). It ensures that an explicit deny cannot be overridden by a broader allow. This is important for sensitive resources where a mistake in an allow rule shouldn't grant unintended access.
-
----
-
-## 2026-04-24 — Permission Service: Resource URI as TEXT
-
-**Context:** The `resource_permissions` table references `mcp_resources.resource_uri`. Should this be a foreign key?
-
-**Options considered:**
-1. Foreign key to `mcp_resources`
-2. TEXT column (denormalized)
-3. ENUM of known resource URIs
-
-**Decision:** Option 2 — TEXT column.
-
-**Rationale:** Permissions are security data — cascade deletes from the resources table could silently remove permissions. Storing the URI as TEXT prevents accidental data loss when a resource is deregistered. The URI is stable and human-readable, so referential integrity isn't critical.
-
----
-
-## 2026-04-24 — Permission Service: User ID XOR Role Name
-
-**Context:** Resource permissions can be granted to a specific user or to all members of a role, but not both in the same row.
-
-**Options considered:**
-1. Two separate tables (`user_permissions`, `role_permissions`)
-2. Single table with CHECK constraint enforcing XOR
-3. Single table with nullable columns
-
-**Decision:** Option 2 — single table with CHECK constraint + partial unique indexes.
-
-**Rationale:** A single table is simpler to query ("what permissions exist for this resource?"). The CHECK constraint enforces data integrity at the database level. Partial unique indexes prevent duplicate entries for the same user/resource or role/resource combination.
-
----
-
-## 2026-04-24 — MCP Server: Tool Slug Convention
-
-**Context:** MCP server tools need a consistent naming convention for the conversation agent to reference them.
-
-**Options considered:**
-1. `{server}_{action}` (e.g. `ads_get_campaign_performance`)
-2. `{action}_{server}` (e.g. `get_campaign_performance_ads`)
-3. Namespaced objects (e.g. `ads.getCampaignPerformance`)
-
-**Decision:** Option 1 — `{server}_{action}` with snake_case.
-
-**Rationale:** Snake_case is standard for API tool names. Prefixing with the server name prevents collisions between servers (e.g. `ads_get_campaign_performance` vs `ga4_get_sessions_overview`). The prefix also makes it clear which data source a tool belongs to.
-
----
-
-## 2026-04-24 — MCP Server: Stdio Transport
-
-**Context:** MCP servers need to communicate with the parent process. Stdio transport spawns a child process and communicates via stdin/stdout.
-
-**Options considered:**
-1. Stdio (child process)
-2. HTTP (separate server)
-3. Unix socket
-
-**Decision:** Option 1 — stdio.
-
-**Rationale:** Stdio is the simplest transport for local MCP servers. No port management, no HTTP server overhead, no CORS. The child process inherits environment variables from the parent, so credentials are available without additional configuration. Railway supports stdio natively.
-
----
-
-## 2026-04-24 — MCP Server: SSE Transport
-
-**Context:** Remote MCP servers need to communicate over HTTP. SSE (Server-Sent Events) is the standard MCP transport for remote connections.
-
-**Options considered:**
-1. SSE (standard MCP transport)
-2. WebSocket
-3. Long polling
-
-**Decision:** Option 1 — SSE.
-
-**Rationale:** SSE is the standard transport for MCP. It's simpler than WebSocket (unidirectional, no handshake complexity) and more efficient than long polling. The MCP SSE spec defines a clear protocol: GET → `endpoint` event → POST URL for JSON-RPC.
-
----
-
-## 2026-04-24 — MCP Server: Database Schema
-
-**Context:** Need a database table to store MCP server configurations (name, transport type, endpoint URL, credentials).
-
-**Options considered:**
-1. Single `mcp_servers` table with JSONB config
-2. Separate tables per transport type
-3. Environment variables only
-
-**Decision:** Option 1 — single `mcp_servers` table with JSONB config.
-
-**Rationale:** A single table is simpler to query and manage. JSONB config allows different transport types to store different configuration fields without schema changes. Environment variables alone would require a server restart to add/remove servers.
-
----
-
-## 2026-04-24 — MCP Server: Architecture Decision
-
-**Context:** The project needs a dynamic MCP server registry to replace hardcoded tool slugs. This enables adding/removing data sources without code changes.
-
-**Options considered:**
-1. Dynamic MCP server registry with database persistence
-2. Hardcoded tool slugs in agent code
-3. Configuration file-based tool definitions
-
-**Decision:** Option 1 — dynamic MCP server registry.
-
-**Rationale:** Hardcoded tool slugs require code changes to add/remove data sources. Configuration files are better but still require a restart. A database-backed registry with a singleton connection manager enables runtime registration, connection lifecycle management, and org-scoped isolation.
-
----
-
-## 2026-04-24 — Budget Guardrails: Two-Layer Enforcement
-
-**Context:** Need to prevent runaway AI costs. Should enforcement be per-run, daily, or both?
-
-**Options considered:**
-1. Per-run only
-2. Daily org-wide only
-3. Both per-run and daily org-wide
-
-**Decision:** Option 3 — both layers.
-
-**Rationale:** Per-run limits prevent a single expensive query from costing too much. Daily org-wide limits prevent cumulative costs from multiple runs. The two layers provide defense in depth: a per-run limit catches individual outliers, while the daily limit catches aggregate overuse.
-
----
-
-## 2026-04-24 — Budget Guardrails: Mid-Run Enforcement
-
-**Context:** Should budget enforcement happen before, during, or after a run?
-
-**Options considered:**
-1. Pre-flight check only
-2. Post-run check only
-3. Pre-flight + mid-run + post-run
-
-**Decision:** Option 3 — all three stages.
-
-**Rationale:** Pre-flight catches obvious over-budget requests before any tokens are spent. Mid-run enforcement (via `emit(text, partialTokensUsed)`) catches runs that go over budget during execution. Post-run is the definitive check after all tokens are counted. The mid-run check is opt-in — agents that don't call `emit` with token counts skip it.
-
----
-
-## 2026-04-24 — Budget Guardrails: Cost Calculation
-
-**Context:** Need to calculate the AUD cost of an API call from token usage.
-
-**Options considered:**
-1. Use Anthropic's API response headers
-2. Calculate from token counts using known pricing
-3. Use a third-party cost calculator
-
-**Decision:** Option 2 — calculate from token counts.
-
-**Rationale:** Anthropic's API returns token counts in the response. Using known pricing constants ($3/M input, $15/M output, $0.30/M cache read, $3.75/M cache write) is simpler and more reliable than parsing response headers. The `AUD_PER_USD` conversion factor (1.55) is a constant that can be updated if the exchange rate changes significantly.
-
----
-
-## 2026-04-24 — Budget Guardrails: Architecture Decision
-
-**Context:** The project needs budget guardrails to prevent runaway AI costs. This is a platform-level concern that applies to all agents.
-
-**Options considered:**
-1. Implement in each agent individually
-2. Implement in `createAgentRoute` (platform level)
-3. Implement as a middleware
-
-**Decision:** Option 2 — implement in `createAgentRoute`.
-
-**Rationale:** Platform-level enforcement ensures all agents benefit from budget guardrails without individual implementation. `createAgentRoute` is the single chokepoint where all agent runs pass through. The `CostGuardService` is a pure function with no IO, making it testable and composable.
-
----
-
-## 2026-04-24 — Permission Service: Architecture Decision
-
-**Context:** Need granular access control for MCP resources. Users should only access resources they have permission for.
-
-**Options considered:**
-1. Role-based access control (RBAC) only
-2. Resource-level permissions only
-3. Both RBAC and resource-level permissions
-
-**Decision:** Option 3 — both RBAC and resource-level permissions.
-
-**Rationale:** RBAC handles broad access patterns (org_admin can access everything, org_member can access tools). Resource-level permissions handle fine-grained access to specific MCP resources. The two systems are complementary: RBAC for agent access, resource permissions for data access.
-
----
-
-## 2026-04-24 — MCP Registry: Architecture Decision
-
-**Context:** The project needs a dynamic MCP server registry to replace hardcoded tool slugs. This is the first of three foundational pillars.
-
-**Options considered:**
-1. Build a custom registry
-2. Use an existing MCP client library
-3. Use a message queue
-
-**Decision:** Option 1 — custom registry.
-
-**Rationale:** Existing MCP client libraries are immature and may not support all required features (org-scoped connections, SSE + stdio, soft deregistration). A custom registry gives full control over the connection lifecycle and can be tailored to the project's specific needs.
-
----
-
-## 2026-04-24 — Platform Architecture: Three Pillars
-
-**Context:** The platform needs three foundational capabilities: dynamic MCP server discovery, resource-level permissions, and budget-aware circuit breakers.
-
-**Options considered:**
-1. Build all three simultaneously
-2. Build in sequence: MCP registry → permissions → budget
-3. Build only what's needed for the first agent
-
-**Decision:** Option 2 — sequential build.
-
-**Rationale:** The three pillars are independent but build on each other. MCP registry is the foundation — without it, there are no servers to manage. Permissions control access to those servers. Budget guardrails protect against cost overruns. Building in sequence allows each pillar to be tested and stabilised before moving to the next.
-
----
-
-## 2026-04-24 — Project Scaffold: Technology Choices
-
-**Context:** Need to choose the technology stack for the MCP CuramTools platform.
-
-**Options considered:**
-1. Express + React + PostgreSQL (current stack)
-2. Next.js + Vercel Postgres
-3. FastAPI + React + PostgreSQL
-
-**Decision:** Option 1 — Express + React + PostgreSQL.
-
-**Rationale:** The team has existing experience with this stack from the Vault and ToolsForge projects. Express provides the flexibility needed for MCP server management (SSE streaming, child process management). React with Vite provides a fast development experience. PostgreSQL with pgvector enables semantic search for the knowledge base.
-
----
-
-## 2026-04-24 — Project Scaffold: Monorepo Structure
-
-**Context:** Need to decide how to structure the project with both a server and client.
-
-**Options considered:**
-1. Monorepo with `/server` and `/client` directories
-2. Separate repositories
-3. Single directory with mixed code
-
-**Decision:** Option 1 — monorepo with `/server` and `/client`.
-
-**Rationale:** A monorepo simplifies development (single `git clone`, shared tooling) while keeping server and client code clearly separated. The Dockerfile at the root handles the two-stage build. Railway deploys from the root directory.
+_(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_

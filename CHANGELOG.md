@@ -25,6 +25,22 @@
 
 ---
 
+## 2026-05-11 — Document Analyzer PDF parsing resilience + global model fallback
+
+### Built
+- **PDF text extraction fallback**: Updated `server/agents/demoSuite/documentAnalyzer.js` to automatically extract text from PDFs using `pdf-parse` if the configured model does not support vision (e.g. DeepSeek).
+- **Global default model fallback**: Updated `server/platform/AgentConfigService.js` (`getOrgDefaultModel`, `getOrgFallbackModel`) to inherit the default model from the primary admin organisation (`org_id = 1`) if the current tenant organisation has not configured one, rather than returning `null`.
+- **OpenAI-compatible text-only enforcement**: Updated `server/platform/providers/openai-compatible.js` to automatically concatenate an array of text-only message contents into a single string for models that do not support vision inputs. This prevents unhandled API hangs or `unknown variant image_url` errors when interacting with strictly text-based providers like DeepSeek.
+
+### Fixed
+- Fixed an issue where the Document Analyzer would hang and keep transactions permanently stuck in the 'started' state when a text-only model (like DeepSeek) was fed a large document as an array of objects.
+- Fixed a bug where `pdf-parse` was instantiated incorrectly, causing it to fail or hang on text extraction.
+
+### Open / next
+- Due to the hard output generation limits of all major models (typically 8,192 tokens), passing large documents (e.g. 190,000+ characters) to text-only models and asking the LLM to output the verbatim text back into the JSON response will result in an `Unterminated string in JSON` error. Consider removing `extracted_text` from the LLM's expected JSON output and injecting the `pdf-parse` extracted text into the final response payload server-side instead, which will significantly reduce tokens and prevent output truncation.
+
+---
+
 ## 2026-05-10 — Re-introduce shared sanitize utility + vision model enforcement for document analyzer
 
 ### Built

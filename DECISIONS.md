@@ -756,14 +756,14 @@ All inline styles include `fontFamily: 'inherit'` to respect the user's platform
 ---
 
 ### Default & Fallback Model Management — Settings > Models Tab
-**Date:** 2026-05-08
+**Date:** 2026-05-11
 **Status:** Settled
-**Context:** The platform needed a way for org admins to set a default model used by all agents (unless overridden per-agent) and a fallback model used when the primary model fails. Previously, model selection was hardcoded per-agent or relied on the first enabled model in `ai_models`.
+**Context:** The platform needed a way for org admins to set a default model used by all agents (unless overridden per-agent) and a fallback model used when the primary model fails. Previously, model selection was hardcoded per-agent or relied on the first enabled model in `ai_models`. As a multi-tenant platform, tenant organisations also needed a fallback if they had not yet configured their own default model to avoid relying on hardcoded agent fallbacks.
 **Decision (storage):** Org-level default and fallback model IDs stored in `system_settings` under keys `default_model` and `fallback_model` respectively. Each stores `{ model_id: string | null }`. This reuses the existing `system_settings` pattern (org_id + key + value) — no new table needed.
 **Decision (API shape):** Two independent endpoints — `GET/PUT /api/settings/default-model` and `GET/PUT /api/settings/fallback-model` — rather than a single combined endpoint. Simpler to reason about, easier to test, and avoids merge conflicts when both are saved simultaneously.
 **Decision (UI):** Two `<select>` dropdowns in the Models tab, each listing only enabled models. Inactive-model warning (red border + warning text) shown when the selected model is disabled. "Save defaults" button saves both simultaneously via `Promise.all`. This is a separate save action from the model list save — admins can edit models without affecting defaults.
-**Decision (model resolution order):** `createAgentRoute` resolves model as: `req.body.model` → `adminConfig.model` → `getOrgDefaultModel(orgId)` → hardcoded fallback `'deepseek-chat'`. The fallback model is resolved separately in `AgentOrchestrator` when the primary model fails.
-**Rationale:** Keeping defaults at org level (not global) allows different orgs to use different models. The two-store pattern (default + fallback) mirrors the existing agent-level admin config pattern. The UI separation (model editing vs default selection) prevents accidental overwrites.
+**Decision (model resolution order):** `createAgentRoute` resolves model as: `req.body.model` → `adminConfig.model` → `getOrgDefaultModel(orgId)`. If `getOrgDefaultModel(orgId)` or `getOrgFallbackModel(orgId)` does not find a configuration for the current organisation, it automatically inherits the configuration from the global admin organisation (`org_id = 1`).
+**Rationale:** Keeping defaults at org level (not global) allows different orgs to use different models, while inheriting the global admin's configuration for new tenants removes friction. The two-store pattern (default + fallback) mirrors the existing agent-level admin config pattern.
 **References:** `server/routes/settings.js` (default-model and fallback-model endpoints); `server/platform/AgentConfigService.js` (getOrgDefaultModel, updateOrgDefaultModel, getOrgFallbackModel, updateOrgFallbackModel); `client/src/components/settings/ModelsTab.jsx` (Default & Fallback Models section).
 
 ---
