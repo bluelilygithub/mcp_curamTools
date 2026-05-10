@@ -315,7 +315,7 @@ async function runDocumentAnalyzer(context) {
   );
   const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
   const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(orgId).catch(() => null);
-  const model    = orgDefaultModel ?? 'deepseek-chat';
+  const model    = orgDefaultModel ?? 'claude-sonnet-4-6';
   const maxTokens = adminConfig.max_tokens ?? 8192;
   const fallback  = adminConfig.fallback_model ?? null;
 
