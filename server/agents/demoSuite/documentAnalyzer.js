@@ -315,10 +315,7 @@ async function runDocumentAnalyzer(context) {
   );
   const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
   const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(orgId).catch(() => null);
-  if (!orgDefaultModel) {
-    throw new Error('No model configured for Document Analyzer. Set a vision-capable model (e.g. Claude, Gemini) in Admin > Agents or Admin > Settings > Models.');
-  }
-  const model    = orgDefaultModel;
+  const model    = orgDefaultModel ?? 'deepseek-chat';
   const maxTokens = adminConfig.max_tokens ?? 8192;
   const fallback  = adminConfig.fallback_model ?? null;
 
