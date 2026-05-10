@@ -235,7 +235,7 @@ async function pdfToImages(pdfBuf, maxPages = DEFAULT_MAX_PAGES, dpi = DEFAULT_P
   }
 }
 
-// ── Main runFn ──────────────────────────────────────────────────────────────
+  // ── Main runFn ──────────────────────────────────────────────────────────────
 async function runDocumentAnalyzer(context) {
   const { orgId, adminConfig, emit } = context;
   const { fileData, mimeType, fileName = 'document', customPrompt } = context.req?.body ?? {};
@@ -257,6 +257,10 @@ async function runDocumentAnalyzer(context) {
     documentRef: fileName,
     metadata: { fileHash, mimeType, fileSize: fileBuf.length },
   });
+
+  // Wrap the main body in try/catch so logger.fail() is always called on error.
+  // This prevents transactions from getting stuck in "started" state permanently.
+  try {
 
   // ── Stage 0: Input sanitisation ────────────────────────────────────────
   emit('Sanitising input…');
@@ -592,6 +596,11 @@ async function runDocumentAnalyzer(context) {
     },
     tokensUsed,
   };
+  } catch (err) {
+    // Ensure the transaction is marked as failed so it doesn't get stuck in "started" state
+    await logger.fail({ error: err.message, metadata: { error_stack: err.stack } }).catch(() => {});
+    throw err;
+  }
 }
 
 module.exports = { runDocumentAnalyzer, TOOL_SLUG };
