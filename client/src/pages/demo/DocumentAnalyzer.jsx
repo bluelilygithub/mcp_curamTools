@@ -234,24 +234,17 @@ function FindingCard({ finding, getIcon, compact = false }) {
 }
 
 function ReviewItem({ finding, runId, onUpdated, getIcon, revisedAssessment }) {
-  const [comment, setComment]         = useState('');
-  const [showComment, setShowComment] = useState(false);
-  const [submitting, setSubmitting]   = useState(false);
-  const [error, setError]             = useState('');
+  const [comment, setComment]       = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError]           = useState('');
 
-  const isDet        = finding.stage === 'deterministic';
-  const conf         = finding.confidence ?? 1.0;
-  const isLow        = !isDet && conf < LOW_CONFIDENCE;
-  const isCross      = finding.also_flagged_deterministic || finding.also_flagged_probabilistic;
-  const needsComment = isLow || isCross;
-  const isResubmit   = finding.status === 'resubmit';
+  const isDet      = finding.stage === 'deterministic';
+  const conf       = finding.confidence ?? 1.0;
+  const isLow      = !isDet && conf < LOW_CONFIDENCE;
+  const isCross    = finding.also_flagged_deterministic || finding.also_flagged_probabilistic;
+  const isResubmit = finding.status === 'resubmit';
 
   const submit = async (status) => {
-    if (needsComment && status === 'approved' && !comment.trim()) {
-      setShowComment(true);
-      setError('Comment required before approving this finding.');
-      return;
-    }
     setSubmitting(true);
     setError('');
     try {
@@ -331,11 +324,11 @@ function ReviewItem({ finding, runId, onUpdated, getIcon, revisedAssessment }) {
         </div>
       )}
 
-      {/* Comment box (not shown for resubmit — they already commented) */}
-      {!isResubmit && (showComment || needsComment) && (
+      {/* Comment box — always visible except when resubmit (already commented) */}
+      {!isResubmit && (
         <textarea
           rows={2}
-          placeholder={needsComment ? 'Comment required before approving…' : 'Optional comment…'}
+          placeholder={isCross ? 'Comment required before approving this finding…' : 'Comment required to reject or resubmit — optional to approve…'}
           value={comment}
           onChange={(e) => { setComment(e.target.value); setError(''); }}
           className="w-full text-xs rounded-lg p-2 resize-none"
@@ -349,37 +342,28 @@ function ReviewItem({ finding, runId, onUpdated, getIcon, revisedAssessment }) {
       <div className="flex items-center gap-2 flex-wrap">
         <button
           onClick={() => submit('approved')}
-          disabled={submitting}
+          disabled={submitting || (isCross && !comment.trim())}
           className="text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-          style={{ background: '#dcfce7', color: '#166534', cursor: submitting ? 'not-allowed' : 'pointer' }}
+          style={{ background: '#dcfce7', color: '#166534', cursor: (submitting || (isCross && !comment.trim())) ? 'not-allowed' : 'pointer', opacity: (isCross && !comment.trim()) ? 0.5 : 1 }}
         >
           Approve
         </button>
         <button
           onClick={() => submit('rejected')}
-          disabled={submitting}
+          disabled={submitting || !comment.trim()}
           className="text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-          style={{ background: '#fee2e2', color: '#991b1b', cursor: submitting ? 'not-allowed' : 'pointer' }}
+          style={{ background: '#fee2e2', color: '#991b1b', cursor: (submitting || !comment.trim()) ? 'not-allowed' : 'pointer', opacity: !comment.trim() ? 0.5 : 1 }}
         >
           Reject
         </button>
         {!isResubmit && (
           <button
             onClick={() => submit('resubmit')}
-            disabled={submitting}
+            disabled={submitting || !comment.trim()}
             className="text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-            style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: submitting ? 'not-allowed' : 'pointer' }}
+            style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: (submitting || !comment.trim()) ? 'not-allowed' : 'pointer', opacity: !comment.trim() ? 0.5 : 1 }}
           >
             Resubmit
-          </button>
-        )}
-        {!isResubmit && !showComment && !needsComment && (
-          <button
-            onClick={() => setShowComment(true)}
-            className="text-xs"
-            style={{ color: 'var(--color-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
-          >
-            + Add comment
           </button>
         )}
       </div>

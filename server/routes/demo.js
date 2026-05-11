@@ -23,8 +23,9 @@ const router = express.Router();
 router.use(requireAuth);
 
 // ── GET /api/demo/manifest ────────────────────────────────────────────────────
-// Returns this org's enabled manifest rows joined with catalog metadata.
-// Ordered by sort_order ASC. is_configured signals whether the agent is ready to run.
+// Returns agents for this org. Catalog entries are shown by default; org_agent_manifest
+// rows override labels/descriptions and can explicitly disable an agent (enabled=false).
+// Ordered by sort_order ASC then slug ASC.
 router.get('/manifest', async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -35,21 +36,28 @@ router.get('/manifest', async (req, res) => {
       [req.user.orgId]
     );
 
-    const manifest = rows
-      .filter((r) => r.enabled)
-      .map((r) => {
-        const catalog = DEMO_CATALOG[r.slug] ?? {};
+    // Build a map of DB overrides keyed by slug
+    const dbMap = {};
+    for (const r of rows) dbMap[r.slug] = r;
+
+    // Union catalog (default enabled) with DB overrides
+    const manifest = Object.entries(DEMO_CATALOG)
+      .map(([slug, catalog], idx) => {
+        const r = dbMap[slug];
+        if (r && !r.enabled) return null; // explicitly disabled by admin
         return {
-          slug:          r.slug,
-          name:          r.label       ?? catalog.name        ?? r.slug,
-          description:   r.description ?? catalog.description ?? '',
+          slug,
+          name:          r?.label       ?? catalog.name        ?? slug,
+          description:   r?.description ?? catalog.description ?? '',
           icon:          catalog.icon     ?? 'box',
           category:      catalog.category ?? 'general',
           pattern:       catalog.pattern  ?? 'unknown',
-          sort_order:    r.sort_order,
-          is_configured: r.is_configured,
+          sort_order:    r?.sort_order   ?? idx,
+          is_configured: r?.is_configured ?? false,
         };
-      });
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.sort_order - b.sort_order || a.slug.localeCompare(b.slug));
 
     res.json(manifest);
   } catch (err) {

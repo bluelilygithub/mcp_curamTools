@@ -630,6 +630,13 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
   const [error, setError]             = useState('');
   const [certLoading, setCertLoading] = useState(false);
   const [certError, setCertError]     = useState('');
+  const [viewLoading, setViewLoading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+  const [emailOpen, setEmailOpen]     = useState(false);
+  const [emailTo, setEmailTo]         = useState('');
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailError, setEmailError]   = useState('');
+  const [emailSent, setEmailSent]     = useState(false);
   const [expandedWorking, setExpandedWorking] = useState(new Set());
   const [followUpOpen, setFollowUpOpen]       = useState(false);
   const [followUpQuestion, setFollowUpQuestion] = useState('');
@@ -765,6 +772,69 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
       setCertError(err.message);
     } finally {
       setCertLoading(false);
+    }
+  };
+
+  // ── Preview certificate ────────────────────────────────────────────────────
+
+  const handleViewCertificate = () => {
+    setViewLoading(true);
+    try {
+      const orgName = user?.orgName ?? 'Curam Engineering';
+      const html    = buildCertificateHtml(runResult, orgName);
+      const blob    = new Blob([html], { type: 'text/html' });
+      const url     = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
+  // ── Email certificate ─────────────────────────────────────────────────────
+
+  const handleEmailCertificate = async () => {
+    if (!runId || !emailTo.trim()) return;
+    setEmailSending(true);
+    setEmailError('');
+    setEmailSent(false);
+    try {
+      const orgName = user?.orgName ?? 'Curam Engineering';
+      const html    = buildCertificateHtml(runResult, orgName);
+      const safe    = (runResult?.file_name ?? 'document')
+        .replace(/\.[^.]+$/, '').replace(/[^a-z0-9_-]/gi, '_').slice(0, 40);
+      await api.post(`/demo/runs/${runId}/email-certificate`, {
+        to:       emailTo.trim(),
+        html,
+        title:    `Hydraulic Compliance Certificate — ${runResult?.file_name ?? 'Document'}`,
+        filename: `cert-hydraulic-${safe}.pdf`,
+      });
+      setEmailSent(true);
+      setEmailOpen(false);
+    } catch (err) {
+      setEmailError(err.message);
+    } finally {
+      setEmailSending(false);
+    }
+  };
+
+  // ── Download original file ────────────────────────────────────────────────
+
+  const handleDownload = async () => {
+    if (!runId) return;
+    setDownloadError('');
+    try {
+      const { blob, filename } = await api.downloadBlob(`/demo/runs/${runId}/download`);
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      a.href     = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setDownloadError(err.message);
     }
   };
 
@@ -978,8 +1048,68 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
               >
                 {certLoading ? 'Generating…' : 'Export Certificate'}
               </button>
+              {allApproved && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={handleViewCertificate}
+                    disabled={viewLoading}
+                    title="Preview certificate"
+                    className="rounded-lg p-2 transition-colors"
+                    style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', cursor: viewLoading ? 'not-allowed' : 'pointer', lineHeight: 0 }}
+                  >
+                    {getIcon('eye', { size: 16 })}
+                  </button>
+                  <button
+                    onClick={() => { setEmailOpen((o) => !o); setEmailSent(false); setEmailError(''); if (!emailTo && user?.email) setEmailTo(user.email); }}
+                    title={emailSent ? 'Certificate sent' : 'Email certificate'}
+                    className="rounded-lg p-2 transition-colors"
+                    style={{ background: 'var(--color-bg)', color: emailSent ? '#16a34a' : 'var(--color-text)', border: `1px solid ${emailSent ? '#16a34a' : 'var(--color-border)'}`, cursor: 'pointer', lineHeight: 0 }}
+                  >
+                    {getIcon('mail', { size: 16 })}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Email certificate — inline form */}
+          {emailOpen && allApproved && (
+            <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+                Email Certificate
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="email"
+                  placeholder="recipient@example.com"
+                  value={emailTo}
+                  onChange={(e) => { setEmailTo(e.target.value); setEmailError(''); }}
+                  className="flex-1 text-sm rounded-lg px-3 py-2"
+                  style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', fontFamily: 'inherit', outline: 'none' }}
+                />
+                <button
+                  onClick={handleEmailCertificate}
+                  disabled={emailSending || !emailTo.trim() || !runId}
+                  className="text-sm font-medium px-4 py-2 rounded-lg transition-colors shrink-0"
+                  style={
+                    emailSending || !emailTo.trim() || !runId
+                      ? { background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: 'not-allowed' }
+                      : { background: 'var(--color-primary)', color: '#fff', cursor: 'pointer' }
+                  }
+                >
+                  {emailSending ? 'Sending…' : 'Send'}
+                </button>
+                <button
+                  onClick={() => setEmailOpen(false)}
+                  className="text-xs"
+                  style={{ color: 'var(--color-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+              </div>
+              {emailError && <p className="text-xs" style={{ color: '#dc2626' }}>{emailError}</p>}
+            </div>
+          )}
 
           {certError && (
             <p className="text-xs" style={{ color: '#dc2626' }}>{certError}</p>
@@ -1126,6 +1256,26 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
                   <p className="text-xs" style={{ color: '#dc2626' }}>{followUpError}</p>
                 )}
               </div>
+            )}
+          </div>
+
+          {/* Original file download */}
+          <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+            <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>Original File</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
+              {runResult?.file_name ?? 'Document'}
+            </p>
+            {runId && (
+              <button
+                onClick={handleDownload}
+                className="text-xs mt-1 inline-block underline bg-transparent border-none p-0 cursor-pointer"
+                style={{ color: 'var(--color-primary)' }}
+              >
+                Download original file →
+              </button>
+            )}
+            {downloadError && (
+              <p className="text-xs mt-1" style={{ color: '#dc2626' }}>{downloadError}</p>
             )}
           </div>
 

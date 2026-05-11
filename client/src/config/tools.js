@@ -117,6 +117,15 @@ const TOOLS = [
     roles:       ['org_member', 'org_admin'],
     group:       'Utilities',
   },
+  {
+    id:          'demo-document-analyzer',
+    name:        'Document Analyzer',
+    description: 'Upload any document — AI-powered extraction of structured findings, deterministic rule checks, and probabilistic analysis with human-in-the-loop review.',
+    icon:        'file-search',
+    path:        '/demo/run/demo-document-analyzer',
+    roles:       ['org_member', 'org_admin'],
+    group:       'Utilities',
+  },
 ];
 
 /**

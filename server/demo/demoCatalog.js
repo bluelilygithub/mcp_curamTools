@@ -12,7 +12,7 @@
  */
 
 const DEMO_CATALOG = {
-  'document-analyzer': {
+  'demo-document-analyzer': {
     name: 'Document Analyzer',
     description: 'Upload a PDF or image — extract structured fields, confidence scores, and flagged clauses using Claude Vision.',
     category: 'operations',
