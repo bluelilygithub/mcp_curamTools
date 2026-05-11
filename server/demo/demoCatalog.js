@@ -33,6 +33,13 @@ const DEMO_CATALOG = {
     icon: 'message-circle',
     pattern: 'react',
   },
+  'demo-spec-validator': {
+    name: 'Spec Validator',
+    description: 'Validates hydraulic services calculation documents. Extracts quantitative claims, runs deterministic Python verification of pipe velocities, pressure drops and pressure budgets, and produces a reviewer-ready finding set with full calculation working.',
+    category: 'Engineering',
+    icon: 'file-check',
+    pattern: 'three-stage-pipeline',
+  },
 };
 
 module.exports = { DEMO_CATALOG };

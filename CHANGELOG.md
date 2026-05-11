@@ -25,6 +25,24 @@
 
 ---
 
+## 2026-05-11 — Spec Validator agent — Phase 1 (server-side pipeline complete)
+
+### Built
+- **`Dockerfile`**: Added Python 3 + venv layer (`/opt/pyenv`) with `fluids` and `numpy`. Separate `RUN` layers to avoid OOM (mirrors existing ghostscript/chromium pattern). `PYTHON_EXEC` env var for local override.
+- **`server/agents/specValidator/calculator.py`**: Deterministic hydraulic calculation engine (~340 lines). Reads JSON from stdin, writes JSON to stdout. Implements: continuity-equation velocity check (`Q = V·A`), Hazen-Williams pressure drop, Darcy-Weisbach pressure drop (friction factor via `fluids.friction_factor`), Reynolds number + flow regime classification, static pressure budget residual check. Returns full step-by-step working for every check. Status: `PASS` / `FAIL` / `WARNING` per AS/NZS 3500.1 limits (velocity max 3.0 m/s, min 0.5 m/s). Output includes `library_versions` for certificate traceability.
+- **`server/agents/specValidator/test_calculator.py`**: Standalone test script — no server dependencies, calls `calculator.py` via subprocess. Hardcoded 452 George Street test cases: CW-04 velocity FAIL (4.09 m/s stated as 2.51), CW-06 velocity WARNING (1.25 m/s stated as 0.87), CW-03 Hazen-Williams FAIL (19.8 kPa stated as 12.4 — C=120 too high for copper, fittings allowance omitted). Assertions with tolerance, prints full working for CW-04 and CW-03.
+- **`server/agents/specValidator/index.js`**: Three-stage pipeline agent (~430 lines). Stage 1: Claude vision PDF extraction (pipe segments + pressure system as structured JSON, no calculations). Stage 2: `execFileAsync(PYTHON_EXEC, [CALC_SCRIPT])` — 30s timeout, 10 MB buffer. Stage 3: Claude synthesis (plain-language findings + probabilistic flags, no new calculations). Dual-status pattern: `check_status` (Python, immutable) vs `status` (HITL review state). PASS findings auto-approved at creation. Cross-stage overlap detection. Extraction privacy post-AI. S3 auto-save. Exports `{ runSpecValidator, TOOL_SLUG_INTERNAL, TOOL_SLUG_DEMO }`.
+
+### Fixed / discovered
+- CW-03 pressure drop reverse-engineering: document used C=120 (incorrect for copper per AS/NZS 3500.1 Table 3.3, should be C=100) and omitted fittings equivalent length (22.0m fittings → total 30.2m equiv). These two errors together produce stated 12.4 kPa vs correct 19.8 kPa (59.7% under-calculation).
+- Python venv required on Alpine to avoid PEP 668 "externally managed environment" errors with system pip.
+
+### Open / next
+- Phase 1 remaining: `prompt.js`, `agents.js` registrations, `demoCatalog.js`, `AgentConfigService.js`, `demo.js` (follow-up slug routing + rejected-finding block).
+- Phase 2: Full frontend — `SpecValidator.jsx`, `SpecValidatorPage.jsx`, `IconProvider`, `App.jsx`, `tools.js`, `Sidebar.jsx`, `DemoSidebar.jsx`.
+
+---
+
 ## 2026-05-11 — Document Analyzer certificate actions: preview, download, email (icon-only buttons)
 
 ### Built

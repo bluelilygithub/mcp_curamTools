@@ -249,6 +249,11 @@ router.patch('/runs/:runId/review/:findingId', async (req, res) => {
     const allFindings = (data.all_findings ?? []).map((f) => {
       if (f.finding_id !== findingId) return f;
 
+      // Rejected findings are permanently blocked — no transition out of rejected
+      if (f.status === 'rejected') {
+        return { ...f, _validation_error: 'Rejected findings cannot be re-approved. Submit a corrected document for a new run.' };
+      }
+
       // Enforce comment requirement for low-confidence or cross-stage conflict findings
       const isLowConfidence = typeof f.confidence === 'number' && f.confidence < 0.7;
       const isCrossStage    = f.also_flagged_deterministic || f.also_flagged_probabilistic;
@@ -598,11 +603,23 @@ Return ONLY a JSON object — no markdown fences, no explanation:
 // Allows the user to ask a follow-up question about a previously analysed document.
 // The LLM receives the original extracted text, findings, summary, and the new question
 // so it can answer contextually — even if the question is unrelated to the previous analysis.
+// Slug → prompt module + config slug mapping for follow-up Q&A
+const FOLLOW_UP_PROMPT_MAP = {
+  'spec-validator':      { promptModule: '../agents/specValidator/prompt',      configSlug: 'spec-validator'      },
+  'demo-spec-validator': { promptModule: '../agents/specValidator/prompt',      configSlug: 'demo-spec-validator' },
+  'demo-document-analyzer': { promptModule: '../agents/demoDocumentAnalyzer/prompt', configSlug: 'demo-document-analyzer' },
+};
+
 router.post('/runs/:runId/follow-up', async (req, res) => {
-  const { question } = req.body ?? {};
+  const { question, agentSlug } = req.body ?? {};
   if (!question?.trim()) {
     return res.status(400).json({ error: 'Question is required.' });
   }
+
+  // Resolve prompt module and config slug — default to document analyzer for backwards compat
+  const slugKey    = FOLLOW_UP_PROMPT_MAP[agentSlug] ? agentSlug : 'demo-document-analyzer';
+  const { promptModule, configSlug } = FOLLOW_UP_PROMPT_MAP[slugKey];
+  const isSpecValidator = slugKey === 'spec-validator' || slugKey === 'demo-spec-validator';
 
   try {
     // Load the run — scoped to org_id
@@ -615,18 +632,44 @@ router.post('/runs/:runId/follow-up', async (req, res) => {
     const result = rows[0].result ?? {};
     const data   = result.data    ?? {};
 
-    // Build context from the original analysis
-    const extractedText = data.extracted_text ?? '';
-    const summary       = result.summary ?? '';
-    const findings      = data.all_findings ?? [];
-    const documentType  = data.document_type ?? 'unknown';
-    const fileName      = data.file_name ?? 'document';
+    let contextPrompt;
 
-    const findingsContext = findings
-      .map((f) => `- [${f.stage}] ${f.label} (confidence: ${f.confidence}): ${f.description ?? ''}`)
-      .join('\n');
+    if (isSpecValidator) {
+      // Spec validator context: findings with stated vs calculated values
+      const findings = data.all_findings ?? [];
+      const fileName = data.file_name ?? 'document';
+      const findingsContext = findings
+        .map((f) => {
+          const det  = f.check_status ? ` | stated: ${f.stated_value} ${f.unit ?? ''} | calculated: ${f.calculated_value ?? 'n/a'} ${f.unit ?? ''} | Python status: ${f.check_status}` : '';
+          return `- [${f.stage ?? f.check_status ?? 'finding'}] ${f.label} (confidence: ${f.confidence ?? 1.0})${det}: ${f.description ?? ''}`;
+        })
+        .join('\n');
 
-    const contextPrompt = `The following context is from a previously analysed document.
+      contextPrompt = `The following context is from a previously validated hydraulic specification document.
+
+Document: "${fileName}"
+
+## Findings (${findings.length} total)
+${findingsContext || 'No findings were identified.'}
+
+---
+
+Reviewer question: ${question.trim()}
+
+If this question relates to the discrepancies or remediation options from this validation run, answer it directly using the context provided. If it is unrelated to these findings, decline and explain that you can only answer questions about the discrepancies from this run. Use markdown formatting in your response.`;
+    } else {
+      // Document analyzer context
+      const extractedText = data.extracted_text ?? '';
+      const summary       = result.summary ?? '';
+      const findings      = data.all_findings ?? [];
+      const documentType  = data.document_type ?? 'unknown';
+      const fileName      = data.file_name ?? 'document';
+
+      const findingsContext = findings
+        .map((f) => `- [${f.stage}] ${f.label} (confidence: ${f.confidence}): ${f.description ?? ''}`)
+        .join('\n');
+
+      contextPrompt = `The following context is from a previously analysed document.
 
 Document: "${fileName}" (type: ${documentType})
 
@@ -644,20 +687,21 @@ ${findingsContext || 'No findings were identified.'}
 Reviewer question: ${question.trim()}
 
 If this question is about the document above, answer it directly using the context provided. If it is unrelated to this document, decline and explain that you can only answer questions about the analysed document. Use markdown formatting in your response.`;
+    }
 
     // Get provider and model config
     const AgentConfigService = require('../platform/AgentConfigService');
     const { getProvider } = require('../platform/AgentOrchestrator');
 
     const customProviders = await AgentConfigService.getCustomProviders(req.user.orgId).catch(() => []);
-    const adminConfig = await AgentConfigService.getAdminConfig('demo-document-analyzer').catch(() => ({}));
+    const adminConfig = await AgentConfigService.getAdminConfig(configSlug).catch(() => ({}));
     const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(req.user.orgId).catch(() => null);
     const model    = orgDefaultModel ?? 'deepseek-chat';
     const maxTokens = adminConfig.max_tokens ?? 4096;
     const fallback  = adminConfig.fallback_model ?? null;
 
-    const { buildSystemPrompt } = require('../agents/demoDocumentAnalyzer/prompt');
-    const agentConfig = await AgentConfigService.getAgentConfig(req.user.orgId, 'demo-document-analyzer').catch(() => ({}));
+    const { buildSystemPrompt } = require(promptModule);
+    const agentConfig = await AgentConfigService.getAgentConfig(req.user.orgId, configSlug).catch(() => ({}));
     const systemPrompt = buildSystemPrompt(agentConfig);
 
     async function callModel(modelId) {

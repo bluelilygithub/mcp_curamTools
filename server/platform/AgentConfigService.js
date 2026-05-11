@@ -70,6 +70,8 @@ const AGENT_DEFAULTS = {
   },
   // ── Demo suite agents ─────────────────────────────────────────────────────
   'demo-document-analyzer': {},  // no operator-configurable settings; all config via adminConfig
+  'spec-validator':          {},
+  'demo-spec-validator':     {},
 };
 
 const ADMIN_DEFAULTS = {
@@ -198,6 +200,20 @@ const ADMIN_DEFAULTS = {
     model:               null,   // inherits org default
     max_tokens:          8192,   // extracted_text + findings — needs headroom
     max_task_budget_aud: 1.00,   // single vision call; low ceiling appropriate for demo
+    fallback_model:      null,
+  },
+  'spec-validator': {
+    enabled:             true,
+    model:               null,   // must be vision-capable
+    max_tokens:          8192,   // extraction + synthesis JSON can be large
+    max_task_budget_aud: 2.00,
+    fallback_model:      null,
+  },
+  'demo-spec-validator': {
+    enabled:             true,
+    model:               null,   // must be vision-capable
+    max_tokens:          8192,
+    max_task_budget_aud: 2.00,
     fallback_model:      null,
   },
   _platform: {

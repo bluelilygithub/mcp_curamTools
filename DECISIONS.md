@@ -25,6 +25,42 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### Spec Validator — Three-Stage Pipeline (Extract → Calculate → Synthesise)
+**Date:** 2026-05-11
+**Status:** Settled
+**Context:** The Spec Validator must check quantitative claims in hydraulic calculation PDFs. Two naive approaches were rejected: (1) ask Claude to perform the calculations — Claude is probabilistic and will hallucinate numeric results under precision pressure; (2) use a pure JS calculation layer — no mature hydraulic friction library exists for Node. A third approach (LLM + tool use) was also rejected — tool-use overhead is unjustified for a fixed, deterministic calculation set.
+**Decision (three-stage pipeline):** Stage 1 (Claude vision) extracts all quantitative claims into structured JSON — no calculations. Stage 2 (Python subprocess via `execFileAsync`) runs deterministic calculations using `fluids` + `numpy` — no AI. Stage 3 (Claude) synthesises the Python output into plain-language findings — no new calculations. Each stage has a single responsibility; the output of each stage feeds the next.
+**Decision (Python for Stage 2):** `fluids` (PyPI) provides AS/NZS 3500.1-aligned Hazen-Williams, Darcy-Weisbach, and Reynolds number primitives. Execution is fully deterministic and auditable. The subprocess is called via `execFileAsync` (never `shell: true`) with a 30-second timeout and a 10 MB buffer cap. Python venv at `/opt/pyenv` is installed in the Dockerfile as a separate `RUN` layer (mirrors the existing ghostscript/chromium layer separation to avoid OOM). The `PYTHON_EXEC` env var allows local override (`python` or `python3` on Windows dev machines).
+**Decision (full working output):** The calculator returns step-by-step intermediate values for every check — inputs, formula used, intermediate values, result, tolerance applied, standard reference. This working is included in the compliance certificate for every FAIL finding so that the reviewer can audit the calculation without running the script.
+**Rationale:** Deterministic calculations must not be probabilistic. The three-stage separation makes it impossible for Stage 3 Claude synthesis to introduce calculation errors — it receives Python output and communicates it; it does not recalculate. Full working output satisfies AS/NZS 3500.1 documentation requirements.
+**Constraints it must not violate:** Stage 2 must never use `exec` or `spawn` with `shell: true`. Stage 3 must not introduce new numeric values — synthesis only. Calculator output must include `library_versions` (fluids + numpy + python) for certificate traceability.
+**References:** `server/agents/specValidator/calculator.py`; `server/agents/specValidator/index.js` — `runSpecValidator`; `Dockerfile` — python3 venv layer.
+
+---
+
+### Spec Validator — Rejected Findings Permanently Block Certificate
+**Date:** 2026-05-11
+**Status:** Settled
+**Context:** The compliance certificate must be meaningful — it must assert that a qualified engineer reviewed every discrepancy and found the document acceptable. If rejected findings could be overridden or cleared after the fact, the certificate would lose its evidential value. An "undo reject" path would also incentivise rubber-stamp review (approve now, fix later).
+**Decision:** Once a finding is rejected, its `status` is permanently `rejected` for that run. The PATCH endpoint enforces this server-side: attempting to transition from `rejected` to any other status returns 422. The certificate generation check (`allReviewed && allApproved`) will never pass for a run containing any rejected finding. The only remediation path is for the engineer to resubmit a corrected document, which creates a new run.
+**Rationale:** The certificate is a one-way statement of acceptance. Rejection means the reviewer found an uncorrectable error in the submitted document. The engineer must produce a corrected document and resubmit — the new run will generate a fresh finding set against the corrected document. This is the correct professional workflow and matches the spec requirement explicitly: "rejected findings block the certificate permanently; the engineer must resubmit a corrected document."
+**Constraints it must not violate:** No admin override path may exist. The `rejected → approved` transition must be blocked server-side (not just client-side). The frontend "approve" control must be hidden or disabled for rejected findings, but server-side enforcement is authoritative.
+**References:** `server/routes/demo.js` — PATCH `/runs/:runId/review/:findingId`; `server/agents/specValidator/index.js` — `buildDeterministicFindings`; `client/src/pages/demo/SpecValidator.jsx` — certificate gate logic.
+
+---
+
+### Spec Validator — Dual-Slug Pattern (spec-validator + demo-spec-validator)
+**Date:** 2026-05-11
+**Status:** Settled
+**Context:** The platform has two org types: `internal` (Blue Lily staff) and `demo` (external client demos). The same agent logic must be available under both contexts. The question was whether to duplicate the agent code, create a thin wrapper, or share one implementation under two slugs.
+**Decision (single implementation, two slugs):** `server/agents/specValidator/index.js` exports `runSpecValidator` plus both slug constants (`TOOL_SLUG_INTERNAL = 'spec-validator'`, `TOOL_SLUG_DEMO = 'demo-spec-validator'`). Both slugs are registered in `server/routes/agents.js` via `createAgentRoute`, each with its own `createAgentRoute` call but both pointing to the same `runFn`. The `createAgentRoute` wrapper loads per-slug admin config automatically — so each slug can have independent system prompt overrides, token limits, and model settings via the admin UI, while sharing all business logic.
+**Decision (slug routing for follow-up Q&A):** The follow-up endpoint in `server/routes/demo.js` accepts an optional `agentSlug` body param. If present, it resolves to the correct prompt module (`spec-validator` and `demo-spec-validator` both resolve to `server/agents/specValidator/prompt.js`). This avoids hardcoding `'demo-document-analyzer'` for all agents.
+**Rationale:** Code duplication would mean two files to maintain for every future change. A thin wrapper adds indirection without benefit. Two `createAgentRoute` registrations with a shared `runFn` is the minimal pattern — consistent with how the platform handles other shared-logic agents. Admin configurability per slug is preserved because `createAgentRoute` loads config by slug, not by `runFn` identity.
+**Constraints it must not violate:** Both slugs must be registered in `demoCatalog.js`, `agents.js`, and `AgentConfigService.js`. The `agentSlug` param in the follow-up endpoint must never override org-scoped security — it only resolves the prompt module, not the org context.
+**References:** `server/agents/specValidator/index.js`; `server/routes/agents.js`; `server/routes/demo.js` — follow-up route; `server/demo/demoCatalog.js`; `server/platform/AgentConfigService.js`.
+
+---
+
 ### Multi-Org User Management — Org Selector on Invite, Organisations Admin Page
 **Date:** 2026-05-06
 **Status:** Settled

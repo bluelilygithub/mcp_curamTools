@@ -12,6 +12,8 @@ WORKDIR /app/server
 # Install system deps in separate layers to reduce peak memory per RUN (exit 137 = OOM)
 RUN apk add --no-cache ghostscript
 RUN apk add --no-cache chromium
+RUN apk add --no-cache python3
+RUN python3 -m venv /opt/pyenv && /opt/pyenv/bin/pip install --no-cache-dir fluids numpy
 COPY server/package*.json ./
 RUN npm install --omit=dev
 COPY server/ ./

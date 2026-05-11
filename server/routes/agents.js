@@ -474,6 +474,29 @@ agentsRouter.use(
   })
 );
 
+// ── Spec Validator (internal + demo) ─────────────────────────────────────
+const { runSpecValidator } = require('../agents/specValidator/index');
+
+agentsRouter.use(
+  '/spec-validator',
+  createAgentRoute({
+    slug:               'spec-validator',
+    runFn:              runSpecValidator,
+    requiredPermission: 'org_member',
+    rateLimit:          10,
+  })
+);
+
+agentsRouter.use(
+  '/demo-spec-validator',
+  createAgentRoute({
+    slug:               'demo-spec-validator',
+    runFn:              runSpecValidator,
+    requiredPermission: 'org_member',
+    rateLimit:          20,
+  })
+);
+
 // ── Agent config routes (/api/agent-configs/:slug) ────────────────────────
 
 // GET /api/agent-configs/:slug — operator config (any authenticated user)
