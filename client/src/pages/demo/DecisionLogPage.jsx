@@ -29,7 +29,7 @@ export default function DecisionLogPage() {
 
   const fetchRuns = () => {
     setLoading(true);
-    api.get('/demo/runs?slug=demo-document-analyzer&limit=50')
+    api.get('/demo/runs?limit=50')
       .then((data) => {
         setRuns(data);
         setLoading(false);
@@ -230,6 +230,11 @@ function RunCard({ run, expanded, onToggle, getIcon }) {
             >
               {run.status}
             </span>
+            {run.slug && (
+              <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)' }}>
+                {run.slug === 'demo-spec-validator' ? 'Spec Validator' : run.slug === 'demo-document-analyzer' ? 'Doc Analyzer' : run.slug}
+              </span>
+            )}
             {s3?.url && (
               <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#166534' }}>
                 S3 ✓
@@ -313,13 +318,19 @@ function RunDetail({ run, getIcon }) {
   });
 
   // 2. Trace steps
+  const stepMeta = {
+    // DocumentAnalyzer steps
+    input_sanitisation:     { icon: 'shield',     label: 'Input Sanitisation' },
+    deterministic_rules:    { icon: 'zap',        label: 'Deterministic Rules' },
+    probabilistic_analysis: { icon: 'bot',        label: 'Probabilistic Analysis' },
+    review_action:          { icon: 'user',       label: 'Review Action' },
+    // SpecValidator steps
+    pdf_extraction:         { icon: 'file-text',  label: 'Stage 1 — Extraction' },
+    python_calculation:     { icon: 'zap',        label: 'Stage 2 — Python Calculations' },
+    synthesis:              { icon: 'bot',        label: 'Stage 3 — Synthesis' },
+  };
+
   for (const step of trace) {
-    const stepMeta = {
-      input_sanitisation:    { icon: 'shield',    label: 'Input Sanitisation' },
-      deterministic_rules:   { icon: 'zap',       label: 'Deterministic Rules' },
-      probabilistic_analysis:{ icon: 'bot',       label: 'Probabilistic Analysis' },
-      review_action:         { icon: 'user',      label: 'Review Action' },
-    };
     const meta = stepMeta[step.step] ?? { icon: 'circle', label: step.step };
 
     let detailText = '';
@@ -331,6 +342,17 @@ function RunDetail({ run, getIcon }) {
       detailText = `Model: ${step.model} · ${step.findings_count} findings`;
     } else if (step.step === 'review_action') {
       detailText = `${step.finding_label} → ${step.decision}${step.reviewed_by ? ` · ${step.reviewed_by}` : ''}${step.comment ? ` · "${step.comment}"` : ''}`;
+    } else if (step.step === 'pdf_extraction') {
+      const parts = [`${step.segments_extracted ?? 0} segments · model: ${step.model ?? '—'}`];
+      if (step.page_count) parts.push(`${step.page_count} pages`);
+      detailText = parts.join(' · ');
+    } else if (step.step === 'python_calculation') {
+      detailText = `${step.fail_count ?? 0} FAIL · ${step.warning_count ?? 0} WARNING · ${step.pass_count ?? 0} PASS`;
+    } else if (step.step === 'synthesis') {
+      const parts = [`model: ${step.synthesis_model ?? step.model ?? '—'}`];
+      if (step.deterministic_count != null) parts.push(`${step.deterministic_count} deterministic`);
+      if (step.probabilistic_count  != null) parts.push(`${step.probabilistic_count} probabilistic`);
+      detailText = parts.join(' · ');
     }
 
     logEntries.push({

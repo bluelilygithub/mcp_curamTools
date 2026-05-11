@@ -551,6 +551,10 @@ async function runSpecValidator(context) {
   const maxTokens = adminConfig.max_tokens ?? 8192;
   const fallback  = adminConfig.fallback_model ?? null;
 
+  // Stage 3 synthesis doesn't need vision — use org default model if available
+  const orgDefaultModel  = await AgentConfigService.getOrgDefaultModel(orgId).catch(() => null);
+  const synthesisModel   = orgDefaultModel || model;
+
   const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
   const provider        = getProvider(model, customProviders);
 
@@ -802,7 +806,8 @@ async function runSpecValidator(context) {
   );
 
   // ── Stage 3: Claude synthesis ──────────────────────────────────────────────
-  emit('Stage 3: Synthesising findings…');
+  emit(`Stage 3: Synthesising findings using ${synthesisModel}${synthesisModel !== model ? ` (switched from extraction model)` : ''}…`);
+  await logger.step('synthesis_model_selection', 'Synthesis Model', synthesisModel, { model: synthesisModel });
 
   const stage3Context = JSON.stringify({
     document_summary:  extractedData.document_summary ?? '',
@@ -820,8 +825,8 @@ async function runSpecValidator(context) {
 
   let synthesisResponse;
   try {
-    synthesisResponse = await getProvider(model, customProviders).chat({
-      model,
+    synthesisResponse = await getProvider(synthesisModel, customProviders).chat({
+      model:      synthesisModel,
       max_tokens: maxTokens,
       system:     SYNTHESIS_SYSTEM_PROMPT,
       messages:   [{ role: 'user', content: stage3UserMsg }],
@@ -914,9 +919,10 @@ async function runSpecValidator(context) {
   const totalTokens = sumTokens(extractionTokens, synthesisTokens);
 
   trace.push({
-    step:               'synthesis',
-    timestamp:          ts(),
+    step:                'synthesis',
+    timestamp:           ts(),
     model,
+    synthesis_model:     synthesisModel,
     deterministic_count: filteredDet.length,
     probabilistic_count: filteredProb.length,
     total_findings:      allFindings.length,
@@ -924,11 +930,11 @@ async function runSpecValidator(context) {
     tokens_output:       synthesisTokens.output ?? 0,
   });
   await logger.step('stage3_synthesis', 'Stage 3 — Synthesis',
-    `${filteredDet.length} deterministic + ${filteredProb.length} probabilistic findings`,
+    `${filteredDet.length} deterministic + ${filteredProb.length} probabilistic findings · model: ${synthesisModel}`,
     {
       total_findings:      allFindings.length,
       probabilistic_count: filteredProb.length,
-      model,
+      model:               synthesisModel,
     }
   );
 
@@ -998,6 +1004,7 @@ async function runSpecValidator(context) {
         rejected_count:          rejectedCount,
         low_confidence_count:    lowConfCount,
         model,
+        synthesis_model:         synthesisModel,
         trace,
         sanitisation,
         s3: s3Info,

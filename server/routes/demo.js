@@ -188,11 +188,13 @@ router.get('/runs/export', async (req, res) => {
 // GET /api/demo/runs?slug=demo-document-analyzer&limit=10
 router.get('/runs', async (req, res) => {
   try {
-    const slug  = req.query.slug  ?? 'demo-document-analyzer';
     const limit = Math.min(parseInt(req.query.limit ?? '10', 10), 50);
+    // Accept comma-separated slugs or omit to see all demo runs
+    const slugs = req.query.slug
+      ? req.query.slug.split(',').map((s) => s.trim()).filter(Boolean)
+      : null;
 
-    const { rows } = await pool.query(
-      `SELECT id, slug, status, error, run_at, completed_at,
+    const SELECT = `SELECT id, slug, status, error, run_at, completed_at,
               result->'summary'                          AS summary,
               result->'data'->'document_type'            AS document_type,
               result->'data'->'file_name'                AS file_name,
@@ -200,12 +202,21 @@ router.get('/runs', async (req, res) => {
               result->'data'->'s3'                       AS s3,
               result->'tokensUsed'                       AS tokens_used,
               result->'costAud'                          AS cost_aud
-         FROM agent_runs
-        WHERE org_id = $1 AND slug = $2
-        ORDER BY run_at DESC
-        LIMIT $3`,
-      [req.user.orgId, slug, limit]
-    );
+         FROM agent_runs`;
+
+    let rows;
+    if (slugs) {
+      const placeholders = slugs.map((_, i) => `$${i + 2}`).join(', ');
+      ({ rows } = await pool.query(
+        `${SELECT} WHERE org_id = $1 AND slug IN (${placeholders}) ORDER BY run_at DESC LIMIT $${slugs.length + 2}`,
+        [req.user.orgId, ...slugs, limit]
+      ));
+    } else {
+      ({ rows } = await pool.query(
+        `${SELECT} WHERE org_id = $1 ORDER BY run_at DESC LIMIT $2`,
+        [req.user.orgId, limit]
+      ));
+    }
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: 'Failed to load runs.' });
