@@ -15,9 +15,9 @@ const FROM_NAME = process.env.MAIL_FROM_NAME || 'MCP CuramTools';
 
 const https = require('https');
 
-async function sendViaMailChannels({ to, subject, html, text }) {
+async function sendViaMailChannels({ to, subject, html, text, attachments = [] }) {
   const apiKey = process.env.MAIL_CHANNEL_API_KEY;
-  const payload = JSON.stringify({
+  const body = {
     personalizations: [{ to: [{ email: to }] }],
     from: { email: FROM_EMAIL, name: FROM_NAME },
     subject,
@@ -25,7 +25,15 @@ async function sendViaMailChannels({ to, subject, html, text }) {
       { type: 'text/plain', value: text },
       { type: 'text/html',  value: html },
     ],
-  });
+  };
+  if (attachments.length) {
+    body.attachments = attachments.map((a) => ({
+      type:     a.contentType ?? 'application/octet-stream',
+      filename: a.filename,
+      content:  Buffer.isBuffer(a.content) ? a.content.toString('base64') : a.content,
+    }));
+  }
+  const payload = JSON.stringify(body);
 
   return new Promise((resolve, reject) => {
     const req = https.request(
@@ -68,7 +76,7 @@ function getSmtpTransport() {
   });
 }
 
-async function sendViaSmtp({ to, subject, html, text }) {
+async function sendViaSmtp({ to, subject, html, text, attachments = [] }) {
   const transport = getSmtpTransport();
   await transport.sendMail({
     from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
@@ -76,6 +84,11 @@ async function sendViaSmtp({ to, subject, html, text }) {
     subject,
     text,
     html,
+    attachments: attachments.map((a) => ({
+      filename:    a.filename,
+      content:     a.content,
+      contentType: a.contentType ?? 'application/octet-stream',
+    })),
   });
 }
 
@@ -84,14 +97,14 @@ async function sendViaSmtp({ to, subject, html, text }) {
 /**
  * Low-level send — accepts pre-composed content.
  */
-async function send({ to, subject, html, text }) {
+async function send({ to, subject, html, text, attachments = [] }) {
   if (!process.env.MAIL_CHANNEL_API_KEY) {
     console.error('[EmailService] MAIL_CHANNEL_API_KEY is not set — email not sent');
     return;
   }
   try {
-    await sendViaMailChannels({ to, subject, html, text });
-    console.log(`[EmailService] Sent "${subject}" → ${to}`);
+    await sendViaMailChannels({ to, subject, html, text, attachments });
+    console.log(`[EmailService] Sent "${subject}" → ${to}${attachments.length ? ` (${attachments.length} attachment(s))` : ''}`);
   } catch (err) {
     console.error(`[EmailService] Failed to send to ${to}:`, err.message);
     throw err;

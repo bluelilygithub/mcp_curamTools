@@ -514,6 +514,11 @@ export default function DocumentAnalyzer() {
   const [certLoading, setCertLoading] = useState(false);
   const [certError, setCertError] = useState('');
   const [downloadError, setDownloadError] = useState('');
+  const [emailOpen, setEmailOpen]     = useState(false);
+  const [emailTo, setEmailTo]         = useState('');
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailError, setEmailError]   = useState('');
+  const [emailSent, setEmailSent]     = useState(false);
   const [resubmitLoading, setResubmitLoading] = useState(false);
   const [resubmitError, setResubmitError] = useState('');
   const [resubmitResults, setResubmitResults] = useState({});  // { finding_id: { revised_assessment, key_points } }
@@ -680,6 +685,38 @@ export default function DocumentAnalyzer() {
       setCertError(err.message);
     } finally {
       setCertLoading(false);
+    }
+  };
+
+  // ── Email certificate ─────────────────────────────────────────────────────
+
+  const handleEmailCertificate = async () => {
+    if (!runId || !emailTo.trim()) return;
+    setEmailSending(true);
+    setEmailError('');
+    setEmailSent(false);
+    try {
+      const orgName = user?.orgName ?? 'Curam Engineering';
+      const html    = buildCertificateHtml(
+        runResult,
+        orgName,
+        runResult?.tokensUsed ?? runResult?.tokens_used,
+        runResult?.costAud,
+      );
+      const safeFileName = (runResult?.file_name ?? 'document')
+        .replace(/\.[^.]+$/, '').replace(/[^a-z0-9_-]/gi, '_').slice(0, 40);
+      await api.post(`/demo/runs/${runId}/email-certificate`, {
+        to:       emailTo.trim(),
+        html,
+        title:    `Compliance Certificate — ${runResult?.file_name ?? 'Document'}`,
+        filename: `certificate-${safeFileName}.pdf`,
+      });
+      setEmailSent(true);
+      setEmailOpen(false);
+    } catch (err) {
+      setEmailError(err.message);
+    } finally {
+      setEmailSending(false);
     }
   };
 
@@ -1180,20 +1217,69 @@ export default function DocumentAnalyzer() {
               </button>
             )}
             {allResolved && (
-              <button
-                onClick={handleCertificate}
-                disabled={certLoading}
-                className="shrink-0 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-                style={
-                  certLoading
-                    ? { background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: 'not-allowed' }
-                    : { background: 'var(--color-primary)', color: '#fff', cursor: 'pointer' }
-                }
-              >
-                {certLoading ? 'Generating…' : 'Generate Certificate'}
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={handleCertificate}
+                  disabled={certLoading}
+                  className="text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                  style={
+                    certLoading
+                      ? { background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: 'not-allowed' }
+                      : { background: 'var(--color-primary)', color: '#fff', cursor: 'pointer' }
+                  }
+                >
+                  {certLoading ? 'Generating…' : 'Download PDF'}
+                </button>
+                <button
+                  onClick={() => { setEmailOpen((o) => !o); setEmailSent(false); setEmailError(''); if (!emailTo && user?.email) setEmailTo(user.email); }}
+                  className="text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                  style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', cursor: 'pointer' }}
+                >
+                  {getIcon('mail', { size: 14 })}
+                  {emailSent ? ' Sent ✓' : ' Email'}
+                </button>
+              </div>
             )}
           </div>
+
+          {/* Email certificate — inline form */}
+          {emailOpen && allResolved && (
+            <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+                Email Certificate
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="email"
+                  placeholder="recipient@example.com"
+                  value={emailTo}
+                  onChange={(e) => { setEmailTo(e.target.value); setEmailError(''); }}
+                  className="flex-1 text-sm rounded-lg px-3 py-2"
+                  style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', fontFamily: 'inherit', outline: 'none' }}
+                />
+                <button
+                  onClick={handleEmailCertificate}
+                  disabled={emailSending || !emailTo.trim() || !runId}
+                  className="text-sm font-medium px-4 py-2 rounded-lg transition-colors shrink-0"
+                  style={
+                    emailSending || !emailTo.trim() || !runId
+                      ? { background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: 'not-allowed' }
+                      : { background: 'var(--color-primary)', color: '#fff', cursor: 'pointer' }
+                  }
+                >
+                  {emailSending ? 'Sending…' : 'Send'}
+                </button>
+                <button
+                  onClick={() => setEmailOpen(false)}
+                  className="text-xs"
+                  style={{ color: 'var(--color-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+              </div>
+              {emailError && <p className="text-xs" style={{ color: '#dc2626' }}>{emailError}</p>}
+            </div>
+          )}
 
           {/* Original file download + S3 Storage */}
           <div className="rounded-xl p-4 flex items-center justify-between gap-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
