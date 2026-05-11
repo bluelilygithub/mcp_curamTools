@@ -4,6 +4,7 @@ import { useIcon } from '../../providers/IconProvider';
 import { exportPdf } from '../../utils/exportService';
 import useAuthStore from '../../stores/authStore';
 import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
+import ProcessingModal from '../../components/shared/ProcessingModal';
 
 const LOW_CONFIDENCE = 0.7;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -77,6 +78,12 @@ const INITIAL_STAGES = [
   { key: 'stage2', name: 'Running calculations', status: 'pending', detail: null },
   { key: 'stage3', name: 'Synthesising findings', status: 'pending', detail: null },
 ];
+
+const STAGE_DESCRIPTIONS = {
+  stage1: 'Claude is reading the PDF and extracting pipe segments, flow rates, and pressure values',
+  stage2: 'Python is running Hazen-Williams, velocity, and pressure budget checks',
+  stage3: 'Claude is synthesising findings with plain-language explanations and remediation steps',
+};
 
 function advanceStages(stages, msg) {
   const lower = msg.toLowerCase();
@@ -629,7 +636,17 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
   const [followUpHistory, setFollowUpHistory]   = useState([]);
   const [followUpLoading, setFollowUpLoading]   = useState(false);
   const [followUpError, setFollowUpError]       = useState('');
-  const fileInputRef = useRef(null);
+  const fileInputRef  = useRef(null);
+  const cancelledRef  = useRef(false);
+
+  // ── Cancel ─────────────────────────────────────────────────────────────────
+
+  const handleCancel = () => {
+    cancelledRef.current = true;
+    setRunning(false);
+    setStages(INITIAL_STAGES);
+    setProgressTail('');
+  };
 
   // ── File handling ──────────────────────────────────────────────────────────
 
@@ -664,6 +681,7 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
 
   const handleRun = async () => {
     if (!file || running) return;
+    cancelledRef.current = false;
     setRunning(true);
     setError('');
     setRunResult(null);
@@ -692,6 +710,7 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
         setStages((prev) => advanceStages(prev, text));
       },
       async (data) => {
+        if (cancelledRef.current) return;
         const innerData = data?.data ?? data;
         setStages((prev) => finaliseStages(prev, innerData));
         setRunResult(innerData);
@@ -855,48 +874,18 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
         </div>
       )}
 
-      {/* Three-stage pipeline indicator — visible once running or complete */}
-      {(running || runResult) && (
-        <div
-          className="rounded-xl p-4 space-y-4"
-          style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
-        >
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
-            Pipeline
-          </p>
-          {stages.map((s, i) => (
-            <div key={s.key} className="flex items-start gap-3">
-              <div className="shrink-0 mt-0.5">
-                {s.status === 'complete' && (
-                  <span style={{ color: '#16a34a' }}>{getIcon('check-circle', { size: 16 })}</span>
-                )}
-                {s.status === 'active' && (
-                  <span className="animate-spin inline-block" style={{ color: 'var(--color-primary)' }}>
-                    {getIcon('loader', { size: 16 })}
-                  </span>
-                )}
-                {s.status === 'pending' && (
-                  <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid var(--color-border)', flexShrink: 0 }} />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p
-                  className="text-sm font-medium"
-                  style={{ color: s.status === 'pending' ? 'var(--color-muted)' : 'var(--color-text)' }}
-                >
-                  Stage {i + 1} — {s.name}
-                </p>
-                {s.detail && (
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>{s.detail}</p>
-                )}
-                {s.status === 'active' && !s.detail && progressTail && (
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>→ {progressTail}</p>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <ProcessingModal
+        isOpen={running}
+        stages={stages.map((s) => ({
+          id: s.key,
+          label: s.name,
+          description: s.detail || (s.status === 'active' && progressTail ? `→ ${progressTail}` : STAGE_DESCRIPTIONS[s.key]),
+          status: s.status,
+        }))}
+        estimatedDuration="Typical processing time: 3–5 minutes."
+        cancelConfirmMessage="Cancel this run? The document will need to be resubmitted."
+        onCancel={handleCancel}
+      />
 
       {/* Results */}
       {runResult && (

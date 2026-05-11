@@ -25,6 +25,24 @@
 
 ---
 
+## 2026-05-11 — ProcessingModal shared component
+
+### Built
+- **`client/src/components/shared/ProcessingModal.jsx`**: New shared overlay modal for multi-stage agent runs. Full-screen backdrop overlay (z-50, `rgba(0,0,0,0.5)`), rounded-2xl panel. Props: `stages`, `estimatedDuration`, `onCancel`, `cancelConfirmMessage`, `isOpen`. Internal 1s tick timer; per-stage elapsed via `useRef` timestamps on status transitions. Completed stages show checkmark + frozen duration; active stage shows spinner + live elapsed; pending shows hollow circle. Description shown for active/complete, hidden for pending. Cancel → confirm → "Confirm cancel" / "Keep waiting". Always includes browser tab note. No close button — only dismisses via parent setting `isOpen=false`.
+- **`client/src/pages/demo/SpecValidator.jsx`**: Replaced inline three-stage pipeline block with `<ProcessingModal>`. Added `STAGE_DESCRIPTIONS` constants. Added `cancelledRef` to prevent orphaned SSE `onResult` from updating state after cancel. Stage shape converted from `{ key, name, status, detail }` to `{ id, label, description, status }` at the call site.
+- **`client/src/pages/demo/DocumentAnalyzer.jsx`**: Added `ProcessingModal` replacing the inline loading block. Added `INITIAL_DA_STAGES`, `advanceDocStages` function (advances stages based on server-emitted progress strings: "stage 1: running deterministic" → stage 2 active; "stage 1 complete" / "stage 2 complete" → complete). Added `docStages` state, `cancelledRef`, and `handleCancel` (resets `running`, `file`, `progress`, `docStages`). No existing logic changed.
+- **`DECISIONS.md`**: Added "ProcessingModal — shared component for multi-stage agent runs" entry with full props interface, behaviour spec, rationale, and future-agent usage pattern.
+
+### Fixed / discovered
+- `SpecValidator.jsx` `onResult` callback previously received the outer `resultPayload` shape `{ summary, data: { all_findings, ... } }` but all field access assumed the inner flat object. Fixed by extracting `data?.data ?? data` in the SSE callback (mirrors `refreshRun` which uses `row.result?.data ?? row.result`).
+- HITL comment requirement was inverted: approve required a comment (for low-confidence or cross-stage), reject/resubmit did not. Fixed server-side (422 on reject/resubmit without comment; approve only blocked for cross-stage overlap) and client-side (Reject/Resubmit buttons disabled + validation text when comment empty).
+
+### Open / next
+- End-to-end smoke test of ProcessingModal in both SpecValidator and DocumentAnalyzer.
+- Verify elapsed timers and stage transitions look correct against a real run.
+
+---
+
 ## 2026-05-11 — Spec Validator — Phase 2 (frontend complete)
 
 ### Built

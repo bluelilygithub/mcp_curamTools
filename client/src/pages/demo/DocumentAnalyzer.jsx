@@ -5,9 +5,36 @@ import { exportPdf } from '../../utils/exportService';
 import useAuthStore from '../../stores/authStore';
 import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
 import MicButton from '../../components/ui/MicButton';
+import ProcessingModal from '../../components/shared/ProcessingModal';
 
 const SLUG = 'demo-document-analyzer';
 const LOW_CONFIDENCE = 0.7;
+
+// ── Processing modal stages ───────────────────────────────────────────────────
+
+const INITIAL_DA_STAGES = [
+  { id: 'stage1', label: 'Analysing document',  description: 'Claude is reading and extracting findings from your document', status: 'pending' },
+  { id: 'stage2', label: 'Preparing findings',  description: 'Structuring results for review',                               status: 'pending' },
+];
+
+function advanceDocStages(stages, msg) {
+  const lower = msg.toLowerCase();
+  return stages.map((s) => {
+    if (s.id === 'stage1') {
+      if (lower.includes('sanitising') || lower.includes('processing document') || lower.includes('pdf rasterised') || lower.includes('stage 2: running')) {
+        return s.status === 'pending' ? { ...s, status: 'active' } : s;
+      }
+      if (lower.includes('stage 1 complete')) return { ...s, status: 'complete' };
+    }
+    if (s.id === 'stage2') {
+      if (lower.includes('stage 1: running deterministic') || lower.includes('stage 1 complete')) {
+        return s.status === 'pending' ? { ...s, status: 'active' } : s;
+      }
+      if (lower.includes('stage 2 complete')) return { ...s, status: 'complete' };
+    }
+    return s;
+  });
+}
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
 
@@ -508,6 +535,7 @@ export default function DocumentAnalyzer() {
   const [dragging, setDragging]   = useState(false);
   const [running, setRunning]     = useState(false);
   const [progress, setProgress]   = useState([]);
+  const [docStages, setDocStages] = useState(INITIAL_DA_STAGES);
   const [runResult, setRunResult] = useState(null);   // full resultPayload from SSE
   const [runId, setRunId]         = useState(null);
   const [error, setError]         = useState('');
@@ -532,6 +560,18 @@ export default function DocumentAnalyzer() {
   const [recentRuns, setRecentRuns] = useState([]);
   const [runsLoading, setRunsLoading] = useState(true);
   const fileInputRef = useRef(null);
+  const cancelledRef = useRef(false);
+
+  // ── Cancel ─────────────────────────────────────────────────────────────────
+
+  const handleCancel = () => {
+    cancelledRef.current = true;
+    setRunning(false);
+    setFile(null);
+    setProgress([]);
+    setError('');
+    setDocStages(INITIAL_DA_STAGES);
+  };
 
   // ── Load recent sessions on mount ─────────────────────────────────────────
 
@@ -594,12 +634,14 @@ export default function DocumentAnalyzer() {
 
   const handleRun = async () => {
     if (!file) return;
+    cancelledRef.current = false;
     setRunning(true);
     setError('');
     setProgress([]);
     setRunResult(null);
     setRunId(null);
     setCertError('');
+    setDocStages(INITIAL_DA_STAGES);
 
     // Read file as base64
     const fileData = await new Promise((resolve, reject) => {
@@ -617,8 +659,13 @@ export default function DocumentAnalyzer() {
 
     await streamRun(
       { fileData, mimeType: file.type, fileName: file.name, customPrompt },
-      (text)   => setProgress((p) => [...p, text]),
+      (text) => {
+        setProgress((p) => [...p, text]);
+        setDocStages((prev) => advanceDocStages(prev, text));
+      },
       async (data) => {
+        if (cancelledRef.current) return;
+        setDocStages(INITIAL_DA_STAGES.map((s) => ({ ...s, status: 'complete' })));
         setRunResult(data);
         // Fetch runId from server — most recent run for this org/slug
         try {
@@ -626,7 +673,7 @@ export default function DocumentAnalyzer() {
           if (runs[0]?.id) setRunId(runs[0].id);
         } catch { /* non-fatal — review actions won't work without runId */ }
       },
-      (err)    => setError(err),
+      (err) => setError(err),
     );
     setRunning(false);
   };
@@ -939,18 +986,13 @@ export default function DocumentAnalyzer() {
         </div>
       )}
 
-      {/* Progress */}
-      {running && (
-        <div className="rounded-xl border p-4 space-y-2" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-          <div className="flex items-center gap-2 mb-2">
-            <span style={{ color: 'var(--color-primary)' }}>{getIcon('loader', { size: 14 })}</span>
-            <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>Analysing document…</p>
-          </div>
-          {progress.map((msg, i) => (
-            <p key={i} className="text-xs" style={{ color: 'var(--color-muted)' }}>→ {msg}</p>
-          ))}
-        </div>
-      )}
+      <ProcessingModal
+        isOpen={running}
+        stages={docStages}
+        estimatedDuration="Typical processing time: 2–4 minutes."
+        cancelConfirmMessage="Cancel this analysis? The document will need to be resubmitted."
+        onCancel={handleCancel}
+      />
 
       {/* Results */}
       {runResult && (

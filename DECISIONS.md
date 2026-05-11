@@ -13,6 +13,47 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### ProcessingModal — shared component for multi-stage agent runs
+**Date:** 2026-05-11
+**Status:** Settled
+**Location:** `client/src/components/shared/ProcessingModal.jsx`
+
+**When to use:** Any agent UI with a run that takes more than approximately 10 seconds, or any agent with multiple discrete stages visible to the user.
+
+**Props interface:**
+
+| Prop | Type | Description |
+|---|---|---|
+| `stages` | `Array<{ id: string, label: string, description: string, status: 'pending'\|'active'\|'complete' }>` | Pipeline stages in order. Parent advances `status` as progress messages arrive. |
+| `estimatedDuration` | `string` | Human-readable estimate shown as static text, e.g. `"Typical processing time: 3–5 minutes."` |
+| `onCancel` | `function` | Called after the user confirms cancellation. Parent handles all abort/state-reset logic — the modal has no knowledge of SSE streams or AbortControllers. |
+| `cancelConfirmMessage` | `string` | Confirmation prompt shown when user clicks Cancel, e.g. `"Cancel this run? The document will need to be resubmitted."` |
+| `isOpen` | `boolean` | Parent sets `true` when run starts, `false` when complete or errored. |
+
+**Behaviour:**
+- Fixed full-screen overlay (`fixed inset-0 z-50`) with `rgba(0,0,0,0.5)` backdrop.
+- Rounded-2xl panel, rounded-xl buttons. All colours via CSS custom properties.
+- Internal 1s `setInterval` timer: tracks per-stage elapsed time using `useRef` timestamps for transitions. Shows live elapsed on the active stage; frozen duration on completed stages.
+- Checkmark icon + elapsed duration (e.g. "47s") for completed stages.
+- Spinner (animate-spin) for active stage, hollow circle for pending.
+- Stage description shown for active and completed stages; hidden for pending.
+- Cancel button → inline confirmation → "Confirm cancel" / "Keep waiting". No close button.
+- Browser tab note: *"Processing continues if you switch browser tabs."* — always included; accurate and reduces user anxiety.
+
+**Rationale:** Prevents in-app navigation during long SSE runs that would orphan the stream on component unmount. Manages user expectations on processing time. Provides a clearly gated cancellation path that requires conscious confirmation before aborting an expensive AI run.
+
+**Pattern for future agents:**
+1. Import `ProcessingModal` from `../../components/shared/ProcessingModal`
+2. Define `INITIAL_STAGES` array mirroring the agent's actual pipeline stages (match stage labels to what the agent actually does)
+3. Advance stage `status` in the SSE `onProgress` callback by matching against server-emitted progress strings
+4. Set `estimatedDuration` based on observed run times in production
+5. Wire `isOpen` to the `running` boolean state
+6. Wire `onCancel` to a function that resets `running`, clears file/progress state, and (optionally) uses a `cancelledRef` to prevent the orphaned `onResult` callback from updating state
+
+**References:** `client/src/pages/demo/SpecValidator.jsx` (three-stage example); `client/src/pages/demo/DocumentAnalyzer.jsx` (two-stage example).
+
+---
+
 ### Document Analyzer Follow-up Q&A — Scope Restriction via Dual-Layer Prompt Boundary
 **Date:** 2026-05-11
 **Status:** Settled
