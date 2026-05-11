@@ -182,9 +182,14 @@ const EXTRACTION_SYSTEM_PROMPT = `You are a specialist hydraulic services engine
 
 DOCUMENT STRUCTURE — hydraulic calculation documents are typically organised as follows:
 1. A pipe schedule or pipe sizing table — one row per pipe segment (section, branch, or leg).
-   Each row contains some or all of: segment reference (e.g. CW-01), nominal pipe diameter (DN),
-   internal diameter (mm), pipe length (m), design flow rate Q (L/s), stated velocity (m/s),
-   friction loss per metre (kPa/m), and total segment pressure drop (kPa).
+   IMPORTANT: some pipe schedule tables contain TWO velocity columns side by side:
+   - Column A: the velocity STATED by the document author (may contain errors)
+   - Column B: the VERIFIED or CALCULATED velocity (added by a checking engineer or discrepancy register)
+   When both columns are present and their values are identical, the segment is considered correct.
+   When the values differ, the segment has a discrepancy. You MUST extract BOTH as separate fields.
+   Extract each row's numeric values IN THE ORDER they appear left-to-right — do NOT skip a column
+   or shift values. Use source_context (the verbatim row) as your reference — map each numeric value
+   to the correct field based on its column position.
 2. A pressure budget section — showing available supply pressure, component losses (meter,
    backflow preventer, valves, elevation), total friction loss, and residual pressure at the
    critical fixture.
@@ -193,6 +198,11 @@ DOCUMENT STRUCTURE — hydraulic calculation documents are typically organised a
 CRITICAL INSTRUCTION: Extract EVERY row from the pipe schedule table as a separate object in
 pipe_segments[]. Do NOT skip rows. Do NOT merge rows. If 8 rows are present, return 8 objects.
 Extract all rows regardless of whether they are highlighted, flagged, or appear to be in error.
+
+COLUMN ORDER — for each row, map numeric values left to right to these fields in order:
+  nominal_diameter_dn → internal_diameter_mm → length_m → flow_rate_ls →
+  stated_velocity_ms (first velocity column) → verified_velocity_ms (second velocity column, if present) →
+  delta_p_per_m_kpa → delta_p_segment_kpa
 
 Return this EXACT JSON structure — no markdown fences, no explanation, just the object:
 {
@@ -209,11 +219,12 @@ Return this EXACT JSON structure — no markdown fences, no explanation, just th
       "hw_coefficient": 130,
       "roughness_mm": null,
       "flow_rate_ls": 1.04,
-      "length_m": 12.5,
+      "length_m": 22.5,
       "equiv_length_m": null,
       "stated_velocity_ms": 2.51,
-      "delta_p_per_m_kpa": 1.24,
-      "delta_p_segment_kpa": 15.5
+      "verified_velocity_ms": 4.09,
+      "delta_p_per_m_kpa": 11.945,
+      "delta_p_segment_kpa": 268.8
     }
   ],
   "pressure_system": {
@@ -237,7 +248,11 @@ Extraction rules — pipe_segments:
 - segment_ref: exact reference code from the table (e.g. CW-01, CW-02, ... CW-08)
 - internal_diameter_mm: stated internal bore (ID) in mm — NOT the nominal OD or DN size
 - flow_rate_ls: design flow rate Q in litres per second (L/s)
-- stated_velocity_ms: the velocity value stated in the table column (m/s)
+- stated_velocity_ms: the FIRST velocity column — the value the document author stated or assumed
+  (this is the value that may be incorrect; it is used as the basis for the original calculation)
+- verified_velocity_ms: the SECOND velocity column if present — the independently checked or
+  calculated velocity shown for comparison or discrepancy detection. Null if only one velocity
+  column exists. Do NOT mix this up with stated_velocity_ms.
 - delta_p_per_m_kpa: friction loss per unit length stated in the table (kPa/m)
 - delta_p_segment_kpa: total pressure drop for this segment stated in the table (kPa)
 - hw_coefficient: Hazen-Williams C value — if a document-wide C value is stated in the
