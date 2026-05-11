@@ -633,6 +633,9 @@ async function runSpecValidator(context) {
   }
   emit(`Stage 2: ${calcInput.checks.length} check${calcInput.checks.length !== 1 ? 's' : ''} queued…`);
 
+  // DEBUG — remove after Stage 2 confirmed working
+  console.log('[specValidator] calcInput (first 2000 chars):', JSON.stringify(calcInput).slice(0, 2000));
+
   let calcOutput;
   const stage2Start = Date.now();
   try {
@@ -645,7 +648,7 @@ async function runSpecValidator(context) {
         timeout:   30_000,            // 30 s hard limit
       }
     );
-    if (stderr) console.warn(`[specValidator] Python stderr: ${stderr.slice(0, 500)}`);
+    if (stderr) console.warn(`[specValidator] Python stderr: ${stderr.slice(0, 1000)}`);
     calcOutput = JSON.parse(stdout);
     if (calcOutput.error) {
       throw new Error(`Python calculator error: ${calcOutput.error}`);
@@ -657,7 +660,12 @@ async function runSpecValidator(context) {
         'Set PYTHON_EXEC env var to your local Python path, or deploy to Railway where /opt/pyenv/bin/python3 is installed.'
       );
     }
-    throw new Error(`Stage 2 Python calculation failed: ${pyErr.message}`);
+    // Include stderr and stdout in the error so the root cause is visible
+    const detail = [
+      pyErr.stderr ? `stderr: ${pyErr.stderr.slice(0, 800)}` : null,
+      pyErr.stdout ? `stdout: ${pyErr.stdout.slice(0, 400)}` : null,
+    ].filter(Boolean).join(' | ');
+    throw new Error(`Stage 2 Python calculation failed: ${pyErr.message}${detail ? ` — ${detail}` : ''}`);
   }
   const stage2Ms = Date.now() - stage2Start;
 
