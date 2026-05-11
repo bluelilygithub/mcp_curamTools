@@ -27,10 +27,64 @@ const crypto  = require('crypto');
 const os      = require('os');
 const path    = require('path');
 const fs      = require('fs');
-const { execFile }  = require('child_process');
-const { promisify } = require('util');
+const { execFile, spawn } = require('child_process');
+const { promisify }       = require('util');
 
 const execFileAsync = promisify(execFile);
+
+// execFileAsync does not support the `input` stdin option — use spawn instead.
+function spawnWithStdin(cmd, args, stdinData, { timeout = 30_000, maxBuffer = 10 * 1024 * 1024 } = {}) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(cmd, args);
+    let stdout = '';
+    let stderr = '';
+    let totalBytes = 0;
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      proc.kill('SIGTERM');
+    }, timeout);
+
+    proc.stdout.on('data', (chunk) => {
+      totalBytes += chunk.length;
+      if (totalBytes > maxBuffer) {
+        proc.kill('SIGTERM');
+        clearTimeout(timer);
+        reject(new Error(`Python stdout exceeded maxBuffer (${maxBuffer} bytes)`));
+        return;
+      }
+      stdout += chunk;
+    });
+    proc.stderr.on('data', (chunk) => { stderr += chunk; });
+
+    proc.on('close', (code) => {
+      clearTimeout(timer);
+      if (timedOut) {
+        const err = new Error(`Python process timed out after ${timeout}ms`);
+        err.stderr = stderr;
+        err.stdout = stdout;
+        return reject(err);
+      }
+      if (code !== 0) {
+        const err = new Error(`Command failed with exit code ${code}: ${cmd} ${args.join(' ')}`);
+        err.code   = code;
+        err.stderr = stderr;
+        err.stdout = stdout;
+        return reject(err);
+      }
+      resolve({ stdout, stderr });
+    });
+
+    proc.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+
+    proc.stdin.write(stdinData, 'utf8');
+    proc.stdin.end();
+  });
+}
 
 const { getProvider }       = require('../../platform/AgentOrchestrator');
 const AgentConfigService    = require('../../platform/AgentConfigService');
@@ -639,14 +693,11 @@ async function runSpecValidator(context) {
   let calcOutput;
   const stage2Start = Date.now();
   try {
-    const { stdout, stderr } = await execFileAsync(
+    const { stdout, stderr } = await spawnWithStdin(
       PYTHON_EXEC,
       [CALC_SCRIPT],
-      {
-        input:     JSON.stringify(calcInput),
-        maxBuffer: 10 * 1024 * 1024,  // 10 MB — full working JSON can be large
-        timeout:   30_000,            // 30 s hard limit
-      }
+      JSON.stringify(calcInput),
+      { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 }
     );
     if (stderr) console.warn(`[specValidator] Python stderr: ${stderr.slice(0, 1000)}`);
     calcOutput = JSON.parse(stdout);
@@ -660,7 +711,6 @@ async function runSpecValidator(context) {
         'Set PYTHON_EXEC env var to your local Python path, or deploy to Railway where /opt/pyenv/bin/python3 is installed.'
       );
     }
-    // Include stderr and stdout in the error so the root cause is visible
     const detail = [
       pyErr.stderr ? `stderr: ${pyErr.stderr.slice(0, 800)}` : null,
       pyErr.stdout ? `stdout: ${pyErr.stdout.slice(0, 400)}` : null,
