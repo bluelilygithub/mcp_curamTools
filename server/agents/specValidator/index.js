@@ -114,6 +114,9 @@ const AGENT_FIELDS = [
   { key: 'mime_type',             label: 'MIME Type',         type: 'text' },
   { key: 'image_pages',           label: 'PDF Pages',         type: 'number' },
   { key: 'segments_extracted',    label: 'Segments',          type: 'number' },
+  { key: 'checkable_segments',    label: 'Checkable Segs',    type: 'number' },
+  { key: 'coverage_pct',          label: 'Coverage %',        type: 'number' },
+  { key: 'extraction_rating',     label: 'Extraction Rating', type: 'text' },
   { key: 'python_fail_count',     label: 'Python FAILs',      type: 'number' },
   { key: 'python_warning_count',  label: 'Python WARNINGs',   type: 'number' },
   { key: 'python_pass_count',     label: 'Python PASSes',     type: 'number' },
@@ -604,7 +607,8 @@ async function runSpecValidator(context) {
     { image_pages: pages.length });
 
   // ── Stage 1: Claude extraction ─────────────────────────────────────────────
-  emit('Stage 1: Extracting quantitative claims…');
+  emit(`Stage 1: Extracting quantitative claims using ${model}…`);
+  await logger.step('model_selection', 'Extraction Model', model, { model });
 
   const stage1UserMsg = [
     ...imageParts,
@@ -710,6 +714,37 @@ async function runSpecValidator(context) {
       'The document must contain pipe segments with stated flow rates, velocities, or pressure drops.'
     );
   }
+  // ── Extraction quality assessment ─────────────────────────────────────────
+  {
+    const segs = extractedData.pipe_segments ?? [];
+    const uniqueSegsWithChecks = new Set(calcInput.checks.map((c) => c.segment_ref)).size;
+    const coveragePct = segCount > 0 ? Math.round((uniqueSegsWithChecks / segCount) * 100) : 0;
+    const hasPressureBudget = !!(calcInput.pressure_budget?.available_pressure_kpa);
+    const coreFields = ['flow_rate_ls', 'stated_velocity_ms', 'internal_diameter_mm', 'length_m'];
+    const totalPossible  = segs.length * coreFields.length;
+    const totalPopulated = segs.reduce((sum, s) => sum + coreFields.filter((f) => s[f] != null).length, 0);
+    const fieldCoveragePct = totalPossible > 0 ? Math.round((totalPopulated / totalPossible) * 100) : 0;
+    const extractionRating =
+      coveragePct >= 90 && hasPressureBudget ? 'Excellent' :
+      coveragePct >= 70                       ? 'Good'      :
+      coveragePct >= 50                       ? 'Partial'   : 'Poor';
+    const qualityDetail = [
+      `${uniqueSegsWithChecks}/${segCount} segments checkable (${coveragePct}%)`,
+      hasPressureBudget ? 'pressure budget extracted' : 'no pressure budget',
+      `field coverage ${fieldCoveragePct}%`,
+    ].join(' · ');
+    emit(`Extraction quality: ${extractionRating} — ${qualityDetail}`);
+    await logger.step('extraction_quality', `Extraction Quality: ${extractionRating}`, qualityDetail, {
+      model,
+      segments_extracted:  segCount,
+      checkable_segments:  uniqueSegsWithChecks,
+      coverage_pct:        coveragePct,
+      field_coverage_pct:  fieldCoveragePct,
+      has_pressure_budget: hasPressureBudget,
+      extraction_rating:   extractionRating,
+    });
+  }
+
   emit(`Stage 2: ${calcInput.checks.length} check${calcInput.checks.length !== 1 ? 's' : ''} queued…`);
 
   let calcOutput;
