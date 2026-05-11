@@ -53,7 +53,7 @@ router.get('/manifest', async (req, res) => {
           category:      catalog.category ?? 'general',
           pattern:       catalog.pattern  ?? 'unknown',
           sort_order:    r?.sort_order   ?? idx,
-          is_configured: r?.is_configured ?? false,
+          is_configured: r?.is_configured ?? true,
         };
       })
       .filter(Boolean)
