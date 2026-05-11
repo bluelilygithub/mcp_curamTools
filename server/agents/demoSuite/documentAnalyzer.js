@@ -151,7 +151,7 @@ const SYSTEM_PROMPT = `You are a specialist in engineering contract and document
 Return this exact JSON structure — no markdown fences, no explanation, just the object:
 {
   "document_type": "contract | specification | scope_of_work | RFI | report | drawing | other",
-  "extracted_text": "complete verbatim text of the document — include all text you can read",
+  "extracted_text": "Relevant contract clauses only — verbatim excerpts of any text containing: liability limits, payment terms, scope exclusions, risk transfer, indemnity, compliance references, IP ownership, dispute resolution, defects liability, unusual obligations. Do NOT reproduce boilerplate or recitals. Maximum 4000 characters total.",
   "parties": [
     { "role": "Client | Contractor | Engineer | Subconsultant | other", "name": "party name or Not specified" }
   ],
@@ -316,7 +316,7 @@ async function runDocumentAnalyzer(context) {
   const orgDefaultModel  = await AgentConfigService.getOrgDefaultModel(orgId).catch(() => null);
   const model     = adminConfig.model ?? orgDefaultModel ?? null;
   if (!model) throw new Error('No model configured. Set a vision-capable model in Admin › Agents for demo-document-analyzer or configure an org default model.');
-  const maxTokens = adminConfig.max_tokens ?? 8192;
+  const maxTokens = adminConfig.max_tokens ?? 16384;
   const fallback  = adminConfig.fallback_model ?? null;
 
   emit(`Stage 2: Running probabilistic analysis using ${model}…`);
@@ -496,8 +496,11 @@ async function runDocumentAnalyzer(context) {
   emit('Stage 1: Running deterministic rules…');
   const extractedText = parsed.extracted_text ?? '';
 
-  // Run rules on extracted text + Claude excerpt corpus for best coverage
-  const corpus = [extractedText, ...(parsed.findings ?? []).map((f) => f.excerpt ?? '')].join('\n');
+  // Run rules on extracted text + excerpts + descriptions for maximum coverage
+  const corpus = [
+    extractedText,
+    ...(parsed.findings ?? []).map((f) => [f.excerpt ?? '', f.description ?? ''].join(' ')),
+  ].join('\n');
   const detFindings = runDeterministic(corpus);
 
   await logger.step('deterministic_rules', 'Deterministic Rules',

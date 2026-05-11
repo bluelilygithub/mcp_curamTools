@@ -198,7 +198,7 @@ const ADMIN_DEFAULTS = {
   'demo-document-analyzer': {
     enabled:             true,
     model:               null,   // inherits org default
-    max_tokens:          8192,   // extracted_text + findings — needs headroom
+    max_tokens:          16384,  // extracted_text capped to 4k chars; findings + summary need headroom for long contracts
     max_task_budget_aud: 1.00,   // single vision call; low ceiling appropriate for demo
     fallback_model:      null,
   },
