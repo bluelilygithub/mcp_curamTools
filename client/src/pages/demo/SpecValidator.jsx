@@ -151,7 +151,6 @@ function WorkingDisplay({ working }) {
 
 function DetFindingCard({ finding, runId, onUpdated, getIcon, expanded, onToggleWorking }) {
   const [comment, setComment]         = useState('');
-  const [showComment, setShowComment] = useState(false);
   const [submitting, setSubmitting]   = useState(false);
   const [reviewError, setReviewError] = useState('');
 
@@ -161,6 +160,10 @@ function DetFindingCard({ finding, runId, onUpdated, getIcon, expanded, onToggle
   const isAutoApproved = finding.check_status === 'PASS';
 
   const submit = async (status) => {
+    if (isCross && status === 'approved' && !comment.trim()) {
+      setReviewError('Comment required before approving this finding.');
+      return;
+    }
     setSubmitting(true);
     setReviewError('');
     try {
@@ -290,39 +293,34 @@ function DetFindingCard({ finding, runId, onUpdated, getIcon, expanded, onToggle
       {/* Review controls — FAIL / WARNING pending_review */}
       {finding.status === 'pending_review' && !isAutoApproved && runId && (
         <>
-          {(showComment || isCross) && (
-            <textarea
-              rows={2}
-              placeholder={isCross ? 'Comment required before approving (cross-stage overlap)…' : 'Optional comment…'}
-              value={comment}
-              onChange={(e) => { setComment(e.target.value); setReviewError(''); }}
-              className="w-full text-xs rounded-lg p-2 resize-none"
-              style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', fontFamily: 'inherit', outline: 'none' }}
-            />
+          <textarea
+            rows={2}
+            placeholder={isCross ? 'Comment required before approving (cross-stage overlap)…' : 'Add a comment (required to reject or request resubmission)…'}
+            value={comment}
+            onChange={(e) => { setComment(e.target.value); setReviewError(''); }}
+            className="w-full text-xs rounded-lg p-2 resize-none"
+            style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', fontFamily: 'inherit', outline: 'none' }}
+          />
+          {!comment.trim() && (
+            <p className="text-xs" style={{ color: '#dc2626' }}>A comment is required to reject or request resubmission</p>
           )}
           {reviewError && <p className="text-xs" style={{ color: '#dc2626' }}>{reviewError}</p>}
           <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => submit('approved')} disabled={submitting}
+            <button onClick={() => submit('approved')} disabled={submitting || (isCross && !comment.trim())}
               className="text-xs font-medium px-3 py-1.5 rounded-lg hover:opacity-80"
-              style={{ background: '#dcfce7', color: '#166534', cursor: submitting ? 'not-allowed' : 'pointer' }}>
+              style={{ background: '#dcfce7', color: '#166534', cursor: (submitting || (isCross && !comment.trim())) ? 'not-allowed' : 'pointer', opacity: (isCross && !comment.trim()) ? 0.5 : 1 }}>
               Approve
             </button>
-            <button onClick={() => submit('rejected')} disabled={submitting}
+            <button onClick={() => submit('rejected')} disabled={submitting || !comment.trim()}
               className="text-xs font-medium px-3 py-1.5 rounded-lg hover:opacity-80"
-              style={{ background: '#fee2e2', color: '#991b1b', cursor: submitting ? 'not-allowed' : 'pointer' }}>
+              style={{ background: '#fee2e2', color: '#991b1b', cursor: (submitting || !comment.trim()) ? 'not-allowed' : 'pointer', opacity: !comment.trim() ? 0.5 : 1 }}>
               Reject
             </button>
-            <button onClick={() => submit('resubmit')} disabled={submitting}
+            <button onClick={() => submit('resubmit')} disabled={submitting || !comment.trim()}
               className="text-xs font-medium px-3 py-1.5 rounded-lg hover:opacity-70"
-              style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: submitting ? 'not-allowed' : 'pointer' }}>
+              style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: (submitting || !comment.trim()) ? 'not-allowed' : 'pointer', opacity: !comment.trim() ? 0.5 : 1 }}>
               Resubmit
             </button>
-            {!showComment && !isCross && (
-              <button onClick={() => setShowComment(true)} className="text-xs hover:opacity-70"
-                style={{ color: 'var(--color-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                + Add comment
-              </button>
-            )}
           </div>
         </>
       )}
@@ -336,16 +334,27 @@ function DetFindingCard({ finding, runId, onUpdated, getIcon, expanded, onToggle
               <p className="text-xs" style={{ color: '#3730a3' }}>{finding.comment}</p>
             </div>
           )}
+          <textarea
+            rows={2}
+            placeholder={isCross ? 'Comment required before approving (cross-stage overlap)…' : 'Add a comment (required to reject)…'}
+            value={comment}
+            onChange={(e) => { setComment(e.target.value); setReviewError(''); }}
+            className="w-full text-xs rounded-lg p-2 resize-none"
+            style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', fontFamily: 'inherit', outline: 'none' }}
+          />
+          {!comment.trim() && (
+            <p className="text-xs" style={{ color: '#dc2626' }}>A comment is required to reject</p>
+          )}
           {reviewError && <p className="text-xs" style={{ color: '#dc2626' }}>{reviewError}</p>}
           <div className="flex items-center gap-2">
-            <button onClick={() => submit('approved')} disabled={submitting}
+            <button onClick={() => submit('approved')} disabled={submitting || (isCross && !comment.trim())}
               className="text-xs font-medium px-3 py-1.5 rounded-lg hover:opacity-80"
-              style={{ background: '#dcfce7', color: '#166534', cursor: submitting ? 'not-allowed' : 'pointer' }}>
+              style={{ background: '#dcfce7', color: '#166534', cursor: (submitting || (isCross && !comment.trim())) ? 'not-allowed' : 'pointer', opacity: (isCross && !comment.trim()) ? 0.5 : 1 }}>
               Approve
             </button>
-            <button onClick={() => submit('rejected')} disabled={submitting}
+            <button onClick={() => submit('rejected')} disabled={submitting || !comment.trim()}
               className="text-xs font-medium px-3 py-1.5 rounded-lg hover:opacity-80"
-              style={{ background: '#fee2e2', color: '#991b1b', cursor: submitting ? 'not-allowed' : 'pointer' }}>
+              style={{ background: '#fee2e2', color: '#991b1b', cursor: (submitting || !comment.trim()) ? 'not-allowed' : 'pointer', opacity: !comment.trim() ? 0.5 : 1 }}>
               Reject
             </button>
           </div>
@@ -359,19 +368,16 @@ function DetFindingCard({ finding, runId, onUpdated, getIcon, expanded, onToggle
 
 function ProbFindingCard({ finding, runId, onUpdated, getIcon }) {
   const [comment, setComment]         = useState('');
-  const [showComment, setShowComment] = useState(false);
   const [submitting, setSubmitting]   = useState(false);
   const [reviewError, setReviewError] = useState('');
 
-  const conf        = finding.confidence ?? 0.5;
-  const isLow       = conf < LOW_CONFIDENCE;
-  const isCross     = !!(finding.also_flagged_deterministic);
-  const pill        = reviewPill(finding.status);
-  const needsComment = isLow || isCross;
+  const conf    = finding.confidence ?? 0.5;
+  const isLow   = conf < LOW_CONFIDENCE;
+  const isCross = !!(finding.also_flagged_deterministic);
+  const pill    = reviewPill(finding.status);
 
   const submit = async (status) => {
-    if (needsComment && status === 'approved' && !comment.trim()) {
-      setShowComment(true);
+    if (isCross && status === 'approved' && !comment.trim()) {
       setReviewError('Comment required before approving this finding.');
       return;
     }
@@ -465,39 +471,36 @@ function ProbFindingCard({ finding, runId, onUpdated, getIcon }) {
               <p className="text-xs" style={{ color: '#3730a3' }}>{finding.comment}</p>
             </div>
           )}
-          {(showComment || needsComment) && (
-            <textarea
-              rows={2}
-              placeholder={needsComment ? 'Comment required before approving…' : 'Optional comment…'}
-              value={comment}
-              onChange={(e) => { setComment(e.target.value); setReviewError(''); }}
-              className="w-full text-xs rounded-lg p-2 resize-none"
-              style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', fontFamily: 'inherit', outline: 'none' }}
-            />
+          <textarea
+            rows={2}
+            placeholder={isCross ? 'Comment required before approving (cross-stage overlap)…' : 'Add a comment (required to reject or request resubmission)…'}
+            value={comment}
+            onChange={(e) => { setComment(e.target.value); setReviewError(''); }}
+            className="w-full text-xs rounded-lg p-2 resize-none"
+            style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', fontFamily: 'inherit', outline: 'none' }}
+          />
+          {!comment.trim() && (
+            <p className="text-xs" style={{ color: '#dc2626' }}>
+              {finding.status === 'resubmit' ? 'A comment is required to reject' : 'A comment is required to reject or request resubmission'}
+            </p>
           )}
           {reviewError && <p className="text-xs" style={{ color: '#dc2626' }}>{reviewError}</p>}
           <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => submit('approved')} disabled={submitting}
+            <button onClick={() => submit('approved')} disabled={submitting || (isCross && !comment.trim())}
               className="text-xs font-medium px-3 py-1.5 rounded-lg hover:opacity-80"
-              style={{ background: '#dcfce7', color: '#166534', cursor: submitting ? 'not-allowed' : 'pointer' }}>
+              style={{ background: '#dcfce7', color: '#166534', cursor: (submitting || (isCross && !comment.trim())) ? 'not-allowed' : 'pointer', opacity: (isCross && !comment.trim()) ? 0.5 : 1 }}>
               Approve
             </button>
-            <button onClick={() => submit('rejected')} disabled={submitting}
+            <button onClick={() => submit('rejected')} disabled={submitting || !comment.trim()}
               className="text-xs font-medium px-3 py-1.5 rounded-lg hover:opacity-80"
-              style={{ background: '#fee2e2', color: '#991b1b', cursor: submitting ? 'not-allowed' : 'pointer' }}>
+              style={{ background: '#fee2e2', color: '#991b1b', cursor: (submitting || !comment.trim()) ? 'not-allowed' : 'pointer', opacity: !comment.trim() ? 0.5 : 1 }}>
               Reject
             </button>
             {finding.status !== 'resubmit' && (
-              <button onClick={() => submit('resubmit')} disabled={submitting}
+              <button onClick={() => submit('resubmit')} disabled={submitting || !comment.trim()}
                 className="text-xs font-medium px-3 py-1.5 rounded-lg hover:opacity-70"
-                style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: submitting ? 'not-allowed' : 'pointer' }}>
+                style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: (submitting || !comment.trim()) ? 'not-allowed' : 'pointer', opacity: !comment.trim() ? 0.5 : 1 }}>
                 Resubmit
-              </button>
-            )}
-            {!showComment && !needsComment && (
-              <button onClick={() => setShowComment(true)} className="text-xs hover:opacity-70"
-                style={{ color: 'var(--color-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                + Add comment
               </button>
             )}
           </div>

@@ -254,11 +254,17 @@ router.patch('/runs/:runId/review/:findingId', async (req, res) => {
         return { ...f, _validation_error: 'Rejected findings cannot be re-approved. Submit a corrected document for a new run.' };
       }
 
-      // Enforce comment requirement for low-confidence or cross-stage conflict findings
-      const isLowConfidence = typeof f.confidence === 'number' && f.confidence < 0.7;
-      const isCrossStage    = f.also_flagged_deterministic || f.also_flagged_probabilistic;
-      if ((isLowConfidence || isCrossStage) && status === 'approved' && !comment?.trim()) {
+      // Cross-stage overlap: comment required before approving (only approval exception)
+      const isCrossStage = f.also_flagged_deterministic || f.also_flagged_probabilistic;
+      if (status === 'approved' && isCrossStage && !comment?.trim()) {
         return { ...f, _validation_error: 'Comment required before approving this finding.' };
+      }
+      // Reject and resubmit always require a comment
+      if (status === 'rejected' && !comment?.trim()) {
+        return { ...f, _validation_error: 'A comment is required when rejecting a finding. Explain why the finding cannot be accepted so the design engineer knows what must be corrected.' };
+      }
+      if (status === 'resubmit' && !comment?.trim()) {
+        return { ...f, _validation_error: 'A comment is required when requesting resubmission. Describe what the engineer must correct before resubmitting.' };
       }
 
       found = true;
