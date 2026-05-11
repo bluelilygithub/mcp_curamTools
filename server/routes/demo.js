@@ -504,6 +504,22 @@ If this question is about the document above, answer it directly using the conte
     const textBlock = response.content?.find((b) => b.type === 'text');
     if (!textBlock) throw new Error('No text response from model.');
 
+    // Persist Q&A pair to run record so it survives page refresh/navigation
+    pool.query(
+      `UPDATE agent_runs
+          SET result = jsonb_set(
+            result,
+            '{data,follow_up_history}',
+            COALESCE(result->'data'->'follow_up_history', '[]'::jsonb) || $1::jsonb
+          )
+        WHERE id = $2 AND org_id = $3`,
+      [
+        JSON.stringify([{ question, answer: textBlock.text, model, timestamp: new Date().toISOString() }]),
+        req.params.runId,
+        req.user.orgId,
+      ]
+    ).catch((err) => console.error('[demo/follow-up] persist error:', err.message));
+
     res.json({
       answer: textBlock.text,
       model,

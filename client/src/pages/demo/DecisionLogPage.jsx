@@ -512,6 +512,39 @@ function RunDetail({ run, getIcon }) {
           )}
         </div>
       )}
+
+      {/* Q&A Thread */}
+      {(() => {
+        const followUps = data.follow_up_history ?? [];
+        if (!followUps.length) return null;
+        return (
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+              Q&amp;A Thread — {followUps.length} question{followUps.length !== 1 ? 's' : ''}
+            </p>
+            {followUps.map((item, i) => (
+              <div key={i} className="space-y-1">
+                <div className="rounded-lg p-3" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Q{i + 1}</p>
+                    {item.timestamp && (
+                      <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{fmtTs(item.timestamp)}</p>
+                    )}
+                  </div>
+                  <p className="text-xs" style={{ color: 'var(--color-text)' }}>{item.question}</p>
+                </div>
+                <div className="rounded-lg p-3 ml-4" style={{ background: '#f0f9ff', border: '1px solid #bae6fd' }}>
+                  <p className="text-xs font-semibold mb-1" style={{ color: '#0369a1' }}>Answer</p>
+                  <p className="text-xs whitespace-pre-wrap" style={{ color: 'var(--color-text)' }}>{item.answer}</p>
+                  {item.model && (
+                    <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>Model: {item.model}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }

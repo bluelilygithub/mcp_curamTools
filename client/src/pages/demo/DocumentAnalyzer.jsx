@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import api from '../../api/client';
 import { useIcon } from '../../providers/IconProvider';
 import { exportPdf } from '../../utils/exportService';
@@ -490,10 +490,40 @@ export default function DocumentAnalyzer() {
   const [customPrompt, setCustomPrompt] = useState('');
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpQuestion, setFollowUpQuestion] = useState('');
-  const [followUpHistory, setFollowUpHistory] = useState([]);  // array of { question, answer, model }
+  const [followUpHistory, setFollowUpHistory] = useState([]);  // array of { question, answer, model, timestamp }
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [followUpError, setFollowUpError] = useState('');
+  const [recentRuns, setRecentRuns] = useState([]);
+  const [runsLoading, setRunsLoading] = useState(true);
   const fileInputRef = useRef(null);
+
+  // ── Load recent sessions on mount ─────────────────────────────────────────
+
+  useEffect(() => {
+    api.get('/demo/runs?slug=demo-document-analyzer&limit=10')
+      .then((data) => { setRecentRuns(data); setRunsLoading(false); })
+      .catch(() => setRunsLoading(false));
+  }, []);
+
+  // ── Load a prior session ───────────────────────────────────────────────────
+
+  const handleLoadRun = async (id) => {
+    try {
+      const row = await api.get(`/demo/runs/${id}`);
+      const data = row.result?.data ?? {};
+      setRunResult(data);
+      setRunId(id);
+      setFollowUpHistory(data.follow_up_history ?? []);
+      setFollowUpOpen(false);
+      setFollowUpQuestion('');
+      setFollowUpError('');
+      setFile(null);
+      setProgress([]);
+      setError('');
+    } catch (err) {
+      setError(`Failed to load session: ${err.message}`);
+    }
+  };
 
   // ── File handling ──────────────────────────────────────────────────────────
 
@@ -743,6 +773,56 @@ export default function DocumentAnalyzer() {
         </button>
       )}
 
+      {/* Recent sessions browser */}
+      {!running && !runResult && !runsLoading && recentRuns.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+            Recent Sessions
+          </p>
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+            {recentRuns.map((run, i) => {
+              const pending = run.pending_review_count ?? 0;
+              return (
+                <button
+                  key={run.id}
+                  onClick={() => handleLoadRun(run.id)}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-opacity hover:opacity-70"
+                  style={{
+                    background: 'var(--color-surface)',
+                    borderTop: i > 0 ? '1px solid var(--color-border)' : 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate" style={{ color: 'var(--color-text)' }}>
+                      {run.file_name ?? 'Document'}
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
+                      {fmtTs(run.run_at)}
+                      {run.document_type ? ` · ${run.document_type}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {pending > 0 && (
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#92400e' }}>
+                        {pending} pending
+                      </span>
+                    )}
+                    {pending === 0 && (
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#166534' }}>
+                        Reviewed
+                      </span>
+                    )}
+                    <span style={{ color: 'var(--color-muted)' }}>{getIcon('chevron-right', { size: 14 })}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Error */}
       {error && (
         <div className="rounded-xl p-3 text-sm" style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' }}>
@@ -772,7 +852,7 @@ export default function DocumentAnalyzer() {
 
           {/* Re-analyze */}
           <button
-            onClick={() => { setRunResult(null); setRunId(null); setProgress([]); setError(''); }}
+            onClick={() => { setRunResult(null); setRunId(null); setProgress([]); setError(''); setFollowUpHistory([]); setFollowUpOpen(false); setFollowUpQuestion(''); }}
             className="text-xs"
             style={{ color: 'var(--color-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
           >
@@ -803,9 +883,14 @@ export default function DocumentAnalyzer() {
             <div key={i} className="space-y-3">
               {/* Question */}
               <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-                <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>
-                  Follow-up question #{i + 1}
-                </p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+                    Follow-up question #{i + 1}
+                  </p>
+                  {item.timestamp && (
+                    <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{fmtTs(item.timestamp)}</p>
+                  )}
+                </div>
                 <p className="text-sm" style={{ color: 'var(--color-text)' }}>{item.question}</p>
               </div>
               {/* Answer */}
