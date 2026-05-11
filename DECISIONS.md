@@ -13,6 +13,18 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### Document Analyzer Follow-up Q&A — Scope Restriction via Dual-Layer Prompt Boundary
+**Date:** 2026-05-11
+**Status:** Settled
+**Context:** The document analyzer follow-up Q&A had no topic boundary — users (including non-admin demo users) could ask arbitrary questions (e.g. "what is the capital of Ireland") and receive detailed answers. The system prompt alone was insufficient because the `contextPrompt` user message contained a conflicting `"Answer the question directly"` instruction that many models honoured over the system prompt restriction.
+**Decision (dual-layer boundary):** The restriction is enforced in both layers: (1) the system prompt (`demoDocumentAnalyzer/prompt.js`) explicitly forbids off-topic answers; (2) the `contextPrompt` user message closing instruction also tells the model to decline unrelated questions. Both must be consistent — a restriction in the system prompt is overridden by a permissive instruction in the user message on many models.
+**Decision (configurable via Admin › MCP Prompts):** The follow-up system prompt is loaded via `AgentConfigService.getAgentConfig()` and routed through `buildSystemPrompt(config)`, making it overridable by admins without a code deploy. The `demo-document-analyzer` slug is registered in `AdminPromptsPage.jsx` AGENTS array. The slug resolves to `server/agents/demoDocumentAnalyzer/prompt.js` via the existing kebab→camelCase `preview-prompt` convention.
+**Rationale:** System prompt restrictions are model-dependent — some models (especially DeepSeek) prioritise explicit user-message instructions over system prompt constraints. Reinforcing the boundary in the user message itself is the only reliable cross-model approach. Making it admin-configurable follows the existing platform pattern (every agent prompt is overridable) without adding new infrastructure.
+**Constraints it must not violate:** The `contextPrompt` user message must never contain instructions that contradict the system prompt boundary (e.g. "answer directly", "use general knowledge"). If the default prompt is changed by an admin, the user message closing instruction remains fixed — admins control the system prompt only, not the user message structure.
+**References:** `server/agents/demoDocumentAnalyzer/prompt.js`; `server/routes/demo.js` — follow-up route; `client/src/pages/admin/AdminPromptsPage.jsx` — AGENTS array.
+
+---
+
 ### Multi-Org User Management — Org Selector on Invite, Organisations Admin Page
 **Date:** 2026-05-06
 **Status:** Settled

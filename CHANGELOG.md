@@ -25,6 +25,20 @@
 
 ---
 
+## 2026-05-11 — Document Analyzer follow-up Q&A scope restriction + configurable prompt
+
+### Built
+- **Follow-up system prompt** (`server/agents/demoDocumentAnalyzer/prompt.js`): New `buildSystemPrompt()` for the document analyzer follow-up Q&A. Default prompt restricts the AI to only answer questions about the uploaded document — refuses off-topic queries (e.g. general knowledge). Admin-overridable via Admin › MCP Prompts.
+- **Admin Prompts entry** (`client/src/pages/admin/AdminPromptsPage.jsx`): Added `demo-document-analyzer` to the AGENTS list so admins can view and customise the follow-up system prompt.
+
+### Fixed
+- Removed conflicting `"You are a specialist… / Answer the question directly"` instructions from the `contextPrompt` user message in `server/routes/demo.js`. These were overriding the system prompt boundary, allowing the model to answer off-topic questions. Both the system prompt and user message closing instruction now consistently enforce the document scope restriction.
+
+### Open / next
+- Test with Railway deployed build to confirm off-topic questions are declined.
+
+---
+
 ## 2026-05-11 — Document Analyzer PDF parsing resilience + global model fallback
 
 ### Built
