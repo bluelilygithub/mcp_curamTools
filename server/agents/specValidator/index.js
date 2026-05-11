@@ -645,8 +645,6 @@ async function runSpecValidator(context) {
   if (!stage1TextBlock) throw new Error('No text response from model in Stage 1.');
 
   const stage1Raw = stage1TextBlock.text;
-  // DEBUG — remove after extraction confirmed working
-  console.log('[specValidator] Stage 1 raw response (first 3000 chars):', stage1Raw.slice(0, 3000));
   await logger.logPrompt(`[Stage 1 extraction] System: ${EXTRACTION_SYSTEM_PROMPT.slice(0, 500)}…`);
   await logger.logResponse(stage1Raw);
 
@@ -691,20 +689,7 @@ async function runSpecValidator(context) {
   // ── Stage 2: Python calculator ─────────────────────────────────────────────
   emit('Stage 2: Running deterministic Python calculations…');
 
-  // DEBUG — per-segment field summary (remove after confirmed working)
-  for (const seg of (extractedData.pipe_segments ?? [])) {
-    console.log(
-      `[specValidator] seg ${seg.segment_ref}: ` +
-      `vel=${seg.stated_velocity_ms} Q=${seg.flow_rate_ls} ` +
-      `ID=${seg.internal_diameter_mm} L=${seg.length_m} ` +
-      `dp_seg=${seg.delta_p_segment_kpa} C=${seg.hw_coefficient}`
-    );
-  }
-
   const calcInput = buildCalcInput(extractedData);
-  // DEBUG — remove after extraction confirmed working
-  console.log(`[specValidator] buildCalcInput: ${calcInput.checks.length} checks built from ${(extractedData.pipe_segments ?? []).length} segments`);
-  console.log(`[specValidator] check types: ${calcInput.checks.map(c => c.check_id).join(', ')}`);
   if (calcInput.checks.length === 0) {
     throw new Error(
       'No calculable claims found in the extracted document. ' +
@@ -712,9 +697,6 @@ async function runSpecValidator(context) {
     );
   }
   emit(`Stage 2: ${calcInput.checks.length} check${calcInput.checks.length !== 1 ? 's' : ''} queued…`);
-
-  // DEBUG — remove after Stage 2 confirmed working
-  console.log('[specValidator] calcInput (first 2000 chars):', JSON.stringify(calcInput).slice(0, 2000));
 
   let calcOutput;
   const stage2Start = Date.now();
@@ -726,14 +708,10 @@ async function runSpecValidator(context) {
       { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 }
     );
     if (stderr) console.warn(`[specValidator] Python stderr: ${stderr.slice(0, 1000)}`);
-    // DEBUG — remove after Stage 2 confirmed working
-    console.log(`[specValidator] Python stdout (first 1000): ${stdout.slice(0, 1000)}`);
     calcOutput = JSON.parse(stdout);
     if (calcOutput.error) {
       throw new Error(`Python calculator error: ${calcOutput.error}`);
     }
-    // DEBUG — result summary
-    console.log(`[specValidator] Python results: ${calcOutput.pass_count} PASS / ${calcOutput.warning_count} WARNING / ${calcOutput.fail_count} FAIL`);
   } catch (pyErr) {
     if (pyErr.code === 'ENOENT') {
       throw new Error(

@@ -689,9 +689,10 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
         setStages((prev) => advanceStages(prev, text));
       },
       async (data) => {
-        setStages((prev) => finaliseStages(prev, data));
-        setRunResult(data);
-        setFollowUpHistory(data.follow_up_history ?? []);
+        const innerData = data?.data ?? data;
+        setStages((prev) => finaliseStages(prev, innerData));
+        setRunResult(innerData);
+        setFollowUpHistory(innerData.follow_up_history ?? []);
         try {
           const runs = await api.get(`/demo/runs?slug=${slug}&limit=1`);
           if (runs[0]?.id) setRunId(runs[0].id);
