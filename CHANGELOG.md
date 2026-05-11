@@ -25,6 +25,30 @@
 
 ---
 
+## 2026-05-12 — Two-model pattern, decision log navigation, model logging
+
+### Built
+- **Two-model pattern (spec-validator)**: Stage 1 extraction uses `adminConfig.model` (vision-capable); Stage 3 synthesis switches to `getOrgDefaultModel(orgId)`, falling back to `adminConfig.model`. Both models emitted to run log, stored as `logger.step()` events (`model_selection`, `synthesis_model_selection`), and persisted in `logger.complete()` metadata as `extraction_model` / `synthesis_model`.
+- **Extraction quality rating (spec-validator)**: After `buildCalcInput`, compute `coverage_pct` (checkable segments / total), `field_coverage_pct`, `has_pressure_budget`, and emit/log a rating: Excellent / Good / Partial / Poor.
+- **Settings › Models — Spec Validator selector**: Third column added to the Default & Fallback grid. Saves to both `spec-validator` and `demo-spec-validator` agent slugs. Adds `spec-validator` badge in model list rows.
+- **Two-model pattern (document-analyzer)**: Removed hardcoded `'deepseek-chat'` fallback. Now resolves `adminConfig.model ?? orgDefaultModel`; throws clearly if neither is set. Added `logger.step('model_selection', ...)` and `emit()` naming the model before the call. Added `extraction_model` to `logger.complete()` metadata.
+- **Decision log — all demo runs**: `/demo/runs` endpoint now returns all agent_runs for the org (no slug filter) unless `?slug=` is explicitly passed. `DecisionLogPage` drops the hardcoded `demo-document-analyzer` slug filter. Runs from both tools appear with a slug badge.
+- **Decision log — "View report →" navigation**: Each run card has a button that navigates to `/demo/run/:slug?runId=:id`. `SpecValidator` adds `useSearchParams` + `useEffect` to load a specific run by `?runId=` URL param.
+- **Transaction log — model metadata**: `TransactionDetail` renders `extraction_model` and `synthesis_model` from `tx.metadata` in the expanded detail panel.
+- **Demo dashboard — cards active by default**: `is_configured` defaults to `true` for all catalog agents when no DB row overrides, so spec-validator and future agents show as "Ready" without manual seeding.
+- **Decision log — spec-validator trace steps**: Added `stepMeta` mappings for `pdf_extraction`, `python_calculation`, `synthesis` so the decision log timeline shows correct icons and labels for spec-validator runs.
+
+### Fixed / discovered
+- Decision log was empty for spec-validator: `/demo/runs` was hardcoded to `slug=demo-document-analyzer`. Fixed to no-filter default.
+- Spec Validator card on demo dashboard showed "Not configured" / "Coming soon" because `is_configured` defaulted to `false`. Fixed to `true`.
+- Stage 3 synthesis was using the vision extraction model for text-only synthesis — wasteful and inflexible. Now uses org default model.
+
+### Open / next
+- Confirm extraction quality rating accuracy against 452 George Street document once Railway deploys.
+- Remove temp `console.log` debug lines from spec-validator index.js once extraction confirmed working.
+
+---
+
 ## 2026-05-11 — ProcessingModal shared component
 
 ### Built

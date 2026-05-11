@@ -423,6 +423,32 @@ Always add a fallback `<option>` for the currently selected model if it's not in
 
 **Failure mode:** a plain `<select>` restricted to `ai_models` silently overrides the org default with a Claude model whenever the configured default isn't in the list — routing all calls to Anthropic regardless of configuration.
 
+### Two-model pattern — extraction vs synthesis (mandatory for all new agents)
+
+**Every multi-stage agent must use two separate models and log both.**
+
+- **Extraction / vision stage**: use `adminConfig.model` (agent-specific, must be vision-capable). Throw clearly if not set — do not silently fall back to a random model.
+- **Synthesis / analysis stage**: use `getOrgDefaultModel(orgId)` as first preference, fall back to `adminConfig.model` only if no org default is configured. Synthesis rarely needs vision; the org default is typically cheaper and faster.
+- **Never hardcode a model ID as a default fallback** (e.g. `?? 'deepseek-chat'`). Always resolve through `adminConfig.model ?? orgDefaultModel`.
+
+**Logging requirements** (apply to every stage):
+```js
+// Before the extraction call:
+emit(`Stage 1: Extracting using ${extractionModel}…`);
+await logger.step('model_selection', 'Extraction Model', extractionModel, { model: extractionModel });
+
+// Before the synthesis call:
+emit(`Stage 3: Synthesising using ${synthesisModel}${synthesisModel !== extractionModel ? ' (switched from extraction model)' : ''}…`);
+await logger.step('synthesis_model_selection', 'Synthesis Model', synthesisModel, { model: synthesisModel });
+
+// In logger.complete() metadata:
+metadata: { extraction_model: extractionModel, synthesis_model: synthesisModel, ... }
+```
+
+**Why:** Operators need to see exactly which model ran each stage for cost attribution, debugging, and compliance tracing. The transaction log, decision log, and run emits all surface this. Hardcoded fallback model IDs break multi-provider routing and create invisible cost surprises.
+
+**Reference implementations:** `server/agents/specValidator/index.js` (full two-stage), `server/agents/demoSuite/documentAnalyzer.js` (single-stage — logs extraction model, uses org default).
+
 ### Google models — env var
 
 `GEMINI_API_KEY` — required for Gemini model tests in Admin > Models.

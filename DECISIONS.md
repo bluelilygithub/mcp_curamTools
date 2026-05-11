@@ -909,6 +909,26 @@ All inline styles include `fontFamily: 'inherit'` to respect the user's platform
 
 ---
 
+---
+
+### Two-Model Pattern — Extraction vs Synthesis
+**Date:** 2026-05-12
+**Status:** Settled
+**Context:** Spec Validator has two AI stages: Stage 1 (PDF vision extraction) and Stage 3 (plain-language synthesis). Both were originally using the same `adminConfig.model`. Document Analyzer had a single combined call using a hardcoded `'deepseek-chat'` fallback. Neither agent logged which model ran which stage, making cost attribution and debugging difficult.
+**Decision:** Every multi-stage agent must resolve and log two distinct models:
+- **Extraction/vision model**: `adminConfig.model` — must be vision-capable; throw if not set; never fall back silently.
+- **Synthesis/analysis model**: `getOrgDefaultModel(orgId)`, falling back to `adminConfig.model` if no org default is set. Synthesis does not require vision; using the org default allows operators to assign a cheaper model for text-only work.
+**Logging requirements (mandatory for all agents):**
+- `emit()` must name the model before each AI call
+- `logger.step('model_selection', ...)` before extraction; `logger.step('synthesis_model_selection', ...)` before synthesis
+- `logger.complete()` metadata must include `extraction_model` and (if different) `synthesis_model`
+- Both model IDs must appear in `result.data` for the decision log trace
+**Rationale:** Operators see exactly which model ran each stage in the transaction log, decision log, and run emits. Enables cost attribution, provider debugging, and audit completeness. Hardcoded fallbacks break multi-provider routing and create invisible cost surprises.
+**Reference implementations:** `server/agents/specValidator/index.js` (full two-stage); `server/agents/demoSuite/documentAnalyzer.js` (single-stage — logs extraction model, resolves org default instead of hardcode).
+**See also:** CLAUDE.md › "Two-model pattern — extraction vs synthesis (mandatory for all new agents)"
+
+---
+
 ## Open Questions
 
 _(No remaining open questions for the scaffold. First agent will add entries to AGENT_DEFAULTS and ADMIN_DEFAULTS in AgentConfigService.js.)_

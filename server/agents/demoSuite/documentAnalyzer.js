@@ -312,15 +312,19 @@ async function runDocumentAnalyzer(context) {
   // Trace and UI present Stage 1 before Stage 2 in logical order.
   // Uses direct provider.chat() because the orchestrator doesn't support image content.
   // Fallback model is handled inline: if primary fails, retry once with fallback.
-  emit('Stage 2: Running probabilistic analysis…');
-  await logger.step('probabilistic_analysis', 'Probabilistic Analysis',
-    `Running model on document…`,
-    { model: adminConfig.model ?? 'default', image_pages: imageParts.length }
-  );
   const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
-  const model    = adminConfig.model ?? 'deepseek-chat';
+  const orgDefaultModel  = await AgentConfigService.getOrgDefaultModel(orgId).catch(() => null);
+  const model     = adminConfig.model ?? orgDefaultModel ?? null;
+  if (!model) throw new Error('No model configured. Set a vision-capable model in Admin › Agents for demo-document-analyzer or configure an org default model.');
   const maxTokens = adminConfig.max_tokens ?? 8192;
   const fallback  = adminConfig.fallback_model ?? null;
+
+  emit(`Stage 2: Running probabilistic analysis using ${model}…`);
+  await logger.step('model_selection', 'Analysis Model', model, { model });
+  await logger.step('probabilistic_analysis', 'Probabilistic Analysis',
+    `Running model on document…`,
+    { model, image_pages: imageParts.length }
+  );
 
   let cachedPdfText = null;
 
@@ -594,6 +598,7 @@ async function runDocumentAnalyzer(context) {
       probabilistic_count: filteredProb.length,
       total_findings: allFindings.length,
       document_type: parsed.document_type ?? 'unknown',
+      extraction_model: model,
     },
   });
 
