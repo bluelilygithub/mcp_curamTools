@@ -610,7 +610,13 @@ async function runSpecValidator(context) {
     ...imageParts,
     {
       type: 'text',
-      text: `This is a hydraulic services calculation document (${pages.length} ${pages.length === 1 ? 'page' : 'pages'}). Extract all quantitative claims as specified. Return the JSON object only.`,
+      text: [
+        `This is a hydraulic services calculation document (${pages.length} ${pages.length === 1 ? 'page' : 'pages'}).`,
+        `Examine ALL ${pages.length} provided page image${pages.length !== 1 ? 's' : ''} carefully — the pipe schedule table and pressure budget may appear on any page.`,
+        `Extract all quantitative claims as specified in the system prompt.`,
+        `If a global Hazen-Williams C value is stated anywhere in the document (e.g. "C = 130" in notes or assumptions), you MUST populate hw_coefficient with that value for EVERY pipe segment — do not leave hw_coefficient null if a C value is stated.`,
+        `Return the JSON object only — no markdown fences, no explanation.`,
+      ].join(' '),
     },
   ];
 
@@ -645,6 +651,8 @@ async function runSpecValidator(context) {
   if (!stage1TextBlock) throw new Error('No text response from model in Stage 1.');
 
   const stage1Raw = stage1TextBlock.text;
+  // TEMP DEBUG — remove once extraction confirmed working
+  console.log('[specValidator] Stage 1 raw response:\n', stage1Raw.slice(0, 3000));
   await logger.logPrompt(`[Stage 1 extraction] System: ${EXTRACTION_SYSTEM_PROMPT.slice(0, 500)}…`);
   await logger.logResponse(stage1Raw);
 
@@ -691,6 +699,12 @@ async function runSpecValidator(context) {
 
   const calcInput = buildCalcInput(extractedData);
   if (calcInput.checks.length === 0) {
+    // TEMP DEBUG — remove once extraction confirmed working
+    const segs = extractedData.pipe_segments ?? [];
+    console.log(`[specValidator] buildCalcInput produced 0 checks. segments=${segs.length}`);
+    if (segs.length > 0) {
+      console.log('[specValidator] First segment sample:', JSON.stringify(segs[0]));
+    }
     throw new Error(
       'No calculable claims found in the extracted document. ' +
       'The document must contain pipe segments with stated flow rates, velocities, or pressure drops.'
