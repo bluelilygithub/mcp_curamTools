@@ -206,17 +206,18 @@ function FindingCard({ finding, getIcon, compact = false }) {
   );
 }
 
-function ReviewItem({ finding, runId, onUpdated, getIcon }) {
-  const [comment, setComment]       = useState('');
+function ReviewItem({ finding, runId, onUpdated, getIcon, revisedAssessment }) {
+  const [comment, setComment]         = useState('');
   const [showComment, setShowComment] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError]           = useState('');
+  const [submitting, setSubmitting]   = useState(false);
+  const [error, setError]             = useState('');
 
-  const isDet   = finding.stage === 'deterministic';
-  const conf    = finding.confidence ?? 1.0;
-  const isLow   = !isDet && conf < LOW_CONFIDENCE;
-  const isCross = finding.also_flagged_deterministic || finding.also_flagged_probabilistic;
+  const isDet        = finding.stage === 'deterministic';
+  const conf         = finding.confidence ?? 1.0;
+  const isLow        = !isDet && conf < LOW_CONFIDENCE;
+  const isCross      = finding.also_flagged_deterministic || finding.also_flagged_probabilistic;
   const needsComment = isLow || isCross;
+  const isResubmit   = finding.status === 'resubmit';
 
   const submit = async (status) => {
     if (needsComment && status === 'approved' && !comment.trim()) {
@@ -236,7 +237,7 @@ function ReviewItem({ finding, runId, onUpdated, getIcon }) {
     }
   };
 
-  if (finding.status !== 'pending_review') {
+  if (finding.status !== 'pending_review' && !isResubmit) {
     return <FindingCard finding={finding} getIcon={getIcon} compact />;
   }
 
@@ -246,8 +247,8 @@ function ReviewItem({ finding, runId, onUpdated, getIcon }) {
     <div
       className="rounded-xl p-4 space-y-3"
       style={{
-        background: 'var(--color-surface)',
-        border: `1px solid ${isCross ? '#fbbf24' : 'var(--color-border)'}`,
+        background: isResubmit ? '#faf5ff' : 'var(--color-surface)',
+        border: `1px solid ${isCross ? '#fbbf24' : isResubmit ? '#c4b5fd' : 'var(--color-border)'}`,
       }}
     >
       {/* Badge row */}
@@ -255,9 +256,10 @@ function ReviewItem({ finding, runId, onUpdated, getIcon }) {
         <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: isDet ? '#eff6ff' : '#faf5ff', color: isDet ? '#1d4ed8' : '#7c3aed' }}>
           {isDet ? 'Deterministic' : 'Probabilistic'}
         </span>
+        {isResubmit && <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#e0e7ff', color: '#3730a3' }}>Flagged for re-examination</span>}
         {isCross && <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#fffbeb', color: '#92400e' }}>Both stages flagged</span>}
         {isLow && <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#fef2f2', color: '#991b1b' }}>Low confidence — Engineering Lead validation required</span>}
-        {!isLow && !isCross && <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: pill.bg, color: pill.color }}>{pill.label}</span>}
+        {!isLow && !isCross && !isResubmit && <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: pill.bg, color: pill.color }}>{pill.label}</span>}
       </div>
 
       {/* Label + confidence */}
@@ -279,8 +281,31 @@ function ReviewItem({ finding, runId, onUpdated, getIcon }) {
       {/* Action */}
       {finding.action && <p className="text-xs" style={{ color: 'var(--color-muted)' }}><strong>Action:</strong> {finding.action}</p>}
 
-      {/* Comment box */}
-      {(showComment || needsComment) && (
+      {/* Reviewer's original comment (resubmit only) */}
+      {isResubmit && finding.comment && (
+        <div className="rounded-lg px-3 py-2" style={{ background: '#ede9fe', border: '1px solid #c4b5fd' }}>
+          <p className="text-xs font-semibold mb-0.5" style={{ color: '#5b21b6' }}>Reviewer note</p>
+          <p className="text-xs" style={{ color: '#3730a3' }}>{finding.comment}</p>
+        </div>
+      )}
+
+      {/* Revised AI assessment (populated after re-examine) */}
+      {revisedAssessment && (
+        <div className="rounded-lg px-3 py-2 space-y-1" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+          <p className="text-xs font-semibold" style={{ color: '#166534' }}>Revised AI assessment</p>
+          <p className="text-xs" style={{ color: 'var(--color-text)' }}>{revisedAssessment.revised_assessment}</p>
+          {(revisedAssessment.key_points ?? []).length > 0 && (
+            <ul className="list-disc list-inside space-y-0.5">
+              {revisedAssessment.key_points.map((pt, i) => (
+                <li key={i} className="text-xs" style={{ color: 'var(--color-muted)' }}>{pt}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Comment box (not shown for resubmit — they already commented) */}
+      {!isResubmit && (showComment || needsComment) && (
         <textarea
           rows={2}
           placeholder={needsComment ? 'Comment required before approving…' : 'Optional comment…'}
@@ -293,7 +318,7 @@ function ReviewItem({ finding, runId, onUpdated, getIcon }) {
 
       {error && <p className="text-xs" style={{ color: '#dc2626' }}>{error}</p>}
 
-      {/* Actions */}
+      {/* Actions — resubmit findings only get Approve / Reject */}
       <div className="flex items-center gap-2 flex-wrap">
         <button
           onClick={() => submit('approved')}
@@ -311,15 +336,17 @@ function ReviewItem({ finding, runId, onUpdated, getIcon }) {
         >
           Reject
         </button>
-        <button
-          onClick={() => submit('resubmit')}
-          disabled={submitting}
-          className="text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-          style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: submitting ? 'not-allowed' : 'pointer' }}
-        >
-          Resubmit
-        </button>
-        {!showComment && !needsComment && (
+        {!isResubmit && (
+          <button
+            onClick={() => submit('resubmit')}
+            disabled={submitting}
+            className="text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+            style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: submitting ? 'not-allowed' : 'pointer' }}
+          >
+            Resubmit
+          </button>
+        )}
+        {!isResubmit && !showComment && !needsComment && (
           <button
             onClick={() => setShowComment(true)}
             className="text-xs"
@@ -487,6 +514,9 @@ export default function DocumentAnalyzer() {
   const [certLoading, setCertLoading] = useState(false);
   const [certError, setCertError] = useState('');
   const [downloadError, setDownloadError] = useState('');
+  const [resubmitLoading, setResubmitLoading] = useState(false);
+  const [resubmitError, setResubmitError] = useState('');
+  const [resubmitResults, setResubmitResults] = useState({});  // { finding_id: { revised_assessment, key_points } }
   const [customPrompt, setCustomPrompt] = useState('');
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpQuestion, setFollowUpQuestion] = useState('');
@@ -653,13 +683,33 @@ export default function DocumentAnalyzer() {
     }
   };
 
+  // ── Resubmit ───────────────────────────────────────────────────────────────
+
+  const handleResubmit = async () => {
+    if (!runId) return;
+    setResubmitLoading(true);
+    setResubmitError('');
+    try {
+      const res = await api.post(`/demo/runs/${runId}/resubmit`, {});
+      const map = {};
+      for (const a of (res.findings ?? [])) map[a.finding_id] = a;
+      setResubmitResults(map);
+    } catch (err) {
+      setResubmitError(err.message);
+    } finally {
+      setResubmitLoading(false);
+    }
+  };
+
   // ── Derived state ──────────────────────────────────────────────────────────
 
   const allFindings    = runResult?.all_findings ?? [];
   const detFindings    = runResult?.deterministic_findings ?? [];
   const probFindings   = runResult?.probabilistic_findings ?? [];
   const pendingCount   = allFindings.filter((f) => f.status === 'pending_review').length;
-  const allResolved    = allFindings.length > 0 && pendingCount === 0;
+  const resubmitCount  = allFindings.filter((f) => f.status === 'resubmit').length;
+  const hasResubmit    = resubmitCount > 0;
+  const allResolved    = allFindings.length > 0 && pendingCount === 0 && resubmitCount === 0;
   const trace          = runResult?.trace ?? [];
   const model          = runResult?.model ?? '—';
   const costAud        = runResult?.costAud;
@@ -1074,6 +1124,7 @@ export default function DocumentAnalyzer() {
                   runId={runId}
                   onUpdated={refreshRun}
                   getIcon={getIcon}
+                  revisedAssessment={resubmitResults[f.finding_id]}
                 />
               ))}
             </div>
@@ -1091,30 +1142,57 @@ export default function DocumentAnalyzer() {
             </div>
           )}
 
-          {/* Certificate */}
-          <div className="rounded-xl p-4 flex items-center justify-between gap-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+          {/* Certificate / Resubmit card */}
+          <div
+            className="rounded-xl p-4 flex items-center justify-between gap-4"
+            style={{
+              background: hasResubmit && pendingCount === 0 ? '#faf5ff' : 'var(--color-surface)',
+              border: `1px solid ${hasResubmit && pendingCount === 0 ? '#c4b5fd' : 'var(--color-border)'}`,
+            }}
+          >
             <div>
-              <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>Compliance Certificate</p>
+              <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+                {allResolved ? 'Compliance Certificate' : hasResubmit && pendingCount === 0 ? 'Findings Flagged for Re-examination' : 'Compliance Certificate'}
+              </p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
-                {allResolved
-                  ? 'All findings reviewed — certificate ready to generate.'
-                  : `${pendingCount} finding${pendingCount !== 1 ? 's' : ''} still pending review. Resolve all before generating.`
+                {pendingCount > 0
+                  ? `${pendingCount} finding${pendingCount !== 1 ? 's' : ''} still pending review.`
+                  : hasResubmit
+                  ? `${resubmitCount} finding${resubmitCount !== 1 ? 's' : ''} flagged for re-examination — click to get a revised AI assessment, then approve or reject.`
+                  : 'All findings reviewed — certificate ready to generate.'
                 }
               </p>
+              {resubmitError && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>{resubmitError}</p>}
               {certError && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>{certError}</p>}
             </div>
-            <button
-              onClick={handleCertificate}
-              disabled={!allResolved || certLoading}
-              className="shrink-0 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-              style={
-                allResolved && !certLoading
-                  ? { background: 'var(--color-primary)', color: '#fff', cursor: 'pointer' }
-                  : { background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: 'not-allowed' }
-              }
-            >
-              {certLoading ? 'Generating…' : 'Generate Certificate'}
-            </button>
+            {pendingCount === 0 && hasResubmit && (
+              <button
+                onClick={handleResubmit}
+                disabled={resubmitLoading || !runId}
+                className="shrink-0 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                style={
+                  resubmitLoading || !runId
+                    ? { background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: 'not-allowed' }
+                    : { background: '#7c3aed', color: '#fff', cursor: 'pointer' }
+                }
+              >
+                {resubmitLoading ? 'Re-examining…' : 'Re-examine with AI'}
+              </button>
+            )}
+            {allResolved && (
+              <button
+                onClick={handleCertificate}
+                disabled={certLoading}
+                className="shrink-0 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                style={
+                  certLoading
+                    ? { background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: 'not-allowed' }
+                    : { background: 'var(--color-primary)', color: '#fff', cursor: 'pointer' }
+                }
+              >
+                {certLoading ? 'Generating…' : 'Generate Certificate'}
+              </button>
+            )}
           </div>
 
           {/* Original file download + S3 Storage */}

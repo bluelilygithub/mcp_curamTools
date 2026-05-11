@@ -410,6 +410,123 @@ router.get('/runs/:runId/download', async (req, res) => {
   }
 });
 
+// ── POST /api/demo/runs/:runId/resubmit ───────────────────────────────────
+// Re-examines all findings currently marked 'resubmit', incorporating the
+// reviewer's comment, and returns a revised AI assessment for each.
+router.post('/runs/:runId/resubmit', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, result FROM agent_runs WHERE id = $1 AND org_id = $2`,
+      [req.params.runId, req.user.orgId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Run not found.' });
+
+    const result  = rows[0].result ?? {};
+    const data    = result.data ?? {};
+    const extractedText  = data.extracted_text ?? '';
+    const fileName       = data.file_name ?? 'document';
+    const documentType   = data.document_type ?? 'unknown';
+
+    const flagged = (data.all_findings ?? []).filter((f) => f.status === 'resubmit');
+    if (!flagged.length) {
+      return res.status(400).json({ error: 'No findings marked for resubmission.' });
+    }
+
+    const findingsText = flagged.map((f, i) => {
+      const excerpt = f.stage === 'deterministic'
+        ? (f.matched_text ?? []).slice(0, 1).join('; ')
+        : (f.excerpt ?? '');
+      return [
+        `Finding ${i + 1} (ID: ${f.finding_id})`,
+        `Label: ${f.label}`,
+        `Stage: ${f.stage}`,
+        `Original assessment: ${f.description ?? f.action ?? ''}`,
+        excerpt ? `Document excerpt: "${excerpt}"` : null,
+        `Reviewer comment: ${f.comment ?? '(no comment provided)'}`,
+      ].filter(Boolean).join('\n');
+    }).join('\n\n---\n\n');
+
+    const contextPrompt = `The following findings from an engineering document analysis have been flagged by a reviewer for re-examination. For each, provide a revised assessment that directly addresses the reviewer's comment.
+
+Document: "${fileName}" (type: ${documentType})
+
+Document text (abridged for context):
+${extractedText.slice(0, 5000)}${extractedText.length > 5000 ? '\n[Text truncated]' : ''}
+
+---
+
+Flagged findings:
+
+${findingsText}
+
+---
+
+Return ONLY a JSON object — no markdown fences, no explanation:
+{
+  "assessments": [
+    {
+      "finding_id": "<finding_id from above>",
+      "revised_assessment": "<2-3 sentences directly addressing the reviewer comment and the document evidence>",
+      "key_points": ["<brief key point>", "<brief key point>"]
+    }
+  ]
+}`;
+
+    const AgentConfigService = require('../platform/AgentConfigService');
+    const { getProvider }    = require('../platform/AgentOrchestrator');
+    const { buildSystemPrompt } = require('../agents/demoDocumentAnalyzer/prompt');
+
+    const customProviders = await AgentConfigService.getCustomProviders(req.user.orgId).catch(() => []);
+    const adminConfig     = await AgentConfigService.getAdminConfig('demo-document-analyzer').catch(() => ({}));
+    const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(req.user.orgId).catch(() => null);
+    const model           = orgDefaultModel ?? 'deepseek-chat';
+    const maxTokens       = adminConfig.max_tokens ?? 4096;
+    const fallback        = adminConfig.fallback_model ?? null;
+    const agentConfig     = await AgentConfigService.getAgentConfig(req.user.orgId, 'demo-document-analyzer').catch(() => ({}));
+    const systemPrompt    = buildSystemPrompt(agentConfig);
+
+    async function callModel(modelId) {
+      const provider = getProvider(modelId, customProviders);
+      return provider.chat({
+        model: modelId,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: [{ type: 'text', text: contextPrompt }] }],
+      });
+    }
+
+    let response;
+    try {
+      response = await callModel(model);
+    } catch (primaryErr) {
+      if (fallback) {
+        response = await callModel(fallback);
+      } else {
+        throw primaryErr;
+      }
+    }
+
+    const textBlock = response.content?.find((b) => b.type === 'text');
+    if (!textBlock) throw new Error('No text response from model.');
+
+    let parsed;
+    try {
+      let candidate = textBlock.text.replace(/```(?:json)?\s*/gi, '').trim();
+      const first = candidate.indexOf('{');
+      const last  = candidate.lastIndexOf('}');
+      if (first !== -1 && last > first) candidate = candidate.slice(first, last + 1);
+      parsed = JSON.parse(candidate);
+    } catch {
+      throw new Error('Model returned invalid JSON for resubmit assessments.');
+    }
+
+    res.json({ findings: parsed.assessments ?? [], model });
+  } catch (err) {
+    console.error('[demo/resubmit]', err.message);
+    res.status(500).json({ error: `Failed to resubmit: ${err.message}` });
+  }
+});
+
 // ── POST /api/demo/runs/:runId/follow-up ──────────────────────────────────
 // Allows the user to ask a follow-up question about a previously analysed document.
 // The LLM receives the original extracted text, findings, summary, and the new question
