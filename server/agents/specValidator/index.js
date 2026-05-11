@@ -978,7 +978,8 @@ async function runSpecValidator(context) {
       python_pass_count:  passCount,
       segments_extracted: segCount,
       image_pages:        pages.length,
-      model,
+      extraction_model:   model,
+      synthesis_model:    synthesisModel,
     },
   });
 

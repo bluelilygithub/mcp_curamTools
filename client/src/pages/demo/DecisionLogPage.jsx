@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useIcon } from '../../providers/IconProvider';
+import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import Button from '../../components/ui/Button';
 import InlineBanner from '../../components/ui/InlineBanner';
@@ -19,13 +20,19 @@ const fmtCost = (n) =>
   n != null ? `$${Number(n).toLocaleString('en-AU', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}` : '—';
 
 export default function DecisionLogPage() {
-  const getIcon = useIcon();
+  const getIcon  = useIcon();
+  const navigate = useNavigate();
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedRun, setExpandedRun] = useState(null);
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'plain'
   const [confirmEmpty, setConfirmEmpty] = useState(false);
+
+  const handleViewReport = (run) => {
+    const toolPath = `/demo/run/${run.slug}`;
+    navigate(`${toolPath}?runId=${run.id}`);
+  };
 
   const fetchRuns = () => {
     setLoading(true);
@@ -157,6 +164,7 @@ export default function DecisionLogPage() {
               expanded={expandedRun === run.id}
               onToggle={() => setExpandedRun(expandedRun === run.id ? null : run.id)}
               getIcon={getIcon}
+              onViewReport={handleViewReport}
             />
           ))}
         </div>
@@ -196,7 +204,7 @@ function PlainTextView({ runs }) {
   );
 }
 
-function RunCard({ run, expanded, onToggle, getIcon }) {
+function RunCard({ run, expanded, onToggle, getIcon, onViewReport }) {
   const statusColor = {
     complete: { bg: '#dcfce7', color: '#166534' },
     error:    { bg: '#fee2e2', color: '#991b1b' },
@@ -246,9 +254,20 @@ function RunCard({ run, expanded, onToggle, getIcon }) {
           </p>
         </div>
 
-        <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
-          {expanded ? 'Hide details' : 'View details'}
-        </span>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {run.slug && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onViewReport(run); }}
+              className="text-xs px-2.5 py-1 rounded-lg border transition-opacity hover:opacity-70"
+              style={{ borderColor: 'var(--color-primary)', color: 'var(--color-primary)', background: 'transparent', cursor: 'pointer' }}
+            >
+              View report →
+            </button>
+          )}
+          <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
+            {expanded ? 'Hide' : 'Details'}
+          </span>
+        </div>
       </button>
 
       {/* Expanded detail */}

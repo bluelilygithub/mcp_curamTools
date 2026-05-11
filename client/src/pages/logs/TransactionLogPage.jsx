@@ -108,6 +108,18 @@ function TransactionDetail({ tx, getIcon }) {
         <MetaItem label="Transaction ID" value={tx.id} mono />
         <MetaItem label="Agent" value={tx.agent_slug} />
         <MetaItem label="Action" value={tx.action} />
+        {tx.metadata?.extraction_model && (
+          <MetaItem label="Extraction Model" value={tx.metadata.extraction_model} mono />
+        )}
+        {tx.metadata?.synthesis_model && (
+          <MetaItem label="Synthesis Model" value={tx.metadata.synthesis_model} mono />
+        )}
+        {tx.metadata?.model && !tx.metadata?.extraction_model && (
+          <MetaItem label="Model" value={tx.metadata.model} mono />
+        )}
+        {tx.metadata?.segments_extracted != null && (
+          <MetaItem label="Segments" value={String(tx.metadata.segments_extracted)} />
+        )}
       </div>
 
       {/* Linked events from Container 2 */}

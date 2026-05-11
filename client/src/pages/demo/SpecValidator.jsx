@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { useIcon } from '../../providers/IconProvider';
 import { exportPdf } from '../../utils/exportService';
@@ -619,6 +620,7 @@ function buildCertificateHtml(runData, orgName) {
 export default function SpecValidator({ slug = 'demo-spec-validator' }) {
   const getIcon  = useIcon();
   const { user } = useAuthStore();
+  const [searchParams] = useSearchParams();
 
   const [file, setFile]               = useState(null);
   const [dragging, setDragging]       = useState(false);
@@ -645,6 +647,18 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
   const [followUpError, setFollowUpError]       = useState('');
   const fileInputRef  = useRef(null);
   const cancelledRef  = useRef(false);
+
+  // ── Load run from URL ?runId= (navigation from decision log) ───────────────
+  useEffect(() => {
+    const urlRunId = searchParams.get('runId');
+    if (!urlRunId) return;
+    api.get(`/demo/runs/${urlRunId}`)
+      .then((row) => {
+        const data = row.result?.data ?? row.result;
+        if (data) { setRunResult(data); setRunId(urlRunId); }
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Cancel ─────────────────────────────────────────────────────────────────
 
