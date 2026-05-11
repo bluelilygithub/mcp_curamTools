@@ -61,18 +61,19 @@ export default function ModelsTab() {
   const { user } = useAuthStore();
   const isAdmin = user?.roles?.some((r) => r.name === 'org_admin');
 
-  const [models,        setModels]        = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [apiKeyOk,      setApiKeyOk]      = useState({});
-  const [saving,        setSaving]        = useState(false);
-  const [error,         setError]         = useState('');
-  const [success,       setSuccess]       = useState('');
-  const [editingId,     setEditingId]     = useState(null);
-  const [form,          setForm]          = useState(EMPTY_FORM);
-  const [defaultModel,  setDefaultModel]  = useState(null);
-  const [fallbackModel, setFallbackModel] = useState(null);
-  const [savingDefaults, setSavingDefaults] = useState(false);
-  const [testResults,   setTestResults]   = useState({});
+  const [models,              setModels]              = useState([]);
+  const [loading,             setLoading]             = useState(true);
+  const [apiKeyOk,            setApiKeyOk]            = useState({});
+  const [saving,              setSaving]              = useState(false);
+  const [error,               setError]               = useState('');
+  const [success,             setSuccess]             = useState('');
+  const [editingId,           setEditingId]           = useState(null);
+  const [form,                setForm]                = useState(EMPTY_FORM);
+  const [defaultModel,        setDefaultModel]        = useState(null);
+  const [fallbackModel,       setFallbackModel]       = useState(null);
+  const [specValidatorModel,  setSpecValidatorModel]  = useState(null);
+  const [savingDefaults,      setSavingDefaults]      = useState(false);
+  const [testResults,         setTestResults]         = useState({});
 
   useEffect(() => {
     if (!isAdmin) { setLoading(false); return; }
@@ -81,11 +82,13 @@ export default function ModelsTab() {
       api.get('/settings/model-status'),
       api.get('/settings/default-model'),
       api.get('/settings/fallback-model'),
-    ]).then(([modelData, statusData, defaultData, fallbackData]) => {
+      api.get('/admin/agents/spec-validator').catch(() => null),
+    ]).then(([modelData, statusData, defaultData, fallbackData, svConfig]) => {
       setModels(modelData);
       setApiKeyOk(statusData);
       setDefaultModel(defaultData.model_id ?? null);
       setFallbackModel(fallbackData.model_id ?? null);
+      setSpecValidatorModel(svConfig?.model ?? null);
     }).catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [isAdmin]);
@@ -96,8 +99,10 @@ export default function ModelsTab() {
       await Promise.all([
         api.put('/settings/default-model', { model_id: defaultModel || null }),
         api.put('/settings/fallback-model', { model_id: fallbackModel || null }),
+        api.put('/admin/agents/spec-validator',      { model: specValidatorModel || null }),
+        api.put('/admin/agents/demo-spec-validator', { model: specValidatorModel || null }),
       ]);
-      setSuccess('Default and fallback models saved.');
+      setSuccess('Models saved.');
     } catch (e) {
       setError(e.message);
     } finally {
@@ -211,8 +216,10 @@ export default function ModelsTab() {
   const activeModels = models.filter((m) => m.enabled);
   const defaultIsInactive = defaultModel && !activeModels.some((m) => m.id === defaultModel);
   const fallbackIsInactive = fallbackModel && !activeModels.some((m) => m.id === fallbackModel);
+  const specValidatorIsInactive = specValidatorModel && !activeModels.some((m) => m.id === specValidatorModel);
   const defaultModelObj = models.find((m) => m.id === defaultModel);
   const fallbackModelObj = models.find((m) => m.id === fallbackModel);
+  const specValidatorModelObj = models.find((m) => m.id === specValidatorModel);
 
   const fi = {
     width: '100%', padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
@@ -235,7 +242,7 @@ export default function ModelsTab() {
             If the default fails, the fallback model is used automatically.
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className={LABEL} style={LABEL_STYLE}>Default model</label>
               <select
@@ -285,6 +292,32 @@ export default function ModelsTab() {
               </select>
               {fallbackIsInactive && (
                 <p className="text-xs mt-1" style={{ color: '#991b1b' }}>⚠ Fallback is inactive</p>
+              )}
+            </div>
+
+            <div>
+              <label className={LABEL} style={LABEL_STYLE}>Spec Validator extraction</label>
+              <select
+                value={specValidatorModel ?? ''}
+                onChange={(e) => setSpecValidatorModel(e.target.value)}
+                className={FIELD}
+                style={{
+                  ...FIELD_STYLE,
+                  borderColor: specValidatorIsInactive ? '#fca5a5' : 'var(--color-border)',
+                }}
+              >
+                <option value="">— Use default —</option>
+                {specValidatorIsInactive && specValidatorModelObj && (
+                  <option value={specValidatorModelObj.id} disabled style={{ color: '#991b1b' }}>
+                    ⚠ {specValidatorModelObj.name} (inactive)
+                  </option>
+                )}
+                {activeModels.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name} — {m.id}</option>
+                ))}
+              </select>
+              {specValidatorIsInactive && (
+                <p className="text-xs mt-1" style={{ color: '#991b1b' }}>⚠ Spec Validator model is inactive</p>
               )}
             </div>
           </div>
@@ -427,6 +460,7 @@ export default function ModelsTab() {
               const test = testResults[m.id];
               const isCurrentDefault = m.id === defaultModel;
               const isCurrentFallback = m.id === fallbackModel;
+              const isSpecValidator = m.id === specValidatorModel;
               return (
                 <div
                   key={m.id}
@@ -461,6 +495,14 @@ export default function ModelsTab() {
                             style={{ background: 'rgba(124,58,237,0.1)', color: '#7c3aed' }}
                           >
                             fallback
+                          </span>
+                        )}
+                        {isSpecValidator && (
+                          <span
+                            className="text-xs px-2 py-0.5 rounded-full font-medium"
+                            style={{ background: 'rgba(5,150,105,0.1)', color: '#059669' }}
+                          >
+                            spec-validator
                           </span>
                         )}
                         {m.tagline && (
