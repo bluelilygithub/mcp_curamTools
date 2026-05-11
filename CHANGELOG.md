@@ -25,6 +25,24 @@
 
 ---
 
+## 2026-05-11 — Spec Validator — Phase 2 (frontend complete)
+
+### Built
+- **`client/src/providers/IconProvider.jsx`**: Added `FileCheck` import and `'file-check': FileCheck` semantic map entry.
+- **`client/src/pages/demo/SpecValidator.jsx`**: Primary Phase 2 deliverable (~700 lines). PDF-only upload zone (10 MB, drag-drop + picker). Three-stage progress indicator (Extracting / Python Calculations / Synthesising) with SSE keyword advancement, post-run stage detail (model name, token counts, library versions). Findings panel: deterministic (Python) section with stated/calculated 3-col grid, expandable "Show working" monospace block, auto-approved PASS rows, approve/reject/resubmit controls for FAIL/WARNING; probabilistic (Claude) section with confidence badges, low-confidence comment gate. Cross-stage overlap pills. Sticky review summary bar (PASS/FAIL/WARNING counts, pending count, certificate gate). Certificate export via `exportService.js` (library versions + full working for FAIL findings). Follow-up Q&A via `ConversationView` with `agentSlug` context. Persistent inline error banner for run failures (not toast).
+- **`client/src/pages/tools/SpecValidatorPage.jsx`**: Thin wrapper — renders `<SpecValidator slug="spec-validator" />`.
+- **`client/src/App.jsx`**: Added two routes: `/demo/run/demo-spec-validator` → `<SpecValidator />`, `/tools/spec-validator` → `<SpecValidatorPage />`.
+- **`client/src/config/tools.js`**: Added `spec-validator` entry (Utilities group, `org_member`+ roles, `file-check` icon).
+
+### Fixed / discovered
+- Sidebar and DemoSidebar: no direct edits required. Sidebar renders dynamically from tools.js via `getPermittedToolGroups`; DemoSidebar is manifest-driven via `/demo/manifest` API. Adding to tools.js and demoCatalog.js (Phase 1 Step 6) covers both surfaces automatically.
+
+### Open / next
+- Phase 1 remaining steps (prompt.js, agents.js, demoCatalog.js, AgentConfigService.js, demo.js) were completed in the Phase 1 session.
+- End-to-end smoke test against a real hydraulic PDF when Railway env is available.
+
+---
+
 ## 2026-05-11 — Spec Validator agent — Phase 1 (server-side pipeline complete)
 
 ### Built

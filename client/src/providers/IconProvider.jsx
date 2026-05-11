@@ -83,6 +83,7 @@ import {
   Building2,
   List,
   MessageCircle,
+  FileCheck,
 } from 'lucide-react';
 
 const semanticMap = {
@@ -156,6 +157,7 @@ const semanticMap = {
 
   // Content
   'file-text': FileText,
+  'file-check': FileCheck,
   'book-open': BookOpen,
   'message-square': MessageSquare,
   send: Send,

@@ -108,6 +108,15 @@ const TOOLS = [
     roles:       ['org_member', 'org_admin'],
     group:       'Utilities',
   },
+  {
+    id:          'spec-validator',
+    name:        'Spec Validator',
+    description: 'Validate hydraulic calculation documents against AS/NZS 3500.1. Deterministic Python verification of pipe velocities, pressure drops, and system pressure budgets.',
+    icon:        'file-check',
+    path:        '/tools/spec-validator',
+    roles:       ['org_member', 'org_admin'],
+    group:       'Utilities',
+  },
 ];
 
 /**

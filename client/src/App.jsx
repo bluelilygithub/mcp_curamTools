@@ -46,6 +46,8 @@ import NotInterestedReportPage   from './pages/tools/NotInterestedReportPage';
 import AdsSetupArchitectPage     from './pages/profitabilitySuite/adsSetupArchitect/AdsSetupArchitectPage';
 import CampaignDashboardPage     from './pages/tools/CampaignDashboardPage';
 import WpThemeExtractorPage      from './pages/tools/WpThemeExtractorPage';
+import SpecValidator            from './pages/demo/SpecValidator';
+import SpecValidatorPage        from './pages/tools/SpecValidatorPage';
 
 export default function App() {
   return (
@@ -74,6 +76,7 @@ export default function App() {
                 <Route path="/tools/ads-setup-architect"   element={<AdsSetupArchitectPage />} />
                 <Route path="/tools/campaign-dashboard"    element={<CampaignDashboardPage />} />
                 <Route path="/tools/wp-theme-extractor"   element={<WpThemeExtractorPage />} />
+                <Route path="/tools/spec-validator"        element={<SpecValidatorPage />} />
 
                 {/* Admin-only */}
                 <Route element={<RequireRole allowedRoles={['org_admin']} />}>
@@ -105,6 +108,7 @@ export default function App() {
 				{/* Demo org routes */}
 				<Route path="/demo/dashboard" element={<DemoDashboardPage />} />
 				<Route path="/demo/run/demo-document-analyzer" element={<DocumentAnalyzer />} />
+				<Route path="/demo/run/demo-spec-validator"    element={<SpecValidator />} />
 				<Route path="/demo/decision-log" element={<DecisionLogPage />} />
 				<Route path="/demo/logs/transactions" element={<TransactionLogPage />} />
 				<Route path="/demo/logs/events" element={<AgentEventLogPage />} />
