@@ -512,6 +512,7 @@ export default function DocumentAnalyzer() {
   const [runId, setRunId]         = useState(null);
   const [error, setError]         = useState('');
   const [certLoading, setCertLoading] = useState(false);
+  const [viewLoading, setViewLoading] = useState(false);
   const [certError, setCertError] = useState('');
   const [downloadError, setDownloadError] = useState('');
   const [emailOpen, setEmailOpen]     = useState(false);
@@ -685,6 +686,27 @@ export default function DocumentAnalyzer() {
       setCertError(err.message);
     } finally {
       setCertLoading(false);
+    }
+  };
+
+  // ── Preview certificate (blob URL in new tab) ──────────────────────────────
+
+  const handleViewCertificate = () => {
+    setViewLoading(true);
+    try {
+      const orgName = user?.orgName ?? 'Curam Engineering';
+      const html    = buildCertificateHtml(
+        runResult,
+        orgName,
+        runResult?.tokensUsed ?? runResult?.tokens_used,
+        runResult?.costAud,
+      );
+      const blob = new Blob([html], { type: 'text/html' });
+      const url  = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } finally {
+      setViewLoading(false);
     }
   };
 
@@ -1217,26 +1239,32 @@ export default function DocumentAnalyzer() {
               </button>
             )}
             {allResolved && (
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={handleViewCertificate}
+                  disabled={viewLoading}
+                  title="Preview certificate"
+                  className="rounded-lg p-2 transition-colors"
+                  style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', cursor: viewLoading ? 'not-allowed' : 'pointer', lineHeight: 0 }}
+                >
+                  {getIcon('eye', { size: 16 })}
+                </button>
                 <button
                   onClick={handleCertificate}
                   disabled={certLoading}
-                  className="text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-                  style={
-                    certLoading
-                      ? { background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: 'not-allowed' }
-                      : { background: 'var(--color-primary)', color: '#fff', cursor: 'pointer' }
-                  }
+                  title="Download PDF"
+                  className="rounded-lg p-2 transition-colors"
+                  style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', cursor: certLoading ? 'not-allowed' : 'pointer', lineHeight: 0 }}
                 >
-                  {certLoading ? 'Generating…' : 'Download PDF'}
+                  {getIcon('download', { size: 16 })}
                 </button>
                 <button
                   onClick={() => { setEmailOpen((o) => !o); setEmailSent(false); setEmailError(''); if (!emailTo && user?.email) setEmailTo(user.email); }}
-                  className="text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-                  style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', cursor: 'pointer' }}
+                  title={emailSent ? 'Certificate sent' : 'Email certificate'}
+                  className="rounded-lg p-2 transition-colors"
+                  style={{ background: 'var(--color-bg)', color: emailSent ? '#16a34a' : 'var(--color-text)', border: `1px solid ${emailSent ? '#16a34a' : 'var(--color-border)'}`, cursor: 'pointer', lineHeight: 0 }}
                 >
-                  {getIcon('mail', { size: 14 })}
-                  {emailSent ? ' Sent ✓' : ' Email'}
+                  {getIcon('mail', { size: 16 })}
                 </button>
               </div>
             )}

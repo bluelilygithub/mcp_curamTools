@@ -25,6 +25,21 @@
 
 ---
 
+## 2026-05-11 — Document Analyzer certificate actions: preview, download, email (icon-only buttons)
+
+### Built
+- **View certificate button** (`DocumentAnalyzer.jsx`): New `handleViewCertificate` builds the certificate HTML client-side and opens it as a blob URL in a new tab — no download, no server round-trip.
+- **Three icon-only certificate buttons**: Replaced the previous labeled Download/Email buttons with three compact square icon-only buttons (eye, download, mail). All use `p-2` + `border: 1px solid var(--color-border)`. Email button shows green border/icon when sent — no text label needed.
+- **`viewLoading` state**: Added alongside `certLoading` to disable the view button while the blob URL is being built (synchronous but guarded).
+
+### Fixed
+- Email button icon and label were rendering on separate lines because `getIcon()` returns an SVG element and adjacent text node sits below it without a flex container. Fixed by making the button icon-only — no text node, no layout issue.
+
+### Open / next
+- Nothing outstanding on certificate actions.
+
+---
+
 ## 2026-05-11 — Document Analyzer follow-up Q&A scope restriction + configurable prompt
 
 ### Built
