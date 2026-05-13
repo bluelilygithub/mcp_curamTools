@@ -462,7 +462,7 @@ export default function ModelsTab() {
               const test = testResults[m.id];
               const isCurrentDefault = m.id === defaultModel;
               const isCurrentFallback = m.id === fallbackModel;
-              const isSpecValidator = m.id === specValidatorModel;
+              const isSpecValidator = m.id === pdfExtractionModel;
               return (
                 <div
                   key={m.id}
