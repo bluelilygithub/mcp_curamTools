@@ -418,9 +418,18 @@ const fileBuffers = await Promise.all(
 
 **File browser UI pattern:**
 
-Before the run starts, the client fetches `GET /api/demo/evidence?pack=<packName>` which returns the listing. The UI renders a browsable file tree — folder structure derived from the S3 key suffixes, file type icons, file size. Each file row has a preview link (opens a 1-hour pre-signed URL) and an optional "substitute" action (see below).
+Before the run starts, the client fetches a **demo-scoped listing endpoint** (see the agent’s section below for the exact path) which returns file metadata plus, when S3 and credentials are configured, **short-lived pre-signed GET URLs** so each row can open in a new tab. A richer UI can render a tree (folder structure from key suffixes), icons, and sizes; the minimal pattern is a flat list with **Open** links.
 
 The file tree is read-only by default. It communicates to the audience that this is the standing evidence the agent will use — not a blank-slate upload prompt.
+
+**Implemented today — `demo-tender-response`:**
+
+| Piece | Location / behaviour |
+|---|---|
+| List + presign | `GET /api/demo/tender-evidence` in `server/routes/demo.js` — lists `curam engineering/evidence-pack/` and attaches presigned URLs (default 1 hour). |
+| UI | `client/src/pages/demo/TenderResponseGenerator.jsx` — pre-run pack list with links. |
+| HITL draft UX | Same page: drafts rendered with **`MarkdownRenderer`**; **Edit** uses **`MicButton`** + textarea (Web Speech API) per `MicButton.jsx` / `useSpeechInput.js`. |
+| Run id for PATCH | `server/platform/createAgentRoute.js` — success SSE payload is `{ type: 'result', data: { ...resultPayload, runId } }` so the client never PATCHes `.../runs/null/...`. |
 
 **Audience upload — substituting a file for testing:**
 

@@ -248,7 +248,9 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
           }).catch((e) => console.warn(`[${slug}] embedding failed (non-fatal):`, e.message));
         }
 
-        emit('result', { data: resultPayload });
+        // Include runId on the streamed payload so clients can PATCH review endpoints
+        // before reloading from GET /demo/runs/:id (persisted result omits this envelope field).
+        emit('result', { data: { ...resultPayload, runId } });
       } catch (runErr) {
         console.error(`[${slug}] run error:`, runErr.message);
         await persistRun({

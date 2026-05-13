@@ -150,6 +150,8 @@ This file catalogs agents **registered for SSE runs** in `server/routes/agents.j
 
 **Key files:** `index.js`, `compliance.py`, `prompt.js`
 
+**Key client / API:** `client/src/pages/demo/TenderResponseGenerator.jsx` — `GET /api/demo/tender-evidence` (list + presigned URLs), `PATCH /api/demo/runs/:runId/tender-review/:requirementId`, `MarkdownRenderer` for drafts, `MicButton` in edit mode. SSE `result` includes `runId` via `createAgentRoute` (see root `CHANGELOG.md` 2026-05-16).
+
 ---
 
 ## Other registered tool agents (summary)

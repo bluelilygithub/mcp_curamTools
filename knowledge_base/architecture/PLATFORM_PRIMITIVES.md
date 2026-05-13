@@ -25,6 +25,8 @@ createAgentRoute({ slug, runFn, requiredPermission })
 | `POST /run` | requireAuth + requireRole | Loads admin config, checks kill switch, streams SSE |
 | `GET /history` | requireAuth | Returns last 20 `agent_runs` rows for this slug + org |
 
+**SSE result payload:** On successful completion, the final `{ type: 'result', data }` message’s `data` object includes **`runId`** (the UUID of the `agent_runs` row). Clients use it for immediate follow-up calls such as `PATCH /api/demo/runs/:runId/...`. **`runId` is not written into persisted `agent_runs.result` JSON** — only the streamed envelope carries it.
+
 **Budget integration:** Pre-flight daily budget check, mid-run accumulation via `emit(text, partialTokensUsed)`, post-run definitive check. `costAud` added to `resultPayload`.
 
 ---

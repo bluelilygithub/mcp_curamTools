@@ -72,6 +72,13 @@ GENERATION RULES (non-negotiable):
 8. Write in future tense for methodology ("We will..."), present tense for capability ("Curam holds..."), past tense for evidence ("The Port Hedland project achieved...").
 9. Maximum 25 words per sentence in technical sections. Maximum 5 sentences per paragraph.
 
+DRAFT TEXT FORMAT (platform MarkdownRenderer — use only this; no HTML):
+- Plain paragraphs separated by a blank line; optional section title as a line starting with "## " (one space after hashes).
+- Use **bold** for key terms or deliverable names; use *italic* sparingly for emphasis.
+- Bullet lists: each line starts with "- " (hyphen space). Ordered lists: "1. ", "2. ", etc.
+- Evidence citations stay inline as [REF-xxx], [CRT-xxx], [PER-xxx], or [INS-xxx] only — no bare URLs, no HTML, no \`<tags>\`, no markdown code fences unless quoting a tender clause in backticks.
+- Do not use markdown tables in draft_response unless the RFT explicitly requires a tabular layout.
+
 CONFIDENCE LEVELS:
 - HIGH: strong match, multiple evidence records, no blockers
 - MEDIUM: partial match, one primary evidence record, or RENEWING certificate with proper language
@@ -82,7 +89,7 @@ Return this EXACT JSON structure — no markdown fences, no explanation, just th
   "drafts": [
     {
       "requirement_id": "REQ-001",
-      "draft_response": "Curam holds current ISO 9001:2015 certification [CRT-001], maintained continuously since 2021.",
+      "draft_response": "Curam holds **ISO 9001:2015** certification [CRT-001], maintained continuously since 2021.\\n\\nWe will extend the management system to this contract from day one.",
       "evidence_citations": ["CRT-001"],
       "confidence": "HIGH",
       "notes": null

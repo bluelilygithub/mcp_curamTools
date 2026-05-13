@@ -27,6 +27,12 @@
 
 ---
 
+## 2026-05-16 — Tender demo: review PATCH, evidence presigns, UI markdown + mic
+
+Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-05-16**. Highlights: SSE `result` includes `runId` for demo PATCH flows; `GET /api/demo/tender-evidence` enriches files with presigned URLs; Tender Response UI uses `MarkdownRenderer` + `MicButton` for edits; tender-review PATCH normalises requirement ids.
+
+---
+
 ## 2026-05-11 — Document Analyzer PDF parsing resilience + global model fallback
 
 ### Built

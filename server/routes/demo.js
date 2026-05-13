@@ -853,8 +853,11 @@ router.patch('/runs/:runId/tender-review/:requirementId', async (req, res) => {
     const data   = result.data    ?? {};
 
     let found = false;
+    const qid = String(requirementId ?? '').trim();
     const requirements = (data.requirements ?? []).map((r) => {
-      if (r.requirement_id !== requirementId && r.finding_id !== requirementId) return r;
+      const rid = String(r.requirement_id ?? '').trim();
+      const fid = String(r.finding_id ?? '').trim();
+      if (rid !== qid && fid !== qid) return r;
       if (r.status === 'blocked') return r; // blocked requirements cannot be reviewed
 
       found = true;

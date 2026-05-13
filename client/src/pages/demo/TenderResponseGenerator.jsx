@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { useIcon } from '../../providers/IconProvider';
 import ProcessingModal from '../../components/shared/ProcessingModal';
+import MicButton from '../../components/ui/MicButton';
+import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
@@ -137,19 +139,28 @@ function RequirementCard({ req, runId, onUpdated, getIcon }) {
 
   const ms   = matchStatusStyle(req.match_status);
   const pill = reviewPill(req.status);
+  const micSupported =
+    typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
   const isBlocked  = req.status === 'blocked';
   const isReviewed = ['approved', 'edited', 'rejected'].includes(req.status);
 
   const submit = async (status) => {
+    if (!runId) {
+      setReviewError('Run ID is missing. Reload this page or open the run from history, then try again.');
+      return;
+    }
     setSubmitting(true);
     setReviewError('');
     try {
-      await api.patch(`/demo/runs/${runId}/tender-review/${req.requirement_id}`, {
+      await api.patch(
+        `/demo/runs/${runId}/tender-review/${encodeURIComponent(req.requirement_id)}`,
+        {
         status,
         comment:     comment.trim() || undefined,
         ...(status === 'edited' ? { edited_text: editedText.trim() } : {}),
-      });
+        }
+      );
       setEditMode(false);
       setRejectOpen(false);
       onUpdated();
@@ -268,26 +279,48 @@ function RequirementCard({ req, runId, onUpdated, getIcon }) {
           </p>
 
           {editMode ? (
-            <textarea
-              value={editedText}
-              onChange={(e) => setEditedText(e.target.value)}
-              rows={6}
-              className="w-full rounded-lg p-3 text-sm"
-              style={{
-                background: 'var(--color-bg)',
-                border: '1px solid var(--color-border)',
-                color: 'var(--color-text)',
-                resize: 'vertical',
-                lineHeight: 1.6,
-              }}
-              placeholder="Enter your edited draft…"
-            />
+            <div
+              className="rounded-lg overflow-hidden"
+              style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }}
+            >
+              <textarea
+                value={editedText}
+                onChange={(e) => setEditedText(e.target.value)}
+                rows={6}
+                className="w-full p-3 text-sm outline-none"
+                style={{
+                  background: 'var(--color-bg)',
+                  border: 'none',
+                  color: 'var(--color-text)',
+                  resize: 'vertical',
+                  lineHeight: 1.6,
+                }}
+                placeholder="Enter your edited draft (Markdown: **bold**, lists, ## headings)…"
+              />
+              {micSupported && (
+                <div
+                  className="flex items-center justify-end gap-2 px-2 py-1.5"
+                  style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-surface)' }}
+                >
+                  <MicButton
+                    onResult={(t) => setEditedText((q) => {
+                      const base = q.replace(/\s*\[.*?\]$/, '').trim();
+                      return base ? `${base} ${t}` : t;
+                    })}
+                    onPartial={(t) => setEditedText((q) => {
+                      const base = q.replace(/\s*\[.*?\]$/, '').trim();
+                      return base ? `${base} [${t}]` : `[${t}]`;
+                    })}
+                  />
+                </div>
+              )}
+            </div>
           ) : (
             <div
               className="rounded-lg p-3 text-sm"
               style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', lineHeight: 1.6, color: 'var(--color-text)' }}
             >
-              {req.status === 'edited' ? req.edited_text : req.draft_response}
+              <MarkdownRenderer text={req.status === 'edited' ? (req.edited_text ?? '') : (req.draft_response ?? '')} />
             </div>
           )}
 
@@ -301,7 +334,7 @@ function RequirementCard({ req, runId, onUpdated, getIcon }) {
                 className="mt-2 rounded-lg p-3 text-xs"
                 style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-muted)', lineHeight: 1.6 }}
               >
-                {req.original_draft}
+                <MarkdownRenderer text={req.original_draft ?? ''} />
               </div>
             </details>
           )}

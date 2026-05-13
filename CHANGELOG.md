@@ -35,6 +35,23 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-16 — Tender demo: HITL save fix, evidence links, voice + markdown drafts
+
+### Built
+- **`createAgentRoute.js`:** Final SSE `result` message now includes **`runId`** on the streamed `data` object (alongside `summary`, `data`, `tokensUsed`, etc.). Persisted `agent_runs.result` is unchanged — `runId` is for clients that must call `PATCH /api/demo/runs/:runId/...` before a full reload.
+- **`GET /api/demo/tender-evidence`:** Each listed object includes a short-lived **presigned download URL** so the pre-run evidence browser can open files in a new tab.
+- **`TenderResponseGenerator.jsx`:** Evidence filenames link to presigned URLs; draft and original-draft body use **`MarkdownRenderer`**; edit mode adds **`MicButton`** (Web Speech API, same append pattern as Admin SQL / Google Ads conversation) when supported; `encodeURIComponent` on requirement id in review PATCH path; guard when `runId` is missing.
+- **`server/agents/demoSuite/tenderResponse/prompt.js`:** **DRAFT TEXT FORMAT** rules aligned with `MarkdownRenderer` (paragraphs, `##` headings, `**bold**`, lists, no HTML / bare URLs; citations remain `[REF-xxx]` style).
+
+### Fixed / discovered
+- **Tender HITL “Save edit” → “Failed to update review”:** The streamed result payload omitted `runId`; the page left `runId` null, so the client called `PATCH .../runs/null/tender-review/...`, PostgreSQL rejected the UUID, and the route returned 500. Fixed by emitting `runId` on the SSE payload.
+- **`PATCH .../tender-review/:requirementId`:** Match `requirement_id` / `finding_id` using trimmed strings so minor whitespace mismatches do not skip the row.
+
+### Open / next
+- None for this slice.
+
+---
+
 ## 2026-05-15 — Tender demo: Curam brand across pack + agent prompts
 
 ### Built
