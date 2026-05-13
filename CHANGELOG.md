@@ -46,6 +46,7 @@ If a session changes both platform and one agent, **one root entry** is enough u
 ### Fixed / discovered
 - **Tender HITL “Save edit” → “Failed to update review”:** The streamed result payload omitted `runId`; the page left `runId` null, so the client called `PATCH .../runs/null/tender-review/...`, PostgreSQL rejected the UUID, and the route returned 500. Fixed by emitting `runId` on the SSE payload.
 - **`PATCH .../tender-review/:requirementId`:** Match `requirement_id` / `finding_id` using trimmed strings so minor whitespace mismatches do not skip the row.
+- **Tender HITL after “Save edit”:** `edited` was treated like a terminal review state, so Approve / Edit / Reject disappeared. Actions now stay available for **`edited`** (revise again, **Approve** to finalise, or **Reject**); only **`approved`** / **`rejected`** hide the bar. **Approve** after an edit shows the saved **`edited_text`** in the card (not the original AI draft).
 
 ### Open / next
 - None for this slice.

@@ -143,7 +143,21 @@ function RequirementCard({ req, runId, onUpdated, getIcon }) {
     typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
   const isBlocked  = req.status === 'blocked';
-  const isReviewed = ['approved', 'edited', 'rejected'].includes(req.status);
+  /** `edited` is revisable — only `approved` / `rejected` hide the action bar. */
+  const isTerminalReview = ['approved', 'rejected'].includes(req.status);
+  const isReviewed       = ['approved', 'edited', 'rejected'].includes(req.status);
+
+  const displayDraft =
+    req.status === 'approved' && req.edited_text?.trim()
+      ? req.edited_text
+      : req.status === 'edited'
+        ? (req.edited_text ?? '')
+        : (req.draft_response ?? '');
+
+  const canApprove =
+    req.status === 'edited'
+      ? !!(req.edited_text?.trim())
+      : !!req.draft_response;
 
   const submit = async (status) => {
     if (!runId) {
@@ -320,12 +334,15 @@ function RequirementCard({ req, runId, onUpdated, getIcon }) {
               className="rounded-lg p-3 text-sm"
               style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', lineHeight: 1.6, color: 'var(--color-text)' }}
             >
-              <MarkdownRenderer text={req.status === 'edited' ? (req.edited_text ?? '') : (req.draft_response ?? '')} />
+              <MarkdownRenderer text={displayDraft} />
             </div>
           )}
 
           {/* Original draft on hover after edit */}
-          {req.status === 'edited' && req.original_draft && req.original_draft !== req.edited_text && !editMode && (
+          {((req.status === 'edited' || (req.status === 'approved' && req.edited_text?.trim()))
+            && req.original_draft
+            && req.original_draft !== (req.edited_text ?? '')
+            && !editMode) && (
             <details>
               <summary className="text-xs cursor-pointer" style={{ color: 'var(--color-muted)' }}>
                 Show original draft
@@ -374,8 +391,8 @@ function RequirementCard({ req, runId, onUpdated, getIcon }) {
         <p className="text-xs" style={{ color: '#dc2626' }}>{reviewError}</p>
       )}
 
-      {/* Review actions — only for pending (non-blocked, non-reviewed) */}
-      {!isBlocked && !isReviewed && (
+      {/* Review actions — pending first pass, or edited (revise / finalise approve / reject) */}
+      {!isBlocked && !isTerminalReview && (
         <div className="space-y-2">
           {editMode ? (
             <div className="flex items-center gap-2 flex-wrap">
@@ -432,27 +449,40 @@ function RequirementCard({ req, runId, onUpdated, getIcon }) {
           ) : (
             <div className="flex items-center gap-2 flex-wrap">
               <button
-                disabled={submitting || !req.draft_response}
+                disabled={submitting || !canApprove}
                 onClick={() => submit('approved')}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium"
                 style={{
-                  background: req.draft_response ? '#dcfce7' : 'var(--color-bg)',
-                  color:      req.draft_response ? '#166534' : 'var(--color-muted)',
-                  border:     req.draft_response ? 'none' : '1px solid var(--color-border)',
-                  cursor:     (submitting || !req.draft_response) ? 'not-allowed' : 'pointer',
-                  opacity:    req.draft_response ? 1 : 0.5,
+                  background: canApprove ? '#dcfce7' : 'var(--color-bg)',
+                  color:      canApprove ? '#166534' : 'var(--color-muted)',
+                  border:     canApprove ? 'none' : '1px solid var(--color-border)',
+                  cursor:     (submitting || !canApprove) ? 'not-allowed' : 'pointer',
+                  opacity:    canApprove ? 1 : 0.5,
                 }}
-                title={!req.draft_response ? 'No draft to approve — write a response first' : undefined}
+                title={
+                  !canApprove
+                    ? (req.status === 'edited'
+                      ? 'Edited text is empty — add content before approving'
+                      : 'No draft to approve — write a response first')
+                    : undefined
+                }
               >
                 Approve
               </button>
               <button
                 disabled={submitting}
-                onClick={() => { setEditedText(req.draft_response ?? ''); setEditMode(true); }}
+                onClick={() => {
+                  setEditedText(
+                    req.status === 'edited'
+                      ? (req.edited_text ?? '')
+                      : (req.draft_response ?? '')
+                  );
+                  setEditMode(true);
+                }}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium"
                 style={{ background: '#eff6ff', color: '#1d4ed8', border: 'none', cursor: submitting ? 'not-allowed' : 'pointer' }}
               >
-                {req.draft_response ? 'Edit' : 'Write'}
+                {req.draft_response || req.status === 'edited' ? 'Edit' : 'Write'}
               </button>
               <button
                 disabled={submitting}
