@@ -247,6 +247,16 @@ function RequirementCard({ req, runId, onUpdated, getIcon }) {
         <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{req.match_rationale}</p>
       )}
 
+      {/* No-evidence notice — unblocked requirement with no draft */}
+      {!isBlocked && !req.draft_response && !req.edited_text && req.status === 'pending' && (
+        <div
+          className="rounded-lg px-3 py-2 text-xs"
+          style={{ background: '#fef9c3', border: '1px solid #fde047', color: '#713f12' }}
+        >
+          No evidence match — manual response required. Use <strong>Write</strong> to author a response.
+        </div>
+      )}
+
       {/* Draft response */}
       {!isBlocked && (req.draft_response || req.edited_text) && (
         <div className="space-y-2">
@@ -389,23 +399,28 @@ function RequirementCard({ req, runId, onUpdated, getIcon }) {
           ) : (
             <div className="flex items-center gap-2 flex-wrap">
               <button
-                disabled={submitting}
+                disabled={submitting || !req.draft_response}
                 onClick={() => submit('approved')}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                style={{ background: '#dcfce7', color: '#166534', border: 'none', cursor: submitting ? 'not-allowed' : 'pointer' }}
+                style={{
+                  background: req.draft_response ? '#dcfce7' : 'var(--color-bg)',
+                  color:      req.draft_response ? '#166534' : 'var(--color-muted)',
+                  border:     req.draft_response ? 'none' : '1px solid var(--color-border)',
+                  cursor:     (submitting || !req.draft_response) ? 'not-allowed' : 'pointer',
+                  opacity:    req.draft_response ? 1 : 0.5,
+                }}
+                title={!req.draft_response ? 'No draft to approve — write a response first' : undefined}
               >
                 Approve
               </button>
-              {req.draft_response && (
-                <button
-                  disabled={submitting}
-                  onClick={() => { setEditedText(req.draft_response ?? ''); setEditMode(true); }}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                  style={{ background: '#eff6ff', color: '#1d4ed8', border: 'none', cursor: submitting ? 'not-allowed' : 'pointer' }}
-                >
-                  Edit
-                </button>
-              )}
+              <button
+                disabled={submitting}
+                onClick={() => { setEditedText(req.draft_response ?? ''); setEditMode(true); }}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                style={{ background: '#eff6ff', color: '#1d4ed8', border: 'none', cursor: submitting ? 'not-allowed' : 'pointer' }}
+              >
+                {req.draft_response ? 'Edit' : 'Write'}
+              </button>
               <button
                 disabled={submitting}
                 onClick={() => setRejectOpen(true)}
