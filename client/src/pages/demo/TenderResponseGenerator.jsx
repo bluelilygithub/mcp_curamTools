@@ -273,7 +273,7 @@ function RequirementCard({ req, runId, onUpdated, getIcon }) {
       )}
 
       {/* No-evidence notice — unblocked requirement with no draft */}
-      {!isBlocked && !req.draft_response && !req.edited_text && req.status === 'pending' && (
+      {!isBlocked && !req.draft_response && !req.edited_text && req.status === 'pending' && !editMode && (
         <div
           className="rounded-lg px-3 py-2 text-xs"
           style={{ background: '#fef9c3', border: '1px solid #fde047', color: '#713f12' }}
@@ -282,8 +282,8 @@ function RequirementCard({ req, runId, onUpdated, getIcon }) {
         </div>
       )}
 
-      {/* Draft response */}
-      {!isBlocked && (req.draft_response || req.edited_text) && (
+      {/* Draft response — also when Write opened (no AI draft yet) */}
+      {!isBlocked && (req.draft_response || req.edited_text || editMode) && (
         <div className="space-y-2">
           <p
             className="text-xs font-medium"
@@ -309,7 +309,11 @@ function RequirementCard({ req, runId, onUpdated, getIcon }) {
                   resize: 'vertical',
                   lineHeight: 1.6,
                 }}
-                placeholder="Enter your edited draft (Markdown: **bold**, lists, ## headings)…"
+                placeholder={
+                  req.draft_response || req.edited_text
+                    ? 'Enter your edited draft (Markdown: **bold**, lists, ## headings)…'
+                    : 'Author your response (Markdown: **bold**, lists, ## headings). Cite evidence only where you have a record ID.'
+                }
               />
               {micSupported && (
                 <div
