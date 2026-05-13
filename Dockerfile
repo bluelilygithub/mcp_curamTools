@@ -13,7 +13,7 @@ WORKDIR /app/server
 RUN apk add --no-cache ghostscript
 RUN apk add --no-cache chromium
 RUN apk add --no-cache python3
-RUN python3 -m venv /opt/pyenv && /opt/pyenv/bin/pip install --no-cache-dir fluids numpy
+RUN python3 -m venv /opt/pyenv && /opt/pyenv/bin/pip install --no-cache-dir fluids numpy openpyxl
 COPY server/package*.json ./
 RUN npm install --omit=dev
 COPY server/ ./

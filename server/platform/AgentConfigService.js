@@ -72,6 +72,7 @@ const AGENT_DEFAULTS = {
   'demo-document-analyzer': {},  // no operator-configurable settings; all config via adminConfig
   'spec-validator':          {},
   'demo-spec-validator':     {},
+  'demo-tender-response':    {},
 };
 
 const ADMIN_DEFAULTS = {
@@ -214,6 +215,13 @@ const ADMIN_DEFAULTS = {
     model:               null,   // must be vision-capable
     max_tokens:          8192,
     max_task_budget_aud: 2.00,
+    fallback_model:      null,
+  },
+  'demo-tender-response': {
+    enabled:             true,
+    model:               null,   // must be vision-capable (Stage 1 RFT extraction)
+    max_tokens:          16384,  // Stage 3 drafts 10+ requirements — needs headroom
+    max_task_budget_aud: 3.00,   // three model calls: vision extraction + compliance + synthesis
     fallback_model:      null,
   },
   _platform: {

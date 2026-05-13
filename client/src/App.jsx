@@ -46,8 +46,9 @@ import NotInterestedReportPage   from './pages/tools/NotInterestedReportPage';
 import AdsSetupArchitectPage     from './pages/profitabilitySuite/adsSetupArchitect/AdsSetupArchitectPage';
 import CampaignDashboardPage     from './pages/tools/CampaignDashboardPage';
 import WpThemeExtractorPage      from './pages/tools/WpThemeExtractorPage';
-import SpecValidator            from './pages/demo/SpecValidator';
-import SpecValidatorPage        from './pages/tools/SpecValidatorPage';
+import SpecValidator                from './pages/demo/SpecValidator';
+import SpecValidatorPage            from './pages/tools/SpecValidatorPage';
+import TenderResponseGenerator     from './pages/demo/TenderResponseGenerator';
 
 export default function App() {
   return (
@@ -107,8 +108,9 @@ export default function App() {
 
 				{/* Demo org routes */}
 				<Route path="/demo/dashboard" element={<DemoDashboardPage />} />
-				<Route path="/demo/run/demo-document-analyzer" element={<DocumentAnalyzer />} />
-				<Route path="/demo/run/demo-spec-validator"    element={<SpecValidator />} />
+				<Route path="/demo/run/demo-document-analyzer"   element={<DocumentAnalyzer />} />
+				<Route path="/demo/run/demo-spec-validator"      element={<SpecValidator />} />
+				<Route path="/demo/run/demo-tender-response"     element={<TenderResponseGenerator />} />
 				<Route path="/demo/decision-log" element={<DecisionLogPage />} />
 				<Route path="/demo/logs/transactions" element={<TransactionLogPage />} />
 				<Route path="/demo/logs/events" element={<AgentEventLogPage />} />

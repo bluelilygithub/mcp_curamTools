@@ -339,17 +339,24 @@ function RunDetail({ run, getIcon }) {
   // 2. Trace steps
   const stepMeta = {
     // DocumentAnalyzer steps
-    input_sanitisation:        { icon: 'shield',     label: 'Input Sanitisation' },
-    deterministic_rules:       { icon: 'zap',        label: 'Deterministic Rules' },
-    probabilistic_analysis:    { icon: 'bot',        label: 'Probabilistic Analysis' },
-    review_action:             { icon: 'user',       label: 'Review Action' },
+    input_sanitisation:        { icon: 'shield',         label: 'Input Sanitisation' },
+    deterministic_rules:       { icon: 'zap',            label: 'Deterministic Rules' },
+    probabilistic_analysis:    { icon: 'bot',            label: 'Probabilistic Analysis' },
+    review_action:             { icon: 'user',           label: 'Review Action' },
     // SpecValidator + DocumentAnalyzer shared steps
-    pdf_extraction:            { icon: 'file-text',  label: 'Stage 1 — Extraction' },
-    model_selection:           { icon: 'cpu',        label: 'Extraction Model' },
-    synthesis_model_selection: { icon: 'cpu',        label: 'Synthesis Model' },
+    pdf_extraction:            { icon: 'file-text',      label: 'Stage 1 — Extraction' },
+    pdf_rasterisation:         { icon: 'image',          label: 'PDF Rasterisation' },
+    model_selection:           { icon: 'cpu',            label: 'Extraction Model' },
+    synthesis_model_selection: { icon: 'cpu',            label: 'Synthesis Model' },
     // SpecValidator steps
-    python_calculation:        { icon: 'zap',        label: 'Stage 2 — Python Calculations' },
-    synthesis:                 { icon: 'bot',        label: 'Stage 3 — Synthesis' },
+    python_calculation:        { icon: 'zap',            label: 'Stage 2 — Python Calculations' },
+    synthesis:                 { icon: 'bot',            label: 'Stage 3 — Synthesis' },
+    // TenderResponse steps
+    rft_extraction:            { icon: 'file-text',      label: 'RFT Requirement Extraction' },
+    evidence_retrieval:        { icon: 'database',       label: 'Evidence Pack Retrieval' },
+    compliance_check:          { icon: 'zap',            label: 'Deterministic Compliance Check' },
+    draft_generation:          { icon: 'edit',           label: 'Draft Response Generation' },
+    blocker_flagged:           { icon: 'alert-triangle', label: 'Compliance Blocker' },
   };
 
   for (const step of trace) {
@@ -363,7 +370,8 @@ function RunDetail({ run, getIcon }) {
     } else if (step.step === 'probabilistic_analysis') {
       detailText = `Model: ${step.model} · ${step.findings_count} findings`;
     } else if (step.step === 'review_action') {
-      detailText = `${step.finding_label} → ${step.decision}${step.reviewed_by ? ` · ${step.reviewed_by}` : ''}${step.comment ? ` · "${step.comment}"` : ''}`;
+      const subject = step.finding_label ?? step.requirement_id ?? step.finding_id ?? '?';
+      detailText = `${subject} → ${step.decision}${step.reviewed_by ? ` · ${step.reviewed_by}` : ''}${step.comment ? ` · "${step.comment}"` : ''}`;
     } else if (step.step === 'pdf_extraction') {
       const parts = [`model: ${step.model ?? '—'}`];
       if (step.segments_extracted != null) parts.push(`${step.segments_extracted} segments`);
@@ -379,6 +387,28 @@ function RunDetail({ run, getIcon }) {
       if (step.deterministic_count != null) parts.push(`${step.deterministic_count} deterministic`);
       if (step.probabilistic_count  != null) parts.push(`${step.probabilistic_count} probabilistic`);
       detailText = parts.join(' · ');
+    } else if (step.step === 'rft_extraction') {
+      const parts = [`${step.requirements_total ?? '?'} requirements`, `${step.image_pages ?? '?'} pages`];
+      if (step.mandatory_gate_count != null) parts.push(`${step.mandatory_gate_count} mandatory`);
+      if (step.model) parts.push(`model: ${step.model}`);
+      detailText = parts.join(' · ');
+    } else if (step.step === 'evidence_retrieval') {
+      detailText = step.detail ?? 'Evidence pack retrieved from S3';
+    } else if (step.step === 'compliance_check') {
+      const parts = [];
+      if (step.strong   != null) parts.push(`${step.strong} strong`);
+      if (step.partial  != null) parts.push(`${step.partial} partial`);
+      if (step.none     != null) parts.push(`${step.none} none`);
+      if (step.blockers != null) parts.push(`${step.blockers} blockers`);
+      if (step.execution_time_ms != null) parts.push(`${step.execution_time_ms}ms`);
+      detailText = parts.join(' · ');
+    } else if (step.step === 'draft_generation') {
+      const parts = [`${step.drafts_generated ?? '?'} drafts`];
+      if (step.draftable_count != null) parts.push(`from ${step.draftable_count} requirements`);
+      if (step.model) parts.push(`model: ${step.model}`);
+      detailText = parts.join(' · ');
+    } else if (step.step === 'blocker_flagged') {
+      detailText = `${step.requirement_id} · ${step.blocker_level}: ${step.blocker_reason ?? ''}`;
     }
 
     logEntries.push({

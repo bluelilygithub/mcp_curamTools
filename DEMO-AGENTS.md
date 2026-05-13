@@ -394,7 +394,7 @@ After run completes, user can save the uploaded file to S3 for permanent storage
 
 **Requirements:** `AWS_S3_BUCKET` env var must be set.
 
-#### 9b. Pre-run evidence source (new pattern — introduced by [new agent name])
+#### 9b. Pre-run evidence source (new pattern — introduced by tender-response)
 
 Some demo agents work from a standing evidence repository provisioned into S3 at setup time rather than requiring a one-off upload each run. This pattern makes the demo self-contained: the audience sees real artefacts without having to supply a file.
 

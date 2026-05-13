@@ -497,6 +497,19 @@ agentsRouter.use(
   })
 );
 
+// ── Demo Suite — Tender Response Generator ───────────────────────────────
+const { runTenderResponse } = require('../agents/demoSuite/tenderResponse');
+
+agentsRouter.use(
+  '/demo-tender-response',
+  createAgentRoute({
+    slug:               'demo-tender-response',
+    runFn:              runTenderResponse,
+    requiredPermission: 'org_member',
+    rateLimit:          10,
+  })
+);
+
 // ── Agent config routes (/api/agent-configs/:slug) ────────────────────────
 
 // GET /api/agent-configs/:slug — operator config (any authenticated user)

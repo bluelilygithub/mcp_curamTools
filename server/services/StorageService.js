@@ -29,6 +29,7 @@ const {
   ListObjectsV2Command,
   HeadBucketCommand,
 } = require('@aws-sdk/client-s3');
+const { Readable } = require('stream');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 // ── Client factory — one client per region, cached ───────────────────────────
@@ -100,6 +101,27 @@ async function getSignedDownloadUrl({ bucket, region, key, expiresIn = 3600 }) {
   return { url, expiresAt };
 }
 
+// ── get — download object bytes as a Buffer ───────────────────────────────────
+
+/**
+ * Download an object from S3 and return its contents as a Buffer.
+ *
+ * @param {object} opts
+ * @param {string}  opts.bucket
+ * @param {string}  opts.region
+ * @param {string}  opts.key
+ * @returns {Promise<Buffer>}
+ */
+async function get({ bucket, region, key }) {
+  const client   = getClient(region);
+  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const chunks   = [];
+  for await (const chunk of response.Body) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
 // ── remove — delete a single object ──────────────────────────────────────────
 
 /**
@@ -160,4 +182,4 @@ async function healthCheck({ bucket, region }) {
   return { ok: true, bucket, region };
 }
 
-module.exports = { put, getSignedDownloadUrl, remove, list, healthCheck };
+module.exports = { put, get, getSignedDownloadUrl, remove, list, healthCheck };

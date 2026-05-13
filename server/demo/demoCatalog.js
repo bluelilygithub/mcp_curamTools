@@ -40,6 +40,13 @@ const DEMO_CATALOG = {
     icon: 'file-check',
     pattern: 'three-stage-pipeline',
   },
+  'demo-tender-response': {
+    name: 'Tender Response Generator',
+    description: 'Upload an RFT PDF — extract compliance requirements, run deterministic checks against a pre-loaded evidence pack, and generate first-draft response paragraphs with inline evidence citations.',
+    category: 'Engineering',
+    icon: 'file-text',
+    pattern: 'four-stage-pipeline',
+  },
 };
 
 module.exports = { DEMO_CATALOG };

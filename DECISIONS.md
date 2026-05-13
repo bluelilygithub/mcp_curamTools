@@ -79,6 +79,22 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### HITL `edited` State — Platform-Level State for Inline Draft Editing
+**Date:** 2026-05-13
+**Status:** Settled
+**Context:** Tender Response Generator requires a review state where engineers can modify AI-generated draft paragraphs before approving them. The existing HITL states (`approved`, `rejected`, `resubmit`) were defined for the Spec Validator, where the reviewer judges pre-computed findings — not text-authoring artefacts. Tender response drafts are starting points the engineer must be able to amend while preserving an audit trail of what the AI originally produced.
+**Decision (`edited` state):** A fifth HITL state, `edited`, is added as a platform-level primitive. When `status = 'edited'`:
+- `edited_text` contains the engineer's modified draft (required, non-empty)
+- `original_draft` is frozen at the AI's original output on the first edit (subsequent edits keep the initial AI draft as the reference, not the previous human edit)
+- `comment` is optional (unlike `rejected` where it is mandatory)
+- The state is transition-in only — no programmatic transition back out of `edited` exists; engineers rerun if they want a fresh AI draft
+**Decision (server enforcement):** The `PATCH /api/demo/runs/:runId/tender-review/:requirementId` endpoint validates `edited_text` is present and non-empty before accepting the transition. `original_draft` is set server-side from the existing `draft_response` — the client never sends it.
+**Rationale:** The platform audit trail must distinguish "AI draft accepted unchanged" (`approved`) from "AI draft accepted with modifications" (`edited`). Legal and quality contexts require this distinction. Freezing `original_draft` at the first edit (not updated on subsequent edits) ensures the AI's exact output is always recoverable — the audit trail shows AI → human delta, not human → human delta.
+**Constraints it must not violate:** `edited_text` must be non-empty — an empty edit is functionally identical to approval and would corrupt the audit trail. `original_draft` must never be overwritten after its first population. The state must be stored in `agent_runs.result` JSONB alongside the other per-requirement fields.
+**References:** `server/routes/demo.js` — PATCH `/runs/:runId/tender-review/:requirementId`; `server/agents/demoSuite/tenderResponse/index.js` — requirement data structure; `client/src/pages/demo/TenderResponseGenerator.jsx` — `RequirementCard` edit flow.
+
+---
+
 ### Spec Validator — Rejected Findings Permanently Block Certificate
 **Date:** 2026-05-11
 **Status:** Settled

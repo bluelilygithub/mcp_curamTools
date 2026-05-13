@@ -25,6 +25,37 @@
 
 ---
 
+## 2026-05-13 — Tender Response Generator demo agent (full build)
+
+### Built
+- **`server/agents/demoSuite/tenderResponse/compliance.py`**: Deterministic compliance checker. Reads JSON from stdin (requirements + 4 evidence files: CSV + 3 XLSX). Parses multi-row XLSX title blocks via `_find_header_row()` (finds first row whose first cell ends with 'ID'). Matches requirements against: compliance rules CSV, Project Experience Library (C5-M corrosivity check: `'C5-M' in corrosivity_class`; value threshold: `> 5_000_000`; ICCP/dredging flags), Personnel Register (RPEQ registration, role matching), Certificates/Insurance Register (ISO 45001 AMBER blocker for RENEWING status, value parse strips `per occurrence/claim/event` suffix). Returns `{ requirement_matches[], compliance_summary, execution_time_ms }`. Tested: 9/10 STRONG, 1/10 PARTIAL (ISO 45001 AMBER), 55ms.
+- **`server/agents/demoSuite/tenderResponse/style-guide.md`**: Voice_of_Firm_Style_Guide bundled in repo (prompt constraint, not S3 — no audience substitution needed).
+- **`server/agents/demoSuite/tenderResponse/prompt.js`**: Stage 1 extraction system prompt (requirements → structured JSON); Stage 3 draft generation system prompt (includes full style guide + non-negotiable rules: ISO 45001 renewal language, REF-002 C4 not C5-M, PER-006 subconsultant, etc.).
+- **`server/agents/demoSuite/tenderResponse/index.js`**: Four-stage pipeline. Stage 0: input sanitisation. Stage 1: PDF rasterisation → vision model extracts requirements (mandatory gates + evaluation criteria). Stage 2a: S3 download of 4 evidence pack files. Stage 2b: spawnWithStdin → compliance.py → matchResults. Stage 3: synthesis model generates first-draft response paragraphs for non-RED-blocked requirements. Result: `data.requirements[]` combining all data; HITL state `pending | blocked`.
+- **`server/services/StorageService.js`**: Added `get()` method (GetObjectCommand + async stream iteration → Buffer). Previously only had `put`, `getSignedDownloadUrl`, `remove`, `list`, `healthCheck`.
+- **`Dockerfile`**: Added `openpyxl` to existing pip install line for XLSX parsing in compliance.py.
+- **Platform wiring**: `DEMO_CATALOG` entry; `AGENT_DEFAULTS` + `ADMIN_DEFAULTS` for `demo-tender-response` (16384 max_tokens, $3.00 budget ceiling); `createAgentRoute` registration in `agents.js` (rateLimit: 10); `GET /api/demo/tender-evidence` + `PATCH /api/demo/runs/:runId/tender-review/:requirementId` in `demo.js`.
+- **`client/src/pages/demo/TenderResponseGenerator.jsx`**: Evidence pack browser (pre-run), PDF upload zone, ProcessingModal (3 stages), coverage stats (5-col grid), two-model display, per-requirement HITL cards with Approve / Edit (inline textarea, preserves original_draft) / Reject (requires comment) controls, run history.
+- **`client/src/App.jsx`**: Route `/demo/run/demo-tender-response`.
+- **`client/src/pages/demo/DecisionLogPage.jsx`**: Added `stepMeta` entries for `rft_extraction`, `evidence_retrieval`, `compliance_check`, `draft_generation`, `blocker_flagged`, `pdf_rasterisation`. Updated `review_action` renderer to also use `requirement_id` (tender-response HITL events have `requirement_id` not `finding_label`).
+- **`DECISIONS.md`**: Entry for `edited` HITL state as new platform-level primitive (stores `original_draft` + `edited_text`, `original_draft` frozen at first edit).
+- **`DEMO-AGENTS.md`**: Filled `[new agent name]` placeholder in Section 9b → `tender-response`.
+- **S3 evidence pack**: 5 files uploaded to `curam-tools-docs / curam engineering/evidence-pack/`: `Compliance_Rules_Seed_v2.csv`, `Project_Experience_Library_Extended.xlsx`, `Personnel_Register.xlsx`, `Certificates_Insurance_Register.xlsx`, `Voice_of_Firm_Style_Guide.md` (style guide is in repo, not S3).
+
+### Fixed / discovered
+- S3 folder contains space: `curam engineering` (not `curam-engineering`). Hardcoded in `EVIDENCE_PREFIX`.
+- XLSX files have 3-row decorative title block before actual column headers. `_find_header_row()` skips it.
+- Corrosivity class stored as `C5-M Marine` not `C5-M`. Changed to substring check `'C5-M' in corrosivity_class`.
+- Insurance cover values include text suffix `per occurrence/claim/event`. Regex strips suffix before float parse.
+- JSON truncation from long model output fixed by extracting first-`{` last-`}` slice before `JSON.parse` (same pattern as document-analyzer).
+
+### Open / next
+- SQL Console: `INSERT INTO org_agent_manifest (org_id, slug, enabled, is_configured, sort_order) VALUES (<curam_org_id>, 'demo-tender-response', true, true, 2);`
+- Smoke test full pipeline with test RFT PDF once Railway deploys.
+- Confirm compliance.py AMBER (ISO 45001 RENEWING) shows amber highlight in TenderResponseGenerator HITL card.
+
+---
+
 ## 2026-05-12 — Two-model pattern, decision log navigation, model logging
 
 ### Built

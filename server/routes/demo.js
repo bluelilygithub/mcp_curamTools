@@ -784,4 +784,107 @@ If this question is about the document above, answer it directly using the conte
   }
 });
 
+// ── GET /api/demo/tender-evidence ─────────────────────────────────────────
+// Lists evidence pack files for the pre-run browser in TenderResponseGenerator.
+router.get('/tender-evidence', async (req, res) => {
+  const bucket = process.env.AWS_S3_BUCKET;
+  const region = process.env.AWS_S3_REGION ?? 'ap-southeast-2';
+  const prefix = 'curam engineering/evidence-pack/';
+
+  if (!bucket) {
+    return res.status(200).json({ files: [], error: 'S3 not configured.' });
+  }
+
+  try {
+    const files = await StorageService.list({ bucket, region, prefix, maxKeys: 50 });
+    res.json({ files });
+  } catch (err) {
+    console.error('[demo/tender-evidence]', err.message);
+    res.status(500).json({ error: 'Failed to list evidence pack.' });
+  }
+});
+
+// ── PATCH /api/demo/runs/:runId/tender-review/:requirementId ─────────────
+// HITL review for tender response drafts.
+// Body: { status, comment, edited_text }
+// status: approved | edited | rejected
+// edited state: edited_text required; preserves original_draft on first edit.
+// rejected state: comment required.
+router.patch('/runs/:runId/tender-review/:requirementId', async (req, res) => {
+  const VALID_STATUSES = new Set(['approved', 'edited', 'rejected']);
+  const { runId, requirementId } = req.params;
+  const { status, comment, edited_text } = req.body ?? {};
+
+  if (!VALID_STATUSES.has(status)) {
+    return res.status(400).json({ error: `Invalid status. Must be: ${[...VALID_STATUSES].join(' | ')}` });
+  }
+  if (status === 'edited' && !edited_text?.trim()) {
+    return res.status(400).json({ error: 'edited_text is required when status is "edited".' });
+  }
+  if (status === 'rejected' && !comment?.trim()) {
+    return res.status(400).json({ error: 'A comment is required when rejecting a draft.' });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, result FROM agent_runs WHERE id = $1 AND org_id = $2`,
+      [runId, req.user.orgId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Run not found.' });
+
+    const result = rows[0].result ?? {};
+    const data   = result.data    ?? {};
+
+    let found = false;
+    const requirements = (data.requirements ?? []).map((r) => {
+      if (r.requirement_id !== requirementId && r.finding_id !== requirementId) return r;
+      if (r.status === 'blocked') return r; // blocked requirements cannot be reviewed
+
+      found = true;
+      const updated = {
+        ...r,
+        status,
+        comment:     comment?.trim() ?? null,
+        reviewed_by: req.user.email ?? req.user.id,
+        reviewed_at: new Date().toISOString(),
+      };
+
+      if (status === 'edited') {
+        updated.edited_text    = edited_text.trim();
+        // preserve original_draft on first edit — subsequent edits keep the initial draft
+        updated.original_draft = r.original_draft ?? r.draft_response;
+      }
+
+      return updated;
+    });
+
+    if (!found) return res.status(404).json({ error: 'Requirement not found in run.' });
+
+    const pending_review_count = requirements.filter((r) => r.status === 'pending').length;
+
+    const trace = data.trace ?? [];
+    trace.push({
+      step:           'review_action',
+      timestamp:      new Date().toISOString(),
+      requirement_id: requirementId,
+      decision:       status,
+      reviewed_by:    req.user.email ?? req.user.id,
+      comment:        comment?.trim() ?? null,
+      ...(status === 'edited' ? { edited_text: edited_text?.trim() } : {}),
+    });
+
+    const updatedData = { ...data, requirements, pending_review_count, trace };
+
+    await pool.query(
+      `UPDATE agent_runs SET result = jsonb_set(result, '{data}', $1::jsonb) WHERE id = $2 AND org_id = $3`,
+      [JSON.stringify(updatedData), runId, req.user.orgId]
+    );
+
+    res.json({ ok: true, requirement_id: requirementId, status, pending_review_count });
+  } catch (err) {
+    console.error('[demo/tender-review PATCH]', err.message);
+    res.status(500).json({ error: 'Failed to update review.' });
+  }
+});
+
 module.exports = router;
