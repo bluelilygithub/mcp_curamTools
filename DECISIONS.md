@@ -13,6 +13,31 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### Changelog layout — platform root vs optional mirrors and per-agent logs
+**Date:** 2026-05-14
+**Status:** Settled
+**Context:** The repository accumulated both `CHANGELOG.md` at the repo root and `knowledge_base/core/CHANGELOG.md` without an explicit rule, causing confusion about which file to read or update first.
+**Decision (canonical log):** The **repository root** `CHANGELOG.md` is the **canonical** evidence log for the platform container (Express app, shared client shell, cross-cutting primitives, and any session touching multiple subsystems). Readers looking for “what shipped recently?” start there.
+**Decision (optional mirrors):** `knowledge_base/core/CHANGELOG.md` may mirror root entries when work is documented primarily through the knowledge base; it **may lag** root and must not be the only place a session is recorded unless the session truly touched only kb files and someone immediately syncs to root.
+**Decision (per-agent logs):** Large or long-lived agents **may** add `CHANGELOG.md` under `server/agents/<slug>/` or a suite directory. Each per-agent entry that relates to platform wiring should **cross-reference** (link or one-line pointer) the corresponding root `CHANGELOG.md` entry so the timeline stays navigable.
+**Rationale:** Multiple logs are acceptable for a foundation app with many agents; ambiguity is not. One canonical default keeps onboarding cost low; optional logs add depth without forking truth.
+**Constraints it must not violate:** A session that changes deployable behaviour must have at least one entry in **root** `CHANGELOG.md` before close. Per-agent logs are additive, not a substitute.
+**References:** `CHANGELOG.md` (root header table); `knowledge_base/INDEX.md` — section *Changelog and evidence logs*.
+
+---
+
+### Demo org UI — supplemental CSS layer (future industry demos)
+**Date:** 2026-05-14
+**Status:** Settled (design intent; implementation when needed)
+**Context:** Demo client orgs (e.g. Curam Engineering) share the same React shell as the internal app but should be able to present **subtle** visual differentiation (accent, spacing, or typography tweaks) per industry or client story. Future demos may target different sectors; hard-forking components per demo does not scale.
+**Decision (brand):** All demo orgs and synthetic evidence use the **Curam** brand (e.g. **Curam Engineering** as the fictitious engineering firm). Alternate fictional company names are not used in pack data, style guides, or prompts; sector stories differ by **scenario and evidence content**, not by a second company identity.
+**Decision:** Introduce a **supplemental CSS** mechanism that **loads on top of** existing global tokens (`ThemeProvider`, `index.css`) — never replacing the base design system. Preferred shape when implemented: org- or demo-slug–scoped class on `DemoShell` (or equivalent) + lazy-loaded `demo-<slug>.css` (or CSS modules) that only overrides a **small allowlisted set** of custom properties (e.g. `--color-primary`, `--color-accent`, spacing scale deltas). Internal `AppShell` remains unchanged.
+**Rationale:** Keeps one codebase and one component tree; differences stay declarative and removable. “Slight” differentiation avoids maintenance of parallel layouts.
+**Constraints it must not violate:** Supplemental rules must not break contrast or accessibility; no duplicate of full `SECTION-*.md` layouts per demo. New demos default to base styling until an explicit stylesheet is added.
+**References:** `client/src/components/layout/DemoShell.jsx` (future mount point); `DEMO-AGENTS.md`.
+
+---
+
 ### ProcessingModal — shared component for multi-stage agent runs
 **Date:** 2026-05-11
 **Status:** Settled

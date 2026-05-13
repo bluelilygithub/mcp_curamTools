@@ -6,6 +6,16 @@
 > **Update trigger:** Every session. Add an entry before closing.
 > **Format:** Date · What was built · What broke/was fixed · What's next.
 
+### Which changelog to use
+
+| Log | Path | Scope |
+|-----|------|--------|
+| **Platform / container (canonical)** | This file — `CHANGELOG.md` at repo root | Express app, shared client, platform primitives, cross-cutting work, and any session that touches multiple areas. Prefer this as the default. |
+| **Knowledge base mirror (optional)** | `knowledge_base/core/CHANGELOG.md` | May lag root; use when documenting work primarily through the `knowledge_base/` tree, or sync entries from root when convenient. |
+| **Per-agent or per-suite (optional)** | e.g. `server/agents/<slug>/CHANGELOG.md` or suite folder | Large or long-lived agents may keep their own evidence log; each entry should link or one-line summarise related root entries so readers can follow cross-cutting changes. |
+
+If a session changes both platform and one agent, **one root entry** is enough unless the agent log needs extended detail.
+
 ---
 
 ## Template
@@ -22,6 +32,40 @@
 ### Open / next
 - …
 ```
+
+---
+
+## 2026-05-15 — Tender demo: Curam brand across pack + agent prompts
+
+### Built
+- **`tender-response-demo-pack/`:** `Voice_of_Firm_Style_Guide.md`, `Evidence_Pack_Overview.md`, `Curam_Engineering_Scenario_Document.md`, `Compliance_Rules_Seed_v2.csv` — replaced Coastline / CCM with **Curam Engineering** / **Curam** for a single demo brand.
+- **`server/agents/demoSuite/tenderResponse/style-guide.md`** and **`prompt.js`:** Aligned bundled style guide and Stage 3 system prompt with the same naming.
+
+### Fixed / discovered
+- None.
+
+### Open / next
+- Re-upload S3 evidence pack CSV if production bucket still holds the old `CCM` rule row for Rule 9.
+
+---
+
+## 2026-05-14 — Documentation: changelog strategy, agents index, demo CSS intent
+
+### Built
+- **`CHANGELOG.md` (root):** Documented canonical vs optional changelogs (kb mirror, per-agent logs) in file header.
+- **`knowledge_base/INDEX.md`:** New *Changelog and evidence logs* section; quick nav + reading order point to root `CHANGELOG.md` as canonical; Bayesian table updated.
+- **`knowledge_base/core/CHANGELOG.md`:** Banner linking to root canonical log (fixed relative path).
+- **`knowledge_base/agents/AGENTS_INDEX.md`:** Expanded with `spec-validator` / `demo-spec-validator`, `demo-tender-response`, `ai-visibility-monitor`, corrected interactive slug to `google-ads-conversation`, fixed demo document-analyzer pipeline description, summary table of other `agents.js` registrations, demo catalog placeholder note.
+- **`DECISIONS.md`:** Entries for changelog layout and future demo supplemental CSS layer.
+- **`PROJECT_IDENTITY.md`** + **`knowledge_base/core/PROJECT_IDENTITY.md`:** Security evolution note (incremental hardening, not frozen).
+- **`DEMO-AGENTS.md`:** Pointer to root changelog + optional per-demo agent log.
+
+### Fixed / discovered
+- `knowledge_base/core/CHANGELOG.md` link to root used one too many `../` segments — corrected to `../../CHANGELOG.md`.
+
+### Open / next
+- Reconcile conversation-agent **tool count** claims across `MCP-SERVERS.md`, `server/CLAUDE.md`, and `tools.js` when auditing.
+- Implement demo org supplemental CSS when the first second-industry demo needs it (`DemoShell` hook per `DECISIONS.md`).
 
 ---
 

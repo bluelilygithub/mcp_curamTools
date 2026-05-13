@@ -6,6 +6,8 @@
 > **Update trigger:** Every session. Add an entry before closing.
 > **Format:** Date · What was built · What broke/was fixed · What's next.
 
+**Relationship to repo root:** The **canonical platform changelog** is [`CHANGELOG.md`](../../CHANGELOG.md) at the repository root. This file is an optional mirror for knowledge-base–centric updates; when in doubt, add or copy the session entry to the root log so current state stays discoverable in one place.
+
 ---
 
 ## Template

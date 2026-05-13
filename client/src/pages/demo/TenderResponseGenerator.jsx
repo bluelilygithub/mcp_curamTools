@@ -586,12 +586,43 @@ export default function TenderResponseGenerator() {
           </p>
         ) : (
           <div className="space-y-1">
-            {evidenceFiles.map((f) => (
-              <div key={f.key} className="flex items-center justify-between text-xs" style={{ color: 'var(--color-muted)' }}>
-                <span className="font-mono">{f.key.split('/').pop()}</span>
-                {f.size != null && <span>{(f.size / 1024).toFixed(1)} KB</span>}
-              </div>
-            ))}
+            {evidenceFiles.map((f) => {
+              const name = f.key.split('/').pop() ?? f.key;
+              return (
+                <div key={f.key} className="flex items-center justify-between gap-3 text-xs" style={{ color: 'var(--color-muted)' }}>
+                  <span className="font-mono truncate min-w-0" title={f.key}>
+                    {f.downloadUrl ? (
+                      <a
+                        href={f.downloadUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 hover:underline"
+                        style={{ color: 'var(--color-primary)' }}
+                      >
+                        {name}
+                        <span className="shrink-0" aria-hidden>{getIcon('external-link', { size: 12 })}</span>
+                      </a>
+                    ) : (
+                      name
+                    )}
+                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {f.size != null && <span>{(f.size / 1024).toFixed(1)} KB</span>}
+                    {f.downloadUrl && (
+                      <a
+                        href={f.downloadUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-sans font-medium hover:underline"
+                        style={{ color: 'var(--color-primary)' }}
+                      >
+                        Open
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

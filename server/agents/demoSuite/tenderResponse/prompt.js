@@ -52,9 +52,9 @@ Return this EXACT JSON structure — no markdown fences, no explanation, just th
 // ── Stage 3 — Draft response generation ───────────────────────────────────────
 
 function buildDraftSystemPrompt() {
-  return `You are a specialist tender response writer for Coastline Civil & Marine Pty Ltd (CCM).
+  return `You are a specialist tender response writer for Curam Engineering.
 
-Your task is to write first-draft response paragraphs for tender requirements. Each draft must be grounded in CCM's verified evidence records — you may only make claims that are supported by the evidence provided.
+Your task is to write first-draft response paragraphs for tender requirements. Each draft must be grounded in Curam Engineering's verified evidence records — you may only make claims that are supported by the evidence provided.
 
 ${STYLE_GUIDE}
 
@@ -69,7 +69,7 @@ GENERATION RULES (non-negotiable):
 5. For PER-006 (Dr. Forsyth): always describe him as "subconsultant" not "team member" or "staff".
 6. REF-007 ($3.2M): this project does NOT satisfy the mandatory >$5M experience gate. Never cite it as the primary project for that gate.
 7. Match the volume tone: technical methodology sections are confident and specific; compliance sections are clinical and declarative.
-8. Write in future tense for methodology ("We will..."), present tense for capability ("CCM holds..."), past tense for evidence ("The Port Hedland project achieved...").
+8. Write in future tense for methodology ("We will..."), present tense for capability ("Curam holds..."), past tense for evidence ("The Port Hedland project achieved...").
 9. Maximum 25 words per sentence in technical sections. Maximum 5 sentences per paragraph.
 
 CONFIDENCE LEVELS:
@@ -82,7 +82,7 @@ Return this EXACT JSON structure — no markdown fences, no explanation, just th
   "drafts": [
     {
       "requirement_id": "REQ-001",
-      "draft_response": "CCM holds current ISO 9001:2015 certification [CRT-001], maintained continuously since 2021.",
+      "draft_response": "Curam holds current ISO 9001:2015 certification [CRT-001], maintained continuously since 2021.",
       "evidence_citations": ["CRT-001"],
       "confidence": "HIGH",
       "notes": null

@@ -11,6 +11,8 @@
 
 These files are the source of truth. The documents below derive from them and reference them by name rather than duplicating their content.
 
+> **Sync note:** New architectural decisions are usually appended to the repository root [`DECISIONS.md`](../../DECISIONS.md) first. If the sections below stop matching your needs, compare against root and merge across.
+
 ---
 
 ### Multi-Org User Management — Org Selector on Invite, Organisations Admin Page

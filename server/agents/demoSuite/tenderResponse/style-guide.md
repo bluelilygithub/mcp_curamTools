@@ -1,4 +1,4 @@
-# Coastline Civil & Marine Pty Ltd
+# Curam Engineering
 ## Voice of Firm — Tender Response Style Guide
 **Version 1.0 | May 2026 | For use with RFT-2026-045 and all future submissions**
 
@@ -6,7 +6,7 @@
 
 ## 1. Firm Identity Statement
 
-Coastline Civil & Marine Pty Ltd (CCM) is a Queensland-based specialist contractor with 22 years of continuous operation in marine and coastal infrastructure. We are not a generalist civil contractor who occasionally works near water — our full business is marine. Every project in our reference library was delivered in a tidal, coastal, or port environment. This distinction should be evident in every paragraph of every response we write.
+Curam Engineering is a Queensland-based specialist contractor with 22 years of continuous operation in marine and coastal infrastructure. We are not a generalist civil contractor who occasionally works near water — our full business is marine. Every project in our reference library was delivered in a tidal, coastal, or port environment. This distinction should be evident in every paragraph of every response we write.
 
 ---
 
@@ -46,7 +46,7 @@ Default to Queensland references and regulatory context unless the project is in
 | Paragraph length | Max 5 sentences per paragraph. Break into sub-sections generously. |
 | Jargon | Use standard Australian engineering terminology. Do not use US terminology (e.g., say "programme" not "schedule", "tender" not "bid", "subcontractor" not "vendor"). |
 | Acronyms | Define on first use in every volume. Do not assume the evaluator read another volume. |
-| Tense | Use future tense for methodology ("We will..."), present tense for capability ("CCM holds..."), and past tense for evidence ("The Port Hedland project achieved..."). |
+| Tense | Use future tense for methodology ("We will..."), present tense for capability ("Curam holds..."), and past tense for evidence ("The Port Hedland project achieved..."). |
 
 ---
 
@@ -56,17 +56,17 @@ The following statements are factually verified and approved for use without add
 
 | Claim | Source |
 |---|---|
-| CCM holds ISO 9001:2015 and 14001:2015 certification (current) | CRT-001, CRT-002 (Certificates Register) |
-| CCM holds ISO 45001:2018 certification — renewal in progress; interim certificate available | CRT-003 (Certificates Register) — use "renewal in progress" language, never "current" |
-| CCM holds QLD PQC Level 3 prequalification | CRT-004 |
-| CCM has delivered marine projects in C5-M environments | REF-001 (Port Hedland), REF-004 (Townsville), REF-005 (Mackay), REF-006 (Darwin) |
-| CCM has installed and commissioned ICCP systems | REF-001, REF-005, REF-006 |
-| CCM has completed maintenance dredging operations | REF-004, REF-006, REF-008 |
-| CCM has completed marine projects exceeding $5M in the last 5 years | REF-001 ($12.4M, 2023), REF-006 ($9.4M, 2023) |
+| Curam holds ISO 9001:2015 and 14001:2015 certification (current) | CRT-001, CRT-002 (Certificates Register) |
+| Curam holds ISO 45001:2018 certification — renewal in progress; interim certificate available | CRT-003 (Certificates Register) — use "renewal in progress" language, never "current" |
+| Curam holds QLD PQC Level 3 prequalification | CRT-004 |
+| Curam has delivered marine projects in C5-M environments | REF-001 (Port Hedland), REF-004 (Townsville), REF-005 (Mackay), REF-006 (Darwin) |
+| Curam has installed and commissioned ICCP systems | REF-001, REF-005, REF-006 |
+| Curam has completed maintenance dredging operations | REF-004, REF-006, REF-008 |
+| Curam has completed marine projects exceeding $5M in the last 5 years | REF-001 ($12.4M, 2023), REF-006 ($9.4M, 2023) |
 | All structural designs will be signed by RPEQ No. 21453 (S. Lam) | PER-002 (Personnel Register) |
-| CCM holds Public Liability insurance to $20M per occurrence | INS-001 (Insurance Register) |
-| CCM holds Professional Indemnity insurance to $10M per claim | INS-002 (Insurance Register) |
-| CCM's LTIFR across the last 4 marine construction projects is 0.0 | PER-005 (Personnel Register — WHS Manager notes) |
+| Curam holds Public Liability insurance to $20M per occurrence | INS-001 (Insurance Register) |
+| Curam holds Professional Indemnity insurance to $10M per claim | INS-002 (Insurance Register) |
+| Curam's LTIFR across the last 4 marine construction projects is 0.0 | PER-005 (Personnel Register — WHS Manager notes) |
 
 ---
 
@@ -87,7 +87,7 @@ The following statements are factually verified and approved for use without add
 
 Every factual claim in a technical response must be traceable. Use the following inline citation format:
 
-> *"CCM designed and commissioned an ICCP system for the Mackay Harbour Berth 6 & 7 retrofit project in 2024 [REF-005], achieving AS 2832.1 compliance verified by independent third-party testing."*
+> *"Curam designed and commissioned an ICCP system for the Mackay Harbour Berth 6 & 7 retrofit project in 2024 [REF-005], achieving AS 2832.1 compliance verified by independent third-party testing."*
 
 For personnel claims:
 

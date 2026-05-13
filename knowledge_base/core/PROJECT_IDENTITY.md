@@ -41,6 +41,8 @@
 - Basic rate limiting on agent endpoints
 - Railway environment variables for secrets
 
+**Evolution:** Security and operational controls are **not frozen** at the threat model described above. As usage and exposure change, controls (rate limits, auth hardening, data boundaries, dependency updates) should be **reviewed and tightened incrementally** — still proportionate to context, but not treated as permanently “good enough” by default.
+
 ## Development & maintenance context
 
 - **One person** maintains everything: code, deployment, database, monitoring

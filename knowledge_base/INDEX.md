@@ -15,18 +15,32 @@ This knowledge base follows the **Search-Verify-Update** protocol established in
 
 - **Search** — Before making any change, search the `knowledge_base/` directory and relevant source files for existing context, decisions, and patterns
 - **Verify** — Cross-reference findings against CLAUDE.md guardrails, DECISIONS.md rationale, and PROJECT_IDENTITY.md context
-- **Update** — Make the change, then update knowledge_base/ files (CHANGELOG.md, DECISIONS.md, etc.) to reflect what was done
+- **Update** — Make the change, then update knowledge_base/ files and **root `CHANGELOG.md`** (canonical evidence log) to reflect what was done; see `knowledge_base/INDEX.md` → *Changelog and evidence logs*
 
 Each file in this knowledge base serves a specific Bayesian role:
 
 | File | Bayesian Role |
 |---|---|
 | `core/PROJECT_IDENTITY.md` | Prior distribution — constrains all reasoning about architecture, security, and scope |
-| `core/CHANGELOG.md` | Evidence log — records what was actually observed (built, broke, discovered) |
+| `core/CHANGELOG.md` | Optional mirror of the evidence log — see [Changelog layout](#changelog-and-evidence-logs) |
+| Root `CHANGELOG.md` | **Canonical** platform/container evidence log — prefer this for session entries |
 | `decisions/DECISIONS.md` | Posterior beliefs — settled conclusions after considering alternatives |
 | `server/CLAUDE.md` | Learned priors — weighted by the cost of re-learning them |
 | All other files | Accumulated posterior — always consult before acting |
 
+
+---
+
+## Changelog and evidence logs
+
+The **repository root** [`CHANGELOG.md`](../CHANGELOG.md) is the **canonical** changelog for the platform (server, client shell, shared primitives, and cross-cutting work).
+
+Optional additional logs are encouraged when an agent or suite grows large:
+
+- **`knowledge_base/core/CHANGELOG.md`** — optional mirror; may lag root; sync when practical.
+- **Per-agent `CHANGELOG.md`** — under `server/agents/<slug>/` or a suite directory; use for deep agent-only history. Reference related entries in the root log so readers can connect platform and agent changes.
+
+Session close rule: **at minimum**, append to root `CHANGELOG.md`. Add agent-specific logs only when they add clarity.
 
 ---
 
@@ -51,7 +65,9 @@ knowledge_base/
 |---|---|
 | **Project identity & scope** | `core/PROJECT_IDENTITY.md` |
 | **Setup guide** | `core/SETUP.md` |
-| **Changelog** | `core/CHANGELOG.md` |
+| **Changelog (canonical)** | [`CHANGELOG.md`](../CHANGELOG.md) (repo root) |
+| **Changelog (kb mirror)** | `core/CHANGELOG.md` |
+| **Agent catalog (summary)** | `agents/AGENTS_INDEX.md` |
 | **Prompts reference** | `core/PROMPTS.md` |
 | **Platform primitives** | `architecture/PLATFORM_PRIMITIVES.md` |
 | **MCP servers & tools** | `architecture/MCP_SERVERS.md` |
@@ -77,7 +93,7 @@ knowledge_base/
 ## Reading Order for New Sessions
 
 1. `core/PROJECT_IDENTITY.md` — understand scope and constraints
-2. `core/CHANGELOG.md` — read last 2-3 entries for current state
+2. Root `CHANGELOG.md` — read last 2–3 entries for current state (canonical)
 3. `architecture/PLATFORM_PRIMITIVES.md` — understand platform abstractions
 4. `architecture/MCP_SERVERS.md` — understand available tools
 5. Relevant agent docs under `agents/`

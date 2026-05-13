@@ -3,6 +3,8 @@
 Reference for building demo agents on the MCP CuramTools platform.
 Read this before adding any new demo agent. Companion to DECISIONS.md (Demo Layer) and PLATFORM-PRIMITIVES.md.
 
+**Changelog:** Record demo work in the **root** [`CHANGELOG.md`](../CHANGELOG.md) (canonical). Optionally mirror or extend detail in `server/agents/demoSuite/<slug>/CHANGELOG.md` if an agent’s history grows large — see `knowledge_base/INDEX.md` → *Changelog and evidence logs*.
+
 ---
 
 ## What a demo agent is
@@ -16,6 +18,8 @@ A demo agent serves an external client org (`org_type = 'demo'`). It uses the sa
 - Routes at `client/src/pages/demo/<ComponentName>.jsx` → `/demo/run/<full-slug>` (DemoSidebar uses the slug verbatim from `org_agent_manifest`)
 
 Internal agents and demo agents share: auth, org scoping, budget enforcement, usage logging, PDF export, extraction privacy, `agent_runs` table, and `createAgentRoute`.
+
+**Branding:** All demo orgs and synthetic packs use the **Curam** brand (e.g. **Curam Engineering**). Scenario details (industry, project type) may vary; the fictitious company identity stays Curam — see `DECISIONS.md` (Demo org UI — supplemental CSS layer) for visual-only differentiation.
 
 ---
 

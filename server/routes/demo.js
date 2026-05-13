@@ -797,7 +797,24 @@ router.get('/tender-evidence', async (req, res) => {
 
   try {
     const files = await StorageService.list({ bucket, region, prefix, maxKeys: 50 });
-    res.json({ files });
+    const expiresIn = 3600;
+    const enriched = await Promise.all(
+      files.map(async (f) => {
+        try {
+          const { url, expiresAt } = await StorageService.getSignedDownloadUrl({
+            bucket,
+            region,
+            key: f.key,
+            expiresIn,
+          });
+          return { ...f, downloadUrl: url, downloadUrlExpiresAt: expiresAt };
+        } catch (signErr) {
+          console.warn('[demo/tender-evidence] presign failed for', f.key, signErr.message);
+          return { ...f, downloadUrl: null };
+        }
+      })
+    );
+    res.json({ files: enriched });
   } catch (err) {
     console.error('[demo/tender-evidence]', err.message);
     res.status(500).json({ error: 'Failed to list evidence pack.' });
