@@ -1,5 +1,7 @@
 # Profitability Suite — Achievement Log (April 2026)
 
+> **Historical snapshot — April 2026.** This doc records what was built. "Next Steps" section reflects the roadmap as of that date; some items may be completed, deferred, or superseded. For current state, read `CHANGELOG.md` and `DECISIONS.md`.
+
 This document summarizes the development of the **Profitability Suite**, a siloed Business Intelligence layer designed to shift Diamond Plate Australia's marketing from lead-volume focus to profit-centric growth.
 
 ## 1. Architectural Foundation

@@ -339,14 +339,17 @@ function RunDetail({ run, getIcon }) {
   // 2. Trace steps
   const stepMeta = {
     // DocumentAnalyzer steps
-    input_sanitisation:     { icon: 'shield',     label: 'Input Sanitisation' },
-    deterministic_rules:    { icon: 'zap',        label: 'Deterministic Rules' },
-    probabilistic_analysis: { icon: 'bot',        label: 'Probabilistic Analysis' },
-    review_action:          { icon: 'user',       label: 'Review Action' },
+    input_sanitisation:        { icon: 'shield',     label: 'Input Sanitisation' },
+    deterministic_rules:       { icon: 'zap',        label: 'Deterministic Rules' },
+    probabilistic_analysis:    { icon: 'bot',        label: 'Probabilistic Analysis' },
+    review_action:             { icon: 'user',       label: 'Review Action' },
+    // SpecValidator + DocumentAnalyzer shared steps
+    pdf_extraction:            { icon: 'file-text',  label: 'Stage 1 — Extraction' },
+    model_selection:           { icon: 'cpu',        label: 'Extraction Model' },
+    synthesis_model_selection: { icon: 'cpu',        label: 'Synthesis Model' },
     // SpecValidator steps
-    pdf_extraction:         { icon: 'file-text',  label: 'Stage 1 — Extraction' },
-    python_calculation:     { icon: 'zap',        label: 'Stage 2 — Python Calculations' },
-    synthesis:              { icon: 'bot',        label: 'Stage 3 — Synthesis' },
+    python_calculation:        { icon: 'zap',        label: 'Stage 2 — Python Calculations' },
+    synthesis:                 { icon: 'bot',        label: 'Stage 3 — Synthesis' },
   };
 
   for (const step of trace) {
@@ -362,9 +365,13 @@ function RunDetail({ run, getIcon }) {
     } else if (step.step === 'review_action') {
       detailText = `${step.finding_label} → ${step.decision}${step.reviewed_by ? ` · ${step.reviewed_by}` : ''}${step.comment ? ` · "${step.comment}"` : ''}`;
     } else if (step.step === 'pdf_extraction') {
-      const parts = [`${step.segments_extracted ?? 0} segments · model: ${step.model ?? '—'}`];
-      if (step.page_count) parts.push(`${step.page_count} pages`);
+      const parts = [`model: ${step.model ?? '—'}`];
+      if (step.segments_extracted != null) parts.push(`${step.segments_extracted} segments`);
+      if (step.image_pages != null) parts.push(`${step.image_pages} pages`);
+      if (step.page_count != null) parts.push(`${step.page_count} pages`);
       detailText = parts.join(' · ');
+    } else if (step.step === 'model_selection' || step.step === 'synthesis_model_selection') {
+      detailText = step.model ?? step.detail ?? '—';
     } else if (step.step === 'python_calculation') {
       detailText = `${step.fail_count ?? 0} FAIL · ${step.warning_count ?? 0} WARNING · ${step.pass_count ?? 0} PASS`;
     } else if (step.step === 'synthesis') {

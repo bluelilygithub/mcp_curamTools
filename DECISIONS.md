@@ -924,7 +924,7 @@ All inline styles include `fontFamily: 'inherit'` to respect the user's platform
 - `logger.complete()` metadata must include `extraction_model` and (if different) `synthesis_model`
 - Both model IDs must appear in `result.data` for the decision log trace
 **Rationale:** Operators see exactly which model ran each stage in the transaction log, decision log, and run emits. Enables cost attribution, provider debugging, and audit completeness. Hardcoded fallbacks break multi-provider routing and create invisible cost surprises.
-**Reference implementations:** `server/agents/specValidator/index.js` (full two-stage); `server/agents/demoSuite/documentAnalyzer.js` (single-stage — logs extraction model, resolves org default instead of hardcode).
+**Reference implementations:** `server/agents/specValidator/index.js` (three-stage: extraction → Python → synthesis); `server/agents/demoSuite/documentAnalyzer.js` (two genuine stages: Stage 1 vision extraction returns `document_type`/`extracted_text`/`parties` only; Stage 2 synthesis receives extracted text, returns `findings`/`summary`/`custom_response`).
 **See also:** CLAUDE.md › "Two-model pattern — extraction vs synthesis (mandatory for all new agents)"
 
 ---

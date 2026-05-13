@@ -43,9 +43,15 @@
 - Spec Validator card on demo dashboard showed "Not configured" / "Coming soon" because `is_configured` defaulted to `false`. Fixed to `true`.
 - Stage 3 synthesis was using the vision extraction model for text-only synthesis — wasteful and inflexible. Now uses org default model.
 
+### Fixed / discovered (session 2)
+- **document-analyzer — genuine two-stage split**: Previous implementation combined extraction and analysis in a single model call despite CLAUDE.md mandating two-model pattern. Split into: Stage 1 (vision model `adminConfig.model`) returns `document_type`, `extracted_text`, `parties` only; Stage 2 (synthesis model `orgDefaultModel || extractionModel`) receives extracted text as context, returns `findings`, `summary`, `custom_response`. Both models now appear in decision log, transaction log metadata (`extraction_model`, `synthesis_model`), and all `emit()` / `logger.step()` calls.
+- **Decision log step rendering**: Added `model_selection` and `synthesis_model_selection` to `stepMeta`. Fixed `pdf_extraction` detail renderer to show `image_pages` (doc-analyzer) alongside `segments_extracted` (spec-validator) — previously showed "0 segments" for doc-analyzer runs.
+- **CLAUDE.md reference implementation**: Updated to name both `specValidator` (three-stage) and `documentAnalyzer` (two-stage) as reference implementations. Removed "(single-stage)" description that was outdated.
+
 ### Open / next
 - Confirm extraction quality rating accuracy against 452 George Street document once Railway deploys.
 - Remove temp `console.log` debug lines from spec-validator index.js once extraction confirmed working.
+- Smoke test document-analyzer two-stage split with a real PDF — confirm decision log shows two distinct model entries.
 
 ---
 

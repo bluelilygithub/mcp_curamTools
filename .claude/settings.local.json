@@ -85,7 +85,15 @@
       "Bash(node --check server/routes/agents.js)",
       "Bash(node --check server/platform/createAgentRoute.js)",
       "Bash(dir \"C:\\\\Users\\\\micha\\\\local sites\\\\mcp_curamtools\")",
-      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\micha\\\\local sites\\\\mcp_curamtools\" -File | Where-Object { $_.Extension -eq '.md' } | Select-Object -ExpandProperty Name)"
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\micha\\\\local sites\\\\mcp_curamtools\" -File | Where-Object { $_.Extension -eq '.md' } | Select-Object -ExpandProperty Name)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\micha\\\\Local Sites\\\\mcp_curamTools\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "PowerShell(grep *)",
+      "PowerShell(head *)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\micha\\\\Local Sites\\\\mcp_curamTools\" -Name | Where-Object { $_ -notmatch \"node_modules\" })",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\micha\\\\Local Sites\\\\mcp_curamTools\\\\server\" -Name | Where-Object { $_ -notmatch \"node_modules\" })",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\micha\\\\Local Sites\\\\mcp_curamTools\\\\client\\\\src\" -Recurse -Name | Where-Object { $_ -notmatch \"node_modules\" } | Select-Object -First 80)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\micha\\\\Local Sites\\\\mcp_curamTools\\\\client\\\\src\" -Recurse -Name | Where-Object { $_ -notmatch \"node_modules\" } | Select-Object -Skip 80)"
     ]
   }
 }

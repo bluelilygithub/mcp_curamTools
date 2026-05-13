@@ -447,7 +447,7 @@ metadata: { extraction_model: extractionModel, synthesis_model: synthesisModel, 
 
 **Why:** Operators need to see exactly which model ran each stage for cost attribution, debugging, and compliance tracing. The transaction log, decision log, and run emits all surface this. Hardcoded fallback model IDs break multi-provider routing and create invisible cost surprises.
 
-**Reference implementations:** `server/agents/specValidator/index.js` (full two-stage), `server/agents/demoSuite/documentAnalyzer.js` (single-stage — logs extraction model, uses org default).
+**Reference implementations:** `server/agents/specValidator/index.js` (three-stage: extraction → Python → synthesis), `server/agents/demoSuite/documentAnalyzer.js` (two-stage: vision extraction → text synthesis).
 
 ### Google models — env var
 

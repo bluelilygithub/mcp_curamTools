@@ -14,9 +14,7 @@ All servers are registered in Admin > MCP Servers and connect via stdio (local p
 
 ---
 
-## google-ads.js — 11 tools (+ 4 pending documentation)
-
-> **Note:** `server/CLAUDE.md` lists 15 tools. The 4 not yet fully documented here: `ads_get_ad_group_performance`, `ads_get_search_terms_by_ad_group`, `ads_get_quality_scores`, `ads_get_negative_keywords`. Add data shapes when next touching `google-ads.js`.
+## google-ads.js — 15 tools
 
 | Tool | Description | Data Shape | When to Use |
 |---|---|---|---|
@@ -31,6 +29,10 @@ All servers are registered in Admin > MCP Servers and connect via stdio (local p
 | `ads_get_change_history` | Recent account change events: bid changes, budget adjustments, status changes, ad edits, keyword additions/removals. Returns changedAt, resourceType, changedFields, clientType, operation, campaignName. | `[{changed_at, resource_type, changed_fields, client_type, operation, campaign_name}]` | For any question about what changed recently in the account. |
 | `ads_get_ad_group_ads` | All enabled RSA ads per campaign and ad group. Returns campaign, adGroup, adId, adStrength (EXCELLENT/GOOD/AVERAGE/POOR/UNSPECIFIED), finalUrls, headlines (text + pinnedField), descriptions (text + pinnedField). | `[{campaign, adGroup, adId, adStrength, finalUrls, headlines, descriptions}]` | Use for ad copy analysis and copy diagnostic reports. |
 | `ads_get_ad_asset_performance` | Asset performance labels for every active RSA asset from the Google Ads asset view. Returns campaign, adGroup, adId, fieldType (HEADLINE/DESCRIPTION), performanceLabel (BEST/GOOD/LOW/POOR/UNRATED/LEARNING), pinnedField, and text. | `[{campaign, adGroup, adId, fieldType, performanceLabel, text}]` | Use to identify which specific headlines and descriptions are rated Poor and should be replaced. |
+| `ads_get_ad_group_performance` | Impressions, clicks, cost (AUD), CTR, conversion rate, and CPA per ad group across all campaigns. | `[{campaign_name, ad_group_name, impressions, clicks, cost_aud, ctr, conversion_rate, cpa_aud}]` | To diagnose performance differences between ad groups within the same campaign. |
+| `ads_get_search_terms_by_ad_group` | Top 20 search terms per ad group, ordered by clicks DESC. Same shape as `ads_get_search_terms` but segmented by ad group. | `[{campaign_name, ad_group_name, term, impressions, clicks, cost_aud, conversions, ctr}]` | To identify ad group-level intent mismatches or negative keyword gaps that aren't visible at account level. |
+| `ads_get_quality_scores` | Quality Score components for all active keywords: expected CTR, ad relevance, and landing page experience. Each rated BELOW_AVERAGE/AVERAGE/ABOVE_AVERAGE. | `[{keyword_text, campaign_name, ad_group_name, quality_score, expected_ctr, ad_relevance, landing_page_experience}]` | To diagnose high CPC or low impression share rooted in Quality Score problems. |
+| `ads_get_negative_keywords` | Shared negative keyword lists and campaign-level negatives. Returns list names with all terms in each list, plus per-campaign negatives separately. | `{sharedLists: {[listName]: [{text, matchType}]}, campaignNegatives: [{campaign, text, matchType}]}` | To audit what is actively blocked, identify coverage gaps, or check before recommending new negatives. |
 
 **Data Coverage:** Google Ads data available from ~March 2026 onwards only.
 
@@ -159,7 +161,7 @@ Device data is available in **all three systems** — never tell the user device
 
 ## Conversation Agent — Tool Count: 25
 
-The conversation agent (`googleAdsConversation`) wires tools from: google-ads (11), google-analytics (5), wordpress (5 — excludes `wp_get_server_ip`), platform (4 — excludes `get_pending_suggestions`, `update_suggestion_outcome`, `get_suggestion_history`, `flag_prompt_for_review`), knowledge-base (2 — excludes `add_document`). Current exported count: 25.
+The conversation agent (`googleAdsConversation`) wires tools from: google-ads (10 — excludes `ads_generate_keyword_ideas`, `ads_get_ad_group_performance`, `ads_get_search_terms_by_ad_group`, `ads_get_quality_scores`, `ads_get_negative_keywords`), google-analytics (5), wordpress (6 — excludes `wp_get_server_ip`), platform (3 — excludes `get_pending_suggestions`, `update_suggestion_outcome`, `get_suggestion_history`, `flag_prompt_for_review`), knowledge-base (1 — excludes `add_document`, `list_knowledge_sources`). Current exported count: 25.
 
 ---
 
