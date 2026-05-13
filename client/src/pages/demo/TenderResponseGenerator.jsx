@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { useIcon } from '../../providers/IconProvider';
@@ -7,6 +7,65 @@ import MicButton from '../../components/ui/MicButton';
 import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
+
+const REVIEW_FILTERS = [
+  { id: 'all',       label: 'All' },
+  { id: 'pending',   label: 'Pending' },
+  { id: 'edited',    label: 'Edited' },
+  { id: 'approved',  label: 'Approved' },
+  { id: 'rejected',  label: 'Rejected' },
+  { id: 'blocked',   label: 'Blocked' },
+];
+
+/** Client-side Markdown pack — one section per requirement (demo export, not a formal submission). */
+function buildTenderDraftPackMd(requirements, extraction) {
+  const sorted = [...requirements].sort((a, b) =>
+    String(a.requirement_id ?? '').localeCompare(String(b.requirement_id ?? ''), undefined, { numeric: true })
+  );
+  const lines = [
+    '# Tender response draft pack (demo export)',
+    '',
+    `_Not a submission-ready Word/PDF — copy into your volume template or send to BD for layout._`,
+    '',
+  ];
+  if (extraction?.document_title) lines.push(`**Tender:** ${extraction.document_title}`, '');
+  if (extraction?.organisation) lines.push(`**Issuer:** ${extraction.organisation}`, '');
+  if (extraction?.tender_reference) lines.push(`**Reference:** ${extraction.tender_reference}`, '');
+  lines.push('---', '');
+
+  for (const req of sorted) {
+    const st = req.status ?? 'pending';
+    lines.push(`## ${req.requirement_id} · ${req.category ?? '—'} · **${st}**`, '');
+    lines.push(`**Requirement:** ${req.requirement_text ?? ''}`, '');
+    if (req.match_rationale) lines.push(`*Matcher:* ${req.match_rationale}`, '');
+    if (req.evidence_ids?.length) lines.push(`*Evidence IDs:* ${req.evidence_ids.join(', ')}`, '');
+    if (req.blocker_reason) lines.push(`*Blocker:* ${req.blocker_reason}`, '');
+    if (req.comment && st === 'rejected') lines.push(`*Reviewer comment:* ${req.comment}`, '');
+    const body = (req.edited_text && String(req.edited_text).trim())
+      ? req.edited_text
+      : (req.draft_response && String(req.draft_response).trim() ? req.draft_response : null);
+    if (body) {
+      lines.push('### Response draft', '', body, '');
+    } else if (st !== 'rejected') {
+      lines.push('_No draft text for this row._', '');
+    }
+    lines.push('---', '');
+  }
+  return lines.join('\n');
+}
+
+function downloadTextFile(filename, text) {
+  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -529,6 +588,7 @@ export default function TenderResponseGenerator() {
   const [runId, setRunId]         = useState(searchParams.get('runId') ?? null);
   const [runData, setRunData]     = useState(null);
   const [loadingRun, setLoadingRun] = useState(false);
+  const [reviewFilter, setReviewFilter] = useState('all');
 
   // History
   const [history, setHistory] = useState([]);
@@ -619,6 +679,24 @@ export default function TenderResponseGenerator() {
   const trace        = resultData.trace ?? [];
   const pendingCount = requirements.filter((r) => r.status === 'pending').length;
 
+  const hitlStats = useMemo(() => {
+    const c = { pending: 0, edited: 0, approved: 0, rejected: 0, blocked: 0 };
+    for (const r of requirements) {
+      const s = r.status ?? 'pending';
+      if (s in c) c[s] += 1;
+      else c.pending += 1;
+    }
+    const actionable = requirements.length - c.blocked;
+    const addressed  = c.approved + c.edited + c.rejected;
+    const pct        = actionable > 0 ? Math.round((addressed / actionable) * 100) : 0;
+    return { ...c, actionable, addressed, pct };
+  }, [requirements]);
+
+  const filteredRequirements = useMemo(() => {
+    if (reviewFilter === 'all') return requirements;
+    return requirements.filter((r) => (r.status ?? 'pending') === reviewFilter);
+  }, [requirements, reviewFilter]);
+
   const extractionModel = trace.find((t) => t.step === 'model_selection')?.model ?? null;
   const synthesisModel  = trace.find((t) => t.step === 'synthesis_model_selection')?.model ?? null;
 
@@ -633,7 +711,7 @@ export default function TenderResponseGenerator() {
           Tender Response Generator
         </h1>
         <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>
-          Upload an RFT PDF — extract compliance requirements, verify against the evidence pack, and generate first-draft response paragraphs.
+          Upload an RFT PDF — extract requirements, check them against your evidence pack, then review **per-requirement** drafts. This demo does **not** assemble a full submission Word/PDF; use **Download draft pack** when you want one Markdown file to paste into your templates.
         </p>
       </div>
 
@@ -787,6 +865,18 @@ export default function TenderResponseGenerator() {
               </div>
               <div className="flex gap-2">
                 <button
+                  type="button"
+                  onClick={() => {
+                    const md = buildTenderDraftPackMd(requirements, extraction);
+                    const slug = runId ? String(runId).replace(/-/g, '').slice(0, 10) : 'run';
+                    downloadTextFile(`tender-draft-pack-${slug}.md`, md);
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                  style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', cursor: 'pointer' }}
+                >
+                  Download draft pack (.md)
+                </button>
+                <button
                   onClick={handleRefresh}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium"
                   style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: 'pointer' }}
@@ -794,7 +884,13 @@ export default function TenderResponseGenerator() {
                   Refresh
                 </button>
                 <button
-                  onClick={() => { setRunData(null); setFile(null); setRunId(null); setSearchParams({}, { replace: true }); }}
+                  onClick={() => {
+                    setRunData(null);
+                    setFile(null);
+                    setRunId(null);
+                    setReviewFilter('all');
+                    setSearchParams({}, { replace: true });
+                  }}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium"
                   style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: 'pointer' }}
                 >
@@ -838,16 +934,58 @@ export default function TenderResponseGenerator() {
               </div>
             )}
 
-            {pendingCount > 0 && (
-              <p className="text-sm font-medium" style={{ color: '#d97706' }}>
-                {pendingCount} draft{pendingCount !== 1 ? 's' : ''} awaiting review
-              </p>
-            )}
-            {pendingCount === 0 && requirements.length > 0 && (
-              <p className="text-sm font-medium" style={{ color: '#16a34a' }}>
-                All requirements reviewed
-              </p>
-            )}
+            <div
+              className="rounded-lg p-3 text-xs space-y-2"
+              style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-muted)' }}
+            >
+              <p className="font-semibold" style={{ color: 'var(--color-text)' }}>What happens next</p>
+              <ul className="list-disc pl-4 space-y-1 m-0">
+                <li>Review decisions are saved on <strong>this run</strong> only. The demo does not build a bound Word/PDF tender volume.</li>
+                <li>Use <strong>Download draft pack (.md)</strong> (above) for one Markdown file you can paste into your templates or hand to BD.</li>
+                <li>Rows in <strong>Edited</strong> still show Approve / Reject until you finalise — use <strong>Approve</strong> when the text is ready to stand as your answer.</li>
+              </ul>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: 'var(--color-muted)' }}>
+                <span>Pending <strong style={{ color: '#d97706' }}>{hitlStats.pending}</strong></span>
+                <span>Edited <strong style={{ color: '#1d4ed8' }}>{hitlStats.edited}</strong></span>
+                <span>Approved <strong style={{ color: '#166534' }}>{hitlStats.approved}</strong></span>
+                <span>Rejected <strong style={{ color: '#991b1b' }}>{hitlStats.rejected}</strong></span>
+                <span>Blocked <strong style={{ color: '#64748b' }}>{hitlStats.blocked}</strong></span>
+              </div>
+              {hitlStats.actionable > 0 ? (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs" style={{ color: 'var(--color-muted)' }}>
+                    <span>Reviewed (approve / edit / reject) vs actionable</span>
+                    <span>{hitlStats.addressed} / {hitlStats.actionable} · {hitlStats.pct}%</span>
+                  </div>
+                  <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--color-border)' }}>
+                    <div
+                      className="h-full rounded-full transition-[width] duration-300"
+                      style={{ width: `${hitlStats.pct}%`, background: 'var(--color-primary)' }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs" style={{ color: 'var(--color-muted)' }}>Every requirement is blocked — resolve evidence gaps outside this UI, then run again.</p>
+              )}
+              {hitlStats.edited > 0 && (
+                <p className="text-xs" style={{ color: '#92400e' }}>
+                  {hitlStats.edited} item{hitlStats.edited !== 1 ? 's' : ''} in <strong>Edited</strong> — click <strong>Approve</strong> when you are ready to finalise, or keep editing.
+                </p>
+              )}
+              {pendingCount > 0 && (
+                <p className="text-sm font-medium m-0" style={{ color: '#d97706' }}>
+                  {pendingCount} requirement{pendingCount !== 1 ? 's' : ''} still <strong>Pending</strong> (no decision yet).
+                </p>
+              )}
+              {pendingCount === 0 && hitlStats.actionable > 0 && hitlStats.edited === 0 && (
+                <p className="text-sm font-medium m-0" style={{ color: '#16a34a' }}>
+                  Every actionable requirement has left <strong>Pending</strong> — export or finalise any <strong>Edited</strong> rows, then use <strong>New run</strong> for another RFT.
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Loading indicator for existing run */}
@@ -858,18 +996,50 @@ export default function TenderResponseGenerator() {
             </div>
           )}
 
-          {/* Requirement cards */}
-          <div className="space-y-4">
-            {requirements.map((req) => (
-              <RequirementCard
-                key={req.requirement_id}
-                req={req}
-                runId={runId}
-                onUpdated={handleRefresh}
-                getIcon={getIcon}
-              />
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium shrink-0" style={{ color: 'var(--color-muted)' }}>Filter by review status</span>
+            {REVIEW_FILTERS.map(({ id, label }) => {
+              const count = id === 'all'
+                ? requirements.length
+                : (hitlStats[id] ?? 0);
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setReviewFilter(id)}
+                  className="px-3 py-1 rounded-full text-xs font-medium"
+                  style={{
+                    background: reviewFilter === id ? 'var(--color-primary)' : 'var(--color-bg)',
+                    color: reviewFilter === id ? '#fff' : 'var(--color-text)',
+                    border: `1px solid ${reviewFilter === id ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {label}
+                  {' '}
+                  <span style={{ opacity: 0.85 }}>({count})</span>
+                </button>
+              );
+            })}
           </div>
+
+          {filteredRequirements.length === 0 ? (
+            <p className="text-sm text-center py-6" style={{ color: 'var(--color-muted)' }}>
+              No requirements match filter &quot;{REVIEW_FILTERS.find((f) => f.id === reviewFilter)?.label ?? reviewFilter}&quot;.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {filteredRequirements.map((req) => (
+                <RequirementCard
+                  key={req.requirement_id}
+                  req={req}
+                  runId={runId}
+                  onUpdated={handleRefresh}
+                  getIcon={getIcon}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 

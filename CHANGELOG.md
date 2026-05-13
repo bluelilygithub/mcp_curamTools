@@ -41,6 +41,7 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - **`createAgentRoute.js`:** Final SSE `result` message now includes **`runId`** on the streamed `data` object (alongside `summary`, `data`, `tokensUsed`, etc.). Persisted `agent_runs.result` is unchanged — `runId` is for clients that must call `PATCH /api/demo/runs/:runId/...` before a full reload.
 - **`GET /api/demo/tender-evidence`:** Each listed object includes a short-lived **presigned download URL** so the pre-run evidence browser can open files in a new tab.
 - **`TenderResponseGenerator.jsx`:** Evidence filenames link to presigned URLs; draft and original-draft body use **`MarkdownRenderer`**; edit mode adds **`MicButton`** (Web Speech API, same append pattern as Admin SQL / Google Ads conversation) when supported; `encodeURIComponent` on requirement id in review PATCH path; guard when `runId` is missing.
+- **Tender results UX:** **What happens next** explainer (no auto Word/PDF); **HITL counts** + progress bar (reviewed vs actionable, excludes blocked); **filter chips** (All / Pending / Edited / Approved / Rejected / Blocked); **Download draft pack (.md)** client-side export of all requirement sections; header copy clarifies per-requirement scope.
 - **`server/agents/demoSuite/tenderResponse/prompt.js`:** **DRAFT TEXT FORMAT** rules aligned with `MarkdownRenderer` (paragraphs, `##` headings, `**bold**`, lists, no HTML / bare URLs; citations remain `[REF-xxx]` style).
 
 ### Fixed / discovered
