@@ -126,6 +126,15 @@ const TOOLS = [
     roles:       ['org_member', 'org_admin'],
     group:       'Utilities',
   },
+  {
+    id:          'demo-tender-response',
+    name:        'Tender Response Generator',
+    description: 'Upload an RFT PDF — extract compliance requirements, run deterministic checks against a pre-loaded evidence pack, and generate first-draft response paragraphs with inline evidence citations.',
+    icon:        'file-text',
+    path:        '/demo/run/demo-tender-response',
+    roles:       ['org_member', 'org_admin'],
+    group:       'Utilities',
+  },
 ];
 
 /**
