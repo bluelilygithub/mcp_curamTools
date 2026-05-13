@@ -35,12 +35,12 @@ const path    = require('path');
 const fs      = require('fs');
 const { spawn } = require('child_process');
 
-const { getProvider }       = require('../../platform/AgentOrchestrator');
-const AgentConfigService    = require('../../platform/AgentConfigService');
-const StorageService        = require('../../services/StorageService');
+const { getProvider }       = require('../../../platform/AgentOrchestrator');
+const AgentConfigService    = require('../../../platform/AgentConfigService');
+const StorageService        = require('../../../services/StorageService');
 const { TransactionLogger,
-        declareAgentFields } = require('../../platform/TransactionLogger');
-const { scanInjection }      = require('../../utils/sanitize');
+        declareAgentFields } = require('../../../platform/TransactionLogger');
+const { scanInjection }      = require('../../../utils/sanitize');
 
 const {
   EXTRACTION_SYSTEM_PROMPT,
