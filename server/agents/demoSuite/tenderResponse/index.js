@@ -572,7 +572,7 @@ async function runTenderResponse(context) {
   });
 
   return {
-    data:       resultData,
+    result: { data: resultData },
     tokensUsed,
   };
 
