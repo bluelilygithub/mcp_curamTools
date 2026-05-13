@@ -71,7 +71,7 @@ export default function ModelsTab() {
   const [form,                setForm]                = useState(EMPTY_FORM);
   const [defaultModel,        setDefaultModel]        = useState(null);
   const [fallbackModel,       setFallbackModel]       = useState(null);
-  const [specValidatorModel,  setSpecValidatorModel]  = useState(null);
+  const [pdfExtractionModel,  setPdfExtractionModel]  = useState(null);
   const [savingDefaults,      setSavingDefaults]      = useState(false);
   const [testResults,         setTestResults]         = useState({});
 
@@ -88,7 +88,7 @@ export default function ModelsTab() {
       setApiKeyOk(statusData);
       setDefaultModel(defaultData.model_id ?? null);
       setFallbackModel(fallbackData.model_id ?? null);
-      setSpecValidatorModel(svConfig?.model ?? null);
+      setPdfExtractionModel(svConfig?.model ?? null);
     }).catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [isAdmin]);
@@ -99,8 +99,10 @@ export default function ModelsTab() {
       await Promise.all([
         api.put('/settings/default-model', { model_id: defaultModel || null }),
         api.put('/settings/fallback-model', { model_id: fallbackModel || null }),
-        api.put('/admin/agents/spec-validator',      { model: specValidatorModel || null }),
-        api.put('/admin/agents/demo-spec-validator', { model: specValidatorModel || null }),
+        api.put('/admin/agents/spec-validator',         { model: pdfExtractionModel || null }),
+        api.put('/admin/agents/demo-spec-validator',    { model: pdfExtractionModel || null }),
+        api.put('/admin/agents/demo-document-analyzer', { model: pdfExtractionModel || null }),
+        api.put('/admin/agents/demo-tender-response',   { model: pdfExtractionModel || null }),
       ]);
       setSuccess('Models saved.');
     } catch (e) {
@@ -216,10 +218,10 @@ export default function ModelsTab() {
   const activeModels = models.filter((m) => m.enabled);
   const defaultIsInactive = defaultModel && !activeModels.some((m) => m.id === defaultModel);
   const fallbackIsInactive = fallbackModel && !activeModels.some((m) => m.id === fallbackModel);
-  const specValidatorIsInactive = specValidatorModel && !activeModels.some((m) => m.id === specValidatorModel);
+  const pdfExtractionIsInactive = pdfExtractionModel && !activeModels.some((m) => m.id === pdfExtractionModel);
   const defaultModelObj = models.find((m) => m.id === defaultModel);
   const fallbackModelObj = models.find((m) => m.id === fallbackModel);
-  const specValidatorModelObj = models.find((m) => m.id === specValidatorModel);
+  const pdfExtractionModelObj = models.find((m) => m.id === pdfExtractionModel);
 
   const fi = {
     width: '100%', padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
@@ -296,28 +298,28 @@ export default function ModelsTab() {
             </div>
 
             <div>
-              <label className={LABEL} style={LABEL_STYLE}>Spec Validator extraction</label>
+              <label className={LABEL} style={LABEL_STYLE}>PDF extraction model</label>
               <select
-                value={specValidatorModel ?? ''}
-                onChange={(e) => setSpecValidatorModel(e.target.value)}
+                value={pdfExtractionModel ?? ''}
+                onChange={(e) => setPdfExtractionModel(e.target.value)}
                 className={FIELD}
                 style={{
                   ...FIELD_STYLE,
-                  borderColor: specValidatorIsInactive ? '#fca5a5' : 'var(--color-border)',
+                  borderColor: pdfExtractionIsInactive ? '#fca5a5' : 'var(--color-border)',
                 }}
               >
                 <option value="">— Use default —</option>
-                {specValidatorIsInactive && specValidatorModelObj && (
-                  <option value={specValidatorModelObj.id} disabled style={{ color: '#991b1b' }}>
-                    ⚠ {specValidatorModelObj.name} (inactive)
+                {pdfExtractionIsInactive && pdfExtractionModelObj && (
+                  <option value={pdfExtractionModelObj.id} disabled style={{ color: '#991b1b' }}>
+                    ⚠ {pdfExtractionModelObj.name} (inactive)
                   </option>
                 )}
                 {activeModels.map((m) => (
                   <option key={m.id} value={m.id}>{m.name} — {m.id}</option>
                 ))}
               </select>
-              {specValidatorIsInactive && (
-                <p className="text-xs mt-1" style={{ color: '#991b1b' }}>⚠ Spec Validator model is inactive</p>
+              {pdfExtractionIsInactive && (
+                <p className="text-xs mt-1" style={{ color: '#991b1b' }}>⚠ PDF extraction model is inactive</p>
               )}
             </div>
           </div>

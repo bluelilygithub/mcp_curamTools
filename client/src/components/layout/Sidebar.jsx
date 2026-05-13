@@ -106,7 +106,6 @@ export default function Sidebar({ mobileOpen, onClose }) {
                 AI & MCP
               </p>
             )}
-            <NavItem to="/admin/models" icon="cpu" label="Models" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/providers" icon="globe" label="Providers" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/agents" icon="bot" label="Agents" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/mcp-servers" icon="server" label="MCP Servers" collapsed={collapsed} onClick={onLinkClick} />
