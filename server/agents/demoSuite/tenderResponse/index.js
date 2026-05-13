@@ -552,20 +552,23 @@ async function runTenderResponse(context) {
   };
 
   await logger.complete({
-    rft_file_name:        fileName,
-    rft_file_hash:        fileHash,
-    image_pages:          pages.length,
-    requirements_total:   requirements.length,
-    mandatory_gate_count: mandatoryCount,
-    match_strong:         summary.strong   ?? 0,
-    match_partial:        summary.partial  ?? 0,
-    match_none:           summary.none     ?? 0,
-    blockers:             blockerCount,
-    drafts_generated:     draftsGenerated,
-    extraction_model:     extractionModel,
-    synthesis_model:      synthesisModel,
-    pending_count:        pendingCount,
-    blocked_count:        blockedCount,
+    outcome:  `${requirements.length} requirements · ${summary.strong ?? 0} strong · ${blockerCount} blocker${blockerCount !== 1 ? 's' : ''} · ${draftsGenerated} draft${draftsGenerated !== 1 ? 's' : ''} generated`,
+    metadata: {
+      rft_file_name:        fileName,
+      rft_file_hash:        fileHash,
+      image_pages:          pages.length,
+      requirements_total:   requirements.length,
+      mandatory_gate_count: mandatoryCount,
+      match_strong:         summary.strong   ?? 0,
+      match_partial:        summary.partial  ?? 0,
+      match_none:           summary.none     ?? 0,
+      blockers:             blockerCount,
+      drafts_generated:     draftsGenerated,
+      extraction_model:     extractionModel,
+      synthesis_model:      synthesisModel,
+      pending_count:        pendingCount,
+      blocked_count:        blockedCount,
+    },
   });
 
   return {
