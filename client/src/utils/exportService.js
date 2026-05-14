@@ -1,7 +1,7 @@
 /**
  * exportService — platform-wide export utility.
  *
- * Provides exportPdf() and exportText() for any tool in the platform.
+ * Provides exportPdf(), fetchPdfBlob(), and exportText() for any tool in the platform.
  * PDF generation is server-side (Puppeteer + Chromium) for consistent,
  * fully-formatted output with selectable text.
  *
@@ -14,6 +14,9 @@
  *   // Conversation (chat messages array):
  *   const html = chatMessagesToHtml(messages);
  *   await exportPdf({ content: html, contentType: 'html', title: 'Discussion', filename: 'discussion.pdf' });
+ *
+ *   // Open PDF in a new tab (same server render as download):
+ *   const blob = await fetchPdfBlob({ content: md, title: 'Preview' });
  *
  *   // Plain text fallback:
  *   exportText({ content: 'some text', filename: 'export.txt' });
@@ -28,12 +31,11 @@ import useAuthStore from '../stores/authStore';
  * @param {string}  opts.content      — markdown string or HTML string
  * @param {string} [opts.contentType] — 'markdown' (default) | 'html'
  * @param {string} [opts.title]       — document title shown in header
- * @param {string} [opts.filename]    — downloaded filename (e.g. 'report.pdf')
+ * @param {string} [opts.filename]    — sent to server for Content-Disposition (download name)
  * @param {string} [opts.extraStyles] — additional CSS injected into the PDF shell
- * @returns {Promise<void>}
+ * @returns {Promise<Blob>}
  */
-export async function exportPdf({ content, contentType = 'markdown', title = 'Export', filename = 'export.pdf', extraStyles = '' }) {
-  // api.stream is for SSE — use a raw fetch for binary responses
+export async function fetchPdfBlob({ content, contentType = 'markdown', title = 'Export', filename = 'export.pdf', extraStyles = '' }) {
   const token = useAuthStore.getState().token ?? '';
 
   const res = await fetch('/api/export/pdf', {
@@ -51,7 +53,16 @@ export async function exportPdf({ content, contentType = 'markdown', title = 'Ex
     throw new Error(msg);
   }
 
-  const blob = await res.blob();
+  return res.blob();
+}
+
+/**
+ * @param {object} opts — same as fetchPdfBlob
+ * @returns {Promise<void>}
+ */
+export async function exportPdf(opts) {
+  const { filename = 'export.pdf', ...rest } = opts;
+  const blob = await fetchPdfBlob({ ...rest, filename });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href     = url;

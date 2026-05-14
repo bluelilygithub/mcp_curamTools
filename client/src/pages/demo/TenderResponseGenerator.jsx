@@ -1,11 +1,12 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
+import useAuthStore from '../../stores/authStore';
 import { useIcon } from '../../providers/IconProvider';
 import ProcessingModal from '../../components/shared/ProcessingModal';
 import MicButton from '../../components/ui/MicButton';
 import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
-import { exportPdf } from '../../utils/exportService';
+import { exportPdf, fetchPdfBlob } from '../../utils/exportService';
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
@@ -568,6 +569,7 @@ function RequirementCard({ req, runId, onUpdated, getIcon }) {
 
 export default function TenderResponseGenerator() {
   const getIcon                           = useIcon();
+  const { user }                          = useAuthStore();
   const [searchParams, setSearchParams]   = useSearchParams();
   const fileInputRef                      = useRef(null);
 
@@ -591,7 +593,13 @@ export default function TenderResponseGenerator() {
   const [loadingRun, setLoadingRun] = useState(false);
   const [reviewFilter, setReviewFilter] = useState('all');
   const [pdfExportLoading, setPdfExportLoading] = useState(false);
-  const [pdfExportError, setPdfExportError] = useState('');
+  const [viewPdfLoading, setViewPdfLoading]     = useState(false);
+  const [pdfExportError, setPdfExportError]     = useState('');
+  const [draftEmailOpen, setDraftEmailOpen]     = useState(false);
+  const [draftEmailTo, setDraftEmailTo]           = useState('');
+  const [draftEmailSending, setDraftEmailSending] = useState(false);
+  const [draftEmailError, setDraftEmailError]   = useState('');
+  const [draftEmailSent, setDraftEmailSent]     = useState(false);
 
   // History
   const [history, setHistory] = useState([]);
@@ -707,6 +715,53 @@ export default function TenderResponseGenerator() {
 
   const exportSlug = runId ? String(runId).replace(/-/g, '').slice(0, 10) : 'run';
 
+  const pdfBusy = pdfExportLoading || viewPdfLoading || draftEmailSending;
+
+  const handleViewDraftPdf = async () => {
+    setViewPdfLoading(true);
+    setPdfExportError('');
+    try {
+      const md    = buildTenderDraftPackMd(requirements, extraction);
+      const title = extraction.document_title?.slice(0, 200) ?? 'Tender response draft pack';
+      const blob  = await fetchPdfBlob({
+        content:     md,
+        contentType: 'markdown',
+        title,
+        filename: `preview-${exportSlug}.pdf`,
+      });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
+    } catch (e) {
+      setPdfExportError(e.message ?? 'PDF preview failed');
+    } finally {
+      setViewPdfLoading(false);
+    }
+  };
+
+  const handleSendDraftEmail = async () => {
+    if (!runId || !draftEmailTo.trim()) return;
+    setDraftEmailSending(true);
+    setDraftEmailError('');
+    setDraftEmailSent(false);
+    try {
+      const md    = buildTenderDraftPackMd(requirements, extraction);
+      const title = extraction.document_title?.slice(0, 200) ?? 'Tender response draft pack';
+      await api.post(`/demo/runs/${runId}/email-tender-draft`, {
+        to:       draftEmailTo.trim(),
+        markdown: md,
+        title,
+        filename: `tender-response-${exportSlug}.pdf`,
+      });
+      setDraftEmailSent(true);
+      setDraftEmailOpen(false);
+    } catch (e) {
+      setDraftEmailError(e.message ?? 'Failed to send');
+    } finally {
+      setDraftEmailSending(false);
+    }
+  };
+
   const handleExportPdf = async () => {
     setPdfExportLoading(true);
     setPdfExportError('');
@@ -740,7 +795,7 @@ export default function TenderResponseGenerator() {
         </h1>
         <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>
           Upload an RFT PDF — extract requirements, check them against your evidence pack, then review{' '}
-          <strong>per-requirement</strong> drafts. Export a <strong>PDF</strong> (platform print pipeline, same as compliance certificates) or <strong>Markdown</strong> for paste-up. This demo does not generate native Word (<span className="font-mono">.docx</span>) or a bound submission volume.
+          <strong>per-requirement</strong> drafts. <strong>Open</strong> or <strong>download</strong> the draft pack as PDF (same server pipeline as other demos), <strong>email</strong> the PDF to a colleague, or export <strong>Markdown</strong> for paste-up. This demo does not generate native Word (<span className="font-mono">.docx</span>) or a bound submission volume.
         </p>
       </div>
 
@@ -893,17 +948,55 @@ export default function TenderResponseGenerator() {
                 )}
               </div>
               <div className="flex flex-col gap-2 items-stretch sm:items-end">
-                <div className="flex flex-wrap gap-2 justify-end">
+                <div className="flex flex-wrap gap-2 justify-end items-center">
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={handleViewDraftPdf}
+                      disabled={pdfBusy}
+                      title="Open PDF preview (new tab)"
+                      className="rounded-lg p-2 transition-colors"
+                      style={{
+                        background: 'var(--color-bg)',
+                        color:      'var(--color-text)',
+                        border:     '1px solid var(--color-border)',
+                        cursor:     pdfBusy ? 'not-allowed' : 'pointer',
+                        lineHeight: 0,
+                      }}
+                    >
+                      {getIcon('eye', { size: 16 })}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraftEmailOpen((o) => !o);
+                        setDraftEmailSent(false);
+                        setDraftEmailError('');
+                        if (!draftEmailTo && user?.email) setDraftEmailTo(user.email);
+                      }}
+                      title={draftEmailSent ? 'Draft pack sent' : 'Email draft pack (PDF)'}
+                      className="rounded-lg p-2 transition-colors"
+                      style={{
+                        background: 'var(--color-bg)',
+                        color:      draftEmailSent ? '#16a34a' : 'var(--color-text)',
+                        border:     `1px solid ${draftEmailSent ? '#16a34a' : 'var(--color-border)'}`,
+                        cursor:     'pointer',
+                        lineHeight: 0,
+                      }}
+                    >
+                      {getIcon('mail', { size: 16 })}
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={handleExportPdf}
-                    disabled={pdfExportLoading}
+                    disabled={pdfBusy}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
                     style={{
-                      background: pdfExportLoading ? 'var(--color-bg)' : '#1d4ed8',
-                      color:      pdfExportLoading ? 'var(--color-muted)' : '#fff',
+                      background: pdfBusy ? 'var(--color-bg)' : '#1d4ed8',
+                      color:      pdfBusy ? 'var(--color-muted)' : '#fff',
                       border:     'none',
-                      cursor:     pdfExportLoading ? 'not-allowed' : 'pointer',
+                      cursor:     pdfBusy ? 'not-allowed' : 'pointer',
                     }}
                     title="Server-rendered PDF (same pipeline as compliance certificates)"
                   >
@@ -913,13 +1006,13 @@ export default function TenderResponseGenerator() {
                   <button
                     type="button"
                     onClick={handleExportMarkdown}
-                    disabled={pdfExportLoading}
+                    disabled={pdfBusy}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
                     style={{
                       background: 'var(--color-bg)',
                       color:      'var(--color-text)',
                       border:     '1px solid var(--color-border)',
-                      cursor:     pdfExportLoading ? 'not-allowed' : 'pointer',
+                      cursor:     pdfBusy ? 'not-allowed' : 'pointer',
                     }}
                     title="Raw Markdown for git, diff, or paste into Word"
                   >
@@ -940,6 +1033,10 @@ export default function TenderResponseGenerator() {
                       setRunId(null);
                       setReviewFilter('all');
                       setPdfExportError('');
+                      setDraftEmailOpen(false);
+                      setDraftEmailTo('');
+                      setDraftEmailError('');
+                      setDraftEmailSent(false);
                       setSearchParams({}, { replace: true });
                     }}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium"
@@ -948,6 +1045,48 @@ export default function TenderResponseGenerator() {
                     New run
                   </button>
                 </div>
+                {draftEmailOpen && (
+                  <div className="rounded-xl p-4 space-y-3 w-full max-w-md ml-auto" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+                    <p className="text-xs font-semibold uppercase tracking-wider m-0" style={{ color: 'var(--color-muted)' }}>
+                      Email draft pack (PDF)
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="email"
+                        placeholder="recipient@example.com"
+                        value={draftEmailTo}
+                        onChange={(e) => { setDraftEmailTo(e.target.value); setDraftEmailError(''); }}
+                        className="flex-1 min-w-[12rem] text-sm rounded-lg px-3 py-2"
+                        style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', fontFamily: 'inherit', outline: 'none' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSendDraftEmail}
+                        disabled={draftEmailSending || !draftEmailTo.trim() || !runId}
+                        className="text-sm font-medium px-4 py-2 rounded-lg transition-colors shrink-0"
+                        style={
+                          draftEmailSending || !draftEmailTo.trim() || !runId
+                            ? { background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)', cursor: 'not-allowed' }
+                            : { background: 'var(--color-primary)', color: '#fff', cursor: 'pointer', border: 'none' }
+                        }
+                      >
+                        {draftEmailSending ? 'Sending…' : 'Send'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDraftEmailOpen(false)}
+                        className="text-xs shrink-0"
+                        style={{ color: 'var(--color-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    {!runId && (
+                      <p className="text-xs m-0" style={{ color: '#d97706' }}>Run ID not available — reload this run from history or re-run the agent so email can attach to your org run.</p>
+                    )}
+                    {draftEmailError && <p className="text-xs m-0" style={{ color: '#dc2626' }}>{draftEmailError}</p>}
+                  </div>
+                )}
                 {pdfExportError && (
                   <p className="text-xs text-right m-0" style={{ color: '#dc2626' }}>{pdfExportError}</p>
                 )}
@@ -995,8 +1134,8 @@ export default function TenderResponseGenerator() {
             >
               <p className="font-semibold" style={{ color: 'var(--color-text)' }}>What happens next</p>
               <ul className="list-disc pl-4 space-y-1 m-0">
-                <li>Review decisions are saved on <strong>this run</strong> only. There is no merge into your branded Word templates — use <strong>Download PDF</strong> for one review-ready file, then hand to BD for layout.</li>
-                <li>Use <strong>Download PDF</strong> for a printable file (server-side via <code className="font-mono">exportPdf</code> — same as Spec Validator / Document Analyzer certificates). Use <strong>Markdown</strong> for raw text, version control, or opening in Word manually.</li>
+                <li>Review decisions are saved on <strong>this run</strong> only. There is no merge into your branded Word templates — use <strong>Download PDF</strong>, <strong>preview</strong>, or <strong>email</strong> for one review-ready file, then hand to BD for layout.</li>
+                <li>Use the <strong>eye</strong> icon to open a PDF preview in a new tab (<code className="font-mono">fetchPdfBlob</code> + same <code className="font-mono">/api/export/pdf</code> render as download). Use <strong>Download PDF</strong> or <strong>mail</strong> to send the same PDF via email (<code className="font-mono">POST /api/demo/runs/:runId/email-tender-draft</code>, same markdown→PDF path as export). Use <strong>Markdown</strong> for raw text, version control, or opening in Word manually.</li>
                 <li>Rows in <strong>Edited</strong> still show Approve / Reject until you finalise — use <strong>Approve</strong> when the text is ready to stand as your answer.</li>
               </ul>
             </div>

@@ -35,6 +35,23 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-14 — Tender draft pack: PDF preview + email (Spec Validator parity)
+
+### Built
+- **`server/services/markdownPdfBuffer.js`:** Shared **markdown/HTML → PDF buffer** (Puppeteer + same shell CSS as former inline `export.js`) for **`POST /api/export/pdf`** and demo email routes.
+- **`server/routes/export.js`:** Delegates PDF generation to **`markdownPdfBuffer`** (no behaviour change intended).
+- **`POST /api/demo/runs/:runId/email-tender-draft`** in **`server/routes/demo.js`:** Org-scoped run check; body `{ to, markdown, title?, filename? }`; renders PDF via shared service; sends via **`EmailService`** (same idea as **`email-certificate`**).
+- **`client/src/utils/exportService.js`:** **`fetchPdfBlob`** (authenticated fetch to `/api/export/pdf`); **`exportPdf`** calls it to avoid duplicated fetch logic.
+- **`TenderResponseGenerator.jsx`:** **Eye** (open PDF in new tab) and **mail** (inline recipient + Send) next to Download/Markdown; **`useAuthStore`** default recipient; copy updates in **`DEMO-AGENTS.md`**.
+
+### Fixed / discovered
+- (none)
+
+### Open / next
+- (none)
+
+---
+
 ## 2026-05-16 — Tender demo: HITL save fix, evidence links, voice + markdown drafts
 
 ### Built
