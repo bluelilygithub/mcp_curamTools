@@ -10,6 +10,30 @@
 const cron = require('node-cron');
 const { pool } = require('../db');
 const { persistRun } = require('./persistRun');
+const { mergePromptVersionIntoResult } = require('./promptVersions');
+
+/**
+ * Split scheduler `runFn` return into persisted body + optional `promptVersion` label.
+ * Envelope `{ result, promptVersion?, … }` persists `result` (same as HTTP agents);
+ * legacy agents return a plain object. Top-level `promptVersion` is merged as
+ * `result.prompt_version`, never left as a duplicate key on the envelope.
+ */
+function peelScheduledRunOutcome(outcome) {
+  if (!outcome || typeof outcome !== 'object' || Array.isArray(outcome)) {
+    return { base: outcome, promptVersion: undefined };
+  }
+  if (Object.prototype.hasOwnProperty.call(outcome, 'result')) {
+    return {
+      base: outcome.result,
+      promptVersion: outcome.promptVersion,
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(outcome, 'promptVersion')) {
+    const { promptVersion, ...rest } = outcome;
+    return { base: rest, promptVersion };
+  }
+  return { base: outcome, promptVersion: undefined };
+}
 
 class AgentSchedulerClass {
   constructor() {
@@ -83,9 +107,10 @@ class AgentSchedulerClass {
    * Execute the agent run for one cron tick. Persists result via persistRun.
    *
    * Multi-customer support: if runFn returns an array of
-   * `{ customerId, result, status, error }` objects, each element is persisted
-   * as a separate agent_runs row. Single-object returns (existing agents) are
-   * unchanged — backward compatible.
+   * `{ customerId, result, status, error, promptVersion? }` objects, each element is persisted
+   * as a separate agent_runs row. Optional **`promptVersion`** on each item (or on a single-run
+   * envelope `{ result, promptVersion? }`) is merged into **`result.prompt_version`** the same
+   * way as `createAgentRoute`. Single-object returns (existing agents) are unchanged — backward compatible.
    *
    * Errors never rethrow — a failing agent cannot crash the process.
    */
@@ -111,11 +136,12 @@ class AgentSchedulerClass {
             customerId: item.customerId ?? null,
             campaignId: item.campaignId ?? null,
           });
+          const { base, promptVersion } = peelScheduledRunOutcome(item);
           await persistRun({
             slug,
             orgId,
             status: item.status ?? (item.error ? 'error' : 'complete'),
-            result: item.result ?? null,
+            result: mergePromptVersionIntoResult(base ?? null, promptVersion),
             error: item.error ?? null,
             customerId: item.customerId ?? null,
             campaignId: item.campaignId ?? null,
@@ -125,11 +151,12 @@ class AgentSchedulerClass {
         console.log(`[AgentScheduler] ${slug} completed ${outcome.length} customer runs at ${new Date().toISOString()}`);
       } else {
         // Single-run (backward compatible)
+        const { base, promptVersion } = peelScheduledRunOutcome(outcome);
         await persistRun({
           slug,
           orgId,
           status: 'complete',
-          result: outcome?.result ?? outcome,
+          result: mergePromptVersionIntoResult(base, promptVersion),
           runId,
         });
         console.log(`[AgentScheduler] ${slug} completed at ${new Date().toISOString()}`);

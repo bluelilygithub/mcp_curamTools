@@ -10,7 +10,7 @@
 
 | Phase | Behaviour |
 |-------|-------------|
-| **1** | `require()` shared server modules: `markdownPdfBuffer`, `export` route, `createAgentRoute`. Verifies `tenderResponse/index.js` exists, mentions `runTenderResponse`, and passes `node --check` (no DB, no `require` of the tender agent — avoids side effects like `declareAgentFields`). |
+| **1** | `require()` shared server modules: `markdownPdfBuffer`, `export` route, `createAgentRoute`, **`promptVersions`**, **`AgentScheduler`**. Instantiates **`createAgentRoute`** once with a no-op `runFn` (catches missing `express` / broken top-of-file comments). Verifies `tenderResponse/index.js` exists, mentions `runTenderResponse`, and passes `node --check` (does not `require` the tender agent — avoids side effects like `declareAgentFields`). |
 | **2** | If system Chromium is found (same paths as production PDF), runs a **minimal markdown → PDF** via `renderMarkdownOrHtmlToPdfBuffer`. If no Chromium, **skips with exit 0** (normal on many Windows/macOS dev machines). |
 
 **What it does *not* do**

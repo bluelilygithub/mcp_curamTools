@@ -47,6 +47,7 @@ const {
   buildDraftSystemPrompt,
   buildDraftUserPrompt,
 } = require('./prompt');
+const { getPromptVersion } = require('../../../platform/promptVersions');
 
 const TOOL_SLUG_DEMO = 'demo-tender-response';
 
@@ -592,8 +593,9 @@ async function runTenderResponse(context) {
   });
 
   return {
-    result: { data: resultData },
+    result:        { data: resultData },
     tokensUsed,
+    promptVersion: getPromptVersion(TOOL_SLUG_DEMO),
   };
 
   } catch (err) {

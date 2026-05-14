@@ -70,7 +70,7 @@ The platform treats **how people enter instructions**, **how model output is sho
 
 Changes that touch the **shared agent/PDF spine** can break many demos at once. **Before you treat such a change as done**, run **`npm test`** from the **repository root** (after `cd server && npm install`). That command runs the golden-path smoke: it loads **`markdownPdfBuffer`**, the **`export`** route, **`createAgentRoute`**, validates the **tender** agent file with `node --check`, and (when Chromium is installed) renders a minimal markdown→PDF. It does **not** call live agents or external APIs.
 
-**Run it whenever you modify:** `server/services/markdownPdfBuffer.js`, `server/routes/export.js`, `server/platform/createAgentRoute.js`, or `server/agents/demoSuite/tenderResponse/index.js` — and **before merging** work that substantially refactors any of those paths.
+**Run it whenever you modify:** `server/services/markdownPdfBuffer.js`, `server/routes/export.js`, `server/platform/createAgentRoute.js`, `server/platform/AgentScheduler.js`, `server/platform/promptVersions.js`, or `server/agents/demoSuite/tenderResponse/index.js` — and **before merging** work that substantially refactors any of those paths.
 
 Details: [scripts/smoke/README.md](./scripts/smoke/README.md); demo author checklist: [DEMO-AGENTS.md](./DEMO-AGENTS.md) (*Golden-path smoke*).
 

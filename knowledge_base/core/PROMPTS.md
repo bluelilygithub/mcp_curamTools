@@ -6,6 +6,8 @@ This file records the prompts used to set up and develop the MCP CuramTools proj
 
 **Related (agent pages, not this historical log):** For **standardised prompt fields + microphone**, **markdown output from models**, and **reports / exports / reopening runs**, see [DEMO-AGENTS.md](../../DEMO-AGENTS.md) (*Standard demo UI*) and [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md) (*Product norms*).
 
+**Prompt lineage on runs:** [PROMPT_VERSIONING.md](./PROMPT_VERSIONING.md) — optional `prompt_version` on `agent_runs.result` for HTTP `createAgentRoute` runs and cron `AgentScheduler` runs.
+
 ---
 
 ## Initial Project Setup Prompt

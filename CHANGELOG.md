@@ -18,6 +18,37 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-14 — Prompt versioning on `AgentScheduler`; `createAgentRoute` header fix
+
+### Built
+- **`server/platform/AgentScheduler.js`:** Cron **single-run** and **multi-customer** persist paths merge optional **`promptVersion`** into **`result.prompt_version`** (same truncation rule as HTTP), using **`mergePromptVersionIntoResult`** from **`promptVersions.js`**.
+- **`server/platform/promptVersions.js`:** **`normalizePromptVersion`**, **`mergePromptVersionIntoResult`** (shared by HTTP and cron).
+
+### Fixed / discovered
+- **`server/platform/createAgentRoute.js`:** File-level `/**` block comment was missing a closing **`*/`**, which commented out all top-level **`require`** calls — **`express` was undefined** the first time **`createAgentRoute()`** ran.
+
+### Open / next
+- **B (Zod / schema):** opt-in validation at tool/API boundaries — not started.
+
+---
+
+## 2026-05-17 — Prompt versioning (C): optional `prompt_version` on HTTP runs
+
+### Built
+- **`server/platform/promptVersions.js`:** Central **`BY_SLUG`** labels; **`getPromptVersion(slug)`**. First entry: **`demo-tender-response@1`**.
+- **`createAgentRoute`:** If `runFn` returns **`promptVersion`** (string), merged into persisted **`result.prompt_version`** (max 160 chars). JSDoc updated. **No change** for agents that omit the field.
+- **`demo-tender-response`:** Returns **`promptVersion`** from registry so completed runs record lineage.
+- **`knowledge_base/core/PROMPT_VERSIONING.md`:** Convention, opt-in steps, HTTP + `AgentScheduler` persistence, link to golden-path smoke after registry edits.
+- **Docs / nav:** `PROMPTS.md`, `knowledge_base/INDEX.md`, `PLATFORM-PRIMITIVES.md` (root + `knowledge_base/architecture/`), `DEMO-AGENTS.md`, `persistRun.js` JSDoc, **Quality gate** lists now include **`promptVersions.js`**; **`scripts/smoke/golden-path.mjs`** loads **`promptVersions`** in phase 1.
+
+### Fixed / discovered
+- (none)
+
+### Open / next
+- **B (Zod / schema):** opt-in validation at tool/API boundaries — not started.
+
+---
+
 ## 2026-05-15 — Golden-path smoke test (platform spine, no live agents)
 
 ### Built

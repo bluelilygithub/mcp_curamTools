@@ -71,6 +71,7 @@ knowledge_base/
 | **Demo UI contract** (prompts + mic, markdown output, exports & reports) | [`DEMO-AGENTS.md`](../DEMO-AGENTS.md) — *Standard demo UI* |
 | **Golden-path smoke** (optional `npm test` from repo root) | [`scripts/smoke/README.md`](../scripts/smoke/README.md) |
 | **Prompts reference** | `core/PROMPTS.md` |
+| **Prompt versioning** (`prompt_version` on runs, registry) | `core/PROMPT_VERSIONING.md` |
 | **Platform primitives** | `architecture/PLATFORM_PRIMITIVES.md` |
 | **MCP servers & tools** | `architecture/MCP_SERVERS.md` |
 | **Database schema** | `architecture/DATABASE_SCHEMA.md` |

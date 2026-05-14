@@ -10,6 +10,18 @@
 
 ---
 
+## 2026-05-14 — Prompt versioning on AgentScheduler + createAgentRoute fix (mirror)
+
+Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-05-14**. Highlights: `AgentScheduler` merges `promptVersion`; `promptVersions.js` exports `mergePromptVersionIntoResult`; `createAgentRoute.js` file-header comment closed (requires were accidentally commented out).
+
+---
+
+## 2026-05-17 — Prompt versioning (mirror)
+
+Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-05-17**. Highlights: `server/platform/promptVersions.js`; `createAgentRoute` + **`AgentScheduler`** optional `result.prompt_version`; `demo-tender-response` opts in; `core/PROMPT_VERSIONING.md`.
+
+---
+
 ## 2026-05-15 — Golden-path smoke (mirror)
 
 Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-05-15**. Highlights: `scripts/smoke/golden-path.mjs`; root `npm test` / `npm run smoke:golden-path`; `scripts/smoke/README.md`; cross-links in `DEMO-AGENTS.md`, `core/SETUP.md`, `knowledge_base/INDEX.md`. **Update:** same entry extended — normative wording in `PROJECT_IDENTITY.md`, `server/CLAUDE.md`, `agents/AGENTS_INDEX.md` (policy alignment).

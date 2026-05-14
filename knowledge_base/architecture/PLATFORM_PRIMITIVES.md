@@ -15,7 +15,7 @@ Returns an Express router with `POST /run` (SSE) and `GET /history` endpoints wi
 ```js
 createAgentRoute({ slug, runFn, requiredPermission })
 // slug: string — agent identifier (e.g. 'google-ads-monitor')
-// runFn: async (context) => { result, trace, tokensUsed } — the agent entry point
+// runFn: async (context) => { result, trace?, tokensUsed, promptVersion? } — optional promptVersion → persisted as result.prompt_version
 // requiredPermission: string — role name; org_admin always satisfies the check
 ```
 
@@ -28,6 +28,8 @@ createAgentRoute({ slug, runFn, requiredPermission })
 **SSE result payload:** On successful completion, the final `{ type: 'result', data }` message’s `data` object includes **`runId`** (the UUID of the `agent_runs` row). Clients use it for immediate follow-up calls such as `PATCH /api/demo/runs/:runId/...`. **`runId` is not written into persisted `agent_runs.result` JSON** — only the streamed envelope carries it.
 
 **Budget integration:** Pre-flight daily budget check, mid-run accumulation via `emit(text, partialTokensUsed)`, post-run definitive check. `costAud` added to `resultPayload`.
+
+**Prompt lineage (additive):** If `runFn` resolves to an object that includes **`promptVersion`** (a short string), it is copied onto the persisted payload as **`result.prompt_version`** (truncated). Optional — see `server/platform/promptVersions.js` and `knowledge_base/core/PROMPT_VERSIONING.md`. Agents that omit it are unchanged.
 
 ---
 
@@ -67,7 +69,9 @@ AgentScheduler.updateSchedule(slug, newSchedule)
 AgentScheduler.getSchedule(slug)
 ```
 
-**Multi-customer support:** If `runFn` returns an array of `{ customerId, result, status, error }`, persists one `agent_runs` row per element.
+**Multi-customer support:** If `runFn` returns an array of `{ customerId, result, status, error, promptVersion? }`, persists one `agent_runs` row per element.
+
+**Prompt lineage (additive):** Optional top-level **`promptVersion`** on the cron return value (single run or per array item) is merged into **`result.prompt_version`** using the same helpers as `createAgentRoute` — see `server/platform/promptVersions.js` and `knowledge_base/core/PROMPT_VERSIONING.md`.
 
 ---
 
@@ -92,13 +96,13 @@ Canonical access layer for operator config (`agent_configs`) and admin config (`
 ## persistRun
 
 **Type:** Utility  
-**Location:** `server/platform/createAgentRoute.js` (exported)
+**Location:** `server/platform/persistRun.js`
 
 The only code that may write to `agent_runs`. Called by both `createAgentRoute` and `AgentScheduler`.
 
 **Interface:**
 ```js
-persistRun({ slug, orgId, status, summary, trace, tokensUsed, startTime })
+persistRun({ slug, orgId, status, result?, error?, runAt?, runId?, customerId?, campaignId? })
 // status: 'running' | 'complete' | 'error' | 'needs_review'
 ```
 

@@ -32,6 +32,18 @@ async function main() {
   require(path.join(root, 'server', 'services', 'markdownPdfBuffer.js'));
   require(path.join(root, 'server', 'routes', 'export.js'));
   require(path.join(root, 'server', 'platform', 'createAgentRoute.js'));
+  require(path.join(root, 'server', 'platform', 'promptVersions.js'));
+  require(path.join(root, 'server', 'platform', 'AgentScheduler.js'));
+
+  const { createAgentRoute } = require(path.join(root, 'server', 'platform', 'createAgentRoute.js'));
+  const smokeRouter = createAgentRoute({
+    slug: 'golden-path-smoke',
+    runFn: async () => ({ result: { summary: '' } }),
+    requiredPermission: 'org_admin',
+  });
+  if (!smokeRouter || typeof smokeRouter.post !== 'function') {
+    throw new Error('createAgentRoute should return an Express router');
+  }
 
   const tenderPath = path.join(root, 'server', 'agents', 'demoSuite', 'tenderResponse', 'index.js');
   if (!fs.existsSync(tenderPath)) {
@@ -46,7 +58,7 @@ async function main() {
     throw new Error(`tender agent syntax check failed: ${chk.stderr || chk.stdout || 'unknown'}`);
   }
 
-  log('Phase 1 OK — markdownPdfBuffer, export route, createAgentRoute, tender agent file present and parseable.');
+  log('Phase 1 OK — markdownPdfBuffer, export route, createAgentRoute (factory callable), promptVersions, AgentScheduler, tender agent file present and parseable.');
 
   const {
     getChromiumPath,

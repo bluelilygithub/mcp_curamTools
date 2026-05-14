@@ -8,9 +8,12 @@
  *   app.use('/api/agents/my-agent', router);
  *
  * runFn signature:
- *   async (context) => { result, tokensUsed }
+ *   async (context) => { result, trace?, tokensUsed, promptVersion? }
  *   context: { orgId, userId, config, adminConfig, req }
+ *   Optional `promptVersion` (short string) is persisted on `agent_runs.result.prompt_version` when set.
+ *   See `server/platform/promptVersions.js` and `knowledge_base/core/PROMPT_VERSIONING.md`.
  */
+
 const express = require('express');
 const { pool } = require('../db');
 const { persistRun } = require('./persistRun');
@@ -22,6 +25,7 @@ const CostGuardService = require('../services/CostGuardService');
 const { logUsage } = require('../services/UsageLogger');
 const EmbeddingService = require('../services/EmbeddingService');
 const { validateToolData } = require('./validateToolData');
+const { mergePromptVersionIntoResult } = require('./promptVersions');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -179,7 +183,7 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
       try {
         emit('progress', { text: 'Starting agent run…' });
 
-        const { result, trace, tokensUsed } = await runFn({
+        const { result, trace, tokensUsed, promptVersion } = await runFn({
           orgId,
           userId,
           config: agentConfig,
@@ -211,21 +215,24 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
         ];
         const runStatus  = boundsFailed.length > 0 ? 'needs_review' : 'complete';
 
-        const resultPayload = {
-          summary:   result?.summary ?? '',
-          data:      { ...toolData, ...(result?.data ?? {}) },
-          suggestions,
-          tokensUsed: tokensUsed ?? {},
-          costAud:   taskCostAud,
-          model:     adminConfig.model ?? null,
-          startDate: req.body.startDate ?? null,
-          endDate:   req.body.endDate   ?? null,
-          progressLog,
-          // Capture prompt/response for Decision Log display
-          prompt_text:  result?.prompt_text  ?? null,
-          response_text: result?.response_text ?? null,
-          ...(boundsFailed.length > 0 && { boundsFailed }),
-        };
+        const resultPayload = mergePromptVersionIntoResult(
+          {
+            summary:   result?.summary ?? '',
+            data:      { ...toolData, ...(result?.data ?? {}) },
+            suggestions,
+            tokensUsed: tokensUsed ?? {},
+            costAud:   taskCostAud,
+            model:     adminConfig.model ?? null,
+            startDate: req.body.startDate ?? null,
+            endDate:   req.body.endDate   ?? null,
+            progressLog,
+            // Capture prompt/response for Decision Log display
+            prompt_text:  result?.prompt_text  ?? null,
+            response_text: result?.response_text ?? null,
+            ...(boundsFailed.length > 0 && { boundsFailed }),
+          },
+          promptVersion,
+        );
 
         await persistRun({ slug, orgId, status: runStatus, result: resultPayload, runId });
 

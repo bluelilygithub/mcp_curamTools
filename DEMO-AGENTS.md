@@ -7,7 +7,7 @@ Read this before adding any new demo agent. Companion to **DECISIONS.md** (Demo 
 
 ### Golden-path smoke (platform spine — **required check**)
 
-**Directive:** After any edit to **`server/services/markdownPdfBuffer.js`**, **`server/routes/export.js`**, **`server/platform/createAgentRoute.js`**, or **`server/agents/demoSuite/tenderResponse/index.js`**, run **`npm test`** from the **repository root** (after `cd server && npm install`) **before** you treat the work as complete. Run the same command **before merging** changes that materially refactor those paths. This is the platform’s smallest guard for shared PDF export and agent routing; it does **not** call Anthropic, S3, PostgreSQL, or a live agent run.
+**Directive:** After any edit to **`server/services/markdownPdfBuffer.js`**, **`server/routes/export.js`**, **`server/platform/createAgentRoute.js`**, **`server/platform/AgentScheduler.js`**, **`server/platform/promptVersions.js`**, or **`server/agents/demoSuite/tenderResponse/index.js`**, run **`npm test`** from the **repository root** (after `cd server && npm install`) **before** you treat the work as complete. Run the same command **before merging** changes that materially refactor those paths. This is the platform’s smallest guard for shared PDF export and agent routing; it does **not** call Anthropic, S3, PostgreSQL, or a live agent run.
 
 | Command (repo root) | Notes |
 |---------------------|--------|
@@ -15,6 +15,10 @@ Read this before adding any new demo agent. Companion to **DECISIONS.md** (Demo 
 | `npm test` | Preferred name in docs and identity |
 
 Details: [`scripts/smoke/README.md`](./scripts/smoke/README.md). Same rule in [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md) and [server/CLAUDE.md](./server/CLAUDE.md).
+
+### Prompt versioning (`agent_runs.result.prompt_version`)
+
+HTTP **`createAgentRoute`** agents and cron **`AgentScheduler`** runs may return **`promptVersion`** from `runFn`; the platform persists **`result.prompt_version`** for audits. Registry: **`server/platform/promptVersions.js`**. First opted-in agent: **`demo-tender-response`**. Convention: [knowledge_base/core/PROMPT_VERSIONING.md](./knowledge_base/core/PROMPT_VERSIONING.md).
 
 ## What a demo agent is
 

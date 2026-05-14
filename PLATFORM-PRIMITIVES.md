@@ -21,7 +21,7 @@ These files are the source of truth. The documents below derive from them and re
 ```js
 createAgentRoute({ slug, runFn, requiredPermission })
 // slug: string — agent identifier (e.g. 'google-ads-monitor')
-// runFn: async (context) => { result, trace, tokensUsed } — the agent entry point
+// runFn: async (context) => { result, trace?, tokensUsed, promptVersion? } — optional promptVersion persisted as result.prompt_version
 // requiredPermission: string — role name; org_admin always satisfies the check
 ```
 Returns an Express router. Two endpoints are registered:
@@ -34,16 +34,18 @@ Returns an Express router. Two endpoints are registered:
 Internal helpers exported from this file:
 - `extractToolData(trace)` — keyed tool results from AgentOrchestrator trace
 - `extractSuggestions(text)` — parses `### Recommendations` numbered list into `[{text, priority}]`
-- `persistRun({ slug, orgId, status, summary, trace, tokensUsed, startTime })` — single write path to `agent_runs`
+
+Run rows are written only via **`persistRun`** from **`server/platform/persistRun.js`** (imported by this factory and by **`AgentScheduler`**).
 
 **Stage 3 budget integration (additive — public interface unchanged):**
 - After the kill switch check, `createAgentRoute` loads org budget settings (`AgentConfigService.getOrgBudgetSettings`) and the daily org spend (`CostGuardService.getDailyOrgSpendAud`) in a single DB query. If the daily budget is already exceeded before the run starts, the route aborts immediately with a `BudgetExceededError`.
 - `emit` accepts an optional second parameter: `emit(text, partialTokensUsed)`. If provided, the route accumulates `taskCostAud` and calls `CostGuardService.check()` mid-run. Existing agents calling `emit(text)` are unaffected.
 - A definitive post-run `CostGuardService.check()` always runs using the final `tokensUsed` returned by `runFn`.
 - `costAud` is added to `resultPayload` and persisted in `agent_runs.result` JSONB on every completed run.
+- **Optional `prompt_version`:** If `runFn` returns **`promptVersion`** (string), `createAgentRoute` merges it into the persisted payload as **`prompt_version`** (see `server/platform/promptVersions.js`, `knowledge_base/core/PROMPT_VERSIONING.md`). Agents that omit it are unchanged.
 
 **Used by:** Google Ads Monitor (`server/routes/agents/`); all future agents.
-**Reuse contract:** Provide `slug` (stable, lowercase, hyphen-separated), a `runFn(context)` that returns `{ result, trace, tokensUsed }`, and a `requiredPermission` role name. Register the returned router in `server/index.js` under `/api/agents/:slug`.
+**Reuse contract:** Provide `slug` (stable, lowercase, hyphen-separated), a `runFn(context)` that returns `{ result, trace, tokensUsed }` (and optionally `promptVersion` for lineage), and a `requiredPermission` role name. Register the returned router in `server/index.js` under `/api/agents/:slug`.
 **Does not handle:** Agent tool registration (done in the agent's `tools.js`), system prompt construction (done in the agent's `prompt.js`), data fetching (done in domain services). Does not write directly to `agent_executions` (that is `services/AgentScheduler.js` territory).
 
 ---
@@ -84,9 +86,9 @@ AgentScheduler.register({ slug, schedule, runFn, orgId })
 // runFn: async (context) => any — agent entry point
 // orgId: number | null — if null, resolved from DB (single active org fallback)
 ```
-On each cron tick: resolves `orgId` if omitted, calls `runFn`, persists result to `agent_runs` via shared `persistRun`. Logs success/failure. Handler errors never rethrow — a failing agent cannot crash the process.
+On each cron tick: resolves `orgId` if omitted, calls `runFn`, persists result to `agent_runs` via shared `persistRun`. Optional **`promptVersion`** from `runFn` (single return or each multi-customer array element) is merged into **`result.prompt_version`** (see `promptVersions.js`). Logs success/failure. Handler errors never rethrow — a failing agent cannot crash the process.
 
-**Multi-customer array return:** If `runFn` returns an array of `{ customerId, result, status, error }` objects, `_tick` persists one `agent_runs` row per element (with `customer_id` populated) and closes the initial placeholder row with `{ multi: true, count: N }`. Single-object returns (existing agents) are unchanged — backward compatible.
+**Multi-customer array return:** If `runFn` returns an array of `{ customerId, result, status, error, promptVersion? }` objects, `_tick` persists one `agent_runs` row per element (with `customer_id` populated) and closes the initial placeholder row with `{ multi: true, count: N }`. Single-object returns (existing agents) are unchanged — backward compatible.
 
 **Used by:** Google Ads Monitor registration (schedule: `'0 6,18 * * *'`).
 **Reuse contract:** Provide `slug`, a valid cron expression, and a `runFn`. Document the UTC↔local offset in a comment at the registration site. For multi-customer agents: return an array from `runFn`; each element must include `{ customerId, status }` at minimum.
