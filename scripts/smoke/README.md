@@ -1,5 +1,7 @@
 # Smoke tests (platform)
 
+**Project norm:** Anyone changing the shared PDF or agent-routing spine must run **`npm test`** from the repository root before treating the work as done (see [PROJECT_IDENTITY.md](../../PROJECT_IDENTITY.md), [server/CLAUDE.md](../../server/CLAUDE.md), [DEMO-AGENTS.md](../../DEMO-AGENTS.md)).
+
 ## Golden path (`golden-path.mjs`)
 
 **Purpose:** Cheapest “is the spine still intact?” check after refactors that touch **PDF export**, **routing**, or the **tender demo agent file**.

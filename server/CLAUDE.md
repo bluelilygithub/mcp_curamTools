@@ -6,6 +6,14 @@ Read this before making any change to the conversation agent, MCP servers, or ag
 
 ---
 
+## Golden-path smoke — platform spine (required discipline)
+
+From **repository root**, after `cd server && npm install`, run **`npm test`** before you consider a session **finished** if you changed **`server/services/markdownPdfBuffer.js`**, **`server/routes/export.js`**, **`server/platform/createAgentRoute.js`**, or **`server/agents/demoSuite/tenderResponse/index.js`**. Same check **before merging** PRs that materially alter those paths. It is the smallest guard against breaking **every** demo that depends on PDF export or the route factory; it does **not** replace per-agent testing.
+
+Full scope and limits: [`scripts/smoke/README.md`](../scripts/smoke/README.md). Product-level wording: [PROJECT_IDENTITY.md](../PROJECT_IDENTITY.md) (*Quality gate — golden-path smoke*), [DEMO-AGENTS.md](../DEMO-AGENTS.md).
+
+---
+
 ## AI session setup — Caveman mode
 
 This project uses the **caveman Claude Code plugin** for AI-assisted development sessions. It reduces token usage ~75% by dropping articles, filler words, and pleasantries while preserving all technical substance.

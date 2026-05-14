@@ -25,6 +25,7 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - **`scripts/smoke/README.md`:** What the smoke covers, prerequisites, and future optional HTTP tier.
 - **Root `package.json`:** `npm test` and **`npm run smoke:golden-path`** invoke the script from repo root.
 - **Docs:** `DEMO-AGENTS.md`, `knowledge_base/core/SETUP.md`, `knowledge_base/INDEX.md` — how to run and scope.
+- **Policy alignment (same day):** Golden-path smoke stated as **required discipline** (when touching the listed spine files / before merge) in **`PROJECT_IDENTITY.md`**, **`knowledge_base/core/PROJECT_IDENTITY.md`**, **`server/CLAUDE.md`**, **`DEMO-AGENTS.md`**, **`knowledge_base/agents/AGENTS_INDEX.md`**, and **`scripts/smoke/README.md`** so the same rule appears in identity, server guardrails, demo checklist, agents index, and smoke README.
 
 ### Fixed / discovered
 - (none)

@@ -12,7 +12,7 @@
 
 ## 2026-05-15 — Golden-path smoke (mirror)
 
-Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-05-15**. Highlights: `scripts/smoke/golden-path.mjs`; root `npm test` / `npm run smoke:golden-path`; `scripts/smoke/README.md`; cross-links in `DEMO-AGENTS.md`, `core/SETUP.md`, `knowledge_base/INDEX.md`.
+Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-05-15**. Highlights: `scripts/smoke/golden-path.mjs`; root `npm test` / `npm run smoke:golden-path`; `scripts/smoke/README.md`; cross-links in `DEMO-AGENTS.md`, `core/SETUP.md`, `knowledge_base/INDEX.md`. **Update:** same entry extended — normative wording in `PROJECT_IDENTITY.md`, `server/CLAUDE.md`, `agents/AGENTS_INDEX.md` (policy alignment).
 
 ---
 

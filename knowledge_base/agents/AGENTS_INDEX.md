@@ -6,6 +6,12 @@ This file catalogs agents **registered for SSE runs** in `server/routes/agents.j
 
 ---
 
+## Platform quality gate (all agents)
+
+Edits that touch **`createAgentRoute`**, **`markdownPdfBuffer`**, **`server/routes/export`**, or the **tender** agent entry file affect **every** SSE-registered agent and demo that relies on that spine. **Run `npm test` from the repository root** (after `cd server && npm install`) before finishing such a change — see [PROJECT_IDENTITY.md](../../PROJECT_IDENTITY.md) (*Quality gate*), [server/CLAUDE.md](../../server/CLAUDE.md), and [scripts/smoke/README.md](../../scripts/smoke/README.md).
+
+---
+
 ## google-ads-monitor
 
 | Property | Value |

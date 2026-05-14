@@ -5,18 +5,16 @@ Read this before adding any new demo agent. Companion to **DECISIONS.md** (Demo 
 
 **Changelog:** Record demo work in the **root** [`CHANGELOG.md`](../CHANGELOG.md) (canonical). Optionally mirror or extend detail in `server/agents/demoSuite/<slug>/CHANGELOG.md` if an agent’s history grows large — see `knowledge_base/INDEX.md` → *Changelog and evidence logs*.
 
-### Golden-path smoke (platform spine)
+### Golden-path smoke (platform spine — **required check**)
 
-Low-cost check that **shared PDF / export modules**, **agent route factory**, and the **tender agent source file** still load or parse — **without** calling Anthropic, S3, PostgreSQL, or any live agent run. When Chromium is present, it also runs a minimal **markdown → PDF** round-trip (same path as `/api/export/pdf`).
+**Directive:** After any edit to **`server/services/markdownPdfBuffer.js`**, **`server/routes/export.js`**, **`server/platform/createAgentRoute.js`**, or **`server/agents/demoSuite/tenderResponse/index.js`**, run **`npm test`** from the **repository root** (after `cd server && npm install`) **before** you treat the work as complete. Run the same command **before merging** changes that materially refactor those paths. This is the platform’s smallest guard for shared PDF export and agent routing; it does **not** call Anthropic, S3, PostgreSQL, or a live agent run.
 
 | Command (repo root) | Notes |
 |---------------------|--------|
-| `npm run smoke:golden-path` | After `cd server && npm install` |
-| `npm test` | Same script |
+| `npm run smoke:golden-path` | Same as `npm test` |
+| `npm test` | Preferred name in docs and identity |
 
-Details: [`scripts/smoke/README.md`](./scripts/smoke/README.md).
-
----
+Details: [`scripts/smoke/README.md`](./scripts/smoke/README.md). Same rule in [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md) and [server/CLAUDE.md](./server/CLAUDE.md).
 
 ## What a demo agent is
 
