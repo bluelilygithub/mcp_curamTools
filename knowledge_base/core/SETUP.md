@@ -42,6 +42,16 @@ npm install
 
 No `.env` needed for the client — Vite proxies all `/api` calls to the Express server at port 3002.
 
+### Golden-path smoke (optional)
+
+From the **repository root**, after server dependencies are installed (`cd server && npm install`):
+
+```bash
+npm run smoke:golden-path
+```
+
+Same script is wired as **`npm test`**. It validates shared export/routing modules and (if Chromium is installed) a minimal markdown→PDF render. It does **not** start the server or call external APIs — see [`scripts/smoke/README.md`](../../scripts/smoke/README.md).
+
 ---
 
 ## Running Locally

@@ -69,6 +69,7 @@ knowledge_base/
 | **Changelog (kb mirror)** | `core/CHANGELOG.md` |
 | **Agent catalog (summary)** | `agents/AGENTS_INDEX.md` |
 | **Demo UI contract** (prompts + mic, markdown output, exports & reports) | [`DEMO-AGENTS.md`](../DEMO-AGENTS.md) — *Standard demo UI* |
+| **Golden-path smoke** (optional `npm test` from repo root) | [`scripts/smoke/README.md`](../scripts/smoke/README.md) |
 | **Prompts reference** | `core/PROMPTS.md` |
 | **Platform primitives** | `architecture/PLATFORM_PRIMITIVES.md` |
 | **MCP servers & tools** | `architecture/MCP_SERVERS.md` |

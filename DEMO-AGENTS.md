@@ -5,6 +5,17 @@ Read this before adding any new demo agent. Companion to **DECISIONS.md** (Demo 
 
 **Changelog:** Record demo work in the **root** [`CHANGELOG.md`](../CHANGELOG.md) (canonical). Optionally mirror or extend detail in `server/agents/demoSuite/<slug>/CHANGELOG.md` if an agent’s history grows large — see `knowledge_base/INDEX.md` → *Changelog and evidence logs*.
 
+### Golden-path smoke (platform spine)
+
+Low-cost check that **shared PDF / export modules**, **agent route factory**, and the **tender agent source file** still load or parse — **without** calling Anthropic, S3, PostgreSQL, or any live agent run. When Chromium is present, it also runs a minimal **markdown → PDF** round-trip (same path as `/api/export/pdf`).
+
+| Command (repo root) | Notes |
+|---------------------|--------|
+| `npm run smoke:golden-path` | After `cd server && npm install` |
+| `npm test` | Same script |
+
+Details: [`scripts/smoke/README.md`](./scripts/smoke/README.md).
+
 ---
 
 ## What a demo agent is

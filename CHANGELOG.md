@@ -18,6 +18,22 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-15 — Golden-path smoke test (platform spine, no live agents)
+
+### Built
+- **`scripts/smoke/golden-path.mjs`:** Phase 1 loads **`markdownPdfBuffer`**, **`server/routes/export`**, **`createAgentRoute`**; verifies **`tenderResponse/index.js`** exists and passes **`node --check`** (does not `require` the tender agent — avoids DB side effects). Phase 2 runs a minimal **markdown → PDF** when system Chromium is found; otherwise **skips with exit 0**.
+- **`scripts/smoke/README.md`:** What the smoke covers, prerequisites, and future optional HTTP tier.
+- **Root `package.json`:** `npm test` and **`npm run smoke:golden-path`** invoke the script from repo root.
+- **Docs:** `DEMO-AGENTS.md`, `knowledge_base/core/SETUP.md`, `knowledge_base/INDEX.md` — how to run and scope.
+
+### Fixed / discovered
+- (none)
+
+### Open / next
+- Optional second-tier smoke (authenticated `POST /agents/demo-tender-response/run`) when CI secrets and a tiny fixture PDF are available.
+
+---
+
 ## Template
 
 ```

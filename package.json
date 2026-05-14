@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node scripts/smoke/golden-path.mjs",
+    "smoke:golden-path": "node scripts/smoke/golden-path.mjs"
   },
   "repository": {
     "type": "git",
