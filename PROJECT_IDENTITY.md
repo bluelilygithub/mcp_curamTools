@@ -51,6 +51,21 @@
 - **Zero‑budget** for external services beyond Railway hosting and AI API costs
 - **Time‑constrained** — features are implemented as needed, not as comprehensive product releases
 
+## Product norms: prompts, LLM display, and reports
+
+The platform treats **how people enter instructions**, **how model output is shown**, and **how artefacts are saved or shared** as cross-cutting product decisions — not something each tool reinvents.
+
+1. **Prompt and instruction fields (including voice)**  
+   Optional free-text fields before a run, follow-up questions, and HITL edit areas use the same **textarea** styling (rounded corners, platform colour tokens). Where dictation helps, **`MicButton`** is anchored **inside** the field (bottom-right), wired through **`useSpeechInput`**, with transcript **append** semantics — copy the pattern from **`DocumentAnalyzer.jsx`** or **`TenderResponseGenerator.jsx`**. Do not add bespoke `SpeechRecognition` code on feature pages.
+
+2. **Formatted responses from the LLM**  
+   User-visible prose that can carry structure (lists, emphasis, headings, tables) is rendered with **`MarkdownRenderer`** using the **`text=`** prop. Server-side prompts should steer models toward **markdown the renderer supports** so layout stays consistent. Avoid `<pre>` or `whitespace-pre-wrap` for normal assistant output. When a run carries soft warnings (bounds, compliance caveats), place **`BoundsWarningPanel`** above the markdown block where that pattern already applies.
+
+3. **Reports, exports, and getting back to a run**  
+   Printable or emailable deliverables go through **`exportService`** (`exportPdf`, `fetchPdfBlob` for preview, `exportText` for plain files) and the shared **`POST /api/export/pdf`** pipeline. Demo email uses org-scoped **`POST /api/demo/runs/:runId/...`** routes (e.g. certificate vs tender draft) so attachments never leave the owning org. Prefer the **preview (eye) → download → mail** control cluster when several actions exist. Saved work lives in **`agent_runs`**; surfaces **recent runs**, **`?runId=`** deep links, and **`DecisionLogPage`** are the standard ways to return to a report.
+
+**Authoritative checklist for demo pages:** [DEMO-AGENTS.md](./DEMO-AGENTS.md) — section *Standard demo UI: prompts, formatted LLM output, and reports*. **Primitive reference:** [PLATFORM-PRIMITIVES.md](./PLATFORM-PRIMITIVES.md) (`MarkdownRenderer`, `MicButton`, `exportService`, voice hooks).
+
 ## Implications for contributions & AI sessions
 
 When reviewing code or suggesting changes:

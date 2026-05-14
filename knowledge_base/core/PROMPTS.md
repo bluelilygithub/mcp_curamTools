@@ -4,6 +4,8 @@
 
 This file records the prompts used to set up and develop the MCP CuramTools project. Each prompt is dated and labeled with its purpose.
 
+**Related (agent pages, not this historical log):** For **standardised prompt fields + microphone**, **markdown output from models**, and **reports / exports / reopening runs**, see [DEMO-AGENTS.md](../../DEMO-AGENTS.md) (*Standard demo UI*) and [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md) (*Product norms*).
+
 ---
 
 ## Initial Project Setup Prompt

@@ -68,6 +68,7 @@ knowledge_base/
 | **Changelog (canonical)** | [`CHANGELOG.md`](../CHANGELOG.md) (repo root) |
 | **Changelog (kb mirror)** | `core/CHANGELOG.md` |
 | **Agent catalog (summary)** | `agents/AGENTS_INDEX.md` |
+| **Demo UI contract** (prompts + mic, markdown output, exports & reports) | [`DEMO-AGENTS.md`](../DEMO-AGENTS.md) — *Standard demo UI* |
 | **Prompts reference** | `core/PROMPTS.md` |
 | **Platform primitives** | `architecture/PLATFORM_PRIMITIVES.md` |
 | **MCP servers & tools** | `architecture/MCP_SERVERS.md` |

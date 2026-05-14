@@ -1,7 +1,7 @@
 # DEMO-AGENTS.md
 
 Reference for building demo agents on the MCP CuramTools platform.
-Read this before adding any new demo agent. Companion to DECISIONS.md (Demo Layer) and PLATFORM-PRIMITIVES.md.
+Read this before adding any new demo agent. Companion to **DECISIONS.md** (Demo Layer), **PLATFORM-PRIMITIVES.md**, and **PROJECT_IDENTITY.md** (product norms — prompts, markdown output, reports).
 
 **Changelog:** Record demo work in the **root** [`CHANGELOG.md`](../CHANGELOG.md) (canonical). Optionally mirror or extend detail in `server/agents/demoSuite/<slug>/CHANGELOG.md` if an agent’s history grows large — see `knowledge_base/INDEX.md` → *Changelog and evidence logs*.
 
@@ -20,6 +20,43 @@ A demo agent serves an external client org (`org_type = 'demo'`). It uses the sa
 Internal agents and demo agents share: auth, org scoping, budget enforcement, usage logging, PDF export, extraction privacy, `agent_runs` table, and `createAgentRoute`.
 
 **Branding:** All demo orgs and synthetic packs use the **Curam** brand (e.g. **Curam Engineering**). Scenario details (industry, project type) may vary; the fictitious company identity stays Curam — see `DECISIONS.md` (Demo org UI — supplemental CSS layer) for visual-only differentiation.
+
+---
+
+## Standard demo UI: prompts, formatted LLM output, and reports
+
+Use this as a **checklist** for every new demo page (and align internal tools where practical) so behaviour stays predictable: **one way to dictate instructions**, **one renderer for model prose**, **one family of export and reopen flows**.
+
+### 1) Prompt and instruction fields (with microphone)
+
+| Expectation | Detail |
+|-------------|--------|
+| **Layout** | Muted label (`text-xs font-medium`) + full-width **`textarea`**, **`rounded-xl`**, platform `border` / `background` / `color` tokens. Padding-right reserved if a mic sits in the corner. |
+| **Voice** | For optional instructions **before** a run, **follow-up** questions, or **HITL edit** bodies, place **`MicButton`** bottom-right inside the field (`position: relative` on wrapper, `absolute` on mic). Wire **`onResult`** to append the final transcript; optional **`onPartial`** for interim text in brackets — mirror **`DocumentAnalyzer.jsx`** (custom instructions) or **`TenderResponseGenerator.jsx`** (edit mode). |
+| **Hooks** | Use **`useSpeechInput`** only via **`MicButton`** on pages — do not call browser `SpeechRecognition` directly (`DECISIONS.md`, voice primitives). |
+
+If a control is not a natural fit for dictation (e.g. single-line codes), **omit** the mic rather than inventing a different speech UX.
+
+### 2) Formatted responses from the LLM
+
+| Expectation | Detail |
+|-------------|--------|
+| **Renderer** | **`MarkdownRenderer`** with **`text=`** prop (never `content=` — see `DECISIONS.md`). All markdown-shaped assistant or agent output goes through this component. |
+| **Prompts** | In **`prompt.js`** / system strings, require **GitHub-flavoured markdown** the renderer supports: headings, **bold**, lists, tables (pipe syntax). Keeps PDF export (markdown → HTML) and on-screen display aligned. |
+| **Warnings** | When the run includes soft-fail or bounds context, render **`BoundsWarningPanel`** immediately **above** the markdown block (existing tools set the precedent). |
+| **Streaming** | Pass the accumulating string into **`MarkdownRenderer`**; do not fork a second code path for “streaming vs final”. |
+
+### 3) Reports, exports, and reopening runs
+
+| Expectation | Detail |
+|-------------|--------|
+| **PDF (markdown or HTML)** | **`exportPdf`** from **`client/src/utils/exportService.js`**. **Preview:** **`fetchPdfBlob`** then `window.open` on the blob URL (same server render as download). |
+| **HTML-only certificates** | Build HTML client-side, then **`exportPdf({ content, contentType: 'html', ... })`** — Document Analyzer / Spec Validator pattern. |
+| **Email (demo)** | Org-scoped **`POST /api/demo/runs/:runId/email-certificate`** (client-supplied HTML → PDF) or **`email-tender-draft`** (markdown → shared PDF buffer). Always verify **`runId`** belongs to **`req.user.orgId`** before sending. |
+| **Plain text / markdown files** | **`exportText`** or a small client **`Blob`** download for `.md` / `.txt` when a PDF is not the right artefact. |
+| **History & audit** | List **recent runs** where useful; deep-link **`/demo/run/<slug>?runId=<uuid>`** so reviewers can return. **`DecisionLogPage`** remains the cross-demo audit trail for persisted **`agent_runs`**. |
+
+**Icon convention:** When several artefact actions exist, group **preview (eye)**, **download**, and **email (mail)** as icon buttons beside the primary labelled action — matches Spec Validator and Tender Response Generator.
 
 ---
 

@@ -43,6 +43,7 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - **`POST /api/demo/runs/:runId/email-tender-draft`** in **`server/routes/demo.js`:** Org-scoped run check; body `{ to, markdown, title?, filename? }`; renders PDF via shared service; sends via **`EmailService`** (same idea as **`email-certificate`**).
 - **`client/src/utils/exportService.js`:** **`fetchPdfBlob`** (authenticated fetch to `/api/export/pdf`); **`exportPdf`** calls it to avoid duplicated fetch logic.
 - **`TenderResponseGenerator.jsx`:** **Eye** (open PDF in new tab) and **mail** (inline recipient + Send) next to Download/Markdown; **`useAuthStore`** default recipient; copy updates in **`DEMO-AGENTS.md`**.
+- **Documentation:** **`PROJECT_IDENTITY.md`** — *Product norms* (standard prompt fields + **`MicButton`**, **`MarkdownRenderer`** for LLM prose, **`exportService`** / demo email / history & report access). **`DEMO-AGENTS.md`** — *Standard demo UI* checklist (tables for prompts, output, reports). **`knowledge_base/INDEX.md`** — quick navigation row.
 
 ### Fixed / discovered
 - (none)

@@ -2,6 +2,10 @@
 
 **Project Context:** Internal learning project for one organisation, solo developer. Design decisions reflect this context. See [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md).
 
+### Agent-facing pages (demos and tools)
+
+**Standardised inputs (including mic), formatted LLM output, and report/export flows** are documented normatively in [PROJECT_IDENTITY.md](./PROJECT_IDENTITY.md) (*Product norms*) and as a build checklist in [DEMO-AGENTS.md](./DEMO-AGENTS.md) (*Standard demo UI*). This section covers shell-level UX (stores, API client, layout); demo and internal tool pages should follow that checklist for `MicButton`, `MarkdownRenderer`, and `exportService`.
+
 ### State management
 
 Three Zustand stores, all persisted to `localStorage`. Storage keys should be namespaced to avoid collisions with Vault or ToolsForge if they run on the same domain.
