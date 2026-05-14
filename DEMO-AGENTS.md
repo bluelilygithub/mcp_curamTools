@@ -430,6 +430,7 @@ The file tree is read-only by default. It communicates to the audience that this
 | UI | `client/src/pages/demo/TenderResponseGenerator.jsx` — pre-run pack list with links. |
 | HITL draft UX | Same page: drafts rendered with **`MarkdownRenderer`**; **Edit** uses **`MicButton`** + textarea (Web Speech API) per `MicButton.jsx` / `useSpeechInput.js`. |
 | Run id for PATCH | `server/platform/createAgentRoute.js` — success SSE payload is `{ type: 'result', data: { ...resultPayload, runId } }` so the client never PATCHes `.../runs/null/...`. |
+| Export | **`exportPdf`** in `client/src/utils/exportService.js` (POST `/api/export/pdf`, Puppeteer) — same pattern as Document Analyzer / Spec Validator certificates. Markdown file is client-side only. No `.docx` generator in-repo. |
 
 **Audience upload — substituting a file for testing:**
 

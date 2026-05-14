@@ -42,6 +42,7 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - **`GET /api/demo/tender-evidence`:** Each listed object includes a short-lived **presigned download URL** so the pre-run evidence browser can open files in a new tab.
 - **`TenderResponseGenerator.jsx`:** Evidence filenames link to presigned URLs; draft and original-draft body use **`MarkdownRenderer`**; edit mode adds **`MicButton`** (Web Speech API, same append pattern as Admin SQL / Google Ads conversation) when supported; `encodeURIComponent` on requirement id in review PATCH path; guard when `runId` is missing.
 - **Tender results UX:** **What happens next** explainer (no auto Word/PDF); **HITL counts** + progress bar (reviewed vs actionable, excludes blocked); **filter chips** (All / Pending / Edited / Approved / Rejected / Blocked); **Download draft pack (.md)** client-side export of all requirement sections; header copy clarifies per-requirement scope.
+- **Tender export:** **Download PDF** uses **`exportPdf`** (`client/src/utils/exportService.js` → `/api/export/pdf`, same as compliance certificates); **Markdown** remains for raw text workflows.
 - **`server/agents/demoSuite/tenderResponse/prompt.js`:** **DRAFT TEXT FORMAT** rules aligned with `MarkdownRenderer` (paragraphs, `##` headings, `**bold**`, lists, no HTML / bare URLs; citations remain `[REF-xxx]` style).
 
 ### Fixed / discovered
