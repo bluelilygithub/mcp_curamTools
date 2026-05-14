@@ -74,6 +74,36 @@ function downloadTextFile(filename, text) {
 const fmtTs = (s) =>
   s ? new Date(s).toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 
+/** Primary label for a tender run in history (from list API). */
+function tenderHistoryPrimaryLabel(run) {
+  const u = run.upload_title && String(run.upload_title).trim();
+  if (u) return u;
+  const f = run.file_name && String(run.file_name).trim();
+  if (f) {
+    const base = f.replace(/\.pdf$/i, '').trim();
+    if (base) return base;
+  }
+  const t = run.tender_document_title && String(run.tender_document_title).trim();
+  if (t && !isGenericExtractedTitle(t)) return t;
+  if (run.id) return `Run ${String(run.id).slice(0, 8)}…`;
+  return 'Tender analysis';
+}
+
+function isGenericExtractedTitle(t) {
+  const s = String(t).trim().toLowerCase();
+  if (!s) return true;
+  if (s === 'tender document' || s === 'untitled' || s === 'rft' || s === 'request for tender') return true;
+  if (/^tender\s+document\b/i.test(String(t).trim())) return true;
+  return false;
+}
+
+/** Default report title from PDF filename (no extension). */
+function reportTitleFromFileName(name) {
+  if (!name || typeof name !== 'string') return '';
+  const base = name.replace(/\.[^.]+$/i, '').trim();
+  return (base || name).replace(/[_]+/g, ' ').trim() || name;
+}
+
 function matchStatusStyle(status) {
   if (status === 'STRONG')  return { bg: '#dcfce7', color: '#166534', label: 'STRONG' };
   if (status === 'PARTIAL') return { bg: '#fef3c7', color: '#92400e', label: 'PARTIAL' };
@@ -570,6 +600,7 @@ function RequirementCard({ req, runId, onUpdated, getIcon }) {
 export default function TenderResponseGenerator() {
   const getIcon                           = useIcon();
   const { user }                          = useAuthStore();
+  const reportTopRef                      = useRef(null);
   const [searchParams, setSearchParams]   = useSearchParams();
   const fileInputRef                      = useRef(null);
 
@@ -579,6 +610,7 @@ export default function TenderResponseGenerator() {
 
   // Upload state
   const [file, setFile]       = useState(null);
+  const [uploadTitle, setUploadTitle]     = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [runError, setRunError] = useState('');
 
@@ -619,23 +651,36 @@ export default function TenderResponseGenerator() {
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
-  const loadRun = useCallback((id) => {
+  const scrollToReportTop = useCallback(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = reportTopRef.current;
+        if (!el) return;
+        try { el.focus({ preventScroll: true }); } catch { /* no-op */ }
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+  }, []);
+
+  const loadRun = useCallback((id, opts = {}) => {
+    const { scrollToTop = false } = opts;
     setLoadingRun(true);
     api.get(`/demo/runs/${id}`)
       .then((row) => {
         setRunData(row.result ?? {});
         setRunId(String(id));
         setSearchParams({ runId: id }, { replace: true });
+        if (scrollToTop) scrollToReportTop();
       })
       .catch((err) => setRunError(err.message))
       .finally(() => setLoadingRun(false));
-  }, [setSearchParams]);
+  }, [setSearchParams, scrollToReportTop]);
 
   useEffect(() => {
-    if (runId && !runData && !loadingRun) loadRun(runId);
+    if (runId && !runData && !loadingRun) loadRun(runId, { scrollToTop: true });
   }, [runId, runData, loadingRun, loadRun]);
 
-  const handleRefresh = () => { if (runId) loadRun(runId); };
+  const handleRefresh = () => { if (runId) loadRun(runId, { scrollToTop: false }); };
 
   const handleFile = (f) => {
     if (!f) return;
@@ -643,6 +688,10 @@ export default function TenderResponseGenerator() {
     if (f.size > MAX_FILE_BYTES) { setRunError('File too large (max 20 MB).'); return; }
     setFile(f);
     setRunError('');
+    setUploadTitle((prev) => {
+      if (prev.trim()) return prev;
+      return reportTitleFromFileName(f.name);
+    });
   };
 
   const handleRun = async () => {
@@ -658,7 +707,12 @@ export default function TenderResponseGenerator() {
 
     streamRun(
       'demo-tender-response',
-      { fileData: base64, mimeType: file.type, fileName: file.name },
+      {
+        fileData: base64,
+        mimeType: file.type,
+        fileName: file.name,
+        uploadTitle: uploadTitle.trim() || reportTitleFromFileName(file.name) || undefined,
+      },
       (msg) => {
         setProgressTail(msg);
         setStages((s) => advanceStages(s, msg));
@@ -666,14 +720,15 @@ export default function TenderResponseGenerator() {
       (data) => {
         setRunning(false);
         const id = data?.runId ?? data?.id;
-        const resultData = data?.data ? data : null;
-        setRunData(resultData);
+        const resultPayload = data?.data ? data : null;
+        setRunData(resultPayload);
         if (id) {
           setRunId(String(id));
           setSearchParams({ runId: id }, { replace: true });
         }
         if (data?.data) setStages((s) => finaliseStages(s, data.data));
         fetchHistory();
+        scrollToReportTop();
       },
       (err) => {
         setRunning(false);
@@ -713,6 +768,18 @@ export default function TenderResponseGenerator() {
 
   const hasResult = requirements.length > 0;
 
+  const exportPackTitle = useMemo(() => {
+    const u = resultData.upload_title && String(resultData.upload_title).trim();
+    if (u) return u.slice(0, 200);
+    return extraction.document_title?.slice(0, 200) ?? 'Tender response draft pack';
+  }, [resultData.upload_title, extraction.document_title]);
+
+  const headlineTitle = useMemo(() => {
+    const u = resultData.upload_title && String(resultData.upload_title).trim();
+    if (u) return u;
+    return extraction.document_title ?? 'Tender Analysis Complete';
+  }, [resultData.upload_title, extraction.document_title]);
+
   const exportSlug = runId ? String(runId).replace(/-/g, '').slice(0, 10) : 'run';
 
   const pdfBusy = pdfExportLoading || viewPdfLoading || draftEmailSending;
@@ -722,7 +789,7 @@ export default function TenderResponseGenerator() {
     setPdfExportError('');
     try {
       const md    = buildTenderDraftPackMd(requirements, extraction);
-      const title = extraction.document_title?.slice(0, 200) ?? 'Tender response draft pack';
+      const title = exportPackTitle;
       const blob  = await fetchPdfBlob({
         content:     md,
         contentType: 'markdown',
@@ -746,7 +813,7 @@ export default function TenderResponseGenerator() {
     setDraftEmailSent(false);
     try {
       const md    = buildTenderDraftPackMd(requirements, extraction);
-      const title = extraction.document_title?.slice(0, 200) ?? 'Tender response draft pack';
+      const title = exportPackTitle;
       await api.post(`/demo/runs/${runId}/email-tender-draft`, {
         to:       draftEmailTo.trim(),
         markdown: md,
@@ -770,7 +837,7 @@ export default function TenderResponseGenerator() {
       await exportPdf({
         content:     md,
         contentType: 'markdown',
-        title:       extraction.document_title?.slice(0, 200) ?? 'Tender response draft pack',
+        title:       exportPackTitle,
         filename:    `tender-response-${exportSlug}.pdf`,
       });
     } catch (e) {
@@ -786,7 +853,11 @@ export default function TenderResponseGenerator() {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div
+      ref={reportTopRef}
+      tabIndex={-1}
+      className="p-6 max-w-5xl mx-auto space-y-6 outline-none"
+    >
 
       {/* Header */}
       <div>
@@ -893,6 +964,27 @@ export default function TenderResponseGenerator() {
             )}
           </div>
 
+          <div className="space-y-2">
+            <label className="text-xs font-medium block" htmlFor="tender-upload-title" style={{ color: 'var(--color-muted)' }}>
+              Report title <span style={{ fontWeight: 400, opacity: 0.85 }}>(defaults from filename — edit to recognise this job in the list below)</span>
+            </label>
+            <input
+              id="tender-upload-title"
+              type="text"
+              maxLength={200}
+              value={uploadTitle}
+              onChange={(e) => setUploadTitle(e.target.value)}
+              placeholder="e.g. Marine berth RFT — internal review"
+              className="w-full text-sm rounded-xl px-3 py-2.5"
+              style={{
+                border:     '1px solid var(--color-border)',
+                background: 'var(--color-surface)',
+                color:      'var(--color-text)',
+                outline:    'none',
+              }}
+            />
+          </div>
+
           {runError && (
             <div className="rounded-lg p-3 text-sm" style={{ background: '#fee2e2', color: '#991b1b' }}>
               {runError}
@@ -939,8 +1031,13 @@ export default function TenderResponseGenerator() {
             <div className="flex items-start justify-between gap-2 flex-wrap">
               <div>
                 <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
-                  {extraction.document_title ?? 'Tender Analysis Complete'}
+                  {headlineTitle}
                 </p>
+                {resultData.upload_title && extraction.document_title && (
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
+                    From PDF: {extraction.document_title}
+                  </p>
+                )}
                 {(extraction.organisation || extraction.tender_reference) && (
                   <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
                     {[extraction.organisation, extraction.tender_reference].filter(Boolean).join(' · ')}
@@ -1037,6 +1134,7 @@ export default function TenderResponseGenerator() {
                       setDraftEmailTo('');
                       setDraftEmailError('');
                       setDraftEmailSent(false);
+                      setUploadTitle('');
                       setSearchParams({}, { replace: true });
                     }}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium"
@@ -1240,27 +1338,59 @@ export default function TenderResponseGenerator() {
       {/* Run history */}
       {history.length > 0 && (
         <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-          <p className="text-sm font-medium mb-3" style={{ color: 'var(--color-text)' }}>Previous runs</p>
-          <div className="space-y-1">
-            {history.map((run) => (
-              <button
-                key={run.id}
-                onClick={() => loadRun(run.id)}
-                className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-xs"
-                style={{
-                  background: String(run.id) === runId ? 'var(--color-bg)' : 'transparent',
-                  border: `1px solid ${String(run.id) === runId ? 'var(--color-border)' : 'transparent'}`,
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  color: 'var(--color-text)',
-                }}
-              >
-                <span>Tender analysis · {fmtTs(run.run_at)}</span>
-                <span style={{ color: run.status === 'complete' ? '#16a34a' : '#dc2626' }}>
-                  {run.status}
-                </span>
-              </button>
-            ))}
+          <p className="text-sm font-medium mb-1 m-0" style={{ color: 'var(--color-text)' }}>Previous runs</p>
+          <p className="text-xs mb-3 m-0" style={{ color: 'var(--color-muted)' }}>
+            Click anywhere on a row to open that report (<strong>→</strong> and <strong>Open</strong> are hints — the whole row is the button). Labels use your <strong>report title</strong> or PDF file name when the extracted tender title is generic (e.g. &quot;Tender document&quot;).
+          </p>
+          <div className="space-y-1" role="list">
+            {history.map((run) => {
+              const active = String(run.id) === String(runId);
+              const primary = tenderHistoryPrimaryLabel(run);
+              const secondary = [fmtTs(run.run_at), run.file_name ? String(run.file_name) : null].filter(Boolean).join(' · ');
+              const statusLabel = run.status === 'complete' ? 'Ready' : run.status;
+              return (
+                <button
+                  key={run.id}
+                  type="button"
+                  role="listitem"
+                  aria-current={active ? 'true' : undefined}
+                  aria-label={`Open report: ${primary}. ${statusLabel}.`}
+                  onClick={() => loadRun(run.id, { scrollToTop: true })}
+                  className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors hover:brightness-[0.98]"
+                  style={{
+                    background: active ? 'var(--color-bg)' : 'var(--color-surface)',
+                    border:     active ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                    boxShadow:  active ? 'inset 3px 0 0 0 var(--color-primary)' : 'none',
+                    cursor:     'pointer',
+                    color:      'var(--color-text)',
+                  }}
+                >
+                  <span className="shrink-0" style={{ color: 'var(--color-primary)', lineHeight: 0 }} aria-hidden title="Click row to open this report">
+                    {getIcon('arrow-right', { size: 18 })}
+                  </span>
+                  <span className="shrink-0" style={{ color: active ? 'var(--color-primary)' : 'var(--color-muted)', lineHeight: 0 }} aria-hidden>
+                    {getIcon('file-text', { size: 18 })}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium truncate">{primary}</span>
+                    <span className="block text-[10px] mt-0.5 truncate" style={{ color: 'var(--color-muted)' }}>{secondary}</span>
+                  </div>
+                  <span
+                    className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{
+                      background: run.status === 'complete' ? '#dcfce7' : '#fee2e2',
+                      color:      run.status === 'complete' ? '#166534' : '#991b1b',
+                    }}
+                  >
+                    {statusLabel}
+                  </span>
+                  <span className="shrink-0 flex items-center gap-0.5" style={{ color: 'var(--color-primary)', lineHeight: 0 }} title="Open this report">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide hidden sm:inline">Open</span>
+                    {getIcon('chevron-right', { size: 16 })}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

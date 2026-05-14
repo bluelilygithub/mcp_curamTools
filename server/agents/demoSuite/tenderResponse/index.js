@@ -40,7 +40,7 @@ const AgentConfigService    = require('../../../platform/AgentConfigService');
 const StorageService        = require('../../../services/StorageService');
 const { TransactionLogger,
         declareAgentFields } = require('../../../platform/TransactionLogger');
-const { scanInjection }      = require('../../../utils/sanitize');
+const { scanInjection, sanitiseFileName, sanitiseText } = require('../../../utils/sanitize');
 
 const {
   EXTRACTION_SYSTEM_PROMPT,
@@ -252,10 +252,28 @@ async function downloadEvidencePack(sessionOverrides = {}) {
 
 async function runTenderResponse(context) {
   const { orgId, adminConfig, emit } = context;
-  const { fileData, mimeType, fileName = 'RFT.pdf', sessionOverrides = {} } = context.req?.body ?? {};
+  const {
+    fileData,
+    mimeType,
+    fileName: rawFileName = 'RFT.pdf',
+    sessionOverrides = {},
+    uploadTitle: rawUploadTitle,
+  } = context.req?.body ?? {};
 
   if (!fileData || !mimeType) throw new Error('Missing fileData or mimeType in request body.');
   if (mimeType !== 'application/pdf') throw new Error('Tender Response Generator accepts PDF files only.');
+
+  const fileName = sanitiseFileName(String(rawFileName || 'RFT.pdf')) || 'RFT.pdf';
+
+  let uploadTitleStored = null;
+  if (typeof rawUploadTitle === 'string' && rawUploadTitle.trim()) {
+    const t = sanitiseText(rawUploadTitle).slice(0, 200).trim();
+    const titleInj = scanInjection(t);
+    if (!titleInj.clean) {
+      throw new Error('Input rejected: prompt injection pattern detected in report title.');
+    }
+    uploadTitleStored = t || null;
+  }
 
   const fileBuf  = Buffer.from(fileData, 'base64');
   const fileHash = crypto.createHash('sha256').update(fileBuf).digest('hex');
@@ -534,6 +552,8 @@ async function runTenderResponse(context) {
   const blockedCount  = requirementData.filter((r) => r.status === 'blocked').length;
 
   const resultData = {
+    file_name:            fileName,
+    upload_title:         uploadTitleStored,
     requirements:         requirementData,
     pending_review_count: pendingCount,
     compliance_summary:   summary,
