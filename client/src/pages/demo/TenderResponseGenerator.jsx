@@ -632,6 +632,8 @@ export default function TenderResponseGenerator() {
   const [draftEmailSending, setDraftEmailSending] = useState(false);
   const [draftEmailError, setDraftEmailError]   = useState('');
   const [draftEmailSent, setDraftEmailSent]     = useState(false);
+  const [reviewPhaseBusy, setReviewPhaseBusy] = useState(false);
+  const [reviewPhaseError, setReviewPhaseError] = useState('');
 
   // History
   const [history, setHistory] = useState([]);
@@ -665,7 +667,8 @@ export default function TenderResponseGenerator() {
   const loadRun = useCallback((id, opts = {}) => {
     const { scrollToTop = false } = opts;
     setLoadingRun(true);
-    api.get(`/demo/runs/${id}`)
+    return api
+      .get(`/demo/runs/${id}`)
       .then((row) => {
         setRunData(row.result ?? {});
         setRunId(String(id));
@@ -680,7 +683,27 @@ export default function TenderResponseGenerator() {
     if (runId && !runData && !loadingRun) loadRun(runId, { scrollToTop: true });
   }, [runId, runData, loadingRun, loadRun]);
 
-  const handleRefresh = () => { if (runId) loadRun(runId, { scrollToTop: false }); };
+  const handleRefresh = () => {
+    if (runId) void loadRun(runId, { scrollToTop: false });
+  };
+
+  const patchReviewPhase = useCallback(
+    async (closed) => {
+      if (!runId) return;
+      setReviewPhaseBusy(true);
+      setReviewPhaseError('');
+      try {
+        await api.patch(`/demo/runs/${runId}/tender-review-phase`, { closed });
+        await loadRun(runId, { scrollToTop: false });
+        fetchHistory();
+      } catch (e) {
+        setReviewPhaseError(e.message ?? 'Update failed');
+      } finally {
+        setReviewPhaseBusy(false);
+      }
+    },
+    [runId, loadRun, fetchHistory]
+  );
 
   const handleFile = (f) => {
     if (!f) return;
@@ -743,7 +766,6 @@ export default function TenderResponseGenerator() {
   const summary      = resultData.compliance_summary ?? {};
   const extraction   = resultData.extraction_summary ?? {};
   const trace        = resultData.trace ?? [];
-  const pendingCount = requirements.filter((r) => r.status === 'pending').length;
 
   const hitlStats = useMemo(() => {
     const c = { pending: 0, edited: 0, approved: 0, rejected: 0, blocked: 0 };
@@ -755,8 +777,17 @@ export default function TenderResponseGenerator() {
     const actionable = requirements.length - c.blocked;
     const addressed  = c.approved + c.edited + c.rejected;
     const pct        = actionable > 0 ? Math.round((addressed / actionable) * 100) : 0;
-    return { ...c, actionable, addressed, pct };
+    const allActionableAddressed =
+      requirements.length === 0
+        ? false
+        : actionable === 0 || (c.pending === 0 && c.edited === 0 && addressed >= actionable);
+    return { ...c, actionable, addressed, pct, allActionableAddressed };
   }, [requirements]);
+
+  const pendingCount = hitlStats.pending;
+
+  const tenderReviewClosedAt = resultData.tender_review_closed_at ?? null;
+  const tenderReviewClosedBy = resultData.tender_review_closed_by ?? null;
 
   const filteredRequirements = useMemo(() => {
     if (reviewFilter === 'all') return requirements;
@@ -1134,6 +1165,7 @@ export default function TenderResponseGenerator() {
                       setDraftEmailTo('');
                       setDraftEmailError('');
                       setDraftEmailSent(false);
+                      setReviewPhaseError('');
                       setUploadTitle('');
                       setSearchParams({}, { replace: true });
                     }}
@@ -1234,7 +1266,7 @@ export default function TenderResponseGenerator() {
               <ul className="list-disc pl-4 space-y-1 m-0">
                 <li>Review decisions are saved on <strong>this run</strong> only. There is no merge into your branded Word templates — use <strong>Download PDF</strong>, <strong>preview</strong>, or <strong>email</strong> for one review-ready file, then hand to BD for layout.</li>
                 <li>Use the <strong>eye</strong> icon to open a PDF preview in a new tab (<code className="font-mono">fetchPdfBlob</code> + same <code className="font-mono">/api/export/pdf</code> render as download). Use <strong>Download PDF</strong> or <strong>mail</strong> to send the same PDF via email (<code className="font-mono">POST /api/demo/runs/:runId/email-tender-draft</code>, same markdown→PDF path as export). Use <strong>Markdown</strong> for raw text, version control, or opening in Word manually.</li>
-                <li>Rows in <strong>Edited</strong> still show Approve / Reject until you finalise — use <strong>Approve</strong> when the text is ready to stand as your answer.</li>
+                <li>When every actionable row is <strong>approved</strong> or <strong>rejected</strong> (nothing left in <strong>Pending</strong> or <strong>Edited</strong>), you can <strong>Mark review round complete</strong> to record team sign-off on this run. Changing any requirement after that reopens the round automatically.</li>
               </ul>
             </div>
 
@@ -1272,9 +1304,69 @@ export default function TenderResponseGenerator() {
                   {pendingCount} requirement{pendingCount !== 1 ? 's' : ''} still <strong>Pending</strong> (no decision yet).
                 </p>
               )}
-              {pendingCount === 0 && hitlStats.actionable > 0 && hitlStats.edited === 0 && (
-                <p className="text-sm font-medium m-0" style={{ color: '#16a34a' }}>
-                  Every actionable requirement has left <strong>Pending</strong> — export or finalise any <strong>Edited</strong> rows, then use <strong>New run</strong> for another RFT.
+              {hitlStats.allActionableAddressed && requirements.length > 0 && (
+                <div
+                  className="rounded-lg p-3 space-y-2"
+                  style={{
+                    background: tenderReviewClosedAt ? '#eef2ff' : '#ecfdf5',
+                    border: `1px solid ${tenderReviewClosedAt ? '#c7d2fe' : '#86efac'}`,
+                  }}
+                >
+                  <p className="text-sm font-medium m-0" style={{ color: tenderReviewClosedAt ? '#312e81' : '#14532d' }}>
+                    {tenderReviewClosedAt
+                      ? 'Review round closed — sign-off recorded for this run.'
+                      : 'All actionable requirements have a final decision (approved or rejected).'}
+                  </p>
+                  {!tenderReviewClosedAt ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={reviewPhaseBusy || !runId}
+                        onClick={() => void patchReviewPhase(true)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                        style={{
+                          background: reviewPhaseBusy || !runId ? 'var(--color-border)' : '#166534',
+                          color:      '#fff',
+                          border:     'none',
+                          cursor:     reviewPhaseBusy || !runId ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {reviewPhaseBusy ? 'Saving…' : 'Mark review round complete'}
+                      </button>
+                      <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
+                        Optional — for audit / handoff. The row still opens with <strong>Open</strong>.
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs m-0" style={{ color: '#4338ca' }}>
+                        Closed {fmtTs(tenderReviewClosedAt)}
+                        {tenderReviewClosedBy ? ` · ${tenderReviewClosedBy}` : ''}. Editing any requirement reopens the round automatically.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={reviewPhaseBusy}
+                        onClick={() => void patchReviewPhase(false)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                        style={{
+                          background: 'var(--color-bg)',
+                          color:      'var(--color-text)',
+                          border:     '1px solid var(--color-border)',
+                          cursor:     reviewPhaseBusy ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {reviewPhaseBusy ? 'Saving…' : 'Reopen review round'}
+                      </button>
+                    </div>
+                  )}
+                  {reviewPhaseError && (
+                    <p className="text-xs m-0" style={{ color: '#dc2626' }}>{reviewPhaseError}</p>
+                  )}
+                </div>
+              )}
+              {pendingCount === 0 && hitlStats.actionable > 0 && hitlStats.edited === 0 && !hitlStats.allActionableAddressed && (
+                <p className="text-sm font-medium m-0" style={{ color: '#d97706' }}>
+                  Finalise every actionable row as <strong>approved</strong> or <strong>rejected</strong> before closing the review round.
                 </p>
               )}
             </div>
@@ -1348,13 +1440,14 @@ export default function TenderResponseGenerator() {
               const primary = tenderHistoryPrimaryLabel(run);
               const secondary = [fmtTs(run.run_at), run.file_name ? String(run.file_name) : null].filter(Boolean).join(' · ');
               const statusLabel = run.status === 'complete' ? 'Ready' : run.status;
+              const reviewClosed = !!run.tender_review_closed_at;
               return (
                 <button
                   key={run.id}
                   type="button"
                   role="listitem"
                   aria-current={active ? 'true' : undefined}
-                  aria-label={`Open report: ${primary}. ${statusLabel}.`}
+                  aria-label={`Open report: ${primary}. ${statusLabel}.${reviewClosed ? ' Review round closed.' : ''}`}
                   onClick={() => loadRun(run.id, { scrollToTop: true })}
                   className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors hover:brightness-[0.98]"
                   style={{
@@ -1375,15 +1468,25 @@ export default function TenderResponseGenerator() {
                     <span className="block text-sm font-medium truncate">{primary}</span>
                     <span className="block text-[10px] mt-0.5 truncate" style={{ color: 'var(--color-muted)' }}>{secondary}</span>
                   </div>
-                  <span
-                    className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                    style={{
-                      background: run.status === 'complete' ? '#dcfce7' : '#fee2e2',
-                      color:      run.status === 'complete' ? '#166534' : '#991b1b',
-                    }}
-                  >
-                    {statusLabel}
-                  </span>
+                  <div className="shrink-0 flex flex-wrap items-center justify-end gap-1">
+                    <span
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                      style={{
+                        background: run.status === 'complete' ? '#dcfce7' : '#fee2e2',
+                        color:      run.status === 'complete' ? '#166534' : '#991b1b',
+                      }}
+                    >
+                      {statusLabel}
+                    </span>
+                    {reviewClosed && (
+                      <span
+                        className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                        style={{ background: '#e0e7ff', color: '#3730a3' }}
+                      >
+                        Review closed
+                      </span>
+                    )}
+                  </div>
                   <span className="shrink-0 flex items-center gap-0.5" style={{ color: 'var(--color-primary)', lineHeight: 0 }} title="Open this report">
                     <span className="text-[10px] font-semibold uppercase tracking-wide hidden sm:inline">Open</span>
                     {getIcon('chevron-right', { size: 16 })}

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { useIcon } from '../../providers/IconProvider';
 import { exportPdf } from '../../utils/exportService';
@@ -514,6 +515,7 @@ function buildCertificateHtml(runData, orgName, tokensUsed, costAud) {
 export default function DocumentAnalyzer() {
   const getIcon  = useIcon();
   const { user } = useAuthStore();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [file, setFile]           = useState(null);
   const [dragging, setDragging]   = useState(false);
@@ -521,7 +523,8 @@ export default function DocumentAnalyzer() {
   const [progress, setProgress]   = useState([]);
   const [docStages, setDocStages] = useState(INITIAL_DA_STAGES);
   const [runResult, setRunResult] = useState(null);   // full resultPayload from SSE
-  const [runId, setRunId]         = useState(null);
+  const [runId, setRunId]         = useState(() => searchParams.get('runId') ?? null);
+  const [loadingPastRun, setLoadingPastRun] = useState(false);
   const [error, setError]         = useState('');
   const [certLoading, setCertLoading] = useState(false);
   const [viewLoading, setViewLoading] = useState(false);
@@ -557,33 +560,57 @@ export default function DocumentAnalyzer() {
     setDocStages(INITIAL_DA_STAGES);
   };
 
-  // ── Load recent sessions on mount ─────────────────────────────────────────
+  // ── Recent runs list (same placement pattern as TenderResponseGenerator) ───
 
-  useEffect(() => {
-    api.get('/demo/runs?slug=demo-document-analyzer&limit=10')
-      .then((data) => { setRecentRuns(data); setRunsLoading(false); })
-      .catch(() => setRunsLoading(false));
+  const fetchRecentRuns = useCallback(() => {
+    return api
+      .get('/demo/runs?slug=demo-document-analyzer&limit=10')
+      .then((data) => setRecentRuns(data))
+      .catch(() => {});
   }, []);
 
-  // ── Load a prior session ───────────────────────────────────────────────────
+  useEffect(() => {
+    setRunsLoading(true);
+    fetchRecentRuns().finally(() => setRunsLoading(false));
+  }, [fetchRecentRuns]);
 
-  const handleLoadRun = async (id) => {
-    try {
-      const row = await api.get(`/demo/runs/${id}`);
-      const data = row.result?.data ?? {};
-      setRunResult(data);
-      setRunId(id);
-      setFollowUpHistory(data.follow_up_history ?? []);
-      setFollowUpOpen(false);
-      setFollowUpQuestion('');
-      setFollowUpError('');
-      setFile(null);
-      setProgress([]);
+  // ── Load a prior session (list row, Decision Log deep link, or URL ?runId=) ─
+
+  const handleLoadRun = useCallback(
+    async (id) => {
+      setLoadingPastRun(true);
       setError('');
-    } catch (err) {
-      setError(`Failed to load session: ${err.message}`);
+      try {
+        const row = await api.get(`/demo/runs/${id}`);
+        const data = row.result?.data ?? {};
+        setRunResult(data);
+        setRunId(String(id));
+        setSearchParams({ runId: String(id) }, { replace: true });
+        setFollowUpHistory(data.follow_up_history ?? []);
+        setFollowUpOpen(false);
+        setFollowUpQuestion('');
+        setFollowUpError('');
+        setFile(null);
+        setProgress([]);
+        await fetchRecentRuns();
+      } catch (err) {
+        setError(`Failed to load session: ${err.message}`);
+        setRunResult(null);
+        setRunId(null);
+        setFollowUpHistory([]);
+        setSearchParams({}, { replace: true });
+      } finally {
+        setLoadingPastRun(false);
+      }
+    },
+    [setSearchParams, fetchRecentRuns]
+  );
+
+  useEffect(() => {
+    if (runId && !runResult && !loadingPastRun) {
+      void handleLoadRun(runId);
     }
-  };
+  }, [runId, runResult, loadingPastRun, handleLoadRun]);
 
   // ── File handling ──────────────────────────────────────────────────────────
 
@@ -601,6 +628,7 @@ export default function DocumentAnalyzer() {
     setFile(f);
     setRunResult(null);
     setRunId(null);
+    setSearchParams({}, { replace: true });
     setProgress([]);
   };
 
@@ -624,6 +652,7 @@ export default function DocumentAnalyzer() {
     setProgress([]);
     setRunResult(null);
     setRunId(null);
+    setSearchParams({}, { replace: true });
     setCertError('');
     setDocStages(INITIAL_DA_STAGES);
 
@@ -654,8 +683,13 @@ export default function DocumentAnalyzer() {
         // Fetch runId from server — most recent run for this org/slug
         try {
           const runs = await api.get('/demo/runs?slug=demo-document-analyzer&limit=1');
-          if (runs[0]?.id) setRunId(runs[0].id);
+          const id = runs[0]?.id;
+          if (id) {
+            setRunId(id);
+            setSearchParams({ runId: String(id) }, { replace: true });
+          }
         } catch { /* non-fatal — review actions won't work without runId */ }
+        void fetchRecentRuns();
       },
       (err) => setError(err),
     );
@@ -668,7 +702,10 @@ export default function DocumentAnalyzer() {
     if (!runId) return;
     try {
       const row = await api.get(`/demo/runs/${runId}`);
-      setRunResult(row.result?.data ?? row.result);
+      const data = row.result?.data ?? row.result;
+      setRunResult(data);
+      if (Array.isArray(data?.follow_up_history)) setFollowUpHistory(data.follow_up_history);
+      await fetchRecentRuns();
     } catch { /* non-fatal */ }
   };
 
@@ -830,8 +867,15 @@ export default function DocumentAnalyzer() {
         )}
       </div>
 
+      {loadingPastRun && !runResult && (
+        <div className="flex items-center gap-2" style={{ color: 'var(--color-muted)' }}>
+          {getIcon('loader', { size: 14 })}
+          <span className="text-sm">Loading session…</span>
+        </div>
+      )}
+
       {/* Upload zone */}
-      {!running && !runResult && (
+      {!running && !runResult && !loadingPastRun && (
         <div
           onDrop={onDrop}
           onDragOver={onDragOver}
@@ -864,7 +908,7 @@ export default function DocumentAnalyzer() {
       )}
 
       {/* Custom prompt */}
-      {!running && !runResult && file && (
+      {!running && !runResult && !loadingPastRun && file && (
         <div className="space-y-2">
           <label className="text-xs font-medium" style={{ color: 'var(--color-muted)' }}>
             Custom instructions (optional)
@@ -903,7 +947,7 @@ export default function DocumentAnalyzer() {
       )}
 
       {/* Selected file + Analyze button */}
-      {!running && !runResult && file && (
+      {!running && !runResult && !loadingPastRun && file && (
         <button
           onClick={handleRun}
           className="w-full py-2.5 rounded-xl text-sm font-semibold transition-colors"
@@ -911,56 +955,6 @@ export default function DocumentAnalyzer() {
         >
           Analyze Document
         </button>
-      )}
-
-      {/* Recent sessions browser */}
-      {!running && !runResult && !runsLoading && recentRuns.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
-            Recent Sessions
-          </p>
-          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
-            {recentRuns.map((run, i) => {
-              const pending = run.pending_review_count ?? 0;
-              return (
-                <button
-                  key={run.id}
-                  onClick={() => handleLoadRun(run.id)}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-opacity hover:opacity-70"
-                  style={{
-                    background: 'var(--color-surface)',
-                    borderTop: i > 0 ? '1px solid var(--color-border)' : 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate" style={{ color: 'var(--color-text)' }}>
-                      {run.file_name ?? 'Document'}
-                    </p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
-                      {fmtTs(run.run_at)}
-                      {run.document_type ? ` · ${run.document_type}` : ''}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {pending > 0 && (
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#92400e' }}>
-                        {pending} pending
-                      </span>
-                    )}
-                    {pending === 0 && (
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#166534' }}>
-                        Reviewed
-                      </span>
-                    )}
-                    <span style={{ color: 'var(--color-muted)' }}>{getIcon('chevron-right', { size: 14 })}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
       )}
 
       {/* Error */}
@@ -987,7 +981,18 @@ export default function DocumentAnalyzer() {
 
           {/* Re-analyze */}
           <button
-            onClick={() => { setRunResult(null); setRunId(null); setProgress([]); setError(''); setFollowUpHistory([]); setFollowUpOpen(false); setFollowUpQuestion(''); }}
+            type="button"
+            onClick={() => {
+              setRunResult(null);
+              setRunId(null);
+              setSearchParams({}, { replace: true });
+              setProgress([]);
+              setError('');
+              setFollowUpHistory([]);
+              setFollowUpOpen(false);
+              setFollowUpQuestion('');
+              void fetchRecentRuns();
+            }}
             className="text-xs"
             style={{ color: 'var(--color-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
           >
@@ -1383,6 +1388,69 @@ export default function DocumentAnalyzer() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Previous runs — always available while viewing a session (matches Tender Response pattern) */}
+      {!running && !runsLoading && recentRuns.length > 0 && (
+        <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+          <p className="text-sm font-medium mb-1 m-0" style={{ color: 'var(--color-text)' }}>Previous runs</p>
+          <p className="text-xs mb-3 m-0" style={{ color: 'var(--color-muted)' }}>
+            Click a row to open that session. The list stays here so you can switch runs or start a new upload above without refreshing the page.
+          </p>
+          <div className="space-y-1" role="list">
+            {recentRuns.map((run) => {
+              const pending = run.pending_review_count ?? 0;
+              const active = String(run.id) === String(runId);
+              return (
+                <button
+                  key={run.id}
+                  type="button"
+                  role="listitem"
+                  aria-current={active ? 'true' : undefined}
+                  aria-label={`Open session: ${run.file_name ?? 'Document'}. ${pending > 0 ? `${pending} pending review` : 'Review complete'}.`}
+                  onClick={() => handleLoadRun(run.id)}
+                  className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors hover:brightness-[0.98]"
+                  style={{
+                    background: active ? 'var(--color-bg)' : 'var(--color-surface)',
+                    border:     active ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                    boxShadow:  active ? 'inset 3px 0 0 0 var(--color-primary)' : 'none',
+                    cursor:     'pointer',
+                    color:      'var(--color-text)',
+                  }}
+                >
+                  <span className="shrink-0" style={{ color: 'var(--color-primary)', lineHeight: 0 }} aria-hidden>
+                    {getIcon('arrow-right', { size: 18 })}
+                  </span>
+                  <span className="shrink-0" style={{ color: active ? 'var(--color-primary)' : 'var(--color-muted)', lineHeight: 0 }} aria-hidden>
+                    {getIcon('file-text', { size: 18 })}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium truncate">{run.file_name ?? 'Document'}</span>
+                    <span className="block text-[10px] mt-0.5 truncate" style={{ color: 'var(--color-muted)' }}>
+                      {fmtTs(run.run_at)}
+                      {run.document_type ? ` · ${run.document_type}` : ''}
+                    </span>
+                  </div>
+                  <div className="shrink-0 flex flex-wrap items-center justify-end gap-1">
+                    {pending > 0 ? (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#92400e' }}>
+                        {pending} pending
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#166534' }}>
+                        Reviewed
+                      </span>
+                    )}
+                  </div>
+                  <span className="shrink-0 flex items-center gap-0.5" style={{ color: 'var(--color-primary)', lineHeight: 0 }} aria-hidden>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide hidden sm:inline">Open</span>
+                    {getIcon('chevron-right', { size: 16 })}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       )}
     </div>
   );

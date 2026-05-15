@@ -22,6 +22,30 @@ const StorageService = require('../services/StorageService');
 const router = express.Router();
 router.use(requireAuth);
 
+/** HITL counts for tender response runs — used by review PATCH and review-phase PATCH */
+function computeTenderReviewStats(requirements) {
+  const reqs = Array.isArray(requirements) ? requirements : [];
+  let pending = 0;
+  let edited = 0;
+  let approved = 0;
+  let rejected = 0;
+  let blocked = 0;
+  for (const r of reqs) {
+    const s = r.status ?? 'pending';
+    if (s === 'pending') pending += 1;
+    else if (s === 'edited') edited += 1;
+    else if (s === 'approved') approved += 1;
+    else if (s === 'rejected') rejected += 1;
+    else if (s === 'blocked') blocked += 1;
+    else pending += 1;
+  }
+  const actionable = reqs.length - blocked;
+  const addressed = approved + edited + rejected;
+  const allActionableAddressed =
+    actionable === 0 || (pending === 0 && edited === 0 && addressed >= actionable);
+  return { pending, edited, approved, rejected, blocked, actionable, addressed, allActionableAddressed };
+}
+
 // ── GET /api/demo/manifest ────────────────────────────────────────────────────
 // Returns agents for this org. Catalog entries are shown by default; org_agent_manifest
 // rows override labels/descriptions and can explicitly disable an agent (enabled=false).
@@ -201,6 +225,7 @@ router.get('/runs', async (req, res) => {
               result->'data'->>'upload_title'            AS upload_title,
               result->'data'->'extraction_summary'->>'document_title' AS tender_document_title,
               result->'data'->'pending_review_count'     AS pending_review_count,
+              result->'data'->>'tender_review_closed_at' AS tender_review_closed_at,
               result->'data'->'s3'                       AS s3,
               result->'tokensUsed'                       AS tokens_used,
               result->'costAud'                          AS cost_aud
@@ -927,7 +952,8 @@ router.patch('/runs/:runId/tender-review/:requirementId', async (req, res) => {
 
     const pending_review_count = requirements.filter((r) => r.status === 'pending').length;
 
-    const trace = data.trace ?? [];
+    const hadClosed = !!(data.tender_review_closed_at);
+    const trace = [...(data.trace ?? [])];
     trace.push({
       step:           'review_action',
       timestamp:      new Date().toISOString(),
@@ -937,8 +963,21 @@ router.patch('/runs/:runId/tender-review/:requirementId', async (req, res) => {
       comment:        comment?.trim() ?? null,
       ...(status === 'edited' ? { edited_text: edited_text?.trim() } : {}),
     });
+    if (hadClosed) {
+      trace.push({
+        step:           'review_phase_reopened',
+        timestamp:      new Date().toISOString(),
+        reviewed_by:    req.user.email ?? req.user.id,
+        reason:         'requirement_review_updated',
+        requirement_id: requirementId,
+      });
+    }
 
     const updatedData = { ...data, requirements, pending_review_count, trace };
+    if (hadClosed) {
+      delete updatedData.tender_review_closed_at;
+      delete updatedData.tender_review_closed_by;
+    }
 
     await pool.query(
       `UPDATE agent_runs SET result = jsonb_set(result, '{data}', $1::jsonb) WHERE id = $2 AND org_id = $3`,
@@ -949,6 +988,81 @@ router.patch('/runs/:runId/tender-review/:requirementId', async (req, res) => {
   } catch (err) {
     console.error('[demo/tender-review PATCH]', err.message);
     res.status(500).json({ error: 'Failed to update review.' });
+  }
+});
+
+// ── PATCH /api/demo/runs/:runId/tender-review-phase ───────────────────────
+// Run-level sign-off: record that the human review round is complete, or reopen it.
+// Body: { closed: true } — requires every actionable requirement approved or rejected (no Pending / Edited).
+// Body: { closed: false } — clears sign-off (manual reopen).
+// Persists: result.data.tender_review_closed_at, tender_review_closed_by
+router.patch('/runs/:runId/tender-review-phase', async (req, res) => {
+  const closed = req.body?.closed;
+  if (closed !== true && closed !== false) {
+    return res.status(400).json({ error: 'Body must include closed: true or false.' });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, slug, result FROM agent_runs WHERE id = $1 AND org_id = $2`,
+      [req.params.runId, req.user.orgId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Run not found.' });
+    if (rows[0].slug !== 'demo-tender-response') {
+      return res.status(400).json({ error: 'Review phase control applies only to tender response demo runs.' });
+    }
+
+    const result = rows[0].result ?? {};
+    const data   = result.data    ?? {};
+    const requirements = data.requirements ?? [];
+    if (!Array.isArray(requirements) || requirements.length === 0) {
+      return res.status(400).json({ error: 'This run has no tender requirements to review.' });
+    }
+
+    const trace = [...(data.trace ?? [])];
+    const updatedData = { ...data };
+
+    if (closed === true) {
+      const { allActionableAddressed } = computeTenderReviewStats(requirements);
+      if (!allActionableAddressed) {
+        return res.status(400).json({
+          error:
+            'Cannot close the review round until every actionable requirement is approved or rejected (no Pending or Edited rows).',
+        });
+      }
+      const ts = new Date().toISOString();
+      const who = req.user.email ?? String(req.user.id);
+      updatedData.tender_review_closed_at = ts;
+      updatedData.tender_review_closed_by = who;
+      trace.push({
+        step:        'review_phase_closed',
+        timestamp:   ts,
+        reviewed_by: who,
+      });
+    } else {
+      delete updatedData.tender_review_closed_at;
+      delete updatedData.tender_review_closed_by;
+      trace.push({
+        step:        'review_phase_reopened',
+        timestamp:   new Date().toISOString(),
+        reviewed_by: req.user.email ?? String(req.user.id),
+        manual:      true,
+      });
+    }
+
+    await pool.query(
+      `UPDATE agent_runs SET result = jsonb_set(result, '{data}', $1::jsonb) WHERE id = $2 AND org_id = $3`,
+      [JSON.stringify({ ...updatedData, trace }), req.params.runId, req.user.orgId]
+    );
+
+    res.json({
+      ok: true,
+      tender_review_closed_at: updatedData.tender_review_closed_at ?? null,
+      tender_review_closed_by: updatedData.tender_review_closed_by ?? null,
+    });
+  } catch (err) {
+    console.error('[demo/tender-review-phase]', err.message);
+    res.status(500).json({ error: 'Failed to update review phase.' });
   }
 });
 
