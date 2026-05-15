@@ -620,7 +620,7 @@ function buildCertificateHtml(runData, orgName) {
 export default function SpecValidator({ slug = 'demo-spec-validator' }) {
   const getIcon  = useIcon();
   const { user } = useAuthStore();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [file, setFile]               = useState(null);
   const [dragging, setDragging]       = useState(false);
@@ -628,7 +628,10 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
   const [stages, setStages]           = useState(INITIAL_STAGES);
   const [progressTail, setProgressTail] = useState('');
   const [runResult, setRunResult]     = useState(null);
-  const [runId, setRunId]             = useState(null);
+  const [runId, setRunId]             = useState(() => searchParams.get('runId') ?? null);
+  const [loadingPastRun, setLoadingPastRun] = useState(false);
+  const [recentRuns, setRecentRuns]   = useState([]);
+  const [runsLoading, setRunsLoading] = useState(true);
   const [error, setError]             = useState('');
   const [certLoading, setCertLoading] = useState(false);
   const [certError, setCertError]     = useState('');
@@ -648,17 +651,56 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
   const fileInputRef  = useRef(null);
   const cancelledRef  = useRef(false);
 
-  // ── Load run from URL ?runId= (navigation from decision log) ───────────────
-  useEffect(() => {
-    const urlRunId = searchParams.get('runId');
-    if (!urlRunId) return;
-    api.get(`/demo/runs/${urlRunId}`)
-      .then((row) => {
-        const data = row.result?.data ?? row.result;
-        if (data) { setRunResult(data); setRunId(urlRunId); }
-      })
+  // ── Previous runs (same pattern as DocumentAnalyzer / TenderResponse) ──────
+
+  const fetchRecentRuns = useCallback(() => {
+    return api
+      .get(`/demo/runs?slug=${encodeURIComponent(slug)}&limit=10`)
+      .then((data) => setRecentRuns(data))
       .catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  useEffect(() => {
+    setRunsLoading(true);
+    fetchRecentRuns().finally(() => setRunsLoading(false));
+  }, [fetchRecentRuns]);
+
+  const handleLoadRun = useCallback(
+    async (id) => {
+      setLoadingPastRun(true);
+      setError('');
+      try {
+        const row = await api.get(`/demo/runs/${id}`);
+        const data = row.result?.data ?? row.result;
+        setRunResult(data);
+        setRunId(String(id));
+        setSearchParams({ runId: String(id) }, { replace: true });
+        setFollowUpHistory(data.follow_up_history ?? []);
+        setFollowUpOpen(false);
+        setFollowUpQuestion('');
+        setFollowUpError('');
+        setFile(null);
+        setStages(INITIAL_STAGES);
+        setProgressTail('');
+        await fetchRecentRuns();
+      } catch (err) {
+        setError(`Failed to load session: ${err.message}`);
+        setRunResult(null);
+        setRunId(null);
+        setFollowUpHistory([]);
+        setSearchParams({}, { replace: true });
+      } finally {
+        setLoadingPastRun(false);
+      }
+    },
+    [setSearchParams, fetchRecentRuns]
+  );
+
+  useEffect(() => {
+    if (runId && !runResult && !loadingPastRun) {
+      void handleLoadRun(runId);
+    }
+  }, [runId, runResult, loadingPastRun, handleLoadRun]);
 
   // ── Cancel ─────────────────────────────────────────────────────────────────
 
@@ -684,6 +726,7 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
     setFile(f);
     setRunResult(null);
     setRunId(null);
+    setSearchParams({}, { replace: true });
     setStages(INITIAL_STAGES);
     setProgressTail('');
   };
@@ -707,6 +750,7 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
     setError('');
     setRunResult(null);
     setRunId(null);
+    setSearchParams({}, { replace: true });
     setStages(INITIAL_STAGES);
     setProgressTail('');
     setCertError('');
@@ -738,8 +782,13 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
         setFollowUpHistory(innerData.follow_up_history ?? []);
         try {
           const runs = await api.get(`/demo/runs?slug=${slug}&limit=1`);
-          if (runs[0]?.id) setRunId(runs[0].id);
+          const id = runs[0]?.id;
+          if (id) {
+            setRunId(id);
+            setSearchParams({ runId: String(id) }, { replace: true });
+          }
         } catch { /* non-fatal */ }
+        void fetchRecentRuns();
       },
       (err) => setError(err),
     );
@@ -752,7 +801,10 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
     if (!runId) return;
     try {
       const row = await api.get(`/demo/runs/${runId}`);
-      setRunResult(row.result?.data ?? row.result);
+      const data = row.result?.data ?? row.result;
+      setRunResult(data);
+      if (Array.isArray(data?.follow_up_history)) setFollowUpHistory(data.follow_up_history);
+      await fetchRecentRuns();
     } catch { /* non-fatal */ }
   };
 
@@ -879,8 +931,15 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
         </p>
       </div>
 
-      {/* Upload zone — hidden while result is showing */}
-      {!runResult && (
+      {loadingPastRun && !runResult && (
+        <div className="flex items-center gap-2" style={{ color: 'var(--color-muted)' }}>
+          {getIcon('loader', { size: 14 })}
+          <span className="text-sm">Loading session…</span>
+        </div>
+      )}
+
+      {/* Upload zone — hidden while result or URL hydration is in progress */}
+      {!runResult && !loadingPastRun && (
         <>
           <div
             onDrop={onDrop}
@@ -976,9 +1035,11 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
         <>
           {/* Re-validate link */}
           <button
+            type="button"
             onClick={() => {
               setRunResult(null);
               setRunId(null);
+              setSearchParams({}, { replace: true });
               setStages(INITIAL_STAGES);
               setProgressTail('');
               setError('');
@@ -986,6 +1047,7 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
               setFollowUpHistory([]);
               setFollowUpOpen(false);
               setFollowUpQuestion('');
+              void fetchRecentRuns();
             }}
             className="text-xs hover:opacity-70"
             style={{ color: 'var(--color-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
@@ -1298,6 +1360,79 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
             <a href={decisionLogPath} style={{ color: 'var(--color-primary)' }}>View decision log →</a>
           </p>
         </>
+      )}
+
+      {/* Previous runs — visible with or without an open session (matches other demo tools) */}
+      {!running && !runsLoading && recentRuns.length > 0 && (
+        <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+          <p className="text-sm font-medium mb-1 m-0" style={{ color: 'var(--color-text)' }}>Previous runs</p>
+          <p className="text-xs mb-3 m-0" style={{ color: 'var(--color-muted)' }}>
+            Open a past validation without leaving this page. Rows use the same org-scoped list as the decision log.
+          </p>
+          <div className="space-y-1" role="list">
+            {recentRuns.map((run) => {
+              const pending = run.pending_review_count ?? 0;
+              const active = String(run.id) === String(runId);
+              const statusLabel = run.status === 'complete' || run.status === 'needs_review' ? 'Complete' : run.status ?? '—';
+              return (
+                <button
+                  key={run.id}
+                  type="button"
+                  role="listitem"
+                  aria-current={active ? 'true' : undefined}
+                  aria-label={`Open validation: ${run.file_name ?? 'PDF'}. ${statusLabel}.${pending > 0 ? ` ${pending} pending review.` : ''}`}
+                  onClick={() => handleLoadRun(run.id)}
+                  className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors hover:brightness-[0.98]"
+                  style={{
+                    background: active ? 'var(--color-bg)' : 'var(--color-surface)',
+                    border:     active ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                    boxShadow:  active ? 'inset 3px 0 0 0 var(--color-primary)' : 'none',
+                    cursor:     'pointer',
+                    color:      'var(--color-text)',
+                  }}
+                >
+                  <span className="shrink-0" style={{ color: 'var(--color-primary)', lineHeight: 0 }} aria-hidden>
+                    {getIcon('arrow-right', { size: 18 })}
+                  </span>
+                  <span className="shrink-0" style={{ color: active ? 'var(--color-primary)' : 'var(--color-muted)', lineHeight: 0 }} aria-hidden>
+                    {getIcon('file-text', { size: 18 })}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium truncate">{run.file_name ?? 'Document'}</span>
+                    <span className="block text-[10px] mt-0.5 truncate" style={{ color: 'var(--color-muted)' }}>
+                      {fmtTs(run.run_at)}
+                      {run.document_type ? ` · ${run.document_type}` : ''}
+                    </span>
+                  </div>
+                  <div className="shrink-0 flex flex-wrap items-center justify-end gap-1">
+                    <span
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                      style={{
+                        background: run.status === 'error' ? '#fee2e2' : '#f1f5f9',
+                        color:      run.status === 'error' ? '#991b1b' : '#64748b',
+                      }}
+                    >
+                      {statusLabel}
+                    </span>
+                    {pending > 0 ? (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#92400e' }}>
+                        {pending} pending
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#166534' }}>
+                        Reviewed
+                      </span>
+                    )}
+                  </div>
+                  <span className="shrink-0 flex items-center gap-0.5" style={{ color: 'var(--color-primary)', lineHeight: 0 }} aria-hidden>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide hidden sm:inline">Open</span>
+                    {getIcon('chevron-right', { size: 16 })}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       )}
     </div>
   );
