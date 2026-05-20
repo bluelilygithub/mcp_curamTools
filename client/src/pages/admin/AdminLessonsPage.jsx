@@ -462,7 +462,12 @@ export default function AdminLessonsPage() {
             </button>
           </p>
         </div>
-        <Button onClick={() => setModal({ type: 'new' })}>{getIcon('plus', { size: 14 })} New Lesson</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => setModal({ type: 'coverage' })}>
+            Covered Agents/Routines
+          </Button>
+          <Button onClick={() => setModal({ type: 'new' })}>{getIcon('plus', { size: 14 })} New Lesson</Button>
+        </div>
       </div>
 
       {error && <InlineBanner type="error" message={error} onDismiss={() => setError('')} />}
