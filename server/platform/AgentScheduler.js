@@ -11,7 +11,7 @@ const cron = require('node-cron');
 const { pool } = require('../db');
 const { persistRun } = require('./persistRun');
 const { mergePromptVersionIntoResult } = require('./promptVersions');
-const { loadLessonsForAgent } = require('../services/LessonRepositoryService');
+const { loadLessonsForAgent, proposeLessonFromRun } = require('../services/LessonRepositoryService');
 
 /**
  * Split scheduler `runFn` return into persisted body + optional `promptVersion` label.
@@ -152,6 +152,14 @@ class AgentSchedulerClass {
             campaignId: item.campaignId ?? null,
             runId: customerRunId,
           });
+          if (!item.error) {
+            proposeLessonFromRun({
+              agentId: slug,
+              organisationId: orgId,
+              runId: customerRunId,
+              summary: base?.summary ?? base?.result?.summary ?? '',
+            }).catch((e) => console.warn(`[AgentScheduler] ${slug} lesson proposal skipped:`, e.message));
+          }
         }
         console.log(`[AgentScheduler] ${slug} completed ${outcome.length} customer runs at ${new Date().toISOString()}`);
       } else {
@@ -164,6 +172,12 @@ class AgentSchedulerClass {
           result: mergePromptVersionIntoResult(base, promptVersion),
           runId,
         });
+        proposeLessonFromRun({
+          agentId: slug,
+          organisationId: orgId,
+          runId,
+          summary: base?.summary ?? base?.result?.summary ?? '',
+        }).catch((e) => console.warn(`[AgentScheduler] ${slug} lesson proposal skipped:`, e.message));
         console.log(`[AgentScheduler] ${slug} completed at ${new Date().toISOString()}`);
       }
     } catch (err) {

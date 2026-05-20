@@ -25,9 +25,11 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - **Service + API:** Added `LessonRepositoryService` and `/api/lessons` routes for admin CRUD, metadata, runtime prompt loading, and under-review agent proposals.
 - **Runtime integration:** `AgentOrchestrator` now appends active matching lessons to the system prompt once per run via `loadLessonsForAgent(toolSlug, orgId)`.
 - **Admin UI:** Added Admin › Lessons Repository with filters, sortable table, create/edit modal, status toggles, soft-delete confirmation, read-only detail, and audit history with content diff view.
+- **Reflection write-back:** Completed SSE and scheduled agent runs now create under-review `agent-reflection` drafts for admin review; they are never injected into future runs until activated.
 
 ### Fixed / discovered
 - Client build initially failed because `react-is` was declared in `client/package.json` but absent from `client/package-lock.json` / `node_modules`; `npm install` restored it and the Vite build now passes.
+- Initial repository implementation exposed `proposeLesson()` but did not call it from normal agent completion paths, so running agents did not populate the Lessons view.
 
 ### Open / next
 - Non-`AgentOrchestrator` agents can call `loadLessonsForAgent()` directly when they need lesson injection in custom multi-stage flows.

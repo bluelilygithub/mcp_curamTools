@@ -459,6 +459,26 @@ async function proposeLesson(agentId, organisationId, category, title, content) 
   return rows[0].id;
 }
 
+async function proposeLessonFromRun({ agentId, organisationId, runId, summary }) {
+  const text = cleanText(summary);
+  if (!text) return null;
+  const excerpt = text.length > 1600 ? `${text.slice(0, 1600).trim()}...` : text;
+  return proposeLesson(
+    agentId,
+    organisationId,
+    'agent-reflection',
+    `Review lesson from ${agentId}`,
+    [
+      'Agent-generated reflection draft. Review and edit before activating.',
+      '',
+      `Source run: ${runId ?? 'unknown'}`,
+      '',
+      'Observed output:',
+      excerpt,
+    ].join('\n')
+  );
+}
+
 module.exports = {
   ALL,
   CONTENT_WARN,
@@ -471,4 +491,5 @@ module.exports = {
   listCategories,
   loadLessonsForAgent,
   proposeLesson,
+  proposeLessonFromRun,
 };

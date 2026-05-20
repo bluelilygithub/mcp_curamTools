@@ -24,7 +24,7 @@ const AgentConfigService = require('./AgentConfigService');
 const CostGuardService = require('../services/CostGuardService');
 const { logUsage } = require('../services/UsageLogger');
 const EmbeddingService = require('../services/EmbeddingService');
-const { loadLessonsForAgent } = require('../services/LessonRepositoryService');
+const { loadLessonsForAgent, proposeLessonFromRun } = require('../services/LessonRepositoryService');
 const { validateToolData } = require('./validateToolData');
 const { mergePromptVersionIntoResult } = require('./promptVersions');
 
@@ -243,6 +243,15 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
         );
 
         await persistRun({ slug, orgId, status: runStatus, result: resultPayload, runId });
+
+        // Reflection write-back is review-only: proposals are saved under-review
+        // and never injected into future runs until an admin activates them.
+        proposeLessonFromRun({
+          agentId: slug,
+          organisationId: orgId,
+          runId,
+          summary: resultPayload.summary,
+        }).catch((e) => console.warn(`[${slug}] lesson proposal skipped:`, e.message));
 
         logUsage({ orgId, userId, slug, modelId: adminConfig.model, tokensUsed: tokensUsed ?? {}, costAud: taskCostAud })
           .catch(err => console.error(`[${slug}] usage log error:`, err.message));
