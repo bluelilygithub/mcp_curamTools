@@ -18,6 +18,22 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-21 — Lessons & Rules Repository
+
+### Built
+- **Platform lessons store:** Added `agent_lessons` schema with org/global scope, agent/global scope, active/disabled/under-review status, applied dates, JSONB audit history, soft delete, and search/runtime indexes.
+- **Service + API:** Added `LessonRepositoryService` and `/api/lessons` routes for admin CRUD, metadata, runtime prompt loading, and under-review agent proposals.
+- **Runtime integration:** `AgentOrchestrator` now appends active matching lessons to the system prompt once per run via `loadLessonsForAgent(toolSlug, orgId)`.
+- **Admin UI:** Added Admin › Lessons Repository with filters, sortable table, create/edit modal, status toggles, soft-delete confirmation, read-only detail, and audit history with content diff view.
+
+### Fixed / discovered
+- Client build initially failed because `react-is` was declared in `client/package.json` but absent from `client/package-lock.json` / `node_modules`; `npm install` restored it and the Vite build now passes.
+
+### Open / next
+- Non-`AgentOrchestrator` agents can call `loadLessonsForAgent()` directly when they need lesson injection in custom multi-stage flows.
+
+---
+
 ## 2026-05-14 — Prompt versioning on `AgentScheduler`; `createAgentRoute` header fix
 
 ### Built

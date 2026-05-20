@@ -25,6 +25,7 @@ const CostGuardService = require('../services/CostGuardService');
 const { logUsage } = require('../services/UsageLogger');
 const { googleAdsConversationTools, TOOL_SLUG } = require('../agents/googleAdsConversation/tools');
 const { buildSystemPrompt } = require('../agents/googleAdsConversation/prompt');
+const { loadLessonsForAgent } = require('../services/LessonRepositoryService');
 
 const router = express.Router();
 
@@ -228,6 +229,10 @@ router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) =>
     let taskCostAud = 0;
 
     emit('progress', { text: 'Thinking…' });
+    const runtimePromptContext = await loadLessonsForAgent(TOOL_SLUG, orgId).catch((err) => {
+      console.warn('[conversation] lessons load skipped:', err.message);
+      return '';
+    });
 
     const context = {
       orgId,
@@ -235,6 +240,7 @@ router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) =>
       startDate: startDate ?? null,
       endDate:   endDate   ?? null,
       toolSlug:  TOOL_SLUG,
+      runtimePromptContext,
       req,
     };
 
@@ -348,7 +354,13 @@ router.post('/keep-warm', requireAuth, async (req, res) => {
       AgentConfigService.getAgentConfig(orgId, 'google-ads-monitor').catch(() => ({})),
     ]);
 
-    const systemPrompt = buildSystemPrompt(agentConfig, monitorConfig);
+    const runtimePromptContext = await loadLessonsForAgent(TOOL_SLUG, orgId).catch((err) => {
+      console.warn('[conversation:keep-warm] lessons load skipped:', err.message);
+      return '';
+    });
+    const systemPrompt = [buildSystemPrompt(agentConfig, monitorConfig), runtimePromptContext]
+      .filter(Boolean)
+      .join('\n\n');
     const model        = adminConfig.model ?? 'claude-sonnet-4-6';
 
     // Mirror AgentOrchestrator: strip execute + meta fields before sending to provider

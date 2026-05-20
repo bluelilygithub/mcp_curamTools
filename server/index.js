@@ -57,6 +57,7 @@ app.use('/api/google-ads', require('./routes/googleAds'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/conversation', require('./routes/conversation'));
 app.use('/api/admin/knowledge', require('./routes/adminKnowledge'));
+app.use('/api/lessons',        require('./routes/lessons'));
 app.use('/api/doc-extractor',  require('./routes/docExtractor'));
 app.use('/api/media-gen',      require('./routes/mediaGen'));
 app.use('/api/export-log',    require('./routes/exportLog'));

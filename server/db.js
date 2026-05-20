@@ -172,6 +172,42 @@ async function initSchema() {
         ON agent_runs(org_id, slug, run_at DESC)
     `);
 
+    // ── Lessons & Rules Repository ─────────────────────────────────────────
+    // org_id NULL means "ALL organisations". agent_id = 'ALL' means global to
+    // every agent. Agent-proposed entries stay under-review until an admin
+    // explicitly activates them.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS agent_lessons (
+        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id     TEXT NOT NULL,
+        org_id       INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+        category     TEXT NOT NULL,
+        title        TEXT NOT NULL,
+        content      TEXT NOT NULL,
+        status       TEXT NOT NULL DEFAULT 'active'
+                       CHECK (status IN ('active', 'disabled', 'under-review')),
+        created_at   TIMESTAMPTZ DEFAULT NOW(),
+        created_by   TEXT NOT NULL,
+        applied_from DATE NOT NULL DEFAULT CURRENT_DATE,
+        applied_to   DATE,
+        audit_log    JSONB NOT NULL DEFAULT '[]',
+        updated_at   TIMESTAMPTZ DEFAULT NOW(),
+        deleted_at   TIMESTAMPTZ
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_agent_lessons_runtime
+        ON agent_lessons(org_id, agent_id, status, applied_from, applied_to)
+        WHERE deleted_at IS NULL
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_agent_lessons_search
+        ON agent_lessons
+        USING GIN ((COALESCE(title, '') || ' ' || COALESCE(content, '') || ' ' || COALESCE(category, '')) gin_trgm_ops)
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS usage_logs (
         id            SERIAL PRIMARY KEY,

@@ -24,6 +24,7 @@ const AgentConfigService = require('./AgentConfigService');
 const CostGuardService = require('../services/CostGuardService');
 const { logUsage } = require('../services/UsageLogger');
 const EmbeddingService = require('../services/EmbeddingService');
+const { loadLessonsForAgent } = require('../services/LessonRepositoryService');
 const { validateToolData } = require('./validateToolData');
 const { mergePromptVersionIntoResult } = require('./promptVersions');
 
@@ -182,12 +183,19 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
       // Run the agent
       try {
         emit('progress', { text: 'Starting agent run…' });
+        let runtimePromptContext = '';
+        try {
+          runtimePromptContext = await loadLessonsForAgent(slug, orgId);
+        } catch (err) {
+          console.warn(`[${slug}] lessons load skipped:`, err.message);
+        }
 
         const { result, trace, tokensUsed, promptVersion } = await runFn({
           orgId,
           userId,
           config: agentConfig,
           adminConfig,
+          runtimePromptContext,
           req,
           // Extended emit: agents may optionally pass tokensUsed to trigger mid-run budget checks.
           // Agents that don't pass tokensUsed still work — cost tracking simply won't accumulate mid-run.

@@ -120,6 +120,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
             )}
             <NavItem to="/admin/email-templates" icon="mail" label="Email Templates" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/knowledge" icon="book-open" label="Knowledge Base" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/lessons" icon="bookmark" label="Lessons Repository" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/competitors" icon="target" label="Competitors" collapsed={collapsed} onClick={onLinkClick} />
 
             {/* Monitoring */}

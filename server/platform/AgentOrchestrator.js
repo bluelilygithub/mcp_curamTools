@@ -122,6 +122,10 @@ class AgentOrchestrator {
     const capped   = Math.min(maxIterations, MAX_ITERATIONS_HARD_CAP);
     const provider = getProvider(model, customProviders);
 
+    const effectiveSystemPrompt = [systemPrompt, context.runtimePromptContext]
+      .filter(Boolean)
+      .join('\n\n');
+
     // Strip execute + meta fields from tool defs before sending to model
     const providerTools = tools.length > 0
       ? tools.map(({ execute: _e, requiredPermissions: _p, toolSlug: _s, cacheable: _c, ...schema }) => schema)
@@ -145,7 +149,7 @@ class AgentOrchestrator {
         response = await provider.chat({
           model,
           max_tokens: maxTokens,
-          system:     systemPrompt,
+          system:     effectiveSystemPrompt,
           messages,
           tools:      providerTools,
           thinking,
@@ -162,7 +166,7 @@ class AgentOrchestrator {
             response = await getProvider(fallbackModel, customProviders).chat({
               model:      fallbackModel,
               max_tokens: maxTokens,
-              system:     systemPrompt,
+              system:     effectiveSystemPrompt,
               messages,
               tools:      providerTools,
               thinking,

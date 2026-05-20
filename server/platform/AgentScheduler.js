@@ -11,6 +11,7 @@ const cron = require('node-cron');
 const { pool } = require('../db');
 const { persistRun } = require('./persistRun');
 const { mergePromptVersionIntoResult } = require('./promptVersions');
+const { loadLessonsForAgent } = require('../services/LessonRepositoryService');
 
 /**
  * Split scheduler `runFn` return into persisted body + optional `promptVersion` label.
@@ -121,7 +122,11 @@ class AgentSchedulerClass {
       // Single opening 'running' row — used for single-run agents; array-run agents
       // create their own rows per customer below and close this one immediately.
       runId = await persistRun({ slug, orgId, status: 'running', runAt: startTime });
-      const outcome = await runFn({ orgId, userId: null, config: {}, adminConfig: {}, emit: () => {} });
+      const runtimePromptContext = await loadLessonsForAgent(slug, orgId).catch((err) => {
+        console.warn(`[AgentScheduler] ${slug} lessons load skipped:`, err.message);
+        return '';
+      });
+      const outcome = await runFn({ orgId, userId: null, config: {}, adminConfig: {}, runtimePromptContext, emit: () => {} });
 
       if (Array.isArray(outcome)) {
         // Multi-customer: close the placeholder row then persist one row per customer

@@ -29,7 +29,7 @@ async function runHighIntentAdvisor(context) {
     maxIterations: adminConfig.max_iterations ?? 25,
     fallbackModel: adminConfig.fallback_model ?? null,
     onStep:        emit,
-    context:       { orgId, userId, toolSlug: TOOL_SLUG, customerId: null },
+    context:       { orgId, userId, toolSlug: TOOL_SLUG, customerId: null, runtimePromptContext: context.runtimePromptContext },
   });
 
   // ── Parse structured suggestions from agent output ────────────────────────

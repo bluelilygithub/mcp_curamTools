@@ -34,6 +34,7 @@ import AdminDataPrivacyPage from './pages/admin/AdminDataPrivacyPage';
 import AdminStoragePage from './pages/admin/AdminStoragePage';
 import AdminCompetitorsPage from './pages/admin/AdminCompetitorsPage';
 import AdminKnowledgePage from './pages/admin/AdminKnowledgePage';
+import AdminLessonsPage from './pages/admin/AdminLessonsPage';
 import AdminProvidersPage from './pages/admin/AdminProvidersPage';
 import AdminUsagePage from './pages/admin/AdminUsagePage';
 import AdminClaudeSessionPage from './pages/admin/AdminClaudeSessionPage';
@@ -101,6 +102,7 @@ export default function App() {
                   <Route path="/admin/storage" element={<AdminStoragePage />} />
                   <Route path="/admin/competitors" element={<AdminCompetitorsPage />} />
                   <Route path="/admin/knowledge" element={<AdminKnowledgePage />} />
+                  <Route path="/admin/lessons" element={<AdminLessonsPage />} />
                   <Route path="/admin/providers" element={<AdminProvidersPage />} />
                   <Route path="/admin/usage" element={<AdminUsagePage />} />
                   <Route path="/admin/claude-sessions" element={<AdminClaudeSessionPage />} />
