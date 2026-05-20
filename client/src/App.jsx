@@ -95,6 +95,7 @@ export default function App() {
                   <Route path="/admin/diagnostics" element={<AdminDiagnosticsPage />} />
                   <Route path="/admin/sql" element={<AdminSqlPage />} />
                   <Route path="/admin/prompts" element={<AdminPromptsPage />} />
+                  <Route path="/lessons" element={<Navigate to="/admin/lessons" replace />} />
                   <Route path="/admin/departments" element={<AdminDepartmentsPage />} />
                   <Route path="/admin/org-roles" element={<AdminOrgRolesPage />} />
                   <Route path="/admin/crm-privacy" element={<AdminCrmPrivacyPage />} />
