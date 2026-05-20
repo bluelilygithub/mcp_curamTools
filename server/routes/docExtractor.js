@@ -31,6 +31,7 @@ const { pool }                = require('../db');
 const { runDocExtraction }    = require('../agents/docExtractor');
 const { canUseModel, isOrgAdmin } = require('../services/PermissionService');
 const { logUsage }            = require('../services/UsageLogger');
+const { proposeLessonFromRun } = require('../services/LessonRepositoryService');
 const { computeCostAud, getDailyOrgSpendAud, check: checkBudget, BudgetExceededError } = require('../services/CostGuardService');
 const { requireRole }         = require('../middleware/requireRole');
 const AgentConfigService      = require('../platform/AgentConfigService');
@@ -239,6 +240,13 @@ router.post(
             WHERE id = $2`,
           [JSON.stringify(result), runId]
         );
+
+        proposeLessonFromRun({
+          agentId:        'doc-extractor',
+          organisationId: orgId,
+          runId,
+          summary:        `Document "${originalname}" extracted ${result.fields?.length ?? 0} fields. Document type: ${result.document_type ?? 'unknown'}. Quality advisory: ${result.quality_advisory?.flag ? result.quality_advisory.reason ?? 'flagged' : 'none'}.`,
+        }).catch((err) => console.warn('[doc-extractor] lesson proposal skipped:', err.message));
 
         logUsage({
           orgId, userId, slug: 'doc-extractor', modelId: model,

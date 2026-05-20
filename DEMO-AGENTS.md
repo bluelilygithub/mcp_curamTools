@@ -516,7 +516,7 @@ Run once in Admin > SQL Console or via a setup script. Upload files to the agree
 1. **`server/agents/demoSuite/<slug>.js`** (or `demoSuite/<slug>/index.js`) — write `runFn`, export `{ runFn, TOOL_SLUG_DEMO, TOOL_SLUG_INTERNAL }` if dual-slug, or `{ runFn, TOOL_SLUG }` if demo-only
 2. **`server/demo/demoCatalog.js`** — add catalog entry: `name`, `description`, `icon`, `category`, `pattern`
 3. **`server/platform/AgentConfigService.js`** — add to `AGENT_DEFAULTS` and `ADMIN_DEFAULTS` (for both slugs if dual-slug)
-4. **`server/routes/agents.js`** — register with `createAgentRoute` (one call per slug)
+4. **`server/routes/agents.js`** — register with `createAgentRoute` (one call per slug). This is also the default Lessons Repository write-back path; if the demo uses a custom route or direct provider call outside `createAgentRoute`, add an explicit `proposeLessonFromRun` hook after the successful result is saved/returned. Update `LESSON_COVERAGE_SECTIONS` in `client/src/pages/admin/AdminLessonsPage.jsx` so Admin > Lessons & Rules lists the new demo/routine in "View covered agents/routines".
 5. **`client/src/pages/demo/<Page>.jsx`** — build UI with `ProcessingModal`, two-model display, HITL review, certificate gate
 6. **`client/src/App.jsx`** — add `<Route path="/demo/run/<full-slug>" element={<Page />} />` (must match slug in `org_agent_manifest` exactly)
 7. **`client/src/pages/demo/DecisionLogPage.jsx`** — add `stepMeta` entries for every `logger.step()` type the agent emits

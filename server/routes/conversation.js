@@ -25,7 +25,7 @@ const CostGuardService = require('../services/CostGuardService');
 const { logUsage } = require('../services/UsageLogger');
 const { googleAdsConversationTools, TOOL_SLUG } = require('../agents/googleAdsConversation/tools');
 const { buildSystemPrompt } = require('../agents/googleAdsConversation/prompt');
-const { loadLessonsForAgent } = require('../services/LessonRepositoryService');
+const { loadLessonsForAgent, proposeLessonFromRun } = require('../services/LessonRepositoryService');
 
 const router = express.Router();
 
@@ -315,6 +315,13 @@ router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) =>
 
     logUsage({ orgId, userId, slug: TOOL_SLUG, modelId: adminConfig.model, tokensUsed: tokensUsed ?? {}, costAud: taskCostAud })
       .catch((e) => console.error('[conversation usage log]', e.message));
+
+    proposeLessonFromRun({
+      agentId:        TOOL_SLUG,
+      organisationId: orgId,
+      runId:          req.params.id,
+      summary:        assistantText,
+    }).catch((e) => console.warn('[conversation] lesson proposal skipped:', e.message));
 
     emit('result', {
       message:    assistantText,

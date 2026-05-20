@@ -257,11 +257,15 @@ The server builds the exact same system prompt and tool array used by real conve
    - Import `run<Name>`
    - `agentsRouter.use('/<slug>', createAgentRoute({ slug, runFn, requiredPermission }))`
    - `AgentScheduler.register({ slug, schedule, runFn })` if it needs a cron schedule
-5. Add operator defaults to `AGENT_DEFAULTS` in `server/platform/AgentConfigService.js`
-6. Add admin defaults to `ADMIN_DEFAULTS` in `server/platform/AgentConfigService.js`
-7. Create `client/src/pages/tools/<NamePage>.jsx`
-8. Add the route in `client/src/App.jsx` (under `RequireAuth > AppShell`)
-9. Add an entry in `client/src/config/tools.js`
+5. Confirm Lessons Repository coverage:
+   - `createAgentRoute` and `AgentScheduler` handle write-back automatically.
+   - If the new routine uses a custom route or direct provider call, add `proposeLessonFromRun({ agentId, organisationId, runId, summary })` after the successful result is saved or returned.
+   - Update `LESSON_COVERAGE_SECTIONS` in `client/src/pages/admin/AdminLessonsPage.jsx` so Admin > Lessons & Rules lists the new covered agent/routine.
+6. Add operator defaults to `AGENT_DEFAULTS` in `server/platform/AgentConfigService.js`
+7. Add admin defaults to `ADMIN_DEFAULTS` in `server/platform/AgentConfigService.js`
+8. Create `client/src/pages/tools/<NamePage>.jsx`
+9. Add the route in `client/src/App.jsx` (under `RequireAuth > AppShell`)
+10. Add an entry in `client/src/config/tools.js`
 
 See `PLATFORM-PRIMITIVES.md` for the full interface contract of each primitive.
 See `MCP_CURAMTOOLS_PROMPTS.md` for prompt structure conventions.

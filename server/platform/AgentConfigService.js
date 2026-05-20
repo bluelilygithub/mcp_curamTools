@@ -243,6 +243,8 @@ const ADMIN_DEFAULTS = {
 
 const AGENT_MODEL_REQUIREMENTS = {
   'google-ads-conversation':     { tier: 'advanced', reason: 'Multi-turn reasoning with dynamic tool selection' },
+  'sql-console-nlp':             { tier: 'advanced', reason: 'Natural-language SQL generation must reason over schema and query safety constraints' },
+  'media-gen':                   { tier: 'standard', reason: 'External media generation request with short prompt-to-result workflow' },
   'google-ads-strategic-review': { tier: 'advanced', reason: 'Multi-step hypothesis validation against live data' },
   'google-ads-change-audit':     { tier: 'advanced', reason: 'Complex narrative audit with before/after comparison' },
   'google-ads-monitor':          { tier: 'advanced', reason: 'Multi-section performance report with cross-source analysis' },

@@ -28,7 +28,7 @@ Returns an Express router. Two endpoints are registered:
 
 | Endpoint | Auth | Behaviour |
 |---|---|---|
-| `POST /run` | requireAuth + requireRole([org_admin, requiredPermission]) | Loads admin config, checks kill switch, streams SSE: `{ type: 'progress', text }` → `{ type: 'result', data }` → `[DONE]` (or `{ type: 'error', error }` → `[DONE]`). On success, **`data` includes `runId`** (the `agent_runs.id` UUID) alongside `summary`, nested `data`, `tokensUsed`, etc., so clients can call org-scoped demo PATCH routes before reloading the row; **`runId` is not added to the JSON persisted** in `agent_runs.result` (only the streamed copy). |
+| `POST /run` | requireAuth + requireRole([org_admin, requiredPermission]) | Loads admin config, checks kill switch, streams SSE: `{ type: 'progress', text }` → `{ type: 'result', data }` → `[DONE]` (or `{ type: 'error', error }` → `[DONE]`). On success, **`data` includes `runId`** (the `agent_runs.id` UUID) alongside `summary`, nested `data`, `tokensUsed`, etc., so clients can call org-scoped demo PATCH routes before reloading the row; **`runId` is not added to the JSON persisted** in `agent_runs.result` (only the streamed copy). Successful runs also submit an under-review Lessons Repository proposal via `proposeLessonFromRun`; new agents get this automatically when they use `createAgentRoute`. |
 | `GET /history` | requireAuth | Returns last 20 `agent_runs` rows for this slug + org, ordered by `run_at DESC` |
 
 Internal helpers exported from this file:
@@ -45,7 +45,7 @@ Run rows are written only via **`persistRun`** from **`server/platform/persistRu
 - **Optional `prompt_version`:** If `runFn` returns **`promptVersion`** (string), `createAgentRoute` merges it into the persisted payload as **`prompt_version`** (see `server/platform/promptVersions.js`, `knowledge_base/core/PROMPT_VERSIONING.md`). Agents that omit it are unchanged.
 
 **Used by:** Google Ads Monitor (`server/routes/agents/`); all future agents.
-**Reuse contract:** Provide `slug` (stable, lowercase, hyphen-separated), a `runFn(context)` that returns `{ result, trace, tokensUsed }` (and optionally `promptVersion` for lineage), and a `requiredPermission` role name. Register the returned router in `server/index.js` under `/api/agents/:slug`.
+**Reuse contract:** Provide `slug` (stable, lowercase, hyphen-separated), a `runFn(context)` that returns `{ result, trace, tokensUsed }` (and optionally `promptVersion` for lineage), and a `requiredPermission` role name. Register the returned router in `server/index.js` under `/api/agents/:slug`. Every new agent must be covered by the Lessons Repository: use `createAgentRoute`/`AgentScheduler` for normal agents, or add an explicit `proposeLessonFromRun` hook in any custom route that bypasses those platform paths. Also update the visible coverage list in `client/src/pages/admin/AdminLessonsPage.jsx` so Admin > Lessons & Rules shows the new agent/routine.
 **Does not handle:** Agent tool registration (done in the agent's `tools.js`), system prompt construction (done in the agent's `prompt.js`), data fetching (done in domain services). Does not write directly to `agent_executions` (that is `services/AgentScheduler.js` territory).
 
 ---
@@ -71,6 +71,22 @@ await logUsage({ orgId, userId, slug, modelId, tokensUsed, costAud })
 **Known gap:** `routes/docExtractor.js` passes `{ input, output }` only — `cacheRead`/`cacheWrite` are missing from doc extraction rows.
 
 **Reuse contract:** Call after a successful run. Pass the full `tokensUsed` object from `AgentOrchestrator` — do not construct a partial object. Always use `??` not `||` for token fields (null must not silently become 0 when the orchestrator returns a real 0).
+
+---
+
+### LessonsRepositoryService
+**Type:** Service
+**Location:** `server/services/LessonRepositoryService.js`
+**What it does:** Stores active, disabled, and under-review lessons/rules for agents. Runtime lessons are loaded with `loadLessonsForAgent(agentId, organisationId)` and agent reflections are written with `proposeLessonFromRun(...)` / `proposeLesson(...)`.
+
+**Coverage contract:** Every new model-backed agent or AI routine must be covered by Lessons Repository write-back. Prefer the platform paths:
+- HTTP/SSE agents: register through `createAgentRoute`, which writes an under-review proposal after a successful persisted run.
+- Scheduled agents: register through `AgentScheduler`, which writes proposals for successful scheduled runs.
+- Custom routes or direct provider calls: add a local fire-and-forget `proposeLessonFromRun({ agentId, organisationId, runId, summary })` after the successful result is saved or returned.
+
+**UI coverage register:** Admin > Lessons & Rules includes a "View covered agents/routines" link. Update `LESSON_COVERAGE_SECTIONS` in `client/src/pages/admin/AdminLessonsPage.jsx` whenever a new model-backed agent, scheduled routine, or custom direct-provider routine is added. The default presumption is that new `createAgentRoute` and `AgentScheduler` agents are covered automatically; the UI list is the human audit register.
+
+**Do not:** Apply proposed lessons automatically. Agent-written entries must stay `under-review` until an admin activates them in Admin > Lessons & Rules.
 
 ---
 

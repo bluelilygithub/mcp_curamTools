@@ -18,6 +18,16 @@ When you change **system or stage prompts** for an agent that opts in, **bump** 
 
 ---
 
+## Lessons Repository coverage — required for new agents
+
+Any new model-backed agent or AI routine must be covered by the Lessons Repository. Prefer **`createAgentRoute`** for manual SSE agents and **`AgentScheduler`** for scheduled agents; those platform paths create under-review lesson proposals automatically after successful runs. If you add a custom route or direct provider call that bypasses those paths, add a fire-and-forget **`proposeLessonFromRun({ agentId, organisationId, runId, summary })`** call after the successful result is saved or returned.
+
+Update **`LESSON_COVERAGE_SECTIONS`** in **`client/src/pages/admin/AdminLessonsPage.jsx`** whenever you add a new model-backed agent, scheduled routine, or custom direct-provider routine. Admin > Lessons & Rules exposes this through "View covered agents/routines"; treat it as the human-facing coverage register.
+
+Agent-proposed lessons must remain **`under-review`** until an admin activates them in Admin > Lessons & Rules. Do not inject proposed lessons into future runs automatically.
+
+---
+
 ## AI session setup — Caveman mode
 
 This project uses the **caveman Claude Code plugin** for AI-assisted development sessions. It reduces token usage ~75% by dropping articles, filler words, and pleasantries while preserving all technical substance.

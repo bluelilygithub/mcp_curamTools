@@ -22,7 +22,7 @@ createAgentRoute({ slug, runFn, requiredPermission })
 **Endpoints:**
 | Endpoint | Auth | Behaviour |
 |---|---|---|
-| `POST /run` | requireAuth + requireRole | Loads admin config, checks kill switch, streams SSE |
+| `POST /run` | requireAuth + requireRole | Loads admin config, checks kill switch, streams SSE, and submits an under-review Lessons Repository proposal after a successful persisted run |
 | `GET /history` | requireAuth | Returns last 20 `agent_runs` rows for this slug + org |
 
 **SSE result payload:** On successful completion, the final `{ type: 'result', data }` message’s `data` object includes **`runId`** (the UUID of the `agent_runs` row). Clients use it for immediate follow-up calls such as `PATCH /api/demo/runs/:runId/...`. **`runId` is not written into persisted `agent_runs.result` JSON** — only the streamed envelope carries it.
@@ -30,6 +30,8 @@ createAgentRoute({ slug, runFn, requiredPermission })
 **Budget integration:** Pre-flight daily budget check, mid-run accumulation via `emit(text, partialTokensUsed)`, post-run definitive check. `costAud` added to `resultPayload`.
 
 **Prompt lineage (additive):** If `runFn` resolves to an object that includes **`promptVersion`** (a short string), it is copied onto the persisted payload as **`result.prompt_version`** (truncated). Optional — see `server/platform/promptVersions.js` and `knowledge_base/core/PROMPT_VERSIONING.md`. Agents that omit it are unchanged.
+
+**Lessons coverage:** Every new model-backed agent or AI routine must be covered by the Lessons Repository. Use `createAgentRoute` for manual SSE agents and `AgentScheduler` for scheduled agents so write-back happens automatically. If a routine bypasses those paths with a custom route or direct provider call, add a local fire-and-forget `proposeLessonFromRun({ agentId, organisationId, runId, summary })` after the successful result is saved or returned. Agent-written lessons remain `under-review` until an admin activates them. Also update `LESSON_COVERAGE_SECTIONS` in `client/src/pages/admin/AdminLessonsPage.jsx`; the Admin > Lessons & Rules coverage link is the visible audit register of covered agents/routines.
 
 ---
 

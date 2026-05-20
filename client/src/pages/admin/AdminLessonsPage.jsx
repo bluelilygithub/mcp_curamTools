@@ -11,6 +11,61 @@ import { fmtDate, fmtDateTime } from '../../utils/date';
 const ALL = 'ALL';
 const STATUSES = ['active', 'disabled', 'under-review'];
 const PAGE_SIZE = 25;
+const LESSON_COVERAGE_SECTIONS = [
+  {
+    title: 'Automatic route-factory coverage',
+    note: 'All agents registered through createAgentRoute submit under-review lesson proposals after successful persisted runs. New createAgentRoute agents are presumed covered automatically; add their slug here when registering them.',
+    items: [
+      'ads-attribution-summary',
+      'ads-bounce-analysis',
+      'ads-copy-diagnostic',
+      'ads-copy-gate',
+      'ads-copy-playbook',
+      'ads-setup-architect',
+      'ai-visibility-monitor',
+      'auction-insights',
+      'competitor-keyword-intel',
+      'cost-per-booked-job',
+      'daypart-intelligence',
+      'demo-document-analyzer',
+      'demo-spec-validator',
+      'demo-tender-response',
+      'diamondplate-data',
+      'geo-heatmap',
+      'google-ads-change-audit',
+      'google-ads-change-impact',
+      'google-ads-freeform',
+      'google-ads-monitor',
+      'google-ads-strategic-review',
+      'high-intent-advisor',
+      'keyword-opportunity',
+      'lead-velocity',
+      'not-interested-report',
+      'search-term-intelligence',
+      'spec-validator',
+      'wp-theme-extractor',
+    ],
+  },
+  {
+    title: 'Scheduled coverage',
+    note: 'AgentScheduler submits lesson proposals for successful scheduled runs. Future scheduled agents inherit this when registered through AgentScheduler.',
+    items: ['ai-visibility-monitor', 'google-ads-monitor'],
+  },
+  {
+    title: 'Custom routine hooks',
+    note: 'These routines bypass createAgentRoute, so each has an explicit local proposeLessonFromRun hook.',
+    items: [
+      'doc-extractor',
+      'google-ads-conversation',
+      'media-gen',
+      'sql-console-nlp',
+      'demo-document-analyzer resubmit review',
+      'demo-document-analyzer follow-up Q&A',
+      'spec-validator follow-up Q&A',
+      'demo-spec-validator follow-up Q&A',
+    ],
+  },
+];
 
 const inputCls = 'w-full px-3 py-2.5 rounded-xl border text-sm outline-none';
 const inputStyle = { background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' };
@@ -262,6 +317,30 @@ function DetailView({ lesson, meta, onEdit }) {
   );
 }
 
+function CoverageView() {
+  return (
+    <div className="space-y-5">
+      <InlineBanner
+        type="info"
+        message="Coverage rule: every new model-backed agent or AI routine must be covered. Standard createAgentRoute and AgentScheduler paths are covered automatically; custom direct-provider routes need an explicit proposeLessonFromRun hook."
+      />
+      {LESSON_COVERAGE_SECTIONS.map((section) => (
+        <section key={section.title} className="rounded-xl border p-4" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)' }}>
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>{section.title}</h3>
+          <p className="text-xs mt-1 mb-3" style={{ color: 'var(--color-muted)' }}>{section.note}</p>
+          <div className="flex flex-wrap gap-2">
+            {section.items.map((item) => (
+              <span key={item} className="px-2 py-1 rounded-lg text-xs font-mono" style={{ background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}>
+                {item}
+              </span>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export default function AdminLessonsPage() {
   const [meta, setMeta] = useState({ agents: [], organisations: [], categories: [], canUseGlobalOrganisation: false });
   const [rows, setRows] = useState([]);
@@ -377,6 +456,10 @@ export default function AdminLessonsPage() {
           <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Lessons Repository</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>
             Persistent, auditable behavioural rules injected into matching agent runs.
+            {' '}
+            <button type="button" className="underline hover:opacity-70" style={{ color: 'var(--color-primary)' }} onClick={() => setModal({ type: 'coverage' })}>
+              View covered agents/routines
+            </button>
           </p>
         </div>
         <Button onClick={() => setModal({ type: 'new' })}>{getIcon('plus', { size: 14 })} New Lesson</Button>
@@ -507,9 +590,10 @@ export default function AdminLessonsPage() {
       <Modal
         open={Boolean(modal)}
         onClose={() => setModal(null)}
-        title={modal?.type === 'new' ? 'New Lesson' : modal?.type === 'edit' ? 'Edit Lesson' : 'Lesson Detail'}
+        title={modal?.type === 'new' ? 'New Lesson' : modal?.type === 'edit' ? 'Edit Lesson' : modal?.type === 'coverage' ? 'Lesson Coverage' : 'Lesson Detail'}
         maxWidth="max-w-4xl"
       >
+        {modal?.type === 'coverage' && <CoverageView />}
         {modal?.type === 'view' && <DetailView lesson={modal.lesson} meta={meta} onEdit={(lesson) => setModal({ type: 'edit', lesson })} />}
         {(modal?.type === 'new' || modal?.type === 'edit') && (
           <LessonForm

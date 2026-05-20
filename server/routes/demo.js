@@ -18,6 +18,7 @@ const { requireAuth } = require('../middleware/requireAuth');
 const { requireRole } = require('../middleware/requireRole');
 const { DEMO_CATALOG } = require('../demo/demoCatalog');
 const StorageService = require('../services/StorageService');
+const { proposeLessonFromRun } = require('../services/LessonRepositoryService');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -687,6 +688,13 @@ Return ONLY a JSON object — no markdown fences, no explanation:
       throw new Error('Model returned invalid JSON for resubmit assessments.');
     }
 
+    proposeLessonFromRun({
+      agentId:        'demo-document-analyzer',
+      organisationId: req.user.orgId,
+      runId:          req.params.runId,
+      summary:        `Reviewer resubmitted ${flaggedFindings.length} document finding(s). Model returned ${parsed.assessments?.length ?? 0} revised assessment(s).`,
+    }).catch((err) => console.warn('[demo/resubmit] lesson proposal skipped:', err.message));
+
     res.json({ findings: parsed.assessments ?? [], model });
   } catch (err) {
     console.error('[demo/resubmit]', err.message);
@@ -842,6 +850,13 @@ If this question is about the document above, answer it directly using the conte
         req.user.orgId,
       ]
     ).catch((err) => console.error('[demo/follow-up] persist error:', err.message));
+
+    proposeLessonFromRun({
+      agentId:        configSlug,
+      organisationId: req.user.orgId,
+      runId:          req.params.runId,
+      summary:        `Follow-up question: ${question.trim()}\nAnswer: ${textBlock.text}`,
+    }).catch((err) => console.warn('[demo/follow-up] lesson proposal skipped:', err.message));
 
     res.json({
       answer: textBlock.text,

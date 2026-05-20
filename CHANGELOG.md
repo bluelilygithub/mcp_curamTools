@@ -26,10 +26,14 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - **Runtime integration:** `AgentOrchestrator` now appends active matching lessons to the system prompt once per run via `loadLessonsForAgent(toolSlug, orgId)`.
 - **Admin UI:** Added Admin › Lessons Repository with filters, sortable table, create/edit modal, status toggles, soft-delete confirmation, read-only detail, and audit history with content diff view.
 - **Reflection write-back:** Completed SSE and scheduled agent runs now create under-review `agent-reflection` drafts for admin review; they are never injected into future runs until activated.
+- **Custom routine coverage:** Added review-only lesson proposals for custom execution paths that bypass `createAgentRoute`: Google Ads conversation turns, Doc Extractor, Media Gen, and SQL Console NLP.
+- **Docs:** Updated platform and new-agent documentation to state that every new model-backed agent or AI routine must be covered by Lessons Repository write-back.
+- **Coverage register:** Admin > Lessons & Rules now links to a covered agents/routines list; docs require `LESSON_COVERAGE_SECTIONS` to be updated whenever a new model-backed routine is added.
 
 ### Fixed / discovered
 - Client build initially failed because `react-is` was declared in `client/package.json` but absent from `client/package-lock.json` / `node_modules`; `npm install` restored it and the Vite build now passes.
 - Initial repository implementation exposed `proposeLesson()` but did not call it from normal agent completion paths, so running agents did not populate the Lessons view.
+- Doc Extractor and other custom routes bypassed the platform route factory, so they needed explicit write-back hooks.
 
 ### Open / next
 - Non-`AgentOrchestrator` agents can call `loadLessonsForAgent()` directly when they need lesson injection in custom multi-stage flows.

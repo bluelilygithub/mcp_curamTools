@@ -23,6 +23,7 @@ const express = require('express');
 const multer  = require('multer');
 const { pool } = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
+const { proposeLessonFromRun } = require('../services/LessonRepositoryService');
 
 const router = express.Router();
 
@@ -482,6 +483,13 @@ router.post(
          WHERE id=$2`,
         [JSON.stringify(result), runId, costUsd],
       );
+
+      proposeLessonFromRun({
+        agentId:        'media-gen',
+        organisationId: orgId,
+        runId,
+        summary:        `Media generation completed. Model: ${model}. Output type: ${outType}. Prompt: ${prompt.slice(0, 500)}`,
+      }).catch((err) => console.warn('[media-gen] lesson proposal skipped:', err.message));
 
       sseWrite(res, { type: 'complete', result, runId, outputType: outType, costUsd });
 

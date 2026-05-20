@@ -22,6 +22,7 @@ const { grantRole, revokeRole, getUserRoles } = require('../services/PermissionS
 const { createInvitation, resendInvitation } = require('../services/InvitationService');
 const AgentConfigService = require('../platform/AgentConfigService');
 const EmailTemplateService = require('../services/EmailTemplateService');
+const { proposeLessonFromRun } = require('../services/LessonRepositoryService');
 
 const router = express.Router();
 router.use(requireAuth, requireRole(['org_admin']));
@@ -1112,6 +1113,13 @@ router.post('/sql/nlp', async (req, res) => {
     } catch (answerErr) {
       console.warn(`[SQL Console NLP] Answer generation failed (${modelDef.id}):`, answerErr.message);
     }
+
+    proposeLessonFromRun({
+      agentId:        'sql-console-nlp',
+      organisationId: req.user.orgId,
+      runId:          null,
+      summary:        `Question: ${question}\nGenerated SQL: ${generatedSql}\nRows returned: ${data.rows?.length ?? 0}${answer ? `\nAnswer: ${answer}` : ''}`,
+    }).catch((e) => console.warn('[SQL Console NLP] lesson proposal skipped:', e.message));
 
     res.json({ ...data, generatedSql, modelId: modelDef.id, tokensUsed, costAud, answer });
   } catch (err) {
