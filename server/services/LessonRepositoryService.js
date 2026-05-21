@@ -9,11 +9,13 @@
  * - active lessons only are injected into runtime prompts
  */
 const { pool } = require('../db');
+const { scanInjection, sanitiseText } = require('../utils/sanitize');
 
 const ALL = 'ALL';
 const STATUSES = new Set(['active', 'disabled', 'under-review']);
 const TITLE_MAX = 120;
 const CONTENT_WARN = 2000;
+const COMMENT_MAX = 2000;
 
 function isSuperAdmin(user) {
   return user?.orgType === 'internal';
@@ -386,6 +388,34 @@ async function updateLesson(id, input, user) {
   return toApi(rows[0]);
 }
 
+async function addLessonComment(id, input, user) {
+  const existing = await getLesson(id, user);
+  if (!existing) return null;
+
+  const comment = sanitiseText(input?.comment);
+  if (!comment) throw new Error('Comment is required.');
+  if (comment.length > COMMENT_MAX) throw new Error(`Comment must be ${COMMENT_MAX} characters or fewer.`);
+  if (!scanInjection(comment).clean) throw new Error('Comment rejected because it contains prompt-injection language.');
+
+  const entry = auditEntry({
+    editedBy:      actorLabel(user),
+    field:         'comment',
+    previousValue: null,
+    newValue:      comment,
+    reason:        'review comment',
+  });
+
+  const { rows } = await pool.query(
+    `UPDATE agent_lessons
+        SET audit_log = audit_log || $2::jsonb,
+            updated_at = NOW()
+      WHERE id = $1
+      RETURNING *`,
+    [id, JSON.stringify([entry])]
+  );
+  return toApi(rows[0]);
+}
+
 async function deleteLesson(id, user, reason = null) {
   const existing = await getLesson(id, user);
   if (!existing) return false;
@@ -534,6 +564,7 @@ module.exports = {
   getLesson,
   createLesson,
   updateLesson,
+  addLessonComment,
   deleteLesson,
   listCategories,
   loadLessonsForAgent,

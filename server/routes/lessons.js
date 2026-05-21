@@ -112,6 +112,16 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+router.post('/:id/comments', async (req, res) => {
+  try {
+    const lesson = await Lessons.addLessonComment(req.params.id, req.body, req.user);
+    if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
+    res.json(lesson);
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Failed to add comment.' });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   try {
     const ok = await Lessons.deleteLesson(req.params.id, req.user, req.body?.reason);

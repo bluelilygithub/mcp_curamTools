@@ -30,12 +30,14 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - **Docs:** Updated platform and new-agent documentation to state that every new model-backed agent or AI routine must be covered by Lessons Repository write-back.
 - **Coverage register:** Admin > Lessons & Rules now links to a covered agents/routines list; docs require `LESSON_COVERAGE_SECTIONS` to be updated whenever a new model-backed routine is added.
 - **Lesson quality guard:** `proposeLessonFromRun` now rejects plain operational telemetry unless an explicit reusable lesson/pattern is present; clean Doc Extractor successes remain in run logs only.
+- **Lesson review comments:** Admins can now add sanitised, append-only review comments to a lesson without editing the agent-proposed observation; the UI reuses the app's microphone input pattern.
 
 ### Fixed / discovered
 - Client build initially failed because `react-is` was declared in `client/package.json` but absent from `client/package-lock.json` / `node_modules`; `npm install` restored it and the Vite build now passes.
 - Initial repository implementation exposed `proposeLesson()` but did not call it from normal agent completion paths, so running agents did not populate the Lessons view.
 - Doc Extractor and other custom routes bypassed the platform route factory, so they needed explicit write-back hooks.
 - First Doc Extractor proposals looked like run logs (`file extracted N fields`) rather than future-facing lessons; write-back is now selective so Lessons remains a pattern/learning trail.
+- Lesson review previously forced admins toward editing the lesson content when they only wanted to add context; comments now live as audit entries.
 
 ### Open / next
 - Non-`AgentOrchestrator` agents can call `loadLessonsForAgent()` directly when they need lesson injection in custom multi-stage flows.

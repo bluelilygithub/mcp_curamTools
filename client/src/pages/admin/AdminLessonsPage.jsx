@@ -4,6 +4,7 @@ import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import InlineBanner from '../../components/ui/InlineBanner';
 import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
+import MicButton from '../../components/ui/MicButton';
 import { useToast } from '../../components/ui/Toast';
 import { useIcon } from '../../providers/IconProvider';
 import { fmtDate, fmtDateTime } from '../../utils/date';
@@ -250,6 +251,7 @@ function AuditEntry({ entry }) {
   const isCreated = entry.field_changed === 'created';
   const isAgent = String(entry.edited_by ?? '').includes('-') && entry.reason === 'agent reflection';
   const contentDiff = entry.field_changed === 'content';
+  const isComment = entry.field_changed === 'comment';
   return (
     <div className="rounded-xl border p-3 space-y-2" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)' }}>
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -257,10 +259,14 @@ function AuditEntry({ entry }) {
           <strong style={{ color: 'var(--color-text)' }}>{entry.field_changed}</strong> by {entry.edited_by} on {fmtDateTime(entry.edited_at)}
         </div>
         <span className="px-2 py-0.5 rounded-full text-xs" style={isAgent ? { background: '#fffbeb', color: '#92400e' } : { background: 'var(--color-surface)', color: 'var(--color-muted)' }}>
-          {isCreated ? 'created' : isAgent ? 'agent-proposed' : 'admin edit'}
+          {isCreated ? 'created' : isAgent ? 'agent-proposed' : isComment ? 'review comment' : 'admin edit'}
         </span>
       </div>
-      {contentDiff ? (
+      {isComment ? (
+        <div className="rounded-lg border p-2 text-sm" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
+          <MarkdownRenderer text={entry.new_value || ''} />
+        </div>
+      ) : contentDiff ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
           <div className="rounded-lg border p-2" style={{ borderColor: '#fca5a5', color: '#991b1b', whiteSpace: 'pre-wrap' }}>
             <p className="font-semibold mb-1">Previous</p>
@@ -281,7 +287,64 @@ function AuditEntry({ entry }) {
   );
 }
 
-function DetailView({ lesson, meta, onEdit }) {
+function LessonCommentForm({ lessonId, onSaved }) {
+  const [comment, setComment] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(e) {
+    e.preventDefault();
+    setError('');
+    const value = comment.trim();
+    if (!value) return setError('Comment is required.');
+    if (value.length > 2000) return setError('Comment must be 2000 characters or fewer.');
+    setSaving(true);
+    try {
+      const lesson = await api.post(`/lessons/${lessonId}/comments`, { comment: value });
+      setComment('');
+      onSaved(lesson);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-xl border p-4 space-y-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)' }}>
+      <div>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Review Comment</h3>
+        <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+          Add admin review context without changing the agent observation. Comments are sanitised and appended to audit history.
+        </p>
+      </div>
+      {error && <InlineBanner type="error" message={error} onDismiss={() => setError('')} />}
+      <div className="relative">
+        <textarea
+          value={comment}
+          onChange={(e) => { setComment(e.target.value); setError(''); }}
+          rows={4}
+          maxLength={2000}
+          className={`${inputCls} resize-y pr-12`}
+          style={inputStyle}
+          placeholder="Add review notes, decision context, or follow-up instructions..."
+        />
+        <div className="absolute top-2 right-2">
+          <MicButton
+            onResult={(text) => setComment((prev) => `${prev}${prev ? ' ' : ''}${text}`.slice(0, 2000))}
+            size={16}
+          />
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs" style={{ color: 'var(--color-muted)' }}>{comment.length}/2000</span>
+        <Button type="submit" disabled={saving || !comment.trim()}>{saving ? 'Adding...' : 'Add Comment'}</Button>
+      </div>
+    </form>
+  );
+}
+
+function DetailView({ lesson, meta, onEdit, onCommentSaved }) {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2 flex-wrap">
@@ -308,6 +371,8 @@ function DetailView({ lesson, meta, onEdit }) {
       <div className="flex justify-end">
         <Button variant="secondary" onClick={() => onEdit(lesson)}>Edit</Button>
       </div>
+
+      <LessonCommentForm lessonId={lesson.id} onSaved={onCommentSaved} />
 
       <section className="space-y-3">
         <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>Audit History</h3>
@@ -599,7 +664,18 @@ export default function AdminLessonsPage() {
         maxWidth="max-w-4xl"
       >
         {modal?.type === 'coverage' && <CoverageView />}
-        {modal?.type === 'view' && <DetailView lesson={modal.lesson} meta={meta} onEdit={(lesson) => setModal({ type: 'edit', lesson })} />}
+        {modal?.type === 'view' && (
+          <DetailView
+            lesson={modal.lesson}
+            meta={meta}
+            onEdit={(lesson) => setModal({ type: 'edit', lesson })}
+            onCommentSaved={(lesson) => {
+              setModal({ type: 'view', lesson });
+              showToast('Comment added.', 'success');
+              loadRows(offset);
+            }}
+          />
+        )}
         {(modal?.type === 'new' || modal?.type === 'edit') && (
           <LessonForm
             initial={modal.type === 'edit' ? modal.lesson : null}
