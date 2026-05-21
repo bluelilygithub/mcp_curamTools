@@ -344,7 +344,7 @@ function LessonCommentForm({ lessonId, onSaved }) {
   );
 }
 
-function DetailView({ lesson, meta, onEdit, onCommentSaved }) {
+function DetailView({ lesson, meta, onCommentSaved }) {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2 flex-wrap">
@@ -367,10 +367,6 @@ function DetailView({ lesson, meta, onEdit, onCommentSaved }) {
         <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text)' }}>{lesson.title}</h3>
         <MarkdownRenderer text={lesson.content} />
       </section>
-
-      <div className="flex justify-end">
-        <Button variant="secondary" onClick={() => onEdit(lesson)}>Edit</Button>
-      </div>
 
       <LessonCommentForm lessonId={lesson.id} onSaved={onCommentSaved} />
 
@@ -637,7 +633,6 @@ export default function AdminLessonsPage() {
                     ) : (
                       <div className="flex items-center gap-1">
                         <Button variant="icon" title="View" onClick={() => openView(row)}>{getIcon('eye', { size: 14 })}</Button>
-                        <Button variant="icon" title="Edit" onClick={() => setModal({ type: 'edit', lesson: row })}>{getIcon('edit', { size: 14 })}</Button>
                         <Button variant="icon" title={row.status === 'active' ? 'Disable' : 'Enable'} onClick={() => toggleStatus(row)}>{getIcon(row.status === 'active' ? 'eye-off' : 'check', { size: 14 })}</Button>
                         <Button variant="icon" title="Delete" onClick={() => setDeleteId(row.id)}>{getIcon('trash', { size: 14 })}</Button>
                       </div>
@@ -668,7 +663,6 @@ export default function AdminLessonsPage() {
           <DetailView
             lesson={modal.lesson}
             meta={meta}
-            onEdit={(lesson) => setModal({ type: 'edit', lesson })}
             onCommentSaved={(lesson) => {
               setModal({ type: 'view', lesson });
               showToast('Comment added.', 'success');

@@ -31,7 +31,7 @@ const { pool }                = require('../db');
 const { runDocExtraction }    = require('../agents/docExtractor');
 const { canUseModel, isOrgAdmin } = require('../services/PermissionService');
 const { logUsage }            = require('../services/UsageLogger');
-const { proposeLessonFromRun } = require('../services/LessonRepositoryService');
+const { loadLessonsForAgent, proposeLessonFromRun } = require('../services/LessonRepositoryService');
 const { computeCostAud, getDailyOrgSpendAud, check: checkBudget, BudgetExceededError } = require('../services/CostGuardService');
 const { requireRole }         = require('../middleware/requireRole');
 const AgentConfigService      = require('../platform/AgentConfigService');
@@ -185,6 +185,11 @@ router.post(
     const batchLabel   = (req.body.label        || '').trim().slice(0, MAX_LABEL_LEN)        || null;
     const purpose      = (req.body.purpose       || '').trim().slice(0, MAX_PURPOSE_LEN)      || null;
     const instructions = (req.body.instructions  || '').trim().slice(0, MAX_INSTRUCTIONS_LEN) || null;
+    const runtimePromptContext = await loadLessonsForAgent('doc-extractor', orgId)
+      .catch((err) => {
+        console.warn('[doc-extractor] lessons load skipped:', err.message);
+        return '';
+      });
 
     // ── Process each file ─────────────────────────────────────────────────
     const results = [];
@@ -222,6 +227,7 @@ router.post(
           model,
           maxTokens:    adminConfig.max_tokens ?? 4096,
           instructions,
+          runtimePromptContext,
           maxPdfPages:  adminConfig.max_pdf_pages ?? 10,
           pdfDpi:       adminConfig.pdf_dpi       ?? 150,
           customProviders,

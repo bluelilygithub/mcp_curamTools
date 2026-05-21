@@ -190,9 +190,10 @@ async function convertPdfToImages(pdfBuffer, maxPages = DEFAULT_MAX_PDF_PAGES, d
  * @param {number} params.maxTokens
  * @param {string} [params.pageContext]   e.g. "page 2 of 4"
  * @param {string} [params.instructions]  Optional user-supplied focus instructions
+ * @param {string} [params.runtimePromptContext] Active Lessons Repository guidance
  * @returns {Promise<{ document_type, fields, tokensUsed }>}
  */
-async function extractFromImage({ imageBuffer, mimeType, model, maxTokens, pageContext, instructions, customProviders = [] }) {
+async function extractFromImage({ imageBuffer, mimeType, model, maxTokens, pageContext, instructions, runtimePromptContext, customProviders = [] }) {
   const base64 = imageBuffer.toString('base64');
 
   let userText = pageContext
@@ -211,7 +212,7 @@ async function extractFromImage({ imageBuffer, mimeType, model, maxTokens, pageC
   const response = await provider.chat({
     model,
     max_tokens: maxTokens,
-    system: EXTRACTION_PROMPT,
+    system: [EXTRACTION_PROMPT, runtimePromptContext].filter(Boolean).join('\n\n'),
     messages: [
       {
         role: 'user',
@@ -373,11 +374,12 @@ function mergePageResults(pageResults, model) {
  * @param {string} [params.model]
  * @param {number} [params.maxTokens]
  * @param {string} [params.instructions]  Optional user-supplied focus instructions
+ * @param {string} [params.runtimePromptContext] Active Lessons Repository guidance
  * @param {number} [params.maxPdfPages]   Max pages to rasterise per PDF (admin-configurable)
  * @param {number} [params.pdfDpi]        Rasterisation DPI: 100 | 150 | 200 (admin-configurable)
  * @returns {Promise<{ document_type, fields, page_count, model, tokensUsed }>}
  */
-async function runDocExtraction({ imageBuffer, mimeType, model = 'claude-sonnet-4-6', maxTokens = 4096, instructions, maxPdfPages = DEFAULT_MAX_PDF_PAGES, pdfDpi = DEFAULT_PDF_DPI, customProviders = [] }) {
+async function runDocExtraction({ imageBuffer, mimeType, model = 'claude-sonnet-4-6', maxTokens = 4096, instructions, runtimePromptContext, maxPdfPages = DEFAULT_MAX_PDF_PAGES, pdfDpi = DEFAULT_PDF_DPI, customProviders = [] }) {
   if (mimeType === 'application/pdf') {
     const pageBuffers = await convertPdfToImages(imageBuffer, maxPdfPages, pdfDpi);
     const total = pageBuffers.length;
@@ -392,6 +394,7 @@ async function runDocExtraction({ imageBuffer, mimeType, model = 'claude-sonnet-
         customProviders,
         pageContext:  total > 1 ? `page ${idx + 1} of ${total}` : null,
         instructions: idx === 0 ? instructions : null,
+        runtimePromptContext,
       }),
       PDF_PAGE_CONCURRENCY
     );
@@ -400,7 +403,7 @@ async function runDocExtraction({ imageBuffer, mimeType, model = 'claude-sonnet-
   }
 
   // Single image
-  const result = await extractFromImage({ imageBuffer, mimeType, model, maxTokens, instructions, customProviders });
+  const result = await extractFromImage({ imageBuffer, mimeType, model, maxTokens, instructions, runtimePromptContext, customProviders });
   return {
     ...result,
     page_count:       1,
