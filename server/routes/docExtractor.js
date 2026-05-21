@@ -63,11 +63,12 @@ function cleanText(value) {
 
 function buildDocExtractorLesson({ documentType, fieldCount, qualityReason }) {
   const normalizedType = cleanText(documentType) || 'unknown';
+  const normalizedTypeKey = normalizedType.toLowerCase();
   const reason = cleanText(qualityReason);
   const lower = reason.toLowerCase();
   const patterns = [];
 
-  if (normalizedType === 'unknown') {
+  if (normalizedTypeKey === 'unknown') {
     patterns.push('The document could not be confidently classified, so extraction strategy and field mapping may be unreliable.');
   }
   if (fieldCount < 3) {
@@ -295,15 +296,19 @@ router.post(
         const fieldCount = result.fields?.length ?? 0;
         const qualityReason = result.quality_advisory?.flag ? (result.quality_advisory.reason ?? 'quality advisory flagged') : '';
         const lesson = buildDocExtractorLesson({ documentType, fieldCount, qualityReason });
+        let lessonProposal = { status: 'skipped', reason: 'No reusable extraction-quality signal detected.' };
         if (lesson) {
-          proposeLessonFromRun({
+          const lessonId = await proposeLessonFromRun({
             agentId:        'doc-extractor',
             organisationId: orgId,
             runId,
             category:       lesson.category,
             title:          lesson.title,
             lesson:         lesson.content,
-          }).catch((err) => console.warn('[doc-extractor] lesson proposal skipped:', err.message));
+          });
+          lessonProposal = lessonId
+            ? { status: 'created', lessonId }
+            : { status: 'skipped', reason: 'Lesson candidate was filtered by the Lessons Repository service.' };
         }
 
         logUsage({
@@ -315,7 +320,7 @@ router.post(
           costAud,
         }).catch((err) => console.error('[doc-extractor] logUsage failed:', err.message));
 
-        results.push({ runId, filename: originalname, label, result });
+        results.push({ runId, filename: originalname, label, result, lessonProposal });
 
       } catch (err) {
         const isBudget = err instanceof BudgetExceededError;

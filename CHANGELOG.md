@@ -33,6 +33,7 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - **Lesson review comments:** Admins can now add sanitised, append-only review comments to a lesson without editing the agent-proposed observation; the UI reuses the app's microphone input pattern.
 - **Doc Extractor runtime lessons:** Active `doc-extractor` lessons are now loaded into the extraction prompt before each run, so approved extraction-quality guidance can be followed on subsequent runs.
 - **Lesson review UI:** Removed existing lesson edit controls from the Lessons page so review comments do not require modifying the agent-generated observation.
+- **Doc Extractor lesson diagnostics:** Lesson proposals are now awaited and returned per file as `lessonProposal`, making created vs skipped proposals visible instead of relying on background logs.
 
 ### Fixed / discovered
 - Client build initially failed because `react-is` was declared in `client/package.json` but absent from `client/package-lock.json` / `node_modules`; `npm install` restored it and the Vite build now passes.
