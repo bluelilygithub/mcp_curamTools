@@ -531,20 +531,62 @@ async function proposeLesson(agentId, organisationId, category, title, content) 
   return rows[0].id;
 }
 
-async function proposeLessonFromRun({ agentId, organisationId, runId, summary, lesson, content, category, title }) {
+async function findExistingLessonCandidate({ agentId, organisationId, category, title }) {
+  const orgId = parseInt(organisationId, 10);
+  if (!Number.isInteger(orgId)) return null;
+
+  const { rows } = await pool.query(
+    `SELECT id, status, updated_at
+       FROM agent_lessons
+      WHERE agent_id = $1
+        AND org_id = $2
+        AND category = $3
+        AND title = $4
+        AND status IN ('under-review', 'active')
+        AND deleted_at IS NULL
+      ORDER BY updated_at DESC
+      LIMIT 1`,
+    [agentId, orgId, category, title]
+  );
+  return rows[0] ?? null;
+}
+
+async function proposeLessonFromRun({ agentId, organisationId, runId, summary, lesson, content, category, title, returnDetails = false }) {
   const explicitLesson = cleanText(
     typeof lesson === 'string'
       ? lesson
       : lesson?.content ?? content ?? extractExplicitLesson(summary)
   );
-  if (!explicitLesson || explicitLesson.length < 30 || isOperationalTelemetry(explicitLesson)) return null;
+  if (!explicitLesson) {
+    return returnDetails ? { status: 'skipped', reason: 'No explicit reusable lesson was provided.' } : null;
+  }
+  if (explicitLesson.length < 30) {
+    return returnDetails ? { status: 'skipped', reason: 'Lesson candidate was too short to be useful.' } : null;
+  }
+  if (isOperationalTelemetry(explicitLesson)) {
+    return returnDetails ? { status: 'skipped', reason: 'Lesson candidate looked like operational telemetry.' } : null;
+  }
 
   const excerpt = explicitLesson.length > 1600 ? `${explicitLesson.slice(0, 1600).trim()}...` : explicitLesson;
-  return proposeLesson(
+  const finalCategory = cleanText(category ?? lesson?.category ?? 'agent-reflection').toLowerCase();
+  const finalTitle = cleanText(title ?? lesson?.title ?? titleFromLesson(agentId, excerpt));
+  const existing = await findExistingLessonCandidate({
     agentId,
     organisationId,
-    category ?? lesson?.category ?? 'agent-reflection',
-    title ?? lesson?.title ?? titleFromLesson(agentId, excerpt),
+    category: finalCategory,
+    title: finalTitle,
+  });
+  if (existing) {
+    return returnDetails
+      ? { status: 'duplicate', lessonId: existing.id, existingStatus: existing.status }
+      : existing.id;
+  }
+
+  const lessonId = await proposeLesson(
+    agentId,
+    organisationId,
+    finalCategory,
+    finalTitle,
     [
       'Agent-generated lesson candidate. Review and edit before activating.',
       '',
@@ -554,6 +596,7 @@ async function proposeLessonFromRun({ agentId, organisationId, runId, summary, l
       excerpt,
     ].join('\n')
   );
+  return returnDetails ? { status: 'created', lessonId } : lessonId;
 }
 
 module.exports = {

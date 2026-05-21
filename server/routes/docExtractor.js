@@ -298,18 +298,28 @@ router.post(
         const lesson = buildDocExtractorLesson({ documentType, fieldCount, qualityReason });
         let lessonProposal = { status: 'skipped', reason: 'No reusable extraction-quality signal detected.' };
         if (lesson) {
-          const lessonId = await proposeLessonFromRun({
-            agentId:        'doc-extractor',
-            organisationId: orgId,
-            runId,
-            category:       lesson.category,
-            title:          lesson.title,
-            lesson:         lesson.content,
-          });
-          lessonProposal = lessonId
-            ? { status: 'created', lessonId }
-            : { status: 'skipped', reason: 'Lesson candidate was filtered by the Lessons Repository service.' };
+          try {
+            lessonProposal = await proposeLessonFromRun({
+              agentId:        'doc-extractor',
+              organisationId: orgId,
+              runId,
+              category:       lesson.category,
+              title:          lesson.title,
+              lesson:         lesson.content,
+              returnDetails:  true,
+            });
+          } catch (err) {
+            lessonProposal = { status: 'error', reason: err.message };
+            console.warn('[doc-extractor] lesson proposal failed:', err.message);
+          }
         }
+        result.lesson_proposal = lessonProposal;
+        await pool.query(
+          `UPDATE doc_extraction_runs
+              SET result = $1
+            WHERE id = $2`,
+          [JSON.stringify(result), runId]
+        );
 
         logUsage({
           orgId, userId, slug: 'doc-extractor', modelId: model,

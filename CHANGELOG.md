@@ -34,6 +34,7 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - **Doc Extractor runtime lessons:** Active `doc-extractor` lessons are now loaded into the extraction prompt before each run, so approved extraction-quality guidance can be followed on subsequent runs.
 - **Lesson review UI:** Removed existing lesson edit controls from the Lessons page so review comments do not require modifying the agent-generated observation.
 - **Doc Extractor lesson diagnostics:** Lesson proposals are now awaited and returned per file as `lessonProposal`, making created vs skipped proposals visible instead of relying on background logs.
+- **Lesson de-duplication:** Repeated lesson candidates with the same agent/org/category/title now report `duplicate` instead of creating multiple under-review rows.
 
 ### Fixed / discovered
 - Client build initially failed because `react-is` was declared in `client/package.json` but absent from `client/package-lock.json` / `node_modules`; `npm install` restored it and the Vite build now passes.
@@ -42,6 +43,7 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - First Doc Extractor proposals looked like run logs (`file extracted N fields`) rather than future-facing lessons; write-back is now selective so Lessons remains a pattern/learning trail.
 - Lesson review previously forced admins toward editing the lesson content when they only wanted to add context; comments now live as audit entries.
 - Doc Extractor had write-back coverage but was not yet loading active lessons at runtime; approved lessons now feed back into extraction.
+- Skipped lesson proposals were only visible in the immediate response; Doc Extractor now persists `result.lesson_proposal` into the run record for auditability.
 
 ### Open / next
 - Non-`AgentOrchestrator` agents can call `loadLessonsForAgent()` directly when they need lesson injection in custom multi-stage flows.
