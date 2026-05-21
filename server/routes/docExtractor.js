@@ -294,7 +294,9 @@ router.post(
             agentId:        'doc-extractor',
             organisationId: orgId,
             runId,
-            ...lesson,
+            category:       lesson.category,
+            title:          lesson.title,
+            lesson:         lesson.content,
           }).catch((err) => console.warn('[doc-extractor] lesson proposal skipped:', err.message));
         }
 

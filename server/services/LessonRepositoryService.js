@@ -501,11 +501,11 @@ async function proposeLesson(agentId, organisationId, category, title, content) 
   return rows[0].id;
 }
 
-async function proposeLessonFromRun({ agentId, organisationId, runId, summary, lesson, category, title }) {
+async function proposeLessonFromRun({ agentId, organisationId, runId, summary, lesson, content, category, title }) {
   const explicitLesson = cleanText(
     typeof lesson === 'string'
       ? lesson
-      : lesson?.content ?? extractExplicitLesson(summary)
+      : lesson?.content ?? content ?? extractExplicitLesson(summary)
   );
   if (!explicitLesson || explicitLesson.length < 30 || isOperationalTelemetry(explicitLesson)) return null;
 
