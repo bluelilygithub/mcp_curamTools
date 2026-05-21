@@ -447,6 +447,7 @@ router.get('/runs', requireAuth, async (req, res) => {
               END AS status,
               -- field_count only — full result fetched separately via GET /runs/:runId
               COALESCE(jsonb_array_length(result->'fields'), 0) AS field_count,
+              result->'lesson_proposal' AS lesson_proposal,
               error, created_at, completed_at, deleted_at, user_id
          FROM doc_extraction_runs
         WHERE org_id = $1 ${where}

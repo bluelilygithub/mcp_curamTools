@@ -588,6 +588,7 @@ export default function DocExtractorPage() {
                 <Th>Label / File</Th>
                 <Th>Purpose</Th>
                 <Th>Status</Th>
+                <Th>Lesson</Th>
                 <Th>Fields</Th>
                 <Th>Date</Th>
                 <Th style={{ width: 130 }} />
@@ -623,6 +624,7 @@ export default function DocExtractorPage() {
                     </span>
                   </Td>
                   <Td><StatusBadge status={row.status} /></Td>
+                  <Td><LessonProposalBadge proposal={row.lesson_proposal} /></Td>
                   <Td>
                     {row.status === 'completed'
                       ? (row.field_count ?? 0)
@@ -1191,6 +1193,27 @@ function LessonProposalBanner({ proposal }) {
         )}
       </div>
     </div>
+  );
+}
+
+function LessonProposalBadge({ proposal }) {
+  if (!proposal) return <span className="text-xs" style={{ color: 'var(--color-muted)' }}>—</span>;
+
+  const styles = {
+    created:   { bg: 'rgba(var(--color-primary-rgb), 0.10)', fg: 'var(--color-primary)', label: 'created' },
+    duplicate: { bg: '#eff6ff', fg: '#1d4ed8', label: 'duplicate' },
+    skipped:   { bg: 'var(--color-bg)', fg: 'var(--color-muted)', label: 'skipped' },
+    error:     { bg: '#fef2f2', fg: '#991b1b', label: 'error' },
+  }[proposal.status] ?? { bg: 'var(--color-bg)', fg: 'var(--color-muted)', label: proposal.status ?? 'unknown' };
+
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-xs"
+      title={proposal.reason ?? proposal.lessonId ?? proposal.status}
+      style={{ background: styles.bg, color: styles.fg, border: '1px solid var(--color-border)' }}
+    >
+      {styles.label}
+    </span>
   );
 }
 
