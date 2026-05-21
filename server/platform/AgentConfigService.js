@@ -593,6 +593,41 @@ async function updateOrgFallbackModel(orgId, modelId, updatedBy) {
   return modelId;
 }
 
+
+// ── Org-level lesson AI model (system_settings key: 'lesson_model') ─────────
+// Used for AI-powered lesson revision and refinement in Admin > Lessons & Rules.
+
+async function getOrgLessonModel(orgId) {
+  try {
+    let res = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'lesson_model' LIMIT 1`,
+      [orgId]
+    );
+    // If the org hasn't set a lesson model, fallback to the global admin org (org 1)
+    if (res.rows.length === 0 && orgId !== 1) {
+      res = await pool.query(
+        `SELECT value FROM system_settings WHERE org_id = 1 AND key = 'lesson_model' LIMIT 1`
+      );
+    }
+    return res.rows[0]?.value?.model_id ?? null;
+  } catch (err) {
+    console.error('[AgentConfigService] getOrgLessonModel error:', err.message);
+    return null;
+  }
+}
+
+async function updateOrgLessonModel(orgId, modelId, updatedBy) {
+  await pool.query(
+    `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+     VALUES ($1, 'lesson_model', $2, $3, NOW())
+     ON CONFLICT (org_id, key)
+     DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+    [orgId, JSON.stringify({ model_id: modelId }), updatedBy]
+  );
+  return modelId;
+}
+
+
 // ── Org-level company profile (system_settings key: 'company_profile') ──────
 
 
@@ -943,6 +978,8 @@ module.exports = {
   updateOrgDefaultModel,
   getOrgFallbackModel,
   updateOrgFallbackModel,
+  getOrgLessonModel,
+  updateOrgLessonModel,
   getCompanyProfile,
   updateCompanyProfile,
   getAgentConfig,

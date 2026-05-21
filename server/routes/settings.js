@@ -125,6 +125,28 @@ router.put('/fallback-model', async (req, res) => {
   }
 });
 
+// ── Lesson AI model ─────────────────────────────────────────────────────────
+
+router.get('/lesson-model', async (req, res) => {
+  try {
+    const modelId = await AgentConfigService.getOrgLessonModel(req.user.orgId);
+    res.json({ model_id: modelId });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load lesson model.' });
+  }
+});
+
+router.put('/lesson-model', async (req, res) => {
+  try {
+    const modelId = req.body.model_id ?? null;
+    await AgentConfigService.updateOrgLessonModel(req.user.orgId, modelId, req.user.id);
+    res.json({ model_id: modelId });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update lesson model.' });
+  }
+});
+
+
 // ── Model test ──────────────────────────────────────────────────────────────
 
 /** @private https.request wrapper returning { status, body } */

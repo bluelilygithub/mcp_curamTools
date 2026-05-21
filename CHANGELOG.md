@@ -18,6 +18,26 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-22 — Lesson AI Revision Cycle + Lesson Model Setting
+
+### Built
+- **Lesson AI model setting:** Added `getOrgLessonModel` / `updateOrgLessonModel` to `AgentConfigService`, stored in `system_settings` under key `lesson_model`. Follows the same pattern as `default_model` and `fallback_model` with org admin fallback.
+- **Settings API:** Added `GET/PUT /api/settings/lesson-model` endpoints in `settings.js` for reading and updating the lesson AI model selection.
+- **Settings UI:** Added "Lesson AI model" selector (fourth column) to the Default & Fallback Models grid in `ModelsTab.jsx`, with inactive-model warning and "lesson" badge on model list entries.
+- **AI revision endpoint:** Added `POST /api/lessons/:id/revise` — takes a human prompt, calls the configured lesson AI model with current content + prompt, returns revised content for preview. Does not auto-persist.
+- **Chat revision UI:** Replaced the simple comment form in `AdminLessonsPage.jsx` with a two-mode `LessonRevisionChat` component supporting iterative AI-powered revisions with side-by-side preview and apply/discard controls.
+- **Documentation:** Updated `PLATFORM-PRIMITIVES.md` with new AgentConfigService methods; updated `lessons-repository.txt` with the revised HITL flow.
+
+### Fixed / discovered
+- The `proposeLessonFromRun` callers in `createAgentRoute` and `AgentScheduler` discard the return value (fire-and-forget). Per-run lesson evaluation visibility remains a known gap — the outcome is not persisted on `agent_runs.result`.
+
+### Open / next
+- Add per-run lesson evaluation marker (`lesson_evaluated`, `lesson_outcome`) to `agent_runs.result` so run history shows whether lesson evaluation occurred.
+- Consider adding the `returnDetails: true` pattern to `createAgentRoute` and `AgentScheduler` for better diagnostics.
+
+---
+
+
 ## 2026-05-21 — Lessons & Rules Repository
 
 ### Built

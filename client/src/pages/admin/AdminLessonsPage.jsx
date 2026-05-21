@@ -344,7 +344,186 @@ function LessonCommentForm({ lessonId, onSaved }) {
   );
 }
 
-function DetailView({ lesson, meta, onCommentSaved }) {
+function LessonRevisionChat({ lessonId, lessonContent, onCommentSaved, onRevisionApplied }) {
+  const [mode, setMode] = useState('comment');
+  const [prompt, setPrompt] = useState('');
+  const [revisedContent, setRevisedContent] = useState(null);
+  const [revising, setRevising] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleRevise(e) {
+    e?.preventDefault();
+    setError('');
+    const value = prompt.trim();
+    if (!value) return setError('Revision prompt is required.');
+    setRevising(true);
+    try {
+      const result = await api.post(`/lessons/${lessonId}/revise`, { prompt: value });
+      setRevisedContent(result.content ?? result.revised_content ?? result.revision ?? '');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRevising(false);
+    }
+  }
+
+  async function handleApply() {
+    setError('');
+    setApplying(true);
+    try {
+      const result = await api.patch(`/lessons/${lessonId}`, { content: revisedContent, reason: 'AI revision applied' });
+      setRevisedContent(null);
+      setPrompt('');
+      onRevisionApplied?.(result.lesson ?? result);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  function handleDiscard() {
+    setRevisedContent(null);
+    setPrompt('');
+    setError('');
+  }
+
+  const isReviseMode = mode === 'revise';
+  const showRevisePreview = isReviseMode && revisedContent != null;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-1 rounded-xl border p-1" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', display: 'inline-flex' }}>
+        <button
+          type="button"
+          onClick={() => { setMode('comment'); setRevisedContent(null); setError(''); }}
+          className="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+          style={{
+            background: !isReviseMode ? 'var(--color-bg)' : 'transparent',
+            color: !isReviseMode ? 'var(--color-text)' : 'var(--color-muted)',
+            border: !isReviseMode ? '1px solid var(--color-border)' : '1px solid transparent',
+          }}
+        >
+          Add Comment
+        </button>
+        <button
+          type="button"
+          onClick={() => { setMode('revise'); setError(''); }}
+          className="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+          style={{
+            background: isReviseMode ? 'var(--color-bg)' : 'transparent',
+            color: isReviseMode ? 'var(--color-text)' : 'var(--color-muted)',
+            border: isReviseMode ? '1px solid var(--color-border)' : '1px solid transparent',
+          }}
+        >
+          Revise with AI
+        </button>
+      </div>
+
+      {error && <InlineBanner type="error" message={error} onDismiss={() => setError('')} />}
+
+      {!isReviseMode && (
+        <LessonCommentForm lessonId={lessonId} onSaved={onCommentSaved} />
+      )}
+
+      {isReviseMode && (
+        <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)' }}>
+          {!showRevisePreview && (
+            <>
+              <div>
+                <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Revise with AI</h3>
+                <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+                  Describe the revision you want to make. The AI will generate an updated version of the lesson content.
+                </p>
+              </div>
+              <div className="relative">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => { setPrompt(e.target.value); setError(''); }}
+                  rows={4}
+                  className={`${inputCls} resize-y pr-12`}
+                  style={inputStyle}
+                  placeholder="e.g. Add a note about handling empty responses, or Rewrite this to be more concise..."
+                />
+                <div className="absolute top-2 right-2">
+                  <MicButton
+                    onResult={(text) => setPrompt((prev) => `${prev}${prev ? ' ' : ''}${text}`)}
+                    size={16}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-3">
+                <Button onClick={handleRevise} disabled={revising || !prompt.trim()}>
+                  {revising ? 'Revising...' : 'Revise'}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {showRevisePreview && (
+            <>
+              <div>
+                <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Revision Preview</h3>
+                <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+                  Review the AI-generated revision below. Apply it to persist the change, or start over with a new prompt.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-lg border p-3 text-sm" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
+                  <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-muted)' }}>Original Content</p>
+                  <div className="prose prose-sm max-w-none" style={{ color: 'var(--color-text)' }}>
+                    <MarkdownRenderer text={lessonContent} />
+                  </div>
+                </div>
+                <div className="rounded-lg border p-3 text-sm" style={{ borderColor: 'var(--color-primary)', background: 'var(--color-surface)' }}>
+                  <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-primary)' }}>Revised Content</p>
+                  <div className="prose prose-sm max-w-none" style={{ color: 'var(--color-text)' }}>
+                    <MarkdownRenderer text={revisedContent} />
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <Button variant="secondary" onClick={handleDiscard} disabled={applying}>
+                  Discard Revision
+                </Button>
+                <Button onClick={handleApply} disabled={applying}>
+                  {applying ? 'Applying...' : 'Apply Revision'}
+                </Button>
+              </div>
+              <div className="border-t pt-4" style={{ borderColor: 'var(--color-border)' }}>
+                <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-muted)' }}>Refine further</p>
+                <div className="relative">
+                  <textarea
+                    value={prompt}
+                    onChange={(e) => { setPrompt(e.target.value); setError(''); }}
+                    rows={3}
+                    className={`${inputCls} resize-y pr-12`}
+                    style={inputStyle}
+                    placeholder="e.g. Make it even more concise, or Add an example..."
+                  />
+                  <div className="absolute top-2 right-2">
+                    <MicButton
+                      onResult={(text) => setPrompt((prev) => `${prev}${prev ? ' ' : ''}${text}`)}
+                      size={16}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-3 mt-2">
+                  <Button onClick={handleRevise} disabled={revising || !prompt.trim()}>
+                    {revising ? 'Revising...' : 'Revise Again'}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailView({ lesson, meta, onCommentSaved, onRevisionApplied }) {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2 flex-wrap">
@@ -368,7 +547,12 @@ function DetailView({ lesson, meta, onCommentSaved }) {
         <MarkdownRenderer text={lesson.content} />
       </section>
 
-      <LessonCommentForm lessonId={lesson.id} onSaved={onCommentSaved} />
+      <LessonRevisionChat
+        lessonId={lesson.id}
+        lessonContent={lesson.content}
+        onCommentSaved={onCommentSaved}
+        onRevisionApplied={onRevisionApplied}
+      />
 
       <section className="space-y-3">
         <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>Audit History</h3>
@@ -667,6 +851,12 @@ export default function AdminLessonsPage() {
               setModal({ type: 'view', lesson });
               showToast('Comment added.', 'success');
               loadRows(offset);
+            }}
+            onRevisionApplied={(lesson) => {
+              setModal({ type: 'view', lesson });
+              showToast('Revision applied.', 'success');
+              loadRows(offset);
+              loadMeta();
             }}
           />
         )}

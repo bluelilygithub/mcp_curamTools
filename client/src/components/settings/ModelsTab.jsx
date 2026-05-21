@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ModelsTab — Settings tab for managing AI models, default, and fallback.
  * Only visible to org_admin users.
  *
@@ -72,6 +72,7 @@ export default function ModelsTab() {
   const [defaultModel,        setDefaultModel]        = useState(null);
   const [fallbackModel,       setFallbackModel]       = useState(null);
   const [pdfExtractionModel,  setPdfExtractionModel]  = useState(null);
+  const [lessonModel,         setLessonModel]         = useState(null);
   const [savingDefaults,      setSavingDefaults]      = useState(false);
   const [testResults,         setTestResults]         = useState({});
 
@@ -82,12 +83,14 @@ export default function ModelsTab() {
       api.get('/settings/model-status'),
       api.get('/settings/default-model'),
       api.get('/settings/fallback-model'),
+      api.get('/settings/lesson-model'),
       api.get('/admin/agents/spec-validator').catch(() => null),
-    ]).then(([modelData, statusData, defaultData, fallbackData, svConfig]) => {
+    ]).then(([modelData, statusData, defaultData, fallbackData, lessonData, svConfig]) => {
       setModels(modelData);
       setApiKeyOk(statusData);
       setDefaultModel(defaultData.model_id ?? null);
       setFallbackModel(fallbackData.model_id ?? null);
+      setLessonModel(lessonData.model_id ?? null);
       setPdfExtractionModel(svConfig?.model ?? null);
     }).catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -103,6 +106,7 @@ export default function ModelsTab() {
         api.put('/admin/agents/demo-spec-validator',    { model: pdfExtractionModel || null }),
         api.put('/admin/agents/demo-document-analyzer', { model: pdfExtractionModel || null }),
         api.put('/admin/agents/demo-tender-response',   { model: pdfExtractionModel || null }),
+        api.put('/settings/lesson-model', { model_id: lessonModel || null }),
       ]);
       setSuccess('Models saved.');
     } catch (e) {
@@ -219,9 +223,11 @@ export default function ModelsTab() {
   const defaultIsInactive = defaultModel && !activeModels.some((m) => m.id === defaultModel);
   const fallbackIsInactive = fallbackModel && !activeModels.some((m) => m.id === fallbackModel);
   const pdfExtractionIsInactive = pdfExtractionModel && !activeModels.some((m) => m.id === pdfExtractionModel);
+  const lessonIsInactive = lessonModel && !activeModels.some((m) => m.id === lessonModel);
   const defaultModelObj = models.find((m) => m.id === defaultModel);
   const fallbackModelObj = models.find((m) => m.id === fallbackModel);
   const pdfExtractionModelObj = models.find((m) => m.id === pdfExtractionModel);
+  const lessonModelObj = models.find((m) => m.id === lessonModel);
 
   const fi = {
     width: '100%', padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
@@ -244,7 +250,7 @@ export default function ModelsTab() {
             If the default fails, the fallback model is used automatically.
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div>
               <label className={LABEL} style={LABEL_STYLE}>Default model</label>
               <select
@@ -322,6 +328,32 @@ export default function ModelsTab() {
                 <p className="text-xs mt-1" style={{ color: '#991b1b' }}>⚠ PDF extraction model is inactive</p>
               )}
             </div>
+            <div>
+              <label className={LABEL} style={LABEL_STYLE}>Lesson AI model</label>
+              <select
+                value={lessonModel ?? ''}
+                onChange={(e) => setLessonModel(e.target.value)}
+                className={FIELD}
+                style={{
+                  ...FIELD_STYLE,
+                  borderColor: lessonIsInactive ? '#fca5a5' : 'var(--color-border)',
+                }}
+              >
+                <option value="">— No lesson AI —</option>
+                {lessonIsInactive && lessonModelObj && (
+                  <option value={lessonModelObj.id} disabled style={{ color: '#991b1b' }}>
+                    ⚠ {lessonModelObj.name} (inactive)
+                  </option>
+                )}
+                {activeModels.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name} — {m.id}</option>
+                ))}
+              </select>
+              {lessonIsInactive && (
+                <p className="text-xs mt-1" style={{ color: '#991b1b' }}>⚠ Lesson AI model is inactive</p>
+              )}
+            </div>
+
           </div>
 
           <div className="flex justify-end">
@@ -463,6 +495,7 @@ export default function ModelsTab() {
               const isCurrentDefault = m.id === defaultModel;
               const isCurrentFallback = m.id === fallbackModel;
               const isSpecValidator = m.id === pdfExtractionModel;
+              const isLessonModel = m.id === lessonModel;
               return (
                 <div
                   key={m.id}
@@ -505,6 +538,14 @@ export default function ModelsTab() {
                             style={{ background: 'rgba(5,150,105,0.1)', color: '#059669' }}
                           >
                             spec-validator
+                          </span>
+                        )}
+                        {isLessonModel && (
+                          <span
+                            className="text-xs px-2 py-0.5 rounded-full font-medium"
+                            style={{ background: 'rgba(147,51,234,0.1)', color: '#9333ea' }}
+                          >
+                            lesson
                           </span>
                         )}
                         {m.tagline && (

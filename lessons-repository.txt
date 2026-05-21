@@ -1,0 +1,95 @@
+You asked me to make the new Lessons Repository useful for agent learning, not just another log stream.
+
+What I’ve Been Attempting
+
+I implemented and iterated on this flow:
+
+Agents run as normal.
+Run history/logging still records operational facts.
+If an agent detects a reusable pattern, it proposes a lesson as under-review.
+Admin can review it in Admin > Lessons & Rules.
+Admin can add review comments without editing the LLM observation.
+If activated, future runs should load active lessons into the agent prompt.
+For Doc Extractor specifically, I tried to show whether a run created/skipped/duplicated a lesson.
+The intended distinction is:
+
+Logs = what happened.
+Lessons = reusable pattern/rule for future runs.
+
+Why It Has Been Difficult
+
+The main difficulty is that we changed the purpose midstream from “write something after each run” to “write only meaningful learning”. That is correct, but it makes testing less obvious.
+
+A clean Doc Extractor run may correctly create no lesson, because there is no new reusable pattern. That feels like failure unless the UI clearly says:
+
+No lesson created: no reusable extraction-quality signal detected.
+
+That visibility was missing at first.
+
+There were also real implementation gaps:
+
+Early Doc Extractor entries were just logs, not lessons.
+I made write-back selective, but initially caused the shaped lesson content to be skipped due to a payload mismatch.
+Doc Extractor had write-back but was not loading active lessons into its prompt, so approved lessons were not necessarily being followed.
+Lesson proposal outcomes were returned/persisted, but not visible enough in the Doc Extractor UI.
+Duplicate lesson candidates were possible, causing repeated near-identical lessons.
+The UI coverage list said “covered”, but that did not prove Doc Extractor was actually creating or skipping a lesson on a given run.
+Current Expected Behaviour
+
+For Doc Extractor, a lesson is only created when there is a reusable signal such as:
+
+unknown document type
+fewer than 3 fields extracted
+quality advisory flagged
+truncation/cut-off content
+incomplete draft/editorial-note pattern
+low confidence
+If none of those happen, no lesson should be created.
+
+The latest intended visibility is:
+
+Doc Extractor history should show a Lesson status column.
+Opening a run should show a lesson proposal banner.
+The run result should contain lesson_proposal with created, duplicate, skipped, or error.
+
+The Doc Extractor history should show a Lesson status column.
+Opening a run should show a lesson proposal banner.
+The run result should contain lesson_proposal with created, duplicate, skipped, or error.
+
+Why You May Still Not See It
+
+Most likely causes:
+
+- The latest frontend/backend changes are not deployed or the dev server is still running an older bundle.
+- The run predates the diagnostic tracking, so it shows —.
+- The extract result is clean, so it correctly records skipped.
+- The UI you're looking at has not refreshed after build/deploy.
+- There may still be a mismatch between the backend response and what the Doc Extractor page renders.
+
+=== 2026-05-22 — Lesson AI Revision Cycle ===
+
+The Lessons Repository now supports a full HITL revision cycle:
+
+1. Agent proposes a lesson → arrives under-review in Admin > Lessons & Rules.
+2. Admin opens the lesson detail view.
+3. Admin toggles between "Add Comment" (audit-only) and "Revise with AI".
+4. In Revise mode, admin types a prompt and the configured Lesson AI model revises the content.
+5. Admin sees a side-by-side preview of original vs revised content.
+6. Admin can iterate — prompt again for further refinement (chat dialog pattern).
+7. Admin applies the revision (PATCH with modified content) or discards it.
+8. Admin approves (sets status to active) when satisfied.
+9. Active lessons are injected into matching agent system prompts on subsequent runs.
+
+The Lesson AI model is configured separately from the default and fallback models,
+allowing a cheaper/faster model to be used for lesson refinement while keeping
+expensive models for agent task execution. Configured in Settings > Models.
+
+Why You May Still Not See It
+
+Most likely causes:
+
+The latest frontend/backend changes are not deployed or the dev server is still running an older bundle.
+The run predates the diagnostic tracking, so it shows —.
+The extract result is clean, so it correctly records skipped.
+The UI you’re looking at has not refreshed after build/deploy.
+There may still be a mismatch between the backend response and what the Doc Extractor page renders.

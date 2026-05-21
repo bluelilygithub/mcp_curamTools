@@ -12,6 +12,7 @@ const { pool } = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
 const { requireRole } = require('../middleware/requireRole');
 const AgentConfigService = require('../platform/AgentConfigService');
+const { getProvider } = require('../platform/AgentOrchestrator');
 const Lessons = require('../services/LessonRepositoryService');
 
 const router = express.Router();
@@ -119,6 +120,53 @@ router.post('/:id/comments', async (req, res) => {
     res.json(lesson);
   } catch (err) {
     res.status(400).json({ error: err.message || 'Failed to add comment.' });
+  }
+});
+
+// POST /api/lessons/:id/revise — AI-powered lesson content revision.
+// Takes a human prompt, calls the lesson AI model, returns revised content.
+router.post('/:id/revise', async (req, res) => {
+  try {
+    const lesson = await Lessons.getLesson(req.params.id, req.user);
+    if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
+
+    const prompt = String(req.body.prompt ?? '').trim();
+    if (!prompt) return res.status(400).json({ error: 'Revision prompt is required.' });
+
+    // Resolve the lesson AI model
+    const modelId = await AgentConfigService.getOrgLessonModel(req.user.orgId);
+    if (!modelId) return res.status(400).json({ error: 'No lesson AI model configured. Set one in Settings > Models.' });
+
+    const customProviders = await AgentConfigService.getCustomProviders(req.user.orgId).catch(() => []);
+    const provider = getProvider(modelId, customProviders);
+
+    const systemPrompt = 'You are a lesson refinement assistant. Your role is to revise lesson content based on the reviewer\'s instructions. Preserve the core learning, improve clarity, and incorporate the reviewer\'s guidance. Return only the revised lesson content — no commentary, no markdown fences.';
+
+    const userMessage = [
+      'Current lesson content:',
+      lesson.content,
+      '',
+      'Reviewer instructions:',
+      prompt,
+      '',
+      'Return the complete revised lesson content only.',
+    ].join('\n');
+
+    const response = await provider.chat({
+      model: modelId,
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    });
+
+    const revisedContent = response?.content?.map((b) => b.text).filter(Boolean).join('').trim();
+    if (!revisedContent) return res.status(500).json({ error: 'AI returned empty content.' });
+
+    // Preview only — caller decides whether to persist via PATCH
+    res.json({ revised_content: revisedContent });
+  } catch (err) {
+    console.error('[lessons revise]', err.message);
+    res.status(500).json({ error: err.message || 'Failed to revise lesson.' });
   }
 });
 

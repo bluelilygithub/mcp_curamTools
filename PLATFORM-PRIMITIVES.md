@@ -258,6 +258,17 @@ AgentConfigService.getOrgBudgetSettings(orgId)
 
 AgentConfigService.updateOrgBudgetSettings(orgId, patch, updatedBy)
 // patch: { max_daily_org_budget_aud: number | null }
+// ── Org-level lesson AI model (system_settings key: 'lesson_model') ─────
+// Used for AI-powered lesson revision and refinement in Admin > Lessons & Rules.
+
+AgentConfigService.getOrgLessonModel(orgId)
+// Returns: string | null — model ID for lesson AI, or null if not configured.
+// Falls back to the global admin org (orgId = 1) if the current org has no setting.
+
+AgentConfigService.updateOrgLessonModel(orgId, modelId, updatedBy)
+// Upserts the lesson AI model selection. Pass null to clear.
+
+
 ```
 
 **AGENT_DEFAULTS entries:**
