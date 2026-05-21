@@ -14,7 +14,7 @@ const PAGE_SIZE = 25;
 const LESSON_COVERAGE_SECTIONS = [
   {
     title: 'Automatic route-factory coverage',
-    note: 'All agents registered through createAgentRoute submit under-review lesson proposals after successful persisted runs. New createAgentRoute agents are presumed covered automatically; add their slug here when registering them.',
+    note: 'All agents registered through createAgentRoute can submit under-review lesson proposals when their output contains an explicit reusable lesson/pattern. New createAgentRoute agents are presumed covered automatically; add their slug here when registering them.',
     items: [
       'ads-attribution-summary',
       'ads-bounce-analysis',
@@ -48,7 +48,7 @@ const LESSON_COVERAGE_SECTIONS = [
   },
   {
     title: 'Scheduled coverage',
-    note: 'AgentScheduler submits lesson proposals for successful scheduled runs. Future scheduled agents inherit this when registered through AgentScheduler.',
+    note: 'AgentScheduler can submit lesson proposals for successful scheduled runs when a reusable lesson/pattern is present. Future scheduled agents inherit this when registered through AgentScheduler.',
     items: ['ai-visibility-monitor', 'google-ads-monitor'],
   },
   {
@@ -322,7 +322,7 @@ function CoverageView() {
     <div className="space-y-5">
       <InlineBanner
         type="info"
-        message="Coverage rule: every new model-backed agent or AI routine must be covered. Standard createAgentRoute and AgentScheduler paths are covered automatically; custom direct-provider routes need an explicit proposeLessonFromRun hook."
+        message="Coverage rule: every new model-backed agent or AI routine must be covered. Standard createAgentRoute and AgentScheduler paths are wired automatically; custom direct-provider routes need an explicit proposeLessonFromRun hook. Plain run logs are ignored."
       />
       {LESSON_COVERAGE_SECTIONS.map((section) => (
         <section key={section.title} className="rounded-xl border p-4" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)' }}>

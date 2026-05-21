@@ -28,7 +28,7 @@ Returns an Express router. Two endpoints are registered:
 
 | Endpoint | Auth | Behaviour |
 |---|---|---|
-| `POST /run` | requireAuth + requireRole([org_admin, requiredPermission]) | Loads admin config, checks kill switch, streams SSE: `{ type: 'progress', text }` → `{ type: 'result', data }` → `[DONE]` (or `{ type: 'error', error }` → `[DONE]`). On success, **`data` includes `runId`** (the `agent_runs.id` UUID) alongside `summary`, nested `data`, `tokensUsed`, etc., so clients can call org-scoped demo PATCH routes before reloading the row; **`runId` is not added to the JSON persisted** in `agent_runs.result` (only the streamed copy). Successful runs also submit an under-review Lessons Repository proposal via `proposeLessonFromRun`; new agents get this automatically when they use `createAgentRoute`. |
+| `POST /run` | requireAuth + requireRole([org_admin, requiredPermission]) | Loads admin config, checks kill switch, streams SSE: `{ type: 'progress', text }` → `{ type: 'result', data }` → `[DONE]` (or `{ type: 'error', error }` → `[DONE]`). On success, **`data` includes `runId`** (the `agent_runs.id` UUID) alongside `summary`, nested `data`, `tokensUsed`, etc., so clients can call org-scoped demo PATCH routes before reloading the row; **`runId` is not added to the JSON persisted** in `agent_runs.result` (only the streamed copy). Runs can submit an under-review Lessons Repository proposal via `proposeLessonFromRun` when the output contains an explicit reusable lesson/pattern; new agents get this wiring automatically when they use `createAgentRoute`. |
 | `GET /history` | requireAuth | Returns last 20 `agent_runs` rows for this slug + org, ordered by `run_at DESC` |
 
 Internal helpers exported from this file:
@@ -80,9 +80,11 @@ await logUsage({ orgId, userId, slug, modelId, tokensUsed, costAud })
 **What it does:** Stores active, disabled, and under-review lessons/rules for agents. Runtime lessons are loaded with `loadLessonsForAgent(agentId, organisationId)` and agent reflections are written with `proposeLessonFromRun(...)` / `proposeLesson(...)`.
 
 **Coverage contract:** Every new model-backed agent or AI routine must be covered by Lessons Repository write-back. Prefer the platform paths:
-- HTTP/SSE agents: register through `createAgentRoute`, which writes an under-review proposal after a successful persisted run.
-- Scheduled agents: register through `AgentScheduler`, which writes proposals for successful scheduled runs.
-- Custom routes or direct provider calls: add a local fire-and-forget `proposeLessonFromRun({ agentId, organisationId, runId, summary })` after the successful result is saved or returned.
+- HTTP/SSE agents: register through `createAgentRoute`, which calls `proposeLessonFromRun` after a successful persisted run.
+- Scheduled agents: register through `AgentScheduler`, which calls `proposeLessonFromRun` after successful scheduled runs.
+- Custom routes or direct provider calls: add a local fire-and-forget `proposeLessonFromRun({ agentId, organisationId, runId, lesson })` after the successful result is saved or returned.
+
+`proposeLessonFromRun` is deliberately not a logging bridge. It stores a draft only when it receives an explicit reusable lesson/pattern, or when `summary` contains a clear `Lesson learned:`, `Learned pattern:`, `Future rule:`, or similar block. Plain telemetry such as "extracted 263 fields" belongs in run history, not Lessons.
 
 **UI coverage register:** Admin > Lessons & Rules includes a "View covered agents/routines" link. Update `LESSON_COVERAGE_SECTIONS` in `client/src/pages/admin/AdminLessonsPage.jsx` whenever a new model-backed agent, scheduled routine, or custom direct-provider routine is added. The default presumption is that new `createAgentRoute` and `AgentScheduler` agents are covered automatically; the UI list is the human audit register.
 

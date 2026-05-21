@@ -137,6 +137,48 @@ function dateOnly(value) {
   return value == null ? null : String(value).slice(0, 10);
 }
 
+function isOperationalTelemetry(text) {
+  const value = cleanText(text);
+  if (!value) return true;
+  return [
+    /^Document ".+" extracted \d+ fields\. Document type: .+\. Quality advisory: .+\.$/i,
+    /^Media generation completed\./i,
+    /^Question:[\s\S]+Generated SQL:/i,
+    /^Follow-up question:/i,
+    /^Reviewer resubmitted \d+ document finding/i,
+  ].some((pattern) => pattern.test(value));
+}
+
+function extractExplicitLesson(text) {
+  const value = cleanText(text);
+  if (!value) return '';
+
+  const inline = value.match(/(?:lesson learned|learned pattern|future rule|agent lesson|rule update):\s*([\s\S]+)/i);
+  if (inline?.[1]) return cleanText(inline[1]);
+
+  const lines = value.split(/\r?\n/);
+  const heading = /^(?:#{1,6}\s*)?(?:agent\s+)?(?:lesson|lessons learned|lesson learned|learned pattern|future rule|rule update|reflection)\s*:?\s*$/i;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!heading.test(lines[i].trim())) continue;
+    const collected = [];
+    for (let j = i + 1; j < lines.length; j += 1) {
+      if (/^#{1,6}\s+\S/.test(lines[j]) && collected.length > 0) break;
+      collected.push(lines[j]);
+    }
+    return cleanText(collected.join('\n'));
+  }
+
+  return '';
+}
+
+function titleFromLesson(agentId, lessonText) {
+  const firstLine = cleanText(lessonText).split(/\r?\n/).find(Boolean) ?? '';
+  const plain = firstLine.replace(/^[-*]\s*/, '').replace(/\s+/g, ' ').trim();
+  if (!plain) return `Review learned pattern for ${agentId}`;
+  const suffix = plain.length > 70 ? `${plain.slice(0, 67).trim()}...` : plain;
+  return `Review pattern: ${suffix}`.slice(0, TITLE_MAX);
+}
+
 function accessWhere(user, startIndex = 1, { includeGlobal = true } = {}) {
   if (isSuperAdmin(user)) return { sql: '1=1', params: [] };
   const params = [user.orgId];
@@ -459,21 +501,26 @@ async function proposeLesson(agentId, organisationId, category, title, content) 
   return rows[0].id;
 }
 
-async function proposeLessonFromRun({ agentId, organisationId, runId, summary }) {
-  const text = cleanText(summary);
-  if (!text) return null;
-  const excerpt = text.length > 1600 ? `${text.slice(0, 1600).trim()}...` : text;
+async function proposeLessonFromRun({ agentId, organisationId, runId, summary, lesson, category, title }) {
+  const explicitLesson = cleanText(
+    typeof lesson === 'string'
+      ? lesson
+      : lesson?.content ?? extractExplicitLesson(summary)
+  );
+  if (!explicitLesson || explicitLesson.length < 30 || isOperationalTelemetry(explicitLesson)) return null;
+
+  const excerpt = explicitLesson.length > 1600 ? `${explicitLesson.slice(0, 1600).trim()}...` : explicitLesson;
   return proposeLesson(
     agentId,
     organisationId,
-    'agent-reflection',
-    `Review lesson from ${agentId}`,
+    category ?? lesson?.category ?? 'agent-reflection',
+    title ?? lesson?.title ?? titleFromLesson(agentId, excerpt),
     [
-      'Agent-generated reflection draft. Review and edit before activating.',
+      'Agent-generated lesson candidate. Review and edit before activating.',
       '',
       `Source run: ${runId ?? 'unknown'}`,
       '',
-      'Observed output:',
+      'Proposed lesson:',
       excerpt,
     ].join('\n')
   );

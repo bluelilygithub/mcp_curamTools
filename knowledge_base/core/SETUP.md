@@ -259,7 +259,8 @@ The server builds the exact same system prompt and tool array used by real conve
    - `AgentScheduler.register({ slug, schedule, runFn })` if it needs a cron schedule
 5. Confirm Lessons Repository coverage:
    - `createAgentRoute` and `AgentScheduler` handle write-back automatically.
-   - If the new routine uses a custom route or direct provider call, add `proposeLessonFromRun({ agentId, organisationId, runId, summary })` after the successful result is saved or returned.
+   - If the new routine uses a custom route or direct provider call, add `proposeLessonFromRun({ agentId, organisationId, runId, lesson })` after the successful result is saved or returned.
+   - Pass reusable learning/patterns only. Plain run telemetry belongs in run history/logging.
    - Update `LESSON_COVERAGE_SECTIONS` in `client/src/pages/admin/AdminLessonsPage.jsx` so Admin > Lessons & Rules lists the new covered agent/routine.
 6. Add operator defaults to `AGENT_DEFAULTS` in `server/platform/AgentConfigService.js`
 7. Add admin defaults to `ADMIN_DEFAULTS` in `server/platform/AgentConfigService.js`

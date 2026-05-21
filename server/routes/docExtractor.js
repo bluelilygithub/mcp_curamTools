@@ -57,6 +57,50 @@ const MAX_LABEL_LEN        = 200;
 const MAX_PURPOSE_LEN      = 100;
 const MAX_INSTRUCTIONS_LEN = 2000;
 
+function cleanText(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function buildDocExtractorLesson({ documentType, fieldCount, qualityReason }) {
+  const normalizedType = cleanText(documentType) || 'unknown';
+  const reason = cleanText(qualityReason);
+  const lower = reason.toLowerCase();
+  const patterns = [];
+
+  if (normalizedType === 'unknown') {
+    patterns.push('The document could not be confidently classified, so extraction strategy and field mapping may be unreliable.');
+  }
+  if (fieldCount < 3) {
+    patterns.push(`Only ${fieldCount} field(s) were extracted, which suggests the source may be unreadable, incomplete, or outside the expected schema.`);
+  }
+  if (/(truncat|cut off|mid-sentence|rendering|export artefact|export artifact)/i.test(reason)) {
+    patterns.push('Requirement or blocker text appears truncated/cut off, often due to rendering or export artefacts in the source document.');
+  }
+  if (/(editorial note|informal|square bracket|draft state|incomplete draft)/i.test(reason)) {
+    patterns.push('Embedded editorial notes or bracketed comments indicate the document is still in draft state and should not be treated as final.');
+  }
+  if (reason && patterns.length === 0) {
+    patterns.push('The extraction quality advisory indicates the extracted fields may need human review before downstream use.');
+  }
+
+  if (patterns.length === 0) return null;
+
+  const affectedHint = lower.includes('req-')
+    ? 'Mention the affected requirement IDs or sections in the user-facing quality note.'
+    : 'Mention the affected section or field group in the user-facing quality note when available.';
+
+  return {
+    category: 'extraction-quality',
+    title:    `Review extraction-quality pattern for ${normalizedType}`.slice(0, 120),
+    content:  [
+      `Pattern observed: ${patterns.join(' ')}`,
+      `Future rule: When extracting "${normalizedType}" documents with this pattern, flag the extraction as needing source-document review before relying on the affected fields.`,
+      `Agent behaviour: ${affectedHint} Recommend re-exporting or supplying a cleaner source document if content is truncated, cut off, or visibly editorial.`,
+      reason ? `Evidence for admin review: ${reason}` : null,
+    ].filter(Boolean).join('\n'),
+  };
+}
+
 // ── POST /extract ──────────────────────────────────────────────────────────────
 
 router.post(
@@ -241,12 +285,18 @@ router.post(
           [JSON.stringify(result), runId]
         );
 
-        proposeLessonFromRun({
-          agentId:        'doc-extractor',
-          organisationId: orgId,
-          runId,
-          summary:        `Document "${originalname}" extracted ${result.fields?.length ?? 0} fields. Document type: ${result.document_type ?? 'unknown'}. Quality advisory: ${result.quality_advisory?.flag ? result.quality_advisory.reason ?? 'flagged' : 'none'}.`,
-        }).catch((err) => console.warn('[doc-extractor] lesson proposal skipped:', err.message));
+        const documentType = result.document_type ?? 'unknown';
+        const fieldCount = result.fields?.length ?? 0;
+        const qualityReason = result.quality_advisory?.flag ? (result.quality_advisory.reason ?? 'quality advisory flagged') : '';
+        const lesson = buildDocExtractorLesson({ documentType, fieldCount, qualityReason });
+        if (lesson) {
+          proposeLessonFromRun({
+            agentId:        'doc-extractor',
+            organisationId: orgId,
+            runId,
+            ...lesson,
+          }).catch((err) => console.warn('[doc-extractor] lesson proposal skipped:', err.message));
+        }
 
         logUsage({
           orgId, userId, slug: 'doc-extractor', modelId: model,

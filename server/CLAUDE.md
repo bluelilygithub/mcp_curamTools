@@ -20,7 +20,9 @@ When you change **system or stage prompts** for an agent that opts in, **bump** 
 
 ## Lessons Repository coverage — required for new agents
 
-Any new model-backed agent or AI routine must be covered by the Lessons Repository. Prefer **`createAgentRoute`** for manual SSE agents and **`AgentScheduler`** for scheduled agents; those platform paths create under-review lesson proposals automatically after successful runs. If you add a custom route or direct provider call that bypasses those paths, add a fire-and-forget **`proposeLessonFromRun({ agentId, organisationId, runId, summary })`** call after the successful result is saved or returned.
+Any new model-backed agent or AI routine must be covered by the Lessons Repository. Prefer **`createAgentRoute`** for manual SSE agents and **`AgentScheduler`** for scheduled agents; those platform paths call lesson write-back after successful runs. If you add a custom route or direct provider call that bypasses those paths, add a fire-and-forget **`proposeLessonFromRun({ agentId, organisationId, runId, lesson })`** call after the successful result is saved or returned.
+
+`proposeLessonFromRun` must capture reusable learning, not telemetry. It ignores plain run logs unless the summary contains an explicit lesson/pattern block such as `Lesson learned:`, `Learned pattern:`, or `Future rule:`. Operational facts like file name, field count, model, row count, or quality status belong in run history/logging.
 
 Update **`LESSON_COVERAGE_SECTIONS`** in **`client/src/pages/admin/AdminLessonsPage.jsx`** whenever you add a new model-backed agent, scheduled routine, or custom direct-provider routine. Admin > Lessons & Rules exposes this through "View covered agents/routines"; treat it as the human-facing coverage register.
 
