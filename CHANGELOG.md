@@ -35,6 +35,7 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - **Lesson review UI:** Removed existing lesson edit controls from the Lessons page so review comments do not require modifying the agent-generated observation.
 - **Doc Extractor lesson diagnostics:** Lesson proposals are now awaited and returned per file as `lessonProposal`, making created vs skipped proposals visible instead of relying on background logs.
 - **Lesson de-duplication:** Repeated lesson candidates with the same agent/org/category/title now report `duplicate` instead of creating multiple under-review rows.
+- **Doc Extractor lesson visibility:** The Doc Extractor result panel now shows lesson proposal outcome (`created`, `duplicate`, `skipped`, or `error`) with the saved/duplicate lesson ID or skip reason.
 
 ### Fixed / discovered
 - Client build initially failed because `react-is` was declared in `client/package.json` but absent from `client/package-lock.json` / `node_modules`; `npm install` restored it and the Vite build now passes.

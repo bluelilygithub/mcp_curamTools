@@ -1135,6 +1135,65 @@ function FieldCustomizationModal({ fields, baseName, format, runId, onClose }) {
 
 // ── Result panel ──────────────────────────────────────────────────────────────
 
+function LessonProposalBanner({ proposal }) {
+  if (!proposal) return null;
+
+  const styles = {
+    created: {
+      background: 'rgba(var(--color-primary-rgb), 0.10)',
+      border:     '1px solid rgba(var(--color-primary-rgb), 0.35)',
+      color:      'var(--color-primary)',
+      label:      'Lesson proposal created',
+    },
+    duplicate: {
+      background: '#eff6ff',
+      border:     '1px solid #93c5fd',
+      color:      '#1d4ed8',
+      label:      'Lesson already exists',
+    },
+    skipped: {
+      background: 'var(--color-bg)',
+      border:     '1px solid var(--color-border)',
+      color:      'var(--color-muted)',
+      label:      'No lesson created',
+    },
+    error: {
+      background: '#fef2f2',
+      border:     '1px solid #fca5a5',
+      color:      '#991b1b',
+      label:      'Lesson proposal failed',
+    },
+  }[proposal.status] ?? {
+    background: 'var(--color-bg)',
+    border:     '1px solid var(--color-border)',
+    color:      'var(--color-muted)',
+    label:      'Lesson proposal status',
+  };
+
+  return (
+    <div className="rounded-lg px-4 py-3 mb-4 text-sm" style={{ background: styles.background, border: styles.border, color: styles.color }}>
+      <div className="font-semibold">{styles.label}</div>
+      <div className="mt-1">
+        {proposal.status === 'created' && (
+          <span>Created lesson candidate <code className="font-mono">{proposal.lessonId}</code>.</span>
+        )}
+        {proposal.status === 'duplicate' && (
+          <span>Matched existing {proposal.existingStatus ?? 'lesson'} <code className="font-mono">{proposal.lessonId}</code>; no duplicate row was created.</span>
+        )}
+        {proposal.status === 'skipped' && (
+          <span>{proposal.reason ?? 'No reusable lesson signal was detected for this extraction.'}</span>
+        )}
+        {proposal.status === 'error' && (
+          <span>{proposal.reason ?? 'The lesson proposal could not be saved.'}</span>
+        )}
+        {!['created', 'duplicate', 'skipped', 'error'].includes(proposal.status) && (
+          <span>{proposal.reason ?? proposal.status}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ResultPanel({ runId, result, filename, purpose, instructions, storageKey, onClose }) {
   const [customizeFor,   setCustomizeFor]   = useState(null);  // 'pdf' | 'csv' | null
   const [downloading,    setDownloading]    = useState(false);
@@ -1272,6 +1331,8 @@ function ResultPanel({ runId, result, filename, purpose, instructions, storageKe
             </div>
           </div>
         )}
+
+        <LessonProposalBanner proposal={result?.lesson_proposal} />
 
         {/* Summary cards */}
         <div className="flex gap-3 mb-4 flex-wrap">
