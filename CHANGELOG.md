@@ -18,6 +18,22 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-22 — Admin Usage Intelligence Console
+
+### Built
+- **Usage intelligence endpoint:** Added `GET /api/admin/usage-intelligence` to compute a management summary from usage logs: health status, score, month-end forecast, daily budget pressure, top cost drivers, and recommended actions.
+- **Admin Usage health panel:** `Admin > Usage` now opens with a Usage Health panel before raw tables, showing projected month spend, 7-day daily average, budget pressure, top cost drivers, and concrete actions.
+- **Operational recommendations:** The signal layer now converts overkill model use, daily budget pressure, high average run cost, poor cache effectiveness, and cost spikes into recommended admin actions.
+- **Architecture note:** Extended `PLATFORM-PRIMITIVES.md` to describe Admin > Usage as an operational signal layer rather than only an audit trail.
+
+### Fixed / discovered
+- The existing warning layer already detected important signals, but the UI presented them as banners below the page header rather than as an executive management summary.
+
+### Open / next
+- Optional next step: add persisted alert rules and notification delivery for email/Slack once the signal thresholds are stable.
+
+---
+
 ## 2026-05-22 — Shared Model Resolution + Admin Agents Clarity
 
 ### Built

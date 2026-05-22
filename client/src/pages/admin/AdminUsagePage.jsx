@@ -150,10 +150,138 @@ function DailyChart({ daily }) {
   );
 }
 
+function HealthPanel({ intelligence }) {
+  if (!intelligence) return null;
+
+  const health = intelligence.health ?? {};
+  const forecast = intelligence.forecast ?? {};
+  const drivers = intelligence.topCostDrivers ?? [];
+  const actions = intelligence.recommendedActions ?? [];
+  const healthColor = {
+    healthy:       '#16a34a',
+    watch:         '#d97706',
+    action_needed: '#dc2626',
+  }[health.status] ?? 'var(--color-primary)';
+  const budgetPct = forecast.daily_budget_pct != null ? Math.min(forecast.daily_budget_pct, 1.5) : null;
+
+  return (
+    <section
+      className="rounded-2xl border p-6 space-y-5"
+      style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
+    >
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>
+            Usage Health
+          </p>
+          <div className="flex items-end gap-3">
+            <span className="text-3xl font-bold" style={{ color: healthColor }}>
+              {health.label ?? 'Healthy'}
+            </span>
+            <span className="text-sm mb-1" style={{ color: 'var(--color-muted)' }}>
+              {health.score ?? 100}/100
+            </span>
+          </div>
+          <p className="text-sm mt-1" style={{ color: 'var(--color-muted)' }}>
+            {health.summary}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 min-w-[280px]">
+          <div className="rounded-xl border p-3" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+            <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>Month forecast</p>
+            <p className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>{fmtAud(forecast.projected_month_aud)}</p>
+            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+              {fmtAud(forecast.month_to_date_aud)} month to date
+            </p>
+          </div>
+          <div className="rounded-xl border p-3" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+            <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>7d daily avg</p>
+            <p className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>{fmtAud(forecast.avg_7d_aud)}</p>
+            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+              {forecast.daily_budget_aud ? `${Math.round((forecast.daily_budget_pct ?? 0) * 100)}% of daily limit` : 'No daily limit set'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {budgetPct != null && (
+        <div>
+          <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--color-muted)' }}>
+            <span>Daily budget pressure</span>
+            <span>{Math.round((forecast.daily_budget_pct ?? 0) * 100)}%</span>
+          </div>
+          <div className="rounded-full overflow-hidden" style={{ height: 8, background: 'var(--color-border)' }}>
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${Math.min(budgetPct * 100, 100)}%`,
+                background: budgetPct >= 1 ? '#dc2626' : budgetPct >= 0.8 ? '#d97706' : '#16a34a',
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-2 gap-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>
+            Recommended Actions
+          </p>
+          {actions.length === 0 ? (
+            <p className="text-sm" style={{ color: 'var(--color-muted)' }}>No usage actions needed.</p>
+          ) : (
+            <div className="space-y-2">
+              {actions.map((action, idx) => {
+                const style = WARNING_STYLES[action.severity] ?? WARNING_STYLES.info;
+                return (
+                  <div key={`${action.type}-${idx}`} className="rounded-xl border p-3" style={{ borderColor: style.border, background: style.bg }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-semibold" style={{ color: style.text }}>{action.title}</p>
+                      {action.metric && <span className="text-xs whitespace-nowrap" style={{ color: style.text }}>{action.metric}</span>}
+                    </div>
+                    <p className="text-xs mt-1" style={{ color: style.text }}>{action.detail}</p>
+                    <p className="text-xs mt-2 font-medium" style={{ color: style.text }}>{action.action}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>
+            Top Cost Drivers
+          </p>
+          {drivers.length === 0 ? (
+            <p className="text-sm" style={{ color: 'var(--color-muted)' }}>No usage recorded yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {drivers.map((driver) => (
+                <div key={driver.tool_slug} className="rounded-xl border p-3" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="font-mono text-xs" style={{ color: 'var(--color-text)' }}>{driver.tool_slug}</span>
+                    <span className="font-semibold" style={{ color: 'var(--color-text)' }}>{fmtAud(driver.cost_aud)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+                    <span>{driver.runs} runs · avg {fmtAud(driver.avg_cost_aud)}</span>
+                    <span>{Math.round((driver.share_of_cost ?? 0) * 100)}% of 30d spend</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function AdminUsagePage() {
   const [days,     setDays]     = useState(30);
   const [data,     setData]     = useState(null);
   const [warnings, setWarnings] = useState([]);
+  const [intel,    setIntel]    = useState(null);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState('');
 
@@ -163,10 +291,12 @@ export default function AdminUsagePage() {
     Promise.all([
       api.get(`/admin/usage-stats?days=${days}`),
       api.get('/admin/usage-warnings'),
+      api.get('/admin/usage-intelligence'),
     ])
-      .then(([stats, warn]) => {
+      .then(([stats, warn, intelligence]) => {
         setData(stats);
         setWarnings(warn.warnings ?? []);
+        setIntel(intelligence);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -214,6 +344,8 @@ export default function AdminUsagePage() {
         <p className="text-sm" style={{ color: 'var(--color-muted)' }}>Loading…</p>
       ) : (
         <>
+          <HealthPanel intelligence={intel} />
+
           {/* Warnings */}
           {warnings.length > 0 && (
             <div className="space-y-2">

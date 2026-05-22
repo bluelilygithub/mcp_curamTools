@@ -72,6 +72,8 @@ await logUsage({ orgId, userId, slug, modelId, tokensUsed, costAud })
 
 **Reuse contract:** Call after a successful run. Pass the full `tokensUsed` object from `AgentOrchestrator` — do not construct a partial object. Always use `??` not `||` for token fields (null must not silently become 0 when the orchestrator returns a real 0).
 
+The platform does not only record cost and token data; it analyses recent usage to surface actionable operational signals in Admin > Usage. The clearest example is overkill model detection: the warning layer identifies agents using a higher-tier model than their configured requirement, catching configuration drift automatically before it becomes normal operating cost. The same layer also watches budget pacing through the seven-day average against the daily organisation limit, high average run cost relative to each agent's per-run budget, cache effectiveness through low cache read rates over recent runs, cost spikes by comparing yesterday against the thirty-day average, and stale agents that have gone quiet after recent activity. Architecturally, this makes the platform partially self-observing: usage data becomes an input to operational reasoning, not just an audit trail. The first management surface for this is the Usage Health panel, which turns those signals into a health score, month-end spend forecast, top cost drivers, and recommended admin actions. This remains a signal layer rather than a full alerting pipeline by design; it does not yet send email or Slack notifications or provide deep per-agent cache diagnostics.
+
 ---
 
 ### LessonsRepositoryService

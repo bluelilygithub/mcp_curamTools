@@ -1923,6 +1923,276 @@ router.get('/usage-warnings', async (req, res) => {
   }
 });
 
+// ── Usage Intelligence ─────────────────────────────────────────────────────
+//
+// GET /admin/usage-intelligence
+// Management summary for Admin > Usage: health, forecast, cost drivers,
+// and concrete actions derived from the same usage data as warnings.
+
+function daysInMonth(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+}
+
+function usageAction({ type, severity = 'info', title, detail, action, metric = null }) {
+  return { type, severity, title, detail, action, metric };
+}
+
+router.get('/usage-intelligence', async (req, res) => {
+  const orgId = req.user.orgId;
+
+  try {
+    const [
+      budgetSettings,
+      monthRes,
+      daily7dRes,
+      cacheRes,
+      spikeRes,
+      topToolsRes,
+      modelUsageRes,
+      modelsRow,
+    ] = await Promise.all([
+      AgentConfigService.getOrgBudgetSettings(orgId),
+
+      pool.query(
+        `SELECT COALESCE(SUM(cost_aud), 0)::numeric AS cost_aud,
+                COUNT(*)::int AS runs
+           FROM usage_logs
+          WHERE org_id = $1
+            AND created_at >= date_trunc('month', NOW())`,
+        [orgId]
+      ),
+
+      pool.query(
+        `SELECT DATE(created_at AT TIME ZONE 'Australia/Brisbane') AS day,
+                COALESCE(SUM(cost_aud), 0)::numeric AS cost_aud
+           FROM usage_logs
+          WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '7 days'
+          GROUP BY day`,
+        [orgId]
+      ),
+
+      pool.query(
+        `SELECT COUNT(*)::int AS runs,
+                COALESCE(SUM(cache_read_tokens), 0)::bigint AS cache_read,
+                COALESCE(SUM(input_tokens + cache_read_tokens + cache_creation_tokens), 0)::bigint AS total_input
+           FROM usage_logs
+          WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '7 days'`,
+        [orgId]
+      ),
+
+      pool.query(
+        `SELECT COALESCE(AVG(daily_cost), 0)::numeric AS avg_daily,
+                COALESCE(MAX(CASE WHEN day = CURRENT_DATE - 1 THEN daily_cost END), 0)::numeric AS yesterday
+           FROM (
+             SELECT DATE(created_at AT TIME ZONE 'Australia/Brisbane') AS day,
+                    SUM(cost_aud) AS daily_cost
+               FROM usage_logs
+              WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '30 days'
+              GROUP BY day
+           ) t`,
+        [orgId]
+      ),
+
+      pool.query(
+        `SELECT COALESCE(tool_slug, 'unknown') AS tool_slug,
+                COUNT(*)::int AS runs,
+                COALESCE(SUM(cost_aud), 0)::numeric AS cost_aud,
+                COALESCE(AVG(cost_aud), 0)::numeric AS avg_cost_aud,
+                COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens), 0)::bigint AS total_tokens,
+                MAX(created_at) AS last_run_at
+           FROM usage_logs
+          WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '30 days'
+          GROUP BY tool_slug
+          ORDER BY cost_aud DESC
+          LIMIT 5`,
+        [orgId]
+      ),
+
+      pool.query(
+        `SELECT tool_slug, model_id, COUNT(*)::int AS runs
+           FROM usage_logs
+          WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '30 days'
+            AND model_id IS NOT NULL AND tool_slug IS NOT NULL
+          GROUP BY tool_slug, model_id`,
+        [orgId]
+      ),
+
+      pool.query(
+        `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'ai_models' LIMIT 1`,
+        [orgId]
+      ),
+    ]);
+
+    const monthCost = Number(monthRes.rows[0]?.cost_aud ?? 0);
+    const monthRuns = Number(monthRes.rows[0]?.runs ?? 0);
+    const now = new Date();
+    const dayOfMonth = Math.max(now.getDate(), 1);
+    const projectedMonthAud = dayOfMonth > 0 ? (monthCost / dayOfMonth) * daysInMonth(now) : 0;
+
+    const daily7Rows = daily7dRes.rows;
+    const avg7dAud = daily7Rows.length > 0
+      ? daily7Rows.reduce((sum, row) => sum + Number(row.cost_aud), 0) / daily7Rows.length
+      : 0;
+
+    const maxDaily = budgetSettings.max_daily_org_budget_aud;
+    const dailyBudgetPct = maxDaily ? avg7dAud / maxDaily : null;
+
+    const cacheRow = cacheRes.rows[0] ?? {};
+    const totalInput = Number(cacheRow.total_input ?? 0);
+    const cacheHitRate = totalInput > 0 ? Number(cacheRow.cache_read ?? 0) / totalInput : 0;
+
+    const spikeRow = spikeRes.rows[0] ?? {};
+    const avgDaily30 = Number(spikeRow.avg_daily ?? 0);
+    const yesterdayAud = Number(spikeRow.yesterday ?? 0);
+    const total30dCost = topToolsRes.rows.reduce((sum, row) => sum + Number(row.cost_aud), 0);
+
+    const topCostDrivers = topToolsRes.rows.map((row) => {
+      const costAud = Number(row.cost_aud);
+      const runs = Number(row.runs);
+      return {
+        tool_slug:      row.tool_slug,
+        runs,
+        cost_aud:       costAud,
+        avg_cost_aud:   Number(row.avg_cost_aud),
+        total_tokens:   Number(row.total_tokens),
+        share_of_cost:  total30dCost > 0 ? costAud / total30dCost : 0,
+        last_run_at:    row.last_run_at,
+      };
+    });
+
+    const actions = [];
+
+    const allModels = Array.isArray(modelsRow.rows[0]?.value) ? modelsRow.rows[0].value : MODEL_DEFAULTS;
+    const modelTierMap = Object.fromEntries(allModels.map((m) => [m.id, m.tier]));
+    const TIER_RANK = { standard: 0, advanced: 1, premium: 2 };
+    const { AGENT_MODEL_REQUIREMENTS } = AgentConfigService;
+    for (const { tool_slug, model_id, runs } of modelUsageRes.rows) {
+      const modelTier = modelTierMap[model_id];
+      const agentReq = AGENT_MODEL_REQUIREMENTS[tool_slug];
+      if (!modelTier || !agentReq) continue;
+      if ((TIER_RANK[modelTier] ?? 0) > (TIER_RANK[agentReq.tier] ?? 0)) {
+        const rec = AgentConfigService.getRecommendedModel(tool_slug, allModels);
+        actions.push(usageAction({
+          type: 'overkill_model',
+          severity: 'info',
+          title: `${tool_slug} may be over-provisioned`,
+          detail: `${model_id} is ${modelTier}, but this agent is configured as ${agentReq.tier}.`,
+          action: rec?.id
+            ? `Review Admin > Agents and consider ${rec.name} for this agent.`
+            : 'Review Admin > Agents and consider a lower-tier enabled model.',
+          metric: `${runs} runs in 30 days`,
+        }));
+      }
+    }
+
+    if (dailyBudgetPct != null) {
+      if (dailyBudgetPct >= 1) {
+        actions.push(usageAction({
+          type: 'budget_pacing',
+          severity: 'critical',
+          title: 'Daily budget pressure is critical',
+          detail: `The 7-day average is $${avg7dAud.toFixed(4)} AUD/day against a $${maxDaily.toFixed(2)} daily limit.`,
+          action: 'Reduce high-cost agents, lower model tiers, or increase the daily organisation budget.',
+          metric: `${Math.round(dailyBudgetPct * 100)}% of daily limit`,
+        }));
+      } else if (dailyBudgetPct >= 0.8) {
+        actions.push(usageAction({
+          type: 'budget_pacing',
+          severity: 'warning',
+          title: 'Daily budget is under pressure',
+          detail: `The 7-day average is $${avg7dAud.toFixed(4)} AUD/day against a $${maxDaily.toFixed(2)} daily limit.`,
+          action: 'Review the top cost drivers before this becomes a hard budget stop.',
+          metric: `${Math.round(dailyBudgetPct * 100)}% of daily limit`,
+        }));
+      }
+    }
+
+    for (const driver of topCostDrivers) {
+      const cfg = await AgentConfigService.getAdminConfig(driver.tool_slug, orgId);
+      const limit = cfg.max_task_budget_aud;
+      if (!limit) continue;
+      const pct = driver.avg_cost_aud / limit;
+      if (pct >= 0.9) {
+        actions.push(usageAction({
+          type: 'agent_avg_cost',
+          severity: pct >= 1 ? 'critical' : 'warning',
+          title: `${driver.tool_slug} is expensive per run`,
+          detail: `Average run cost is $${driver.avg_cost_aud.toFixed(4)} AUD against a $${Number(limit).toFixed(2)} per-run budget.`,
+          action: 'Inspect recent runs, model choice, max tokens, and whether the agent can pre-fetch less context.',
+          metric: `${Math.round(pct * 100)}% of per-run budget`,
+        }));
+      }
+    }
+
+    if (Number(cacheRow.runs ?? 0) >= 5 && cacheHitRate < 0.15) {
+      actions.push(usageAction({
+        type: 'cache_health',
+        severity: 'warning',
+        title: 'Prompt cache effectiveness is low',
+        detail: `Cache read rate is ${(cacheHitRate * 100).toFixed(1)}% over the last 7 days.`,
+        action: 'Check agents with dynamic system prompts or large changing context that prevents cache reuse.',
+        metric: `${cacheRow.runs} recent runs`,
+      }));
+    }
+
+    if (avgDaily30 > 0.001 && yesterdayAud > avgDaily30 * 2.5) {
+      actions.push(usageAction({
+        type: 'cost_spike',
+        severity: 'warning',
+        title: 'Spend spiked yesterday',
+        detail: `Yesterday was $${yesterdayAud.toFixed(4)} AUD versus a $${avgDaily30.toFixed(4)} 30-day daily average.`,
+        action: 'Check which agent ran yesterday and whether the run volume or model choice changed.',
+        metric: `${(yesterdayAud / avgDaily30).toFixed(1)}x baseline`,
+      }));
+    }
+
+    if (topCostDrivers.length > 0 && actions.length === 0) {
+      const top = topCostDrivers[0];
+      actions.push(usageAction({
+        type: 'top_driver',
+        severity: 'info',
+        title: `${top.tool_slug} is the main cost driver`,
+        detail: `It represents ${Math.round(top.share_of_cost * 100)}% of 30-day agent/tool spend.`,
+        action: 'No immediate issue detected. Use this as the first place to optimise if budget pressure appears.',
+        metric: `$${top.cost_aud.toFixed(4)} AUD`,
+      }));
+    }
+
+    const criticalCount = actions.filter((a) => a.severity === 'critical').length;
+    const warningCount = actions.filter((a) => a.severity === 'warning').length;
+    const status = criticalCount > 0 ? 'action_needed' : warningCount > 0 ? 'watch' : 'healthy';
+    const score = Math.max(0, 100 - (criticalCount * 35) - (warningCount * 15) - Math.min(actions.filter((a) => a.severity === 'info').length * 3, 9));
+
+    res.json({
+      health: {
+        status,
+        score,
+        label: status === 'action_needed' ? 'Action Needed' : status === 'watch' ? 'Watch' : 'Healthy',
+        summary: status === 'action_needed'
+          ? 'Usage needs admin attention.'
+          : status === 'watch'
+            ? 'Usage is acceptable but some signals need watching.'
+            : 'No major usage pressure detected.',
+      },
+      forecast: {
+        month_to_date_aud: monthCost,
+        projected_month_aud: projectedMonthAud,
+        current_day_of_month: dayOfMonth,
+        days_in_month: daysInMonth(now),
+        runs_month_to_date: monthRuns,
+        daily_budget_aud: maxDaily,
+        avg_7d_aud: avg7dAud,
+        daily_budget_pct: dailyBudgetPct,
+      },
+      topCostDrivers,
+      recommendedActions: actions.slice(0, 6),
+    });
+  } catch (err) {
+    console.error('[usage-intelligence]', err.message);
+    res.status(500).json({ error: 'Failed to compute usage intelligence.' });
+  }
+});
+
 // ── Usage Stats ───────────────────────────────────────────────────────────
 //
 // GET /admin/usage-stats?days=30
