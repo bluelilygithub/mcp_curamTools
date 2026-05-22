@@ -74,6 +74,11 @@ function IntelligenceProfileSection({ slug, profile, onChange }) {
 const inputCls = "w-full px-3 py-2.5 rounded-xl border text-sm outline-none";
 const inputStyle = { background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' };
 
+const SYSTEM_ROLE_OPTIONS = [
+  { name: 'org_member', label: 'Member' },
+  { name: 'ads_operator', label: 'Ads Operator' },
+];
+
 // ── Doc Extractor — file upload settings ─────────────────────────────────────
 
 const ALL_MIME_TYPES = [
@@ -209,7 +214,7 @@ function DocExtractorSettingsSection({ config, onChange }) {
   );
 }
 
-function AgentCard({ agent, models, onSave, isOpen, onToggle }) {
+function AgentCard({ agent, models, roleOptions, onSave, isOpen, onToggle }) {
   const [config,         setConfig]         = useState(agent);
   const [profile,        setProfile]        = useState(null);
   const [saving,         setSaving]         = useState(false);
@@ -219,6 +224,21 @@ function AgentCard({ agent, models, onSave, isOpen, onToggle }) {
   const enabledModels = models.filter((m) => m.enabled !== false);
   const rec           = agent.recommended_model; // { id, name, tier, reason } | null
   const hasMismatch   = rec && config.model && config.model !== rec.id;
+  const supportsRoleAccess = Boolean(agent.default_required_permission);
+  const allowedRoles   = Array.isArray(config.allowed_roles) ? config.allowed_roles : [];
+  const accessLabel    = allowedRoles.length > 0
+    ? allowedRoles.map((role) => roleOptions.find((r) => r.name === role)?.label ?? role).join(', ')
+    : `Default: ${agent.default_access_label ?? agent.default_required_permission ?? 'platform default'}`;
+
+  function toggleAllowedRole(roleName) {
+    setConfig((current) => {
+      const currentRoles = Array.isArray(current.allowed_roles) ? current.allowed_roles : [];
+      const next = currentRoles.includes(roleName)
+        ? currentRoles.filter((r) => r !== roleName)
+        : [...currentRoles, roleName];
+      return { ...current, allowed_roles: next.length > 0 ? next : null };
+    });
+  }
 
   async function save() {
     setSaving(true);
@@ -265,6 +285,11 @@ function AgentCard({ agent, models, onSave, isOpen, onToggle }) {
           {!isOpen && (
             <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: config.enabled ? 'var(--color-primary)' : '#ef4444', color: '#fff' }}>
               {config.enabled ? 'Enabled' : 'Disabled'}
+            </span>
+          )}
+          {!isOpen && supportsRoleAccess && (
+            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)' }}>
+              Access: {accessLabel}
             </span>
           )}
         </div>
@@ -342,6 +367,46 @@ function AgentCard({ agent, models, onSave, isOpen, onToggle }) {
           </p>
         </div>
 
+        {supportsRoleAccess && (
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
+              Agent Access
+            </label>
+            <div className="rounded-xl border p-3 space-y-3" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+              <label className="flex items-start gap-2 text-sm cursor-pointer" style={{ color: 'var(--color-text)' }}>
+                <input
+                  type="checkbox"
+                  checked={allowedRoles.length === 0}
+                  onChange={() => setConfig((c) => ({ ...c, allowed_roles: null }))}
+                  style={{ marginTop: 3 }}
+                />
+                <span>
+                  <span className="font-medium">Use code default</span>
+                  <span className="block text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
+                    Current default: {agent.default_access_label ?? agent.default_required_permission}. Org admins are always allowed.
+                  </span>
+                </span>
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {roleOptions.map((role) => (
+                  <label key={role.name} className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--color-text)' }}>
+                    <input
+                      type="checkbox"
+                      checked={allowedRoles.includes(role.name)}
+                      onChange={() => toggleAllowedRole(role.name)}
+                    />
+                    <span>{role.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+              Select roles to override the coded default for this agent. Leave empty to preserve the existing route rule.
+            </p>
+          </div>
+        )}
+
         {/* Fallback model */}
         <div className="sm:col-span-2">
           <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
@@ -418,6 +483,7 @@ function AgentCard({ agent, models, onSave, isOpen, onToggle }) {
 export default function AdminAgentsPage() {
   const [agents,   setAgents]   = useState([]);
   const [models,   setModels]   = useState([]);
+  const [roles,    setRoles]    = useState(SYSTEM_ROLE_OPTIONS);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState('');
   const [openSlug, setOpenSlug] = useState(null);
@@ -430,10 +496,15 @@ export default function AdminAgentsPage() {
     Promise.all([
       api.get('/admin/agents'),
       api.get('/admin/models'),
+      api.get('/admin/org-roles').catch(() => []),
     ])
-      .then(([agentData, modelData]) => {
+      .then(([agentData, modelData, orgRoles]) => {
         setAgents(agentData);
         setModels(modelData);
+        const customRoles = Array.isArray(orgRoles)
+          ? orgRoles.map((role) => ({ name: role.name, label: role.label ?? role.name }))
+          : [];
+        setRoles([...SYSTEM_ROLE_OPTIONS, ...customRoles]);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -458,6 +529,7 @@ export default function AdminAgentsPage() {
             key={agent.slug}
             agent={agent}
             models={models}
+            roleOptions={roles}
             onSave={() => {}}
             isOpen={openSlug === agent.slug}
             onToggle={() => toggleSlug(agent.slug)}

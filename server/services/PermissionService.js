@@ -125,6 +125,25 @@ async function hasPermission(userId, permission) {
 }
 
 /**
+ * Check whether a user may run an agent.
+ *
+ * If allowedRoles is configured on the agent, it becomes the per-agent access
+ * list. If not configured, fall back to the route's legacy requiredPermission.
+ * org_admin remains allowed through either path.
+ */
+async function canRunAgent(userId, requiredPermission, allowedRoles = null) {
+  const roles = Array.isArray(allowedRoles)
+    ? allowedRoles.map((r) => String(r).trim()).filter(Boolean)
+    : [];
+
+  if (roles.length > 0) {
+    return hasRole(userId, ['org_admin', ...roles]);
+  }
+
+  return hasPermission(userId, requiredPermission || 'agents:run');
+}
+
+/**
  * Grant a role to a user.
  */
 async function grantRole(userId, roleName, scope = { scopeType: 'global', scopeId: null }, grantedBy = null) {
@@ -291,6 +310,7 @@ async function listResourcePermissions(orgId, resourceUri = null) {
 module.exports = {
   hasRole,
   hasPermission,
+  canRunAgent,
   isOrgAdmin,
   getUserRoles,
   getEffectivePermissions,

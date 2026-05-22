@@ -18,13 +18,13 @@ const express = require('express');
 const { pool } = require('../db');
 const { persistRun } = require('./persistRun');
 const { requireAuth } = require('../middleware/requireAuth');
-const { requirePermission } = require('../middleware/requirePermission');
 const { createRateLimiter } = require('../middleware/rateLimiter');
 const AgentConfigService = require('./AgentConfigService');
 const CostGuardService = require('../services/CostGuardService');
 const { logUsage } = require('../services/UsageLogger');
 const EmbeddingService = require('../services/EmbeddingService');
 const { loadLessonsForAgent, proposeLessonFromRun } = require('../services/LessonRepositoryService');
+const { canRunAgent } = require('../services/PermissionService');
 const { validateToolData } = require('./validateToolData');
 const { mergePromptVersionIntoResult } = require('./promptVersions');
 
@@ -84,7 +84,6 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
   router.post(
     '/run',
     requireAuth,
-    requirePermission(requiredPermission || 'agents:run'),
     runRateLimiter,
     async (req, res) => {
       // SSE headers
@@ -110,15 +109,7 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
 
       // Accumulate progress messages for auditing — saved into the run record on completion
       const progressLog = [];
-
-      // Insert initial 'running' row
       let runId;
-      try {
-        runId = await persistRun({ slug, orgId, status: 'running', runAt: startTime });
-      } catch (dbErr) {
-        emit('error', { error: 'Failed to record run start' });
-        return done();
-      }
 
       // Load admin config and check kill switch
       let adminConfig;
@@ -134,9 +125,22 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
         return done();
       }
 
+      const permitted = await canRunAgent(userId, requiredPermission, adminConfig.allowed_roles);
+      if (!permitted) {
+        emit('error', { error: 'Insufficient permissions.' });
+        return done();
+      }
+
       if (!adminConfig.enabled) {
         emit('error', { error: 'Agent is currently disabled by an administrator.' });
-        await persistRun({ slug, orgId, status: 'error', error: 'Agent disabled', runId });
+        return done();
+      }
+
+      // Insert initial 'running' row only after config/access checks pass.
+      try {
+        runId = await persistRun({ slug, orgId, status: 'running', runAt: startTime });
+      } catch (dbErr) {
+        emit('error', { error: 'Failed to record run start' });
         return done();
       }
 

@@ -622,6 +622,45 @@ router.post('/models/reset', async (req, res) => {
 
 // ── Agents (admin guardrails) ──────────────────────────────────────────────
 
+const AGENT_DEFAULT_ACCESS = {
+  'google-ads-monitor':          'ads_operator',
+  'google-ads-freeform':         'ads_operator',
+  'google-ads-change-impact':    'ads_operator',
+  'google-ads-change-audit':     'ads_operator',
+  'ads-bounce-analysis':         'ads_operator',
+  'auction-insights':            'ads_operator',
+  'competitor-keyword-intel':    'ads_operator',
+  'google-ads-strategic-review': 'ads_operator',
+  'keyword-opportunity':         'ads_operator',
+  'ads-copy-gate':               'ads_operator',
+  'ads-copy-playbook':           'ads_operator',
+  'ads-setup-architect':         'ads_operator',
+  'ads-copy-diagnostic':         'ads_operator',
+  'ads-attribution-summary':     'ads_operator',
+  'daypart-intelligence':        'ads_operator',
+  'cost-per-booked-job':         'ads_operator',
+  'wp-theme-extractor':          'org_member',
+  'diamondplate-data':           'org_member',
+  'search-term-intelligence':    'org_member',
+  'lead-velocity':               'org_member',
+  'ai-visibility-monitor':       'org_member',
+  'geo-heatmap':                 'org_member',
+  'demo-document-analyzer':      'org_member',
+  'spec-validator':              'org_member',
+  'demo-spec-validator':         'org_member',
+  'demo-tender-response':        'org_member',
+  'not-interested-report':       'org_admin',
+  'high-intent-advisor':         'org_admin',
+};
+
+function accessLabel(roleName) {
+  return {
+    org_admin:    'Admin',
+    org_member:   'Member',
+    ads_operator: 'Ads Operator',
+  }[roleName] ?? roleName;
+}
+
 router.get('/agents', async (req, res) => {
   const slugs = Object.keys(AgentConfigService.ADMIN_DEFAULTS).filter((s) => s !== '_platform');
   try {
@@ -635,6 +674,8 @@ router.get('/agents', async (req, res) => {
       slugs.map(async (slug) => ({
         slug,
         ...(await AgentConfigService.getAdminConfig(slug)),
+        default_required_permission: AGENT_DEFAULT_ACCESS[slug] ?? null,
+        default_access_label:        AGENT_DEFAULT_ACCESS[slug] ? accessLabel(AGENT_DEFAULT_ACCESS[slug]) : null,
         recommended_model: AgentConfigService.getRecommendedModel(slug, allModels),
       }))
     );
@@ -647,7 +688,12 @@ router.get('/agents', async (req, res) => {
 router.get('/agents/:slug', async (req, res) => {
   try {
     const config = await AgentConfigService.getAdminConfig(req.params.slug);
-    res.json(config);
+    const defaultPermission = AGENT_DEFAULT_ACCESS[req.params.slug] ?? null;
+    res.json({
+      ...config,
+      default_required_permission: defaultPermission,
+      default_access_label:        defaultPermission ? accessLabel(defaultPermission) : null,
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load agent admin config.' });
   }
@@ -655,9 +701,26 @@ router.get('/agents/:slug', async (req, res) => {
 
 router.put('/agents/:slug', async (req, res) => {
   try {
+    const patch = { ...req.body };
+    if (Object.prototype.hasOwnProperty.call(patch, 'allowed_roles')) {
+      const allowedRoles = Array.isArray(patch.allowed_roles)
+        ? [...new Set(patch.allowed_roles.map((r) => String(r).trim()).filter(Boolean))]
+        : [];
+      const { rows: customRoles } = await pool.query(
+        `SELECT name FROM org_roles WHERE org_id = $1`,
+        [req.user.orgId]
+      );
+      const validRoles = new Set(['org_member', 'ads_operator', ...customRoles.map((r) => r.name)]);
+      const invalid = allowedRoles.filter((role) => !validRoles.has(role));
+      if (invalid.length > 0) {
+        return res.status(400).json({ error: `Invalid agent access role: ${invalid[0]}` });
+      }
+      patch.allowed_roles = allowedRoles.length > 0 ? allowedRoles : null;
+    }
+
     const updated = await AgentConfigService.updateAdminConfig(
       req.params.slug,
-      req.body,
+      patch,
       req.user.id
     );
     res.json(updated);

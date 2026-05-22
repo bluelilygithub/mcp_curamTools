@@ -44,6 +44,7 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - **Capability middleware:** Added `requirePermission(permission)` as a compatibility layer over existing roles.
 - **Role-to-capability mapping:** Added `ROLE_PERMISSIONS`, `getEffectivePermissions()`, and `hasPermission()` to `PermissionService`. `org_admin` maps to `*`; legacy role names are still exposed as capabilities during migration.
 - **Route adoption:** Moved shared agent run protection, the main admin router, Lessons management, MCP admin, admin knowledge, and Google Ads customer/assignment management to capability checks while preserving existing `org_admin`, `org_member`, and `ads_operator` behaviour.
+- **Agent access controls:** Added `Admin > Agents > Agent Access` for standard route-factory agents. Admins can leave the coded default in place or select roles that may run that agent; `org_admin` remains always allowed.
 - **Permissions guide:** Added `PERMISSIONS.md` with the current model, migration rules, route/agent usage examples, naming guidance, and testing checklist.
 
 ### Fixed / discovered

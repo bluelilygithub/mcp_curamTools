@@ -148,6 +148,36 @@ createAgentRoute({
 
 `createAgentRoute()` calls `requirePermission(requiredPermission || 'agents:run')`, so `org_admin` still passes automatically through `*`.
 
+### Assign Roles To An Agent
+
+For standard agents registered through `createAgentRoute`, admins can override the coded default from:
+
+```text
+Admin > Agents > Agent Access
+```
+
+Each agent has two modes:
+
+1. **Use code default**
+
+The route's `requiredPermission` remains in effect. For example, many Google Ads agents default to `ads_operator`, while demo/document agents often default to `org_member`.
+
+2. **Selected roles**
+
+The selected roles become the allowed roles for that agent. This is stored in the agent's admin config as `allowed_roles`.
+
+```json
+{
+  "allowed_roles": ["org_member", "ads_operator"]
+}
+```
+
+`org_admin` is always allowed, even when it is not listed.
+
+If `allowed_roles` is empty or `null`, the agent falls back to the coded route default.
+
+This UI currently applies to standard `createAgentRoute` agents only. Custom direct routes need their own explicit access check before exposing role assignment controls.
+
 ### Check A Permission In Code
 
 Use `PermissionService.hasPermission()` for non-middleware checks.
@@ -270,6 +300,7 @@ Permission-sensitive code must use the organisation from `req.user`, not from re
 The first retrofit pass wires these areas through `requirePermission()`:
 
 - shared agent run routes via `createAgentRoute`
+- per-agent role overrides for standard route-factory agents through `Admin > Agents > Agent Access`
 - main admin router via `admin:access`
 - Lessons management via `lessons:manage`
 - MCP admin via `mcp:manage`
