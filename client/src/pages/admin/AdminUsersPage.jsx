@@ -50,6 +50,12 @@ const inputStyle = {
   color: 'var(--color-text)', fontSize: '0.875rem', outline: 'none', boxSizing: 'border-box',
 };
 
+const SYSTEM_ROLE_FALLBACK = [
+  { name: 'org_member', label: 'Member', description: 'General organisation user.' },
+  { name: 'ads_operator', label: 'Ads Operator', description: 'Advertising/reporting operator.' },
+  { name: 'org_admin', label: 'Admin', description: 'Full admin access.' },
+];
+
 function ModalShell({ onClose, title, subtitle, children, maxWidth = 'max-w-md' }) {
   const getIcon = useIcon();
   return (
@@ -318,10 +324,13 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
   const [selectedOrgId, setSelectedOrgId] = useState(user.org_id ?? '');
   const [orgSaving,     setOrgSaving]     = useState(false);
 
-  // Org role (admin/member toggle)
-  const [isAdmin,       setIsAdmin]       = useState(false);
-  const [roleLoading,   setRoleLoading]   = useState(true);
-  const [roleWorking,   setRoleWorking]   = useState(false);
+  // System access roles
+  const [systemRoleOptions, setSystemRoleOptions] = useState(SYSTEM_ROLE_FALLBACK);
+  const [systemRoleNames,   setSystemRoleNames]   = useState([]);
+  const [roleLoading,       setRoleLoading]       = useState(true);
+  const [systemRoleSaving,  setSystemRoleSaving]  = useState(false);
+  const [accessPreview,     setAccessPreview]     = useState(null);
+  const [previewLoading,    setPreviewLoading]    = useState(false);
 
   // Departments
   const [allDepts,      setAllDepts]      = useState([]);
@@ -359,14 +368,22 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
       api.get('/admin/org-roles'),
       api.get('/admin/models'),
       api.get('/admin/organizations'),
-    ]).then(([roles, userDepts, userOrgRoles, depts, orgRoles, modelList, orgs]) => {
+      api.get('/admin/access-roles').catch(() => ({ systemRoles: SYSTEM_ROLE_FALLBACK })),
+      api.get(`/admin/users/${user.id}/access-preview`).catch(() => null),
+    ]).then(([roles, userDepts, userOrgRoles, depts, orgRoles, modelList, orgs, accessRoles, preview]) => {
       setAllOrgs(Array.isArray(orgs) ? orgs : []);
-      setIsAdmin(roles.some((r) => r.role_name === 'org_admin' && r.scope_type === 'global'));
+      const loadedSystemRoles = Array.isArray(accessRoles?.systemRoles) ? accessRoles.systemRoles : SYSTEM_ROLE_FALLBACK;
+      const systemNames = loadedSystemRoles.map((role) => role.name);
+      setSystemRoleOptions(loadedSystemRoles);
+      setSystemRoleNames(roles
+        .filter((r) => systemNames.includes(r.role_name) && r.scope_type === 'global')
+        .map((r) => r.role_name));
       setUserDeptIds(userDepts.map((d) => d.id));
       setUserRoleNames(userOrgRoles);
       setAllDepts(depts);
       setAllOrgRoles(orgRoles);
       setModels(modelList.filter((m) => m.enabled));
+      setAccessPreview(preview);
     }).catch(() => showToast('Failed to load user data', 'error'))
       .finally(() => setRoleLoading(false));
   }, [user.id]);
@@ -397,6 +414,7 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
     try {
       await api.put(`/admin/users/${user.id}/org-roles`, { roleNames: userRoleNames });
       showToast('Roles updated', 'success');
+      await loadAccessPreview();
       onSaved();
     } catch (e) {
       showToast(e.message || 'Failed to update roles', 'error');
@@ -421,19 +439,39 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
     }
   };
 
-  const toggleAdmin = async () => {
-    if (isSelf) { showToast('You cannot change your own admin role', 'error'); return; }
-    setRoleWorking(true);
+  const loadAccessPreview = async () => {
+    setPreviewLoading(true);
     try {
-      const endpoint = isAdmin ? 'revoke-role' : 'grant-role';
-      await api.post(`/admin/users/${user.id}/${endpoint}`, { roleName: 'org_admin', scopeType: 'global' });
-      setIsAdmin(!isAdmin);
-      showToast(isAdmin ? 'Admin role removed' : 'Admin role granted', 'success');
+      const preview = await api.get(`/admin/users/${user.id}/access-preview`);
+      setAccessPreview(preview);
+    } catch {
+      setAccessPreview(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const toggleSystemRole = (roleName) => {
+    setSystemRoleNames((prev) => {
+      if (isSelf && roleName === 'org_admin' && prev.includes('org_admin')) {
+        showToast('You cannot remove your own admin role', 'error');
+        return prev;
+      }
+      return prev.includes(roleName) ? prev.filter((r) => r !== roleName) : [...prev, roleName];
+    });
+  };
+
+  const saveSystemRoles = async () => {
+    setSystemRoleSaving(true);
+    try {
+      await api.put(`/admin/users/${user.id}/system-roles`, { roleNames: systemRoleNames });
+      showToast('System roles updated', 'success');
+      await loadAccessPreview();
       onSaved();
     } catch (err) {
-      showToast(err.message || 'Failed to update role', 'error');
+      showToast(err.message || 'Failed to update system roles', 'error');
     } finally {
-      setRoleWorking(false);
+      setSystemRoleSaving(false);
     }
   };
 
@@ -513,34 +551,42 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
           </div>
         </section>
 
-        {/* ── Organisation role ─────────────────────────────────────────── */}
+        {/* ── System access roles ───────────────────────────────────────── */}
         <section>
           <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>
-            Organisation Role
+            System Access Roles
           </p>
-          <div
-            className="flex items-center justify-between px-3 py-2.5 rounded-xl border"
-            style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)' }}
-          >
-            <div>
-              <p className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
-                {roleLoading ? '…' : isAdmin ? 'Administrator' : 'Member'}
-              </p>
-              <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
-                {isAdmin ? 'Full access to this admin panel' : 'Standard organisation member'}
-              </p>
-            </div>
-            <button
-              onClick={toggleAdmin}
-              disabled={roleWorking || roleLoading || isSelf}
-              title={isSelf ? 'You cannot change your own admin role' : undefined}
-              className="text-xs px-2 py-1 rounded-lg transition-opacity hover:opacity-70 disabled:opacity-30"
-              style={{
-                color:      isAdmin ? '#ef4444' : 'var(--color-primary)',
-                background: 'transparent', border: 'none', cursor: 'pointer',
-              }}
-            >
-              {roleWorking ? '…' : isAdmin ? 'Remove admin' : 'Make admin'}
+          <p className="text-xs mb-2" style={{ color: 'var(--color-muted)' }}>
+            These roles drive admin access and agent access. Custom roles below can also be assigned to agents.
+          </p>
+          <div className="space-y-1.5">
+            {systemRoleOptions.map((role) => (
+              <label
+                key={role.name}
+                className="flex items-start gap-2.5 px-3 py-2 rounded-xl border cursor-pointer"
+                style={{
+                  borderColor: systemRoleNames.includes(role.name) ? 'var(--color-primary)' : 'var(--color-border)',
+                  background:  systemRoleNames.includes(role.name) ? 'rgba(var(--color-primary-rgb,99,102,241),0.06)' : 'var(--color-bg)',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={systemRoleNames.includes(role.name)}
+                  onChange={() => toggleSystemRole(role.name)}
+                  disabled={roleLoading || (isSelf && role.name === 'org_admin' && systemRoleNames.includes('org_admin'))}
+                  className="accent-[var(--color-primary)] mt-0.5"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>{role.label}</p>
+                  <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{role.description}</p>
+                </div>
+                <span className="text-xs font-mono" style={{ color: 'var(--color-muted)' }}>{role.name}</span>
+              </label>
+            ))}
+            <button onClick={saveSystemRoles} disabled={systemRoleSaving || roleLoading}
+              className="mt-2 text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40"
+              style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', cursor: 'pointer' }}>
+              {systemRoleSaving ? 'Saving…' : 'Save system roles'}
             </button>
           </div>
         </section>
@@ -623,6 +669,44 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
                 style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', cursor: 'pointer' }}>
                 {orgRoleSaving ? 'Saving…' : 'Save roles'}
               </button>
+            </div>
+          )}
+        </section>
+
+        {/* ── Effective agent access ─────────────────────────────────────── */}
+        <section>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+              Effective Agent Access
+            </p>
+            <button
+              onClick={loadAccessPreview}
+              disabled={previewLoading}
+              className="text-xs px-2 py-1 rounded-lg transition-opacity hover:opacity-70 disabled:opacity-40"
+              style={{ color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer' }}
+            >
+              {previewLoading ? 'Checking…' : 'Refresh'}
+            </button>
+          </div>
+          {!accessPreview ? (
+            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+              Access preview unavailable.
+            </p>
+          ) : (
+            <div className="rounded-xl border p-3 space-y-2" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)' }}>
+              <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+                Allowed for {accessPreview.agents.filter((agent) => agent.allowed).length} of {accessPreview.agents.length} role-controlled agents in this organisation.
+              </p>
+              <div className="max-h-36 overflow-y-auto space-y-1">
+                {accessPreview.agents.map((agent) => (
+                  <div key={agent.slug} className="flex items-center justify-between gap-2 text-xs">
+                    <span style={{ color: 'var(--color-text)' }}>{agent.slug}</span>
+                    <span style={{ color: agent.allowed ? '#16a34a' : '#ef4444' }}>
+                      {agent.allowed ? 'Allowed' : 'Denied'}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </section>

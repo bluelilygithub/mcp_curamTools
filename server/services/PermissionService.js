@@ -143,6 +143,53 @@ async function canRunAgent(userId, requiredPermission, allowedRoles = null) {
   return hasPermission(userId, requiredPermission || 'agents:run');
 }
 
+async function getAgentAccessDecision(userId, requiredPermission, allowedRoles = null) {
+  const userRoles = await getUserRoles(userId);
+  const roleNames = [...new Set(userRoles.map((role) => role.role_name))];
+
+  if (roleNames.includes('org_admin')) {
+    return {
+      allowed: true,
+      reason: 'User is an admin.',
+      mode: 'admin',
+      matchingRoles: ['org_admin'],
+      userRoles: roleNames,
+    };
+  }
+
+  const configuredRoles = Array.isArray(allowedRoles)
+    ? allowedRoles.map((r) => String(r).trim()).filter(Boolean)
+    : [];
+
+  if (configuredRoles.length > 0) {
+    const matchingRoles = configuredRoles.filter((role) => roleNames.includes(role));
+    return {
+      allowed: matchingRoles.length > 0,
+      reason: matchingRoles.length > 0
+        ? `User has required role: ${matchingRoles.join(', ')}.`
+        : `User needs one of: ${configuredRoles.join(', ')}.`,
+      mode: 'configured_roles',
+      requiredRoles: configuredRoles,
+      matchingRoles,
+      userRoles: roleNames,
+    };
+  }
+
+  const permission = requiredPermission || 'agents:run';
+  const permissions = await getEffectivePermissions(userId);
+  const allowed = permissions.some((granted) => permissionMatches(granted, permission));
+  return {
+    allowed,
+    reason: allowed
+      ? `User satisfies default permission: ${permission}.`
+      : `User lacks default permission: ${permission}.`,
+    mode: 'default_permission',
+    requiredPermission: permission,
+    matchingRoles: [],
+    userRoles: roleNames,
+  };
+}
+
 /**
  * Grant a role to a user.
  */
@@ -311,6 +358,7 @@ module.exports = {
   hasRole,
   hasPermission,
   canRunAgent,
+  getAgentAccessDecision,
   isOrgAdmin,
   getUserRoles,
   getEffectivePermissions,

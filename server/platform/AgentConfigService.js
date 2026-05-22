@@ -488,14 +488,30 @@ function slugToKey(slug) {
 /**
  * Returns defaults merged with stored admin config for the given slug.
  */
-async function getAdminConfig(slug) {
+async function getAdminConfig(slug, orgId = null) {
   try {
-    // Admin config is org-agnostic for now (all orgs share the same admin guardrails per slug)
-    const res = await pool.query(
-      `SELECT value FROM system_settings WHERE key = $1 LIMIT 1`,
-      [slugToKey(slug)]
-    );
+    const key = slugToKey(slug);
     const defaults = getDefaultAdminConfig(slug);
+    let res;
+
+    if (orgId != null) {
+      res = await pool.query(
+        `SELECT value FROM system_settings WHERE org_id = $1 AND key = $2 LIMIT 1`,
+        [orgId, key]
+      );
+      if (res.rows.length === 0 && orgId !== 1) {
+        res = await pool.query(
+          `SELECT value FROM system_settings WHERE org_id = 1 AND key = $1 LIMIT 1`,
+          [key]
+        );
+      }
+    } else {
+      res = await pool.query(
+        `SELECT value FROM system_settings WHERE key = $1 ORDER BY org_id LIMIT 1`,
+        [key]
+      );
+    }
+
     if (res.rows.length === 0) return defaults;
     return { ...defaults, ...(res.rows[0].value || {}) };
   } catch (err) {
@@ -533,7 +549,7 @@ async function getOrgModels(orgId) {
  * Fallback model follows the same "per-agent first, org fallback second" rule.
  */
 async function getResolvedAdminConfig(slug, orgId, { useRecommended = false } = {}) {
-  const adminConfig = await getAdminConfig(slug);
+  const adminConfig = await getAdminConfig(slug, orgId);
 
   let model = adminConfig.model || null;
   let model_source = model ? 'agent-config' : null;
@@ -571,21 +587,23 @@ async function getResolvedAdminConfig(slug, orgId, { useRecommended = false } = 
 /**
  * Saves merged admin config to system_settings.
  */
-async function updateAdminConfig(slug, patch, updatedBy) {
-  const current = await getAdminConfig(slug);
+async function updateAdminConfig(slug, patch, updatedBy, orgId = null) {
+  const current = await getAdminConfig(slug, orgId);
   const merged = { ...current, ...patch };
 
-  // Get the org_id of the admin (first org as fallback)
-  const orgRes = await pool.query('SELECT id FROM organizations ORDER BY id LIMIT 1');
-  const orgId = orgRes.rows[0]?.id;
-  if (!orgId) throw new Error('No organisation found');
+  let targetOrgId = orgId;
+  if (!targetOrgId) {
+    const orgRes = await pool.query('SELECT id FROM organizations ORDER BY id LIMIT 1');
+    targetOrgId = orgRes.rows[0]?.id;
+  }
+  if (!targetOrgId) throw new Error('No organisation found');
 
   await pool.query(
     `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
      VALUES ($1, $2, $3, $4, NOW())
      ON CONFLICT (org_id, key)
      DO UPDATE SET value = $3, updated_by = $4, updated_at = NOW()`,
-    [orgId, slugToKey(slug), JSON.stringify(merged), updatedBy]
+    [targetOrgId, slugToKey(slug), JSON.stringify(merged), updatedBy]
   );
   return merged;
 }

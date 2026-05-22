@@ -220,6 +220,8 @@ function AgentCard({ agent, models, roleOptions, onSave, isOpen, onToggle }) {
   const [saving,         setSaving]         = useState(false);
   const [success,        setSuccess]        = useState('');
   const [error,          setError]          = useState('');
+  const [accessPreview,  setAccessPreview]  = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const enabledModels = models.filter((m) => m.enabled !== false);
   const rec           = agent.recommended_model; // { id, name, tier, reason } | null
@@ -240,6 +242,23 @@ function AgentCard({ agent, models, roleOptions, onSave, isOpen, onToggle }) {
     });
   }
 
+  async function loadAccessPreview() {
+    if (!supportsRoleAccess) return;
+    setPreviewLoading(true);
+    try {
+      const preview = await api.get(`/admin/agents/${agent.slug}/access-preview`);
+      setAccessPreview(preview);
+    } catch {
+      setAccessPreview(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (isOpen) loadAccessPreview();
+  }, [isOpen, agent.slug]);
+
   async function save() {
     setSaving(true);
     setSuccess('');
@@ -248,6 +267,7 @@ function AgentCard({ agent, models, roleOptions, onSave, isOpen, onToggle }) {
       if (profile !== null) {
         await api.put(`/agent-configs/${agent.slug}`, { intelligence_profile: profile });
       }
+      await loadAccessPreview();
       setSuccess('Saved.');
     } catch (e) {
       setError(e.message);
@@ -404,6 +424,41 @@ function AgentCard({ agent, models, roleOptions, onSave, isOpen, onToggle }) {
             <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
               Select roles to override the coded default for this agent. Leave empty to preserve the existing route rule.
             </p>
+            <div className="rounded-xl border p-3 mt-3" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+                  Access Preview
+                </p>
+                <button
+                  type="button"
+                  onClick={loadAccessPreview}
+                  disabled={previewLoading}
+                  className="text-xs transition-opacity hover:opacity-70 disabled:opacity-40"
+                  style={{ color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                >
+                  {previewLoading ? 'Checking…' : 'Refresh'}
+                </button>
+              </div>
+              {accessPreview ? (
+                <div className="space-y-2">
+                  <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+                    {accessPreview.allowedCount} allowed · {accessPreview.deniedCount} denied in this organisation.
+                  </p>
+                  <div className="max-h-36 overflow-y-auto space-y-1">
+                    {accessPreview.users.map((user) => (
+                      <div key={user.id} className="flex items-center justify-between gap-2 text-xs">
+                        <span style={{ color: 'var(--color-text)' }}>{user.name}</span>
+                        <span style={{ color: user.allowed ? '#16a34a' : '#ef4444' }}>
+                          {user.allowed ? 'Allowed' : 'Denied'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs" style={{ color: 'var(--color-muted)' }}>No preview loaded.</p>
+              )}
+            </div>
           </div>
         )}
 
@@ -496,15 +551,20 @@ export default function AdminAgentsPage() {
     Promise.all([
       api.get('/admin/agents'),
       api.get('/admin/models'),
-      api.get('/admin/org-roles').catch(() => []),
+      api.get('/admin/access-roles').catch(() => ({ systemRoles: SYSTEM_ROLE_OPTIONS, customRoles: [] })),
     ])
-      .then(([agentData, modelData, orgRoles]) => {
+      .then(([agentData, modelData, accessRoles]) => {
         setAgents(agentData);
         setModels(modelData);
-        const customRoles = Array.isArray(orgRoles)
-          ? orgRoles.map((role) => ({ name: role.name, label: role.label ?? role.name }))
+        const systemRoles = Array.isArray(accessRoles?.systemRoles)
+          ? accessRoles.systemRoles
+              .filter((role) => role.assignableToAgents !== false)
+              .map((role) => ({ name: role.name, label: role.label ?? role.name }))
+          : SYSTEM_ROLE_OPTIONS;
+        const customRoles = Array.isArray(accessRoles?.customRoles)
+          ? accessRoles.customRoles.map((role) => ({ name: role.name, label: role.label ?? role.name }))
           : [];
-        setRoles([...SYSTEM_ROLE_OPTIONS, ...customRoles]);
+        setRoles([...systemRoles, ...customRoles]);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));

@@ -18,14 +18,17 @@ const https   = require('https');
 const { pool } = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
 const { requirePermission } = require('../middleware/requirePermission');
-const { grantRole, revokeRole, getUserRoles } = require('../services/PermissionService');
+const { grantRole, revokeRole, getUserRoles, getAgentAccessDecision } = require('../services/PermissionService');
 const { createInvitation, resendInvitation } = require('../services/InvitationService');
 const AgentConfigService = require('../platform/AgentConfigService');
+const { SYSTEM_ROLE_OPTIONS, getDefaultAccess } = require('../platform/AgentAccessRegistry');
 const EmailTemplateService = require('../services/EmailTemplateService');
 const { proposeLessonFromRun } = require('../services/LessonRepositoryService');
 
 const router = express.Router();
 router.use(requireAuth, requirePermission('admin:access'));
+
+const SYSTEM_ROLE_NAMES = SYSTEM_ROLE_OPTIONS.map((role) => role.name);
 
 // ── Users ─────────────────────────────────────────────────────────────────
 
@@ -180,6 +183,100 @@ router.post('/users/:id/revoke-role', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to revoke role.' });
+  }
+});
+
+router.get('/access-roles', async (req, res) => {
+  try {
+    const { rows: customRoles } = await pool.query(
+      `SELECT id, name, label, description, color
+         FROM org_roles
+        WHERE org_id = $1
+        ORDER BY label`,
+      [req.user.orgId]
+    );
+    res.json({
+      systemRoles: SYSTEM_ROLE_OPTIONS,
+      customRoles,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load access roles.' });
+  }
+});
+
+router.put('/users/:id/system-roles', async (req, res) => {
+  const userId = parseInt(req.params.id);
+  const requestedRoles = Array.isArray(req.body.roleNames)
+    ? [...new Set(req.body.roleNames.map((r) => String(r).trim()).filter(Boolean))]
+    : [];
+  const invalid = requestedRoles.filter((role) => !SYSTEM_ROLE_NAMES.includes(role));
+  if (invalid.length > 0) {
+    return res.status(400).json({ error: `Invalid system role: ${invalid[0]}` });
+  }
+
+  try {
+    const check = await pool.query('SELECT id FROM users WHERE id = $1 AND org_id = $2', [userId, req.user.orgId]);
+    if (!check.rows.length) return res.status(404).json({ error: 'User not found.' });
+
+    const currentRoles = await getUserRoles(userId);
+    const isRemovingOwnAdmin = userId === req.user.id
+      && currentRoles.some((role) => role.role_name === 'org_admin')
+      && !requestedRoles.includes('org_admin');
+    if (isRemovingOwnAdmin) {
+      return res.status(400).json({ error: 'You cannot remove your own admin role.' });
+    }
+
+    await pool.query(
+      `DELETE FROM user_roles
+        WHERE user_id = $1
+          AND scope_type = 'global'
+          AND role_name = ANY($2)`,
+      [userId, SYSTEM_ROLE_NAMES]
+    );
+    for (const roleName of requestedRoles) {
+      await grantRole(userId, roleName, { scopeType: 'global', scopeId: null }, req.user.id);
+    }
+    res.json({ ok: true, roleNames: requestedRoles });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update system roles.' });
+  }
+});
+
+async function getUserAgentAccessPreview(userId, orgId) {
+  const slugs = Object.keys(AgentConfigService.ADMIN_DEFAULTS).filter((s) => s !== '_platform');
+  const rows = [];
+  for (const slug of slugs) {
+    const config = await AgentConfigService.getAdminConfig(slug, orgId);
+    const defaultAccess = getDefaultAccess(slug);
+    if (!defaultAccess.roleName) continue;
+    const decision = await getAgentAccessDecision(userId, defaultAccess.roleName, config.allowed_roles);
+    rows.push({
+      slug,
+      allowed: decision.allowed,
+      reason: decision.reason,
+      mode: decision.mode,
+      requiredRoles: decision.requiredRoles ?? null,
+      requiredPermission: decision.requiredPermission ?? defaultAccess.roleName,
+      default_role: defaultAccess.roleName,
+      default_label: defaultAccess.label,
+    });
+  }
+  return rows;
+}
+
+router.get('/users/:id/access-preview', async (req, res) => {
+  const userId = parseInt(req.params.id);
+  try {
+    const check = await pool.query('SELECT id FROM users WHERE id = $1 AND org_id = $2', [userId, req.user.orgId]);
+    if (!check.rows.length) return res.status(404).json({ error: 'User not found.' });
+    const roles = await getUserRoles(userId);
+    const agents = await getUserAgentAccessPreview(userId, req.user.orgId);
+    res.json({
+      roles: roles.map((role) => role.role_name),
+      agents,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load access preview.' });
   }
 });
 
@@ -622,45 +719,6 @@ router.post('/models/reset', async (req, res) => {
 
 // ── Agents (admin guardrails) ──────────────────────────────────────────────
 
-const AGENT_DEFAULT_ACCESS = {
-  'google-ads-monitor':          'ads_operator',
-  'google-ads-freeform':         'ads_operator',
-  'google-ads-change-impact':    'ads_operator',
-  'google-ads-change-audit':     'ads_operator',
-  'ads-bounce-analysis':         'ads_operator',
-  'auction-insights':            'ads_operator',
-  'competitor-keyword-intel':    'ads_operator',
-  'google-ads-strategic-review': 'ads_operator',
-  'keyword-opportunity':         'ads_operator',
-  'ads-copy-gate':               'ads_operator',
-  'ads-copy-playbook':           'ads_operator',
-  'ads-setup-architect':         'ads_operator',
-  'ads-copy-diagnostic':         'ads_operator',
-  'ads-attribution-summary':     'ads_operator',
-  'daypart-intelligence':        'ads_operator',
-  'cost-per-booked-job':         'ads_operator',
-  'wp-theme-extractor':          'org_member',
-  'diamondplate-data':           'org_member',
-  'search-term-intelligence':    'org_member',
-  'lead-velocity':               'org_member',
-  'ai-visibility-monitor':       'org_member',
-  'geo-heatmap':                 'org_member',
-  'demo-document-analyzer':      'org_member',
-  'spec-validator':              'org_member',
-  'demo-spec-validator':         'org_member',
-  'demo-tender-response':        'org_member',
-  'not-interested-report':       'org_admin',
-  'high-intent-advisor':         'org_admin',
-};
-
-function accessLabel(roleName) {
-  return {
-    org_admin:    'Admin',
-    org_member:   'Member',
-    ads_operator: 'Ads Operator',
-  }[roleName] ?? roleName;
-}
-
 router.get('/agents', async (req, res) => {
   const slugs = Object.keys(AgentConfigService.ADMIN_DEFAULTS).filter((s) => s !== '_platform');
   try {
@@ -671,13 +729,16 @@ router.get('/agents', async (req, res) => {
     const allModels = modelsRow.rows[0]?.value ?? MODEL_DEFAULTS;
 
     const configs = await Promise.all(
-      slugs.map(async (slug) => ({
-        slug,
-        ...(await AgentConfigService.getAdminConfig(slug)),
-        default_required_permission: AGENT_DEFAULT_ACCESS[slug] ?? null,
-        default_access_label:        AGENT_DEFAULT_ACCESS[slug] ? accessLabel(AGENT_DEFAULT_ACCESS[slug]) : null,
-        recommended_model: AgentConfigService.getRecommendedModel(slug, allModels),
-      }))
+      slugs.map(async (slug) => {
+        const defaultAccess = getDefaultAccess(slug);
+        return {
+          slug,
+          ...(await AgentConfigService.getAdminConfig(slug, req.user.orgId)),
+          default_required_permission: defaultAccess.roleName,
+          default_access_label:        defaultAccess.label,
+          recommended_model: AgentConfigService.getRecommendedModel(slug, allModels),
+        };
+      })
     );
     res.json(configs);
   } catch (err) {
@@ -687,12 +748,12 @@ router.get('/agents', async (req, res) => {
 
 router.get('/agents/:slug', async (req, res) => {
   try {
-    const config = await AgentConfigService.getAdminConfig(req.params.slug);
-    const defaultPermission = AGENT_DEFAULT_ACCESS[req.params.slug] ?? null;
+    const config = await AgentConfigService.getAdminConfig(req.params.slug, req.user.orgId);
+    const defaultAccess = getDefaultAccess(req.params.slug);
     res.json({
       ...config,
-      default_required_permission: defaultPermission,
-      default_access_label:        defaultPermission ? accessLabel(defaultPermission) : null,
+      default_required_permission: defaultAccess.roleName,
+      default_access_label:        defaultAccess.label,
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load agent admin config.' });
@@ -710,7 +771,10 @@ router.put('/agents/:slug', async (req, res) => {
         `SELECT name FROM org_roles WHERE org_id = $1`,
         [req.user.orgId]
       );
-      const validRoles = new Set(['org_member', 'ads_operator', ...customRoles.map((r) => r.name)]);
+      const validRoles = new Set([
+        ...SYSTEM_ROLE_OPTIONS.filter((role) => role.assignableToAgents !== false).map((role) => role.name),
+        ...customRoles.map((r) => r.name),
+      ]);
       const invalid = allowedRoles.filter((role) => !validRoles.has(role));
       if (invalid.length > 0) {
         return res.status(400).json({ error: `Invalid agent access role: ${invalid[0]}` });
@@ -721,11 +785,67 @@ router.put('/agents/:slug', async (req, res) => {
     const updated = await AgentConfigService.updateAdminConfig(
       req.params.slug,
       patch,
-      req.user.id
+      req.user.id,
+      req.user.orgId
     );
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update agent admin config.' });
+  }
+});
+
+router.get('/agents/:slug/access-preview', async (req, res) => {
+  try {
+    const config = await AgentConfigService.getAdminConfig(req.params.slug, req.user.orgId);
+    const defaultAccess = getDefaultAccess(req.params.slug);
+    if (!defaultAccess.roleName) {
+      return res.json({
+        slug: req.params.slug,
+        supported: false,
+        users: [],
+        allowedCount: 0,
+        deniedCount: 0,
+      });
+    }
+
+    const { rows: users } = await pool.query(
+      `SELECT u.id, u.email, u.first_name, u.last_name, u.is_active,
+              array_agg(DISTINCT ur.role_name) FILTER (WHERE ur.role_name IS NOT NULL) AS roles
+         FROM users u
+         LEFT JOIN user_roles ur ON ur.user_id = u.id
+        WHERE u.org_id = $1
+        GROUP BY u.id
+        ORDER BY u.email`,
+      [req.user.orgId]
+    );
+
+    const decisions = [];
+    for (const user of users) {
+      const decision = await getAgentAccessDecision(user.id, defaultAccess.roleName, config.allowed_roles);
+      decisions.push({
+        id: user.id,
+        email: user.email,
+        name: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email,
+        is_active: user.is_active,
+        roles: user.roles ?? [],
+        allowed: decision.allowed,
+        reason: decision.reason,
+      });
+    }
+
+    res.json({
+      slug: req.params.slug,
+      supported: true,
+      mode: Array.isArray(config.allowed_roles) && config.allowed_roles.length > 0 ? 'configured_roles' : 'code_default',
+      configuredRoles: config.allowed_roles ?? null,
+      defaultRole: defaultAccess.roleName,
+      defaultLabel: defaultAccess.label,
+      allowedCount: decisions.filter((user) => user.allowed).length,
+      deniedCount: decisions.filter((user) => !user.allowed).length,
+      users: decisions,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load agent access preview.' });
   }
 });
 
@@ -1119,7 +1239,7 @@ router.post('/sql/nlp', async (req, res) => {
       getDbSchema(),
       getDefaultModel(req.user.orgId, modelId),
       getCustomProviders(req.user.orgId),
-      AgentConfigService.getAdminConfig('sql-nlp').catch(() => ({})),
+      AgentConfigService.getAdminConfig('sql-nlp', req.user.orgId).catch(() => ({})),
     ]);
 
     const provider = getProvider(modelDef.id, customProviders);
@@ -1737,7 +1857,7 @@ router.get('/usage-warnings', async (req, res) => {
     if (slugCostRes.rows.length > 0) {
       const configs = await Promise.all(
         slugCostRes.rows.map((r) =>
-          AgentConfigService.getAdminConfig(r.tool_slug).then((cfg) => ({ slug: r.tool_slug, cfg, row: r }))
+          AgentConfigService.getAdminConfig(r.tool_slug, req.user.orgId).then((cfg) => ({ slug: r.tool_slug, cfg, row: r }))
         )
       );
       for (const { slug, cfg, row } of configs) {

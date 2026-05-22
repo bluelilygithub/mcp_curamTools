@@ -178,6 +178,34 @@ If `allowed_roles` is empty or `null`, the agent falls back to the coded route d
 
 This UI currently applies to standard `createAgentRoute` agents only. Custom direct routes need their own explicit access check before exposing role assignment controls.
 
+### Assign Roles To Users
+
+Use:
+
+```text
+Admin > Users > Manage User > System Access Roles
+```
+
+System roles are the built-in security roles:
+
+- `org_admin` / Admin: full admin access and always allowed to run agents.
+- `org_member` / Member: general organisation user.
+- `ads_operator` / Ads Operator: advertising/reporting user.
+
+Use:
+
+```text
+Admin > Users > Manage User > Custom Roles
+```
+
+Custom roles are organisation-specific roles created on the Roles page. They can be assigned to users and then selected in `Admin > Agents > Agent Access`.
+
+The user form includes an Effective Agent Access preview. This answers the practical question: "Which agents can this user run in this organisation?"
+
+The agent form includes an Access Preview. This answers the practical question: "Which users in this organisation can run this agent?"
+
+Agent admin config is organisation-scoped with fallback to the platform/default org. This allows demo organisations to diverge later: one demo organisation can expose a demo agent broadly, while another can restrict that same agent to a specific role.
+
 ### Check A Permission In Code
 
 Use `PermissionService.hasPermission()` for non-middleware checks.
@@ -301,6 +329,8 @@ The first retrofit pass wires these areas through `requirePermission()`:
 
 - shared agent run routes via `createAgentRoute`
 - per-agent role overrides for standard route-factory agents through `Admin > Agents > Agent Access`
+- explicit system-role assignment and access previews through `Admin > Users`
+- organisation-scoped agent admin config with fallback to the platform/default org
 - main admin router via `admin:access`
 - Lessons management via `lessons:manage`
 - MCP admin via `mcp:manage`
