@@ -22,13 +22,13 @@ These files are the source of truth. The documents below derive from them and re
 createAgentRoute({ slug, runFn, requiredPermission })
 // slug: string — agent identifier (e.g. 'google-ads-monitor')
 // runFn: async (context) => { result, trace?, tokensUsed, promptVersion? } — optional promptVersion persisted as result.prompt_version
-// requiredPermission: string — role name; org_admin always satisfies the check
+// requiredPermission: string — legacy role name or capability; org_admin always satisfies the check
 ```
 Returns an Express router. Two endpoints are registered:
 
 | Endpoint | Auth | Behaviour |
 |---|---|---|
-| `POST /run` | requireAuth + requireRole([org_admin, requiredPermission]) | Loads admin config, checks kill switch, streams SSE: `{ type: 'progress', text }` → `{ type: 'result', data }` → `[DONE]` (or `{ type: 'error', error }` → `[DONE]`). On success, **`data` includes `runId`** (the `agent_runs.id` UUID) alongside `summary`, nested `data`, `tokensUsed`, etc., so clients can call org-scoped demo PATCH routes before reloading the row; **`runId` is not added to the JSON persisted** in `agent_runs.result` (only the streamed copy). Runs can submit an under-review Lessons Repository proposal via `proposeLessonFromRun` when the output contains an explicit reusable lesson/pattern; new agents get this wiring automatically when they use `createAgentRoute`. |
+| `POST /run` | requireAuth + requirePermission(requiredPermission) | Loads admin config, checks kill switch, streams SSE: `{ type: 'progress', text }` → `{ type: 'result', data }` → `[DONE]` (or `{ type: 'error', error }` → `[DONE]`). On success, **`data` includes `runId`** (the `agent_runs.id` UUID) alongside `summary`, nested `data`, `tokensUsed`, etc., so clients can call org-scoped demo PATCH routes before reloading the row; **`runId` is not added to the JSON persisted** in `agent_runs.result` (only the streamed copy). Runs can submit an under-review Lessons Repository proposal via `proposeLessonFromRun` when the output contains an explicit reusable lesson/pattern; new agents get this wiring automatically when they use `createAgentRoute`. |
 | `GET /history` | requireAuth | Returns last 20 `agent_runs` rows for this slug + org, ordered by `run_at DESC` |
 
 Internal helpers exported from this file:
@@ -45,7 +45,7 @@ Run rows are written only via **`persistRun`** from **`server/platform/persistRu
 - **Optional `prompt_version`:** If `runFn` returns **`promptVersion`** (string), `createAgentRoute` merges it into the persisted payload as **`prompt_version`** (see `server/platform/promptVersions.js`, `knowledge_base/core/PROMPT_VERSIONING.md`). Agents that omit it are unchanged.
 
 **Used by:** Google Ads Monitor (`server/routes/agents/`); all future agents.
-**Reuse contract:** Provide `slug` (stable, lowercase, hyphen-separated), a `runFn(context)` that returns `{ result, trace, tokensUsed }` (and optionally `promptVersion` for lineage), and a `requiredPermission` role name. Register the returned router in `server/index.js` under `/api/agents/:slug`. Every new agent must be covered by the Lessons Repository: use `createAgentRoute`/`AgentScheduler` for normal agents, or add an explicit `proposeLessonFromRun` hook in any custom route that bypasses those platform paths. Also update the visible coverage list in `client/src/pages/admin/AdminLessonsPage.jsx` so Admin > Lessons & Rules shows the new agent/routine.
+**Reuse contract:** Provide `slug` (stable, lowercase, hyphen-separated), a `runFn(context)` that returns `{ result, trace, tokensUsed }` (and optionally `promptVersion` for lineage), and a `requiredPermission` capability or legacy role name. Register the returned router in `server/index.js` under `/api/agents/:slug`. Every new agent must be covered by the Lessons Repository: use `createAgentRoute`/`AgentScheduler` for normal agents, or add an explicit `proposeLessonFromRun` hook in any custom route that bypasses those platform paths. Also update the visible coverage list in `client/src/pages/admin/AdminLessonsPage.jsx` so Admin > Lessons & Rules shows the new agent/routine.
 **Does not handle:** Agent tool registration (done in the agent's `tools.js`), system prompt construction (done in the agent's `prompt.js`), data fetching (done in domain services). Does not write directly to `agent_executions` (that is `services/AgentScheduler.js` territory).
 
 ---
@@ -248,6 +248,17 @@ AgentConfigService.listCustomerConfigs(orgId, slug)
 AgentConfigService.getAdminConfig(slug)
 // Reads system_settings key 'agent_<slug_underscored>'. Returns ADMIN_DEFAULTS merged with stored JSON.
 
+AgentConfigService.getResolvedAdminConfig(slug, orgId, { useRecommended = false })
+// Runtime resolver for model-backed agents.
+// Returns admin config with model resolved as:
+//   1. per-agent model override
+//   2. organisation default model
+//   3. optional recommended enabled model when useRecommended is true
+// Fallback model resolves as:
+//   1. per-agent fallback model
+//   2. organisation fallback model
+// No hardcoded runtime model fallback is applied.
+
 AgentConfigService.updateAdminConfig(slug, patch, updatedBy)
 // Saves merged config to system_settings. Returns merged result.
 
@@ -276,14 +287,15 @@ AgentConfigService.updateOrgLessonModel(orgId, modelId, updatedBy)
 - `google-ads-freeform`: `max_suggestions=5`
 - `google-ads-change-impact`: `lookback_days=7`, `max_suggestions=5`
 
-**ADMIN_DEFAULTS entries** (all with `enabled`, `model='claude-sonnet-4-6'`, `max_task_budget_aud=0.50`):
+**ADMIN_DEFAULTS entries** (all with `enabled`, `model=null` unless explicitly noted; `null` means "inherit organisation default"):
 - `google-ads-monitor`: `max_tokens=8192`, `max_iterations=10`
 - `google-ads-freeform`: `max_tokens=8192`, `max_iterations=12`
 - `google-ads-change-impact`: `max_tokens=8192`, `max_iterations=10`
 - `_platform` (fallback for unregistered agents): `max_tokens=4096`, `max_iterations=10`
 
 **Used by:** `createAgentRoute.js`; all agent `index.js` files; `PUT /api/agent-configs/:slug`; `PUT /api/agent-configs/:slug/customers/:customerId`; `AgentScheduler._tick` (array-return multi-customer path).
-**Reuse contract:** New agents add entries to `AGENT_DEFAULTS` and `ADMIN_DEFAULTS`. Agent code reads config via `getAgentConfig` or `getAgentConfigForCustomer` — never queries tables directly. `custom_prompt` and `intelligence_profile` are returned as top-level fields on the merged config object alongside the JSONB config fields.
+**Reuse contract:** New agents add entries to `AGENT_DEFAULTS` and `ADMIN_DEFAULTS`. Runtime code must use `getResolvedAdminConfig(slug, orgId)` for model-bearing admin guardrails, or consume the already-resolved `adminConfig` passed by `createAgentRoute` / `AgentScheduler`. Agent code reads operator config via `getAgentConfig` or `getAgentConfigForCustomer` — never queries tables directly. `custom_prompt` and `intelligence_profile` are returned as top-level fields on the merged config object alongside the JSONB config fields.
+**Model contract:** "Auto" / blank per-agent model means inherit the organisation default. Do not write `?? 'claude-sonnet-4-6'`, `|| 'deepseek-chat'`, or any other hardcoded model fallback inside an agent. Literal model IDs are acceptable only in model catalog defaults, pricing tables, provider examples, or tests/diagnostics that explicitly name the model they are testing.
 **Does not handle:** Permission checks (route layer). Cron rescheduling (route calls `AgentScheduler.updateSchedule` separately).
 
 ---
@@ -950,9 +962,20 @@ CREATE UNIQUE INDEX idx_resource_perm_role ON resource_permissions(org_id, resou
 ### PermissionService — Resource Methods
 **Type:** Service extension
 **Location:** `server/services/PermissionService.js`
-**What it does:** Four methods extending role-based permissions to cover MCP resource URI access.
+**What it does:** Provides the role compatibility layer, capability checks, and MCP resource URI access checks.
 **Interface:**
 ```js
+PermissionService.hasRole(userId, roleNames, scope?)
+// Existing role check. Preserved for compatibility.
+
+PermissionService.getEffectivePermissions(userId)
+// Derives capability permissions from user_roles.
+// org_admin -> '*'; legacy role names are also exposed as capabilities during migration.
+
+PermissionService.hasPermission(userId, permission)
+// Capability check used by requirePermission().
+// Supports '*' and prefix wildcards like 'admin:*'.
+
 PermissionService.canAccessResource(userId, resourceUri, orgId)
 // org_admin → always true (checked first, no DB query needed for admins).
 // Otherwise: fetches user's roles, checks resource_permissions for user_id OR role_name match.
@@ -969,8 +992,22 @@ PermissionService.revokeResourcePermission(orgId, permissionId)
 PermissionService.listResourcePermissions(orgId, resourceUri = null)
 // All permissions for org; optional resourceUri filter. Joins users for email display.
 ```
-**Security invariant:** `org_id` always from `req.user.orgId` at call sites. `org_admin` bypass is unconditional.
+**Security invariant:** `org_id` always from `req.user.orgId` at call sites. `org_admin` maps to `*` and is still allowed everywhere it was previously allowed.
+**Capability migration contract:** Add new route checks with `requirePermission('capability:name')`. Existing roles such as `org_admin`, `org_member`, and `ads_operator` remain valid while routes migrate gradually from role checks to capability checks. Do not remove existing roles or change their meaning.
 **Does not handle:** Wildcard URI matching. Time-limited permissions. Permission inheritance from parent URI paths.
+
+---
+
+### requirePermission Middleware
+**Type:** Express middleware
+**Location:** `server/middleware/requirePermission.js`
+**What it does:** Enforces capability checks through `PermissionService.hasPermission()`.
+**Interface:**
+```js
+router.post('/example', requireAuth, requirePermission('models:manage'), handler);
+```
+**Used by:** `createAgentRoute` run endpoints, main admin router, Lessons management routes, MCP admin routes, admin knowledge routes, and Google Ads customer/assignment management.
+**Reuse contract:** Prefer `requirePermission()` for new protected routes. Use `requireRole()` only when the code intentionally needs a raw legacy role check.
 
 ---
 
@@ -1251,7 +1288,7 @@ rl.on('line', async (line) => {
 3. Executes the generated SQL via the same `execSql` helper as SQL mode (write guard applies)
 4. Returns results plus `generatedSql`, `modelId`, `tokensUsed`, `costAud`
 
-**Model selection — `getDefaultModel(orgId)`:** Reads `ai_models` from `system_settings` (the list managed in Admin → Models). Picks the first enabled `advanced` tier model; falls back to first enabled model; falls back to `claude-sonnet-4-6`. This means swapping the active model in Admin → Models immediately affects NLP query generation — no code change needed.
+**Model selection — `getDefaultModel(orgId)`:** Resolves the requested override first, then the organisation default via `AgentConfigService.getOrgDefaultModel(orgId)`, then the first enabled `advanced` tier model, then the first enabled model. It does **not** fall back to a hardcoded model ID; if no enabled/default model exists, the API returns a clear configuration error. This means changing the active/default model in Admin → Models affects NLP query generation without a code change.
 
 **Usage logging:** Every NLP call writes to `usage_logs` with `tool_slug = 'sql-console-nlp'`, the resolved model ID, token counts, and AUD cost. Cost is computed from the model's own `inputPricePer1M` / `outputPricePer1M` from `MODEL_DEFAULTS` (not the hardcoded Sonnet rate in `CostGuardService`). Appears in Admin → Logs alongside agent runs.
 

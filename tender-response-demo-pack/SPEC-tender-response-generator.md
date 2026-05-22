@@ -81,7 +81,7 @@ Log step: `evidence_retrieval`
 ---
 
 ### Stage 3 — Draft Generation
-**Model:** Synthesis model (`getOrgDefaultModel(orgId) || adminConfig.model`)
+**Model:** Synthesis model resolved from the organisation default, falling back to the already resolved extraction model when needed. Do not hardcode a model ID.
 **Input:** Each requirement with STRONG or PARTIAL match + its matched evidence records + Style Guide constraints
 **Output per requirement:**
 - `draft_response`: a single response paragraph, written in firm voice

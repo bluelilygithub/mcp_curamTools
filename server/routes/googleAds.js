@@ -18,7 +18,7 @@
 const express      = require('express');
 const { pool }     = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
-const { requireRole } = require('../middleware/requireRole');
+const { requirePermission } = require('../middleware/requirePermission');
 const { googleAdsService } = require('../services/GoogleAdsService');
 
 const router = express.Router();
@@ -41,7 +41,7 @@ router.get('/customers', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/customers', requireAuth, requireRole(['org_admin']), async (req, res) => {
+router.post('/customers', requireAuth, requirePermission('google_ads:manage'), async (req, res) => {
   try {
     const { customer_id, customer_name } = req.body;
     if (!customer_id || !customer_name) {
@@ -62,7 +62,7 @@ router.post('/customers', requireAuth, requireRole(['org_admin']), async (req, r
   }
 });
 
-router.put('/customers/:customerId', requireAuth, requireRole(['org_admin']), async (req, res) => {
+router.put('/customers/:customerId', requireAuth, requirePermission('google_ads:manage'), async (req, res) => {
   try {
     const { customer_name, is_active } = req.body;
     const result = await pool.query(
@@ -81,7 +81,7 @@ router.put('/customers/:customerId', requireAuth, requireRole(['org_admin']), as
   }
 });
 
-router.delete('/customers/:customerId', requireAuth, requireRole(['org_admin']), async (req, res) => {
+router.delete('/customers/:customerId', requireAuth, requirePermission('google_ads:manage'), async (req, res) => {
   try {
     await pool.query(
       `UPDATE google_ads_customers SET is_active = FALSE
@@ -125,7 +125,7 @@ router.get('/campaign-assignments', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/campaign-assignments', requireAuth, requireRole(['org_admin']), async (req, res) => {
+router.post('/campaign-assignments', requireAuth, requirePermission('google_ads:manage'), async (req, res) => {
   try {
     const { customer_id, campaign_id, campaign_name, agent_slug, config } = req.body;
     if (!customer_id || !campaign_id || !agent_slug) {
@@ -149,7 +149,7 @@ router.post('/campaign-assignments', requireAuth, requireRole(['org_admin']), as
   }
 });
 
-router.delete('/campaign-assignments/:id', requireAuth, requireRole(['org_admin']), async (req, res) => {
+router.delete('/campaign-assignments/:id', requireAuth, requirePermission('google_ads:manage'), async (req, res) => {
   try {
     await pool.query(
       `DELETE FROM campaign_agent_assignments WHERE id = $1 AND org_id = $2`,

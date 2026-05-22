@@ -1,6 +1,6 @@
 /**
  * admin.js — admin-only routes.
- * All routes require requireAuth + requireRole(['org_admin']).
+ * All routes require requireAuth + requirePermission('admin:access').
  *
  * Sections:
  *   Users         GET/POST/PUT/DELETE /api/admin/users
@@ -17,7 +17,7 @@ const bcrypt = require('bcryptjs');
 const https   = require('https');
 const { pool } = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
-const { requireRole } = require('../middleware/requireRole');
+const { requirePermission } = require('../middleware/requirePermission');
 const { grantRole, revokeRole, getUserRoles } = require('../services/PermissionService');
 const { createInvitation, resendInvitation } = require('../services/InvitationService');
 const AgentConfigService = require('../platform/AgentConfigService');
@@ -25,7 +25,7 @@ const EmailTemplateService = require('../services/EmailTemplateService');
 const { proposeLessonFromRun } = require('../services/LessonRepositoryService');
 
 const router = express.Router();
-router.use(requireAuth, requireRole(['org_admin']));
+router.use(requireAuth, requirePermission('admin:access'));
 
 // ── Users ─────────────────────────────────────────────────────────────────
 

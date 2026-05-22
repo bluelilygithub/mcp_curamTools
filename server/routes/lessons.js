@@ -4,13 +4,13 @@
  * Lessons & Rules Repository routes.
  *
  * Runtime/propose endpoints are authenticated and org-scoped. Management
- * endpoints are org_admin only and use LessonRepositoryService for validation,
+ * endpoints require the lessons:manage capability and use LessonRepositoryService for validation,
  * audit appends, soft-delete, and global organisation permission checks.
  */
 const express = require('express');
 const { pool } = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
-const { requireRole } = require('../middleware/requireRole');
+const { requirePermission } = require('../middleware/requirePermission');
 const AgentConfigService = require('../platform/AgentConfigService');
 const { getProvider } = require('../platform/AgentOrchestrator');
 const Lessons = require('../services/LessonRepositoryService');
@@ -39,7 +39,7 @@ router.post('/propose', requireAuth, async (req, res) => {
   }
 });
 
-router.use(requireAuth, requireRole(['org_admin']));
+router.use(requireAuth, requirePermission('lessons:manage'));
 
 router.get('/meta', async (req, res) => {
   try {

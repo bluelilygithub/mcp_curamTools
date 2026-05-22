@@ -18,7 +18,7 @@ const express = require('express');
 const { pool } = require('../db');
 const { persistRun } = require('./persistRun');
 const { requireAuth } = require('../middleware/requireAuth');
-const { requireRole } = require('../middleware/requireRole');
+const { requirePermission } = require('../middleware/requirePermission');
 const { createRateLimiter } = require('../middleware/rateLimiter');
 const AgentConfigService = require('./AgentConfigService');
 const CostGuardService = require('../services/CostGuardService');
@@ -71,7 +71,7 @@ function extractSuggestions(text) {
 /**
  * @param {string}   slug               — agent identifier (e.g. 'google-ads-monitor')
  * @param {Function} runFn              — async (context) => { result, trace?, tokensUsed? }
- * @param {string}   requiredPermission — role name; org_admin always satisfies the check
+ * @param {string}   requiredPermission — role or capability; org_admin always satisfies the check
  * @param {number}   [rateLimit=5]      — max runs per user per 5-minute window
  */
 function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
@@ -84,7 +84,7 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
   router.post(
     '/run',
     requireAuth,
-    requireRole(['org_admin', requiredPermission].filter(Boolean)),
+    requirePermission(requiredPermission || 'agents:run'),
     runRateLimiter,
     async (req, res) => {
       // SSE headers

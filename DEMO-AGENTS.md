@@ -119,9 +119,9 @@ Then create the demo user via Admin > Users — assign to the same org, role `or
 
 #### Two-stage pipeline
 
-**Stage 1 (vision model — `adminConfig.model`):** Claude receives the rasterised PDF pages as images. Returns `document_type`, `extracted_text`, and `parties` only — no analysis. Deterministic Node.js rules then run on `extracted_text`.
+**Stage 1 (vision model — resolved `adminConfig.model`):** Claude receives the rasterised PDF pages as images. Returns `document_type`, `extracted_text`, and `parties` only — no analysis. Deterministic Node.js rules then run on `extracted_text`.
 
-**Stage 2 (synthesis model — `getOrgDefaultModel(orgId) || adminConfig.model`):** Receives `extracted_text` as context string. Returns `findings`, `summary`, `custom_response`. No new extraction — synthesis only.
+**Stage 2 (synthesis model — organisation default or resolved extraction model):** Receives `extracted_text` as context string. Returns `findings`, `summary`, `custom_response`. No new extraction — synthesis only.
 
 Both models logged via `logger.step('model_selection')` and `logger.step('synthesis_model_selection')` before each call. Both stored in `logger.complete()` metadata as `extraction_model` / `synthesis_model`.
 
@@ -179,7 +179,7 @@ The `rejected` → anything transition is permanently blocked for all agents. Re
 
 #### Three-stage pipeline
 
-**Stage 1 (vision model — `adminConfig.model`):** Claude vision extracts all quantitative claims into structured JSON — pipe segments, pressure system, stated values. No calculations, no analysis.
+**Stage 1 (vision model — resolved `adminConfig.model`):** Claude vision extracts all quantitative claims into structured JSON — pipe segments, pressure system, stated values. No calculations, no analysis.
 
 **Stage 2 (Python subprocess — `execFileAsync`):** Deterministic calculations using `fluids` + `numpy`. Returns full step-by-step working with `check_status` (`PASS` / `FAIL` / `WARNING`) and `library_versions` per check. Zero AI involvement — deterministic and auditable. 30-second timeout, 10 MB buffer.
 
@@ -194,7 +194,7 @@ const { stdout } = await execFileAsync(PYTHON_EXEC, [CALC_SCRIPT], {
 const calcResult = JSON.parse(stdout);
 ```
 
-**Stage 3 (synthesis model — `getOrgDefaultModel(orgId) || adminConfig.model`):** Receives Python output. Produces plain-language findings and probabilistic flags. Must not introduce new numeric values — synthesis only.
+**Stage 3 (synthesis model — organisation default or resolved extraction model):** Receives Python output. Produces plain-language findings and probabilistic flags. Must not introduce new numeric values — synthesis only.
 
 #### Dual-status pattern
 
@@ -259,6 +259,7 @@ Every new demo agent must implement all of the following. These are not optional
 ### 1. Two-model pattern (extraction + synthesis)
 
 ```js
+const adminConfig = await AgentConfigService.getResolvedAdminConfig(slug, orgId);
 const extractionModel = adminConfig.model;
 if (!extractionModel) throw new Error('No model configured for this agent. Set one in Admin > Agents.');
 
@@ -281,7 +282,8 @@ await logger.complete({ extraction_model: extractionModel, synthesis_model: synt
 ```
 
 **Rules:**
-- Never hardcode a model ID fallback (e.g. `?? 'claude-sonnet-4-6'`). Always resolve through `adminConfig.model` then `getOrgDefaultModel`.
+- Never hardcode a model ID fallback (e.g. `?? 'claude-sonnet-4-6'`). Always resolve through `getResolvedAdminConfig(slug, orgId)` or consume the resolved `adminConfig` passed by `createAgentRoute`.
+- A blank per-agent model is valid and means "Use organisation default"; do not treat the first model in a dropdown as persisted config.
 - Extraction model must support vision if the agent processes PDFs or images.
 - Synthesis model resolves to org default first — typically cheaper and doesn't need vision.
 - Both models must appear in the decision log trace (`model_selection` / `synthesis_model_selection` step types).

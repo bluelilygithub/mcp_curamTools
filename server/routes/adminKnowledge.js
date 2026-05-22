@@ -2,7 +2,7 @@
 
 /**
  * adminKnowledge.js — Knowledge base document management.
- * All routes require org_admin.
+ * All routes require knowledge:manage.
  *
  * Routes:
  *   POST   /api/admin/knowledge/upload  — upload PDF / DOCX / TXT / MD, extract text, embed + store
@@ -17,11 +17,11 @@ const pdfParse = require('pdf-parse');
 const mammoth  = require('mammoth');
 const { pool } = require('../db');
 const { requireAuth }  = require('../middleware/requireAuth');
-const { requireRole }  = require('../middleware/requireRole');
+const { requirePermission }  = require('../middleware/requirePermission');
 const EmbeddingService = require('../services/EmbeddingService');
 
 const router = express.Router();
-router.use(requireAuth, requireRole(['org_admin']));
+router.use(requireAuth, requirePermission('knowledge:manage'));
 
 // ── Multer — memory storage, 15 MB cap ───────────────────────────────────────
 

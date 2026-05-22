@@ -18,6 +18,28 @@ When you change **system or stage prompts** for an agent that opts in, **bump** 
 
 ---
 
+## Model resolution — no hardcoded runtime fallbacks
+
+The platform model hierarchy is:
+
+1. Per-agent override from `Admin > Agents`
+2. Organisation default from `Settings > Models`
+3. Configuration error if neither exists
+
+Use **`AgentConfigService.getResolvedAdminConfig(slug, orgId)`** for runtime admin guardrails whenever agent code fetches its own admin config. Agents mounted through **`createAgentRoute`** and scheduled through **`AgentScheduler`** receive a resolved `adminConfig`; do not replace it by calling raw `getAdminConfig()` unless you immediately resolve it.
+
+Blank / `Auto` / `Use organisation default` is intentional and must remain `null` in storage. It means "inherit the org default", not "silently choose the first visible dropdown option".
+
+Do **not** add fallback expressions like:
+
+```js
+model: adminConfig.model ?? 'claude-sonnet-4-6'
+```
+
+Literal model IDs are allowed in model catalog defaults, provider-prefix examples, pricing tables, and diagnostics that intentionally test a named model. They are not allowed as runtime fallbacks inside agents.
+
+---
+
 ## Lessons Repository coverage — required for new agents
 
 Any new model-backed agent or AI routine must be covered by the Lessons Repository. Prefer **`createAgentRoute`** for manual SSE agents and **`AgentScheduler`** for scheduled agents; those platform paths call lesson write-back after successful runs. If you add a custom route or direct provider call that bypasses those paths, add a fire-and-forget **`proposeLessonFromRun({ agentId, organisationId, runId, lesson })`** call after the successful result is saved or returned.
@@ -27,6 +49,18 @@ Any new model-backed agent or AI routine must be covered by the Lessons Reposito
 Update **`LESSON_COVERAGE_SECTIONS`** in **`client/src/pages/admin/AdminLessonsPage.jsx`** whenever you add a new model-backed agent, scheduled routine, or custom direct-provider routine. Admin > Lessons & Rules exposes this through "View covered agents/routines"; treat it as the human-facing coverage register.
 
 Agent-proposed lessons must remain **`under-review`** until an admin activates them in Admin > Lessons & Rules. Do not inject proposed lessons into future runs automatically.
+
+---
+
+## Permission layer — extend roles, do not replace them
+
+The existing roles remain valid: `org_admin`, `org_member`, and `ads_operator`. Do not remove or redefine them.
+
+New protected routes should prefer **`requirePermission('capability:name')`** from `server/middleware/requirePermission.js`. It delegates to `PermissionService.hasPermission()`, where roles map to capabilities. `org_admin` maps to `*`, so existing admin access remains intact.
+
+During migration, legacy role names are also exposed as capabilities. That means checks such as `requiredPermission: 'ads_operator'` keep working while new checks can move toward clearer capabilities such as `lessons:manage`, `mcp:manage`, or `google_ads:manage`.
+
+Use raw **`requireRole()`** only when the code intentionally needs a legacy role check. For new capability boundaries, use `requirePermission()`.
 
 ---
 

@@ -18,6 +18,44 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-22 — Shared Model Resolution + Admin Agents Clarity
+
+### Built
+- **Shared model resolver:** Added `AgentConfigService.getResolvedAdminConfig(slug, orgId)` so runtime agents resolve model settings consistently: per-agent override first, organisation default second, then no hidden hardcoded fallback.
+- **Fallback resolver:** The same shared path resolves fallback models consistently: per-agent fallback first, organisation fallback second.
+- **Agent runtime coverage:** Updated standard agent entry points, `createAgentRoute`, `AgentScheduler`, conversation, demo follow-up/resubmit, and Doc Extractor to use resolved model config rather than raw `adminConfig.model` where appropriate.
+- **Admin Agents UI clarity:** `Admin > Agents` now shows an explicit `Use organisation default` option so a blank saved value cannot look like a concrete model override.
+- **Doc Extractor Auto:** The Doc Extractor model selector keeps `Auto` as an empty override and lets the server resolve the current model at run time.
+
+### Fixed / discovered
+- Several agents could display a model in the UI while the saved agent model was actually `null`; the browser selected the first option visually, but the runtime still received no model.
+- Some custom/direct agent paths read raw `getAdminConfig()` and passed `adminConfig.model` directly to `AgentOrchestrator`, bypassing the organisation default.
+- SQL Console NLP documentation still described a hardcoded Sonnet fallback; this is no longer the intended pattern.
+
+### Open / next
+- Continue removing or documenting remaining literal model IDs that are catalog defaults, pricing tables, provider-prefix examples, or diagnostics so future agents do not copy them as runtime fallbacks.
+- Any new model-backed agent must use `getResolvedAdminConfig()` or receive resolved `adminConfig` from `createAgentRoute` / `AgentScheduler`.
+
+---
+
+## 2026-05-22 — Backwards-Compatible Permission Layer
+
+### Built
+- **Capability middleware:** Added `requirePermission(permission)` as a compatibility layer over existing roles.
+- **Role-to-capability mapping:** Added `ROLE_PERMISSIONS`, `getEffectivePermissions()`, and `hasPermission()` to `PermissionService`. `org_admin` maps to `*`; legacy role names are still exposed as capabilities during migration.
+- **Route adoption:** Moved shared agent run protection, the main admin router, Lessons management, MCP admin, admin knowledge, and Google Ads customer/assignment management to capability checks while preserving existing `org_admin`, `org_member`, and `ads_operator` behaviour.
+- **Permissions guide:** Added `PERMISSIONS.md` with the current model, migration rules, route/agent usage examples, naming guidance, and testing checklist.
+
+### Fixed / discovered
+- Existing role checks were already a workable foundation; no schema change was needed for the first retrofit step.
+- MCP resource-level permissions already existed and remain separate from route-level capabilities.
+
+### Open / next
+- Add UI and persistence for custom capability grants only if/when the current role mapping becomes too coarse.
+- Continue migrating new admin areas to `requirePermission()` rather than adding more raw `requireRole()` checks.
+
+---
+
 ## 2026-05-22 — Lesson AI Revision Cycle + Lesson Model Setting
 
 ### Built

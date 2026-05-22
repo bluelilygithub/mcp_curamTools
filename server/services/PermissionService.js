@@ -4,6 +4,30 @@
  */
 const { pool } = require('../db');
 
+const ROLE_PERMISSIONS = {
+  org_admin: ['*'],
+  ads_operator: [
+    'agents:run',
+    'agents:run:ads',
+    'reports:view',
+  ],
+  org_member: [
+    'agents:run',
+    'agents:run:basic',
+    'conversation:use',
+    'reports:view',
+  ],
+};
+
+function permissionMatches(granted, requested) {
+  if (!granted || !requested) return false;
+  if (granted === '*' || granted === requested) return true;
+  if (granted.endsWith(':*')) {
+    return requested.startsWith(granted.slice(0, -1));
+  }
+  return false;
+}
+
 /**
  * Check if a user holds any of the given roles at the given scope.
  * A global role satisfies any scope check.
@@ -64,6 +88,40 @@ async function getUserRoles(userId, scopeType = null) {
   query += ` ORDER BY scope_type, role_name`;
   const res = await pool.query(query, params);
   return res.rows;
+}
+
+/**
+ * Return effective capability permissions derived from the user's current roles.
+ *
+ * This is intentionally a compatibility layer over user_roles, not a replacement
+ * for the existing role model. Existing roles keep working while routes can move
+ * gradually from "has role X" to "may perform capability Y".
+ */
+async function getEffectivePermissions(userId) {
+  if (!userId) return [];
+  const roles = await getUserRoles(userId);
+  const permissions = new Set();
+  for (const role of roles) {
+    for (const permission of ROLE_PERMISSIONS[role.role_name] ?? []) {
+      permissions.add(permission);
+    }
+    // Backwards compatibility: existing route checks can treat role names as
+    // capabilities during migration (e.g. requiredPermission: 'ads_operator').
+    permissions.add(role.role_name);
+  }
+  return [...permissions].sort();
+}
+
+/**
+ * Check whether a user has a named capability.
+ *
+ * org_admin maps to '*' and therefore satisfies every capability. During the
+ * migration, direct role-name checks remain valid through getEffectivePermissions.
+ */
+async function hasPermission(userId, permission) {
+  if (!userId || !permission) return false;
+  const permissions = await getEffectivePermissions(userId);
+  return permissions.some((granted) => permissionMatches(granted, permission));
 }
 
 /**
@@ -232,10 +290,13 @@ async function listResourcePermissions(orgId, resourceUri = null) {
 
 module.exports = {
   hasRole,
+  hasPermission,
   isOrgAdmin,
   getUserRoles,
+  getEffectivePermissions,
   grantRole,
   revokeRole,
+  ROLE_PERMISSIONS,
   getPermittedModels,
   canUseModel,
   canAccessResource,

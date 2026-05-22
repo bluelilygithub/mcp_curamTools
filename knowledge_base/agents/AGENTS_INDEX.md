@@ -12,6 +12,8 @@ Edits that touch **`createAgentRoute`**, **`AgentScheduler`**, **`markdownPdfBuf
 
 Every new model-backed agent or AI routine must also be covered by the Lessons Repository. Use `createAgentRoute` for manual SSE agents and `AgentScheduler` for scheduled agents so write-back wiring is automatic. If the routine bypasses those platform paths with a custom route or direct provider call, add a local `proposeLessonFromRun` call after the successful result is saved or returned. `proposeLessonFromRun` should receive a reusable lesson/pattern, not a run log. Update `LESSON_COVERAGE_SECTIONS` in `client/src/pages/admin/AdminLessonsPage.jsx` at the same time so the Admin > Lessons & Rules coverage link remains current.
 
+Every model-backed agent must also use the platform model resolver. Prefer the resolved `adminConfig` passed by `createAgentRoute` / `AgentScheduler`; otherwise call `AgentConfigService.getResolvedAdminConfig(slug, orgId)`. A blank per-agent model means `Use organisation default`. Do not add hardcoded runtime model fallbacks such as `?? 'claude-sonnet-4-6'` or `|| 'deepseek-chat'`.
+
 ---
 
 ## google-ads-monitor
@@ -210,7 +212,7 @@ Used by: `google-ads-conversation`
 Used by: `demo-document-analyzer`, stages of `spec-validator` / `demo-spec-validator` (with Python between), `demo-tender-response` (with deterministic compliance between extraction and synthesis)
 
 - Extraction/vision: `adminConfig.model` (must be vision-capable when reading PDFs/images)
-- Synthesis: `getOrgDefaultModel(orgId) ?? adminConfig.model`
+- Synthesis: resolved organisation default, falling back to the extraction model only when the same resolved admin config has already supplied it
 - **Never** hardcode model ID fallbacks — see `server/CLAUDE.md` and `DEMO-AGENTS.md`
 
 ### Three-stage (extract → deterministic code → synthesise)

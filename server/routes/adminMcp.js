@@ -1,6 +1,6 @@
 /**
  * adminMcp.js — Admin routes for MCP server registry and resource permissions.
- * All routes require org_admin. org_id is always sourced from req.user.orgId.
+ * All routes require mcp:manage. org_id is always sourced from req.user.orgId.
  *
  * MCP Servers:
  *   GET    /api/admin/mcp-servers            — list registered servers for org
@@ -23,7 +23,7 @@
 const express = require('express');
 const { pool } = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
-const { requireRole } = require('../middleware/requireRole');
+const { requirePermission } = require('../middleware/requirePermission');
 const MCPRegistry = require('../platform/mcpRegistry');
 const logger = require('../utils/logger');
 const {
@@ -33,7 +33,7 @@ const {
 } = require('../services/PermissionService');
 
 const router = express.Router();
-router.use(requireAuth, requireRole(['org_admin']));
+router.use(requireAuth, requirePermission('mcp:manage'));
 
 // ── MCP Servers ───────────────────────────────────────────────────────────────
 
