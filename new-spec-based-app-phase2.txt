@@ -1,0 +1,220 @@
+Begin Phase 2. Read client/src/pages/demo/DocumentAnalyzer.jsx 
+in full before writing any frontend code. SpecValidator.jsx must 
+follow the same component structure, state management patterns, 
+and UI conventions — not a copy, but the same architecture 
+applied to the three-stage pipeline.
+
+Also read SECTION-3-COMPONENTS.md and SECTION-6-DECISIONS.md 
+before writing any JSX or CSS.
+
+---
+
+## Phase 2 order
+
+Complete in this sequence. Do not skip ahead.
+
+1. IconProvider.jsx
+   Add file-check to the semantic icon map if not already 
+   present. Single line addition only — do not touch any 
+   existing entries.
+
+2. client/src/pages/demo/SpecValidator.jsx
+   This is the primary deliverable for Phase 2. Full 
+   requirements below.
+
+3. client/src/pages/tools/SpecValidatorPage.jsx
+   Thin wrapper only — imports SpecValidator.jsx and 
+   renders it. No duplicated logic.
+
+4. App.jsx
+   Two routes, additive only:
+   /demo/run/demo-spec-validator → SpecValidator
+   /tools/spec-validator → SpecValidatorPage
+   Do not modify any existing routes.
+
+5. tools.js
+   One entry, additive only:
+   id: 'spec-validator'
+   name: 'Spec Validator'
+   description: 'Validate hydraulic calculation documents 
+     against AS/NZS 3500.1. Deterministic Python 
+     verification of pipe velocities, pressure drops, 
+     and system pressure budgets.'
+   icon: 'file-check'
+   path: '/tools/spec-validator'
+   permission: ['org_member', 'org_admin']
+
+6. Sidebar.jsx
+   Two additive NavItem entries:
+   - Under Tools section: Spec Validator, icon file-check, 
+     path /tools/spec-validator
+   - Under Utilities section (already exists): 
+     Spec Validator, icon file-check, 
+     path /tools/spec-validator
+   Do not modify any existing NavItems or section labels.
+
+7. DemoSidebar.jsx
+   One additive NavItem: Spec Validator, icon file-check,
+   path /demo/run/demo-spec-validator
+   Place it below the Document Analyzer entry.
+   Do not modify any existing entries.
+
+---
+
+## SpecValidator.jsx — full requirements
+
+### Upload state
+- PDF only, 10 MB limit (enforce client-side, same pattern 
+  as DocumentAnalyzer)
+- Drag-drop zone + file picker button
+- Show filename, size, and a clear/replace control once 
+  a file is selected
+- Single "Validate Document" submit button — disabled until 
+  a file is selected and no run is in progress
+
+### Three-stage progress indicator
+Show clearly distinct stages during a run. Each stage must 
+show: stage name, status (pending / active / complete / 
+error), and elapsed time once complete.
+
+Stage 1 — Extracting claims (Claude vision)
+Stage 2 — Running calculations (Python)
+Stage 3 — Synthesising findings (Claude)
+
+Do not collapse the progress indicator after completion — 
+leave it visible so the reviewer can see timing and which 
+model was used. Show model name and token counts for 
+Stages 1 and 3 once complete. Show Python library versions 
+for Stage 2 once complete.
+
+### Findings panel
+Render only after Stage 3 completes.
+
+Two sections, deterministic first:
+
+DETERMINISTIC FINDINGS (from Python)
+- Confidence always 1.0 — do not show a confidence badge 
+  for these
+- Show: segment reference, parameter, stated value, 
+  calculated value, unit, status badge (PASS green / 
+  FAIL red / WARNING amber)
+- Expandable "Show working" section for each finding — 
+  renders the full step-by-step Python working JSON as a 
+  formatted block (formula used, inputs, intermediate 
+  values, result). Use monospace font, var(--color-surface) 
+  background, var(--color-border) border, rounded-xl.
+- PASS findings are auto-approved — show as approved, 
+  no review controls needed
+- FAIL and WARNING findings show approve/reject/resubmit 
+  controls (same pattern as DocumentAnalyzer)
+- Rejected findings show a permanent red banner: 
+  "This finding has been rejected. A new document 
+  submission is required to obtain a certificate."
+
+PROBABILISTIC FINDINGS (from Claude)
+- Show confidence badge (0.0–1.0)
+- Same approve/reject/resubmit controls as DocumentAnalyzer
+- Low confidence (< 0.7) requires comment before approval 
+  — enforce client-side with inline validation, and 
+  server-side in the PATCH endpoint (already implemented)
+
+Cross-stage overlap: if a finding is flagged in both 
+sections, show a small "Also flagged deterministically" 
+or "Also flagged probabilistically" pill on the relevant 
+finding. Requires a comment before approval.
+
+### Review summary bar
+Sticky bar above the findings panel showing:
+- Total findings count
+- PASS / FAIL / WARNING breakdown
+- Pending review count
+- Certificate status: "X findings pending" or 
+  "Ready to export" (green, only when all approved)
+
+### Certificate export
+Button in the review summary bar.
+Greyed and disabled until all findings are approved 
+and none are rejected.
+
+Certificate must include:
+- Document name and upload date
+- Run date and model used
+- Total findings with PASS/FAIL/WARNING counts
+- Python library versions used for calculations
+- For each FAIL finding: full calculation working
+- Reviewer name and timestamp for each finding
+- Statement: "Deterministic calculations performed by 
+  Python hydraulic engine. AI was not used for 
+  quantitative verification."
+
+Use exportPdf from exportService.js — same pattern 
+as DocumentAnalyzer. Build as HTML string client-side.
+
+### Decision log link
+Below the certificate button: "View decision log →" 
+linking to /demo/decision-log if demo org, 
+/tools/spec-validator/log if internal.
+(Internal log page is out of scope for this phase — 
+link can be a placeholder for now.)
+
+### Follow-up Q&A
+Below the findings panel, after a run completes.
+"Discuss these findings →" button opens ConversationView.
+
+The follow-up context passed to the conversation must 
+include:
+- The full finding set (stated values, calculated 
+  values, discrepancies)
+- The document name
+- The run ID
+
+The follow-up is scoped to discrepancies and direct 
+remediation questions only. The scope restriction is 
+enforced by the server-side prompt (already implemented 
+in Phase 1). Do not add any client-side scope messaging 
+— the boundary is invisible to the user.
+
+### Empty and error states
+Empty (no run yet): centred upload zone, no other content.
+
+Error (run failed): inline error banner below the upload 
+zone using the error banner pattern from 
+SECTION-3-COMPONENTS.md. Show the error message. 
+Do not use a toast for run failures — they are persistent 
+blocking errors.
+
+Vision model error (model does not support images): 
+show the specific message returned by the server 
+("Model X does not support vision — configure a 
+vision-capable model in Admin > Agents"). Do not 
+show a generic error.
+
+---
+
+## Constraints — must not violate
+
+- All colours via CSS custom properties — no hardcoded 
+  Tailwind colour classes
+- corner radius: rounded-xl for inputs/buttons, 
+  rounded-2xl for containers and panels
+- Hover: opacity only (hover:opacity-70 or 
+  hover:opacity-80) — no colour shift
+- Bounce dots for streaming/generating states, 
+  spinner for discrete async operations
+- All authenticated API calls via the centralised 
+  fetch wrapper — never raw fetch('/api/...')
+- After modal or panel close: return focus to trigger 
+  element
+- Mobile: apply pb-safe to any bottom-anchored input 
+  or action area
+- Do not use localStorage or sessionStorage
+
+---
+
+## After all 7 steps are complete
+
+Update CHANGELOG.md with a Phase 2 session entry 
+listing every file changed.
+
+Do not update DECISIONS.md in Phase 2 — all decisions 
+for this agent were documented in Phase 1.

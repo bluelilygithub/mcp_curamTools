@@ -24,7 +24,7 @@ async function runHighIntentAdvisor(context) {
     systemPrompt:  buildSystemPrompt(config),
     userMessage,
     tools:         highIntentAdvisorTools,
-    model:         adminConfig.model          ?? 'claude-sonnet-4-6',
+    model:         adminConfig.model,
     maxTokens:     adminConfig.max_tokens     ?? 4096,
     maxIterations: adminConfig.max_iterations ?? 25,
     fallbackModel: adminConfig.fallback_model ?? null,

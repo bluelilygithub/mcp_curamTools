@@ -263,7 +263,7 @@ async function runCostPerBookedJob(context) {
     userMessage,
     tools:         [],
     maxIterations: 1,
-    model:         adminConfig.model          ?? 'claude-sonnet-4-6',
+    model:         adminConfig.model,
     maxTokens:     adminConfig.max_tokens     ?? 4096,
     fallbackModel: adminConfig.fallback_model ?? null,
     onStep:        emit,

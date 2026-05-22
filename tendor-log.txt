@@ -1,0 +1,301 @@
+2026-05-13T02:15:06.267576307Z [inf]  Starting Container
+2026-05-13T02:15:06.480714180Z [err]      at Module.require (node:internal/modules/cjs/loader:1463:12)
+2026-05-13T02:15:06.480720185Z [err]      at require (node:internal/modules/helpers:147:16)
+2026-05-13T02:15:06.480720900Z [err]    code: 'MODULE_NOT_FOUND',
+2026-05-13T02:15:06.480725142Z [err]      at Object.<anonymous> (/app/server/agents/demoSuite/tenderResponse/index.js:38:31)
+2026-05-13T02:15:06.480730472Z [err]      at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+2026-05-13T02:15:06.480735729Z [err]      at Module._compile (node:internal/modules/cjs/loader:1705:14) {
+2026-05-13T02:15:06.480739919Z [err]      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+2026-05-13T02:15:06.480745064Z [inf]  [AgentScheduler] Registered "ai-visibility-monitor" → "0 7 * * 1"
+2026-05-13T02:15:06.480748526Z [err]      at Function._load (node:internal/modules/cjs/loader:1192:37)
+2026-05-13T02:15:06.480751792Z [err]  Require stack:
+2026-05-13T02:15:06.480754695Z [err]  node:internal/modules/cjs/loader:1386
+2026-05-13T02:15:06.480755277Z [err]  - /app/server/routes/agents.js
+2026-05-13T02:15:06.480761735Z [err]  - /app/server/agents/demoSuite/tenderResponse/index.js
+2026-05-13T02:15:06.480764384Z [err]      at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2026-05-13T02:15:06.480765636Z [inf]  [AgentScheduler] Registered "google-ads-monitor" → "0 6,18 * * *"
+2026-05-13T02:15:06.480767236Z [err]  - /app/server/index.js
+2026-05-13T02:15:06.480767915Z [err]    throw err;
+2026-05-13T02:15:06.480776213Z [err]      at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+2026-05-13T02:15:06.480776455Z [err]      at Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)
+2026-05-13T02:15:06.480777353Z [err]    ^
+2026-05-13T02:15:06.480782624Z [err]  
+2026-05-13T02:15:06.480785879Z [err]  Error: Cannot find module '../../platform/AgentOrchestrator'
+2026-05-13T02:15:06.481462394Z [err]    requireStack: [
+2026-05-13T02:15:06.481465855Z [err]      '/app/server/agents/demoSuite/tenderResponse/index.js',
+2026-05-13T02:15:06.481470228Z [err]      '/app/server/routes/agents.js',
+2026-05-13T02:15:06.481473558Z [err]      '/app/server/index.js'
+2026-05-13T02:15:06.481477272Z [err]    ]
+2026-05-13T02:15:06.481480785Z [err]  }
+2026-05-13T02:15:06.481484035Z [err]  
+2026-05-13T02:15:06.481487277Z [err]  Node.js v22.22.2
+2026-05-13T02:15:07.483900123Z [err]      at Module.require (node:internal/modules/cjs/loader:1463:12)
+2026-05-13T02:15:07.483907365Z [err]      at require (node:internal/modules/helpers:147:16)
+2026-05-13T02:15:07.483915366Z [err]    throw err;
+2026-05-13T02:15:07.483919292Z [err]      at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+2026-05-13T02:15:07.483926289Z [err]    ^
+2026-05-13T02:15:07.483926614Z [err]      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+2026-05-13T02:15:07.483930734Z [err]  - /app/server/routes/agents.js
+2026-05-13T02:15:07.483932586Z [inf]  [AgentScheduler] Registered "google-ads-monitor" → "0 6,18 * * *"
+2026-05-13T02:15:07.483935892Z [err]  
+2026-05-13T02:15:07.483936759Z [err]      at Function._load (node:internal/modules/cjs/loader:1192:37)
+2026-05-13T02:15:07.483942474Z [inf]  [AgentScheduler] Registered "ai-visibility-monitor" → "0 7 * * 1"
+2026-05-13T02:15:07.483943452Z [err]  - /app/server/index.js
+2026-05-13T02:15:07.483948555Z [err]  Error: Cannot find module '../../platform/AgentOrchestrator'
+2026-05-13T02:15:07.483949617Z [err]  node:internal/modules/cjs/loader:1386
+2026-05-13T02:15:07.483954783Z [err]  Require stack:
+2026-05-13T02:15:07.483955098Z [err]      at Object.<anonymous> (/app/server/agents/demoSuite/tenderResponse/index.js:38:31)
+2026-05-13T02:15:07.483956267Z [err]      at Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)
+2026-05-13T02:15:07.483961807Z [err]      at Module._compile (node:internal/modules/cjs/loader:1705:14) {
+2026-05-13T02:15:07.483966815Z [err]    code: 'MODULE_NOT_FOUND',
+2026-05-13T02:15:07.483968124Z [err]  - /app/server/agents/demoSuite/tenderResponse/index.js
+2026-05-13T02:15:07.483981771Z [err]      at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2026-05-13T02:15:07.483990241Z [err]      at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+2026-05-13T02:15:07.485409379Z [err]    requireStack: [
+2026-05-13T02:15:07.485413667Z [err]      '/app/server/agents/demoSuite/tenderResponse/index.js',
+2026-05-13T02:15:07.485417041Z [err]      '/app/server/routes/agents.js',
+2026-05-13T02:15:07.485420320Z [err]      '/app/server/index.js'
+2026-05-13T02:15:07.485423587Z [err]    ]
+2026-05-13T02:15:07.485426621Z [err]  }
+2026-05-13T02:15:07.485429408Z [err]  
+2026-05-13T02:15:07.485432261Z [err]  Node.js v22.22.2
+2026-05-13T02:15:08.196400001Z [inf]  [AgentScheduler] Registered "google-ads-monitor" → "0 6,18 * * *"
+2026-05-13T02:15:08.494357431Z [err]    code: 'MODULE_NOT_FOUND',
+2026-05-13T02:15:08.494366357Z [err]    requireStack: [
+2026-05-13T02:15:08.494368707Z [inf]  [AgentScheduler] Registered "ai-visibility-monitor" → "0 7 * * 1"
+2026-05-13T02:15:08.494374033Z [err]      '/app/server/agents/demoSuite/tenderResponse/index.js',
+2026-05-13T02:15:08.494376010Z [err]  node:internal/modules/cjs/loader:1386
+2026-05-13T02:15:08.494385402Z [err]    throw err;
+2026-05-13T02:15:08.494391176Z [err]    ^
+2026-05-13T02:15:08.494396701Z [err]  
+2026-05-13T02:15:08.494405111Z [err]  - /app/server/routes/agents.js
+2026-05-13T02:15:08.494409322Z [err]  - /app/server/index.js
+2026-05-13T02:15:08.494414814Z [err]      at Object.<anonymous> (/app/server/agents/demoSuite/tenderResponse/index.js:38:31)
+2026-05-13T02:15:08.494415110Z [err]      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+2026-05-13T02:15:08.494418707Z [err]      at Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)
+2026-05-13T02:15:08.494419916Z [err]  Error: Cannot find module '../../platform/AgentOrchestrator'
+2026-05-13T02:15:08.494425317Z [err]      at Module._compile (node:internal/modules/cjs/loader:1705:14) {
+2026-05-13T02:15:08.494429143Z [err]      at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+2026-05-13T02:15:08.494430174Z [err]  Require stack:
+2026-05-13T02:15:08.494431703Z [err]      at Module.require (node:internal/modules/cjs/loader:1463:12)
+2026-05-13T02:15:08.494433029Z [err]      at Function._load (node:internal/modules/cjs/loader:1192:37)
+2026-05-13T02:15:08.494433460Z [err]      at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2026-05-13T02:15:08.494436943Z [err]  - /app/server/agents/demoSuite/tenderResponse/index.js
+2026-05-13T02:15:08.494443377Z [err]      at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+2026-05-13T02:15:08.494444301Z [err]      at require (node:internal/modules/helpers:147:16)
+2026-05-13T02:15:08.495358747Z [err]  Node.js v22.22.2
+2026-05-13T02:15:08.495364950Z [err]      '/app/server/routes/agents.js',
+2026-05-13T02:15:08.495368504Z [err]      '/app/server/index.js'
+2026-05-13T02:15:08.495371824Z [err]    ]
+2026-05-13T02:15:08.495375067Z [err]  }
+2026-05-13T02:15:08.495378333Z [err]  
+2026-05-13T02:15:09.127436092Z [inf]  [AgentScheduler] Registered "google-ads-monitor" → "0 6,18 * * *"
+2026-05-13T02:15:09.157397489Z [inf]  [AgentScheduler] Registered "ai-visibility-monitor" → "0 7 * * 1"
+2026-05-13T02:15:09.488575468Z [err]    throw err;
+2026-05-13T02:15:09.488585178Z [err]      at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+2026-05-13T02:15:09.488585346Z [err]    ^
+2026-05-13T02:15:09.488593900Z [err]      at Module.require (node:internal/modules/cjs/loader:1463:12)
+2026-05-13T02:15:09.488595797Z [err]  
+2026-05-13T02:15:09.488597283Z [err]      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+2026-05-13T02:15:09.488597435Z [err]      '/app/server/agents/demoSuite/tenderResponse/index.js',
+2026-05-13T02:15:09.488604406Z [err]  Error: Cannot find module '../../platform/AgentOrchestrator'
+2026-05-13T02:15:09.488605963Z [err]      at require (node:internal/modules/helpers:147:16)
+2026-05-13T02:15:09.488606898Z [err]      at Module._compile (node:internal/modules/cjs/loader:1705:14) {
+2026-05-13T02:15:09.488607509Z [err]      at Function._load (node:internal/modules/cjs/loader:1192:37)
+2026-05-13T02:15:09.488610376Z [err]      '/app/server/routes/agents.js',
+2026-05-13T02:15:09.488616909Z [err]      at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2026-05-13T02:15:09.488618288Z [err]  Require stack:
+2026-05-13T02:15:09.488620222Z [err]  node:internal/modules/cjs/loader:1386
+2026-05-13T02:15:09.488622741Z [err]    code: 'MODULE_NOT_FOUND',
+2026-05-13T02:15:09.488622810Z [err]      at Object.<anonymous> (/app/server/agents/demoSuite/tenderResponse/index.js:38:31)
+2026-05-13T02:15:09.488628124Z [err]      at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+2026-05-13T02:15:09.488628268Z [err]  - /app/server/routes/agents.js
+2026-05-13T02:15:09.488632493Z [err]    requireStack: [
+2026-05-13T02:15:09.488633321Z [err]  - /app/server/agents/demoSuite/tenderResponse/index.js
+2026-05-13T02:15:09.488639086Z [err]  - /app/server/index.js
+2026-05-13T02:15:09.488643614Z [err]      at Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)
+2026-05-13T02:15:09.490199298Z [err]  Node.js v22.22.2
+2026-05-13T02:15:09.490246211Z [err]      '/app/server/index.js'
+2026-05-13T02:15:09.490249705Z [err]    ]
+2026-05-13T02:15:09.490254131Z [err]  }
+2026-05-13T02:15:09.490258883Z [err]  
+2026-05-13T02:15:10.039524290Z [inf]  [AgentScheduler] Registered "google-ads-monitor" → "0 6,18 * * *"
+2026-05-13T02:15:10.066340263Z [inf]  [AgentScheduler] Registered "ai-visibility-monitor" → "0 7 * * 1"
+2026-05-13T02:15:10.148006380Z [err]  node:internal/modules/cjs/loader:1386
+2026-05-13T02:15:10.148008423Z [err]      '/app/server/routes/agents.js',
+2026-05-13T02:15:10.148009862Z [err]      at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+2026-05-13T02:15:10.148011815Z [err]    throw err;
+2026-05-13T02:15:10.148016780Z [err]      at Module.require (node:internal/modules/cjs/loader:1463:12)
+2026-05-13T02:15:10.148021962Z [err]    ^
+2026-05-13T02:15:10.148024138Z [err]      at require (node:internal/modules/helpers:147:16)
+2026-05-13T02:15:10.148025123Z [err]      at Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)
+2026-05-13T02:15:10.148031613Z [err]  
+2026-05-13T02:15:10.148031790Z [err]      at Object.<anonymous> (/app/server/agents/demoSuite/tenderResponse/index.js:38:31)
+2026-05-13T02:15:10.148034093Z [err]      at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+2026-05-13T02:15:10.148037172Z [err]      at Module._compile (node:internal/modules/cjs/loader:1705:14) {
+2026-05-13T02:15:10.148040478Z [err]  Error: Cannot find module '../../platform/AgentOrchestrator'
+2026-05-13T02:15:10.148042518Z [err]      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+2026-05-13T02:15:10.148048632Z [err]      at Function._load (node:internal/modules/cjs/loader:1192:37)
+2026-05-13T02:15:10.148048960Z [err]    code: 'MODULE_NOT_FOUND',
+2026-05-13T02:15:10.148051827Z [err]  Require stack:
+2026-05-13T02:15:10.148056624Z [err]      at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2026-05-13T02:15:10.148056958Z [err]    requireStack: [
+2026-05-13T02:15:10.148059603Z [err]  - /app/server/agents/demoSuite/tenderResponse/index.js
+2026-05-13T02:15:10.148062477Z [err]      '/app/server/agents/demoSuite/tenderResponse/index.js',
+2026-05-13T02:15:10.148065720Z [err]  - /app/server/routes/agents.js
+2026-05-13T02:15:10.148069994Z [err]  - /app/server/index.js
+2026-05-13T02:15:10.150259305Z [err]      '/app/server/index.js'
+2026-05-13T02:15:10.150265018Z [err]    ]
+2026-05-13T02:15:10.150270097Z [err]  }
+2026-05-13T02:15:10.150274280Z [err]  
+2026-05-13T02:15:10.150278500Z [err]  Node.js v22.22.2
+2026-05-13T02:15:11.164365813Z [inf]  [AgentScheduler] Registered "google-ads-monitor" → "0 6,18 * * *"
+2026-05-13T02:15:11.194421819Z [inf]  [AgentScheduler] Registered "ai-visibility-monitor" → "0 7 * * 1"
+2026-05-13T02:15:11.473844291Z [err]      at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+2026-05-13T02:15:11.473851013Z [err]      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+2026-05-13T02:15:11.473853819Z [err]      '/app/server/routes/agents.js',
+2026-05-13T02:15:11.473861833Z [err]  Require stack:
+2026-05-13T02:15:11.473863198Z [err]    ^
+2026-05-13T02:15:11.473867619Z [err]  - /app/server/agents/demoSuite/tenderResponse/index.js
+2026-05-13T02:15:11.473872923Z [err]      at Module._compile (node:internal/modules/cjs/loader:1705:14) {
+2026-05-13T02:15:11.473876098Z [err]  
+2026-05-13T02:15:11.473876895Z [err]  - /app/server/routes/agents.js
+2026-05-13T02:15:11.473878148Z [err]  node:internal/modules/cjs/loader:1386
+2026-05-13T02:15:11.473883556Z [err]    code: 'MODULE_NOT_FOUND',
+2026-05-13T02:15:11.473884768Z [err]  Error: Cannot find module '../../platform/AgentOrchestrator'
+2026-05-13T02:15:11.473886992Z [err]      at Module.require (node:internal/modules/cjs/loader:1463:12)
+2026-05-13T02:15:11.473887351Z [err]  - /app/server/index.js
+2026-05-13T02:15:11.473891126Z [err]    throw err;
+2026-05-13T02:15:11.473894872Z [err]    requireStack: [
+2026-05-13T02:15:11.473895039Z [err]      at Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)
+2026-05-13T02:15:11.473900429Z [err]      at require (node:internal/modules/helpers:147:16)
+2026-05-13T02:15:11.473904542Z [err]      '/app/server/agents/demoSuite/tenderResponse/index.js',
+2026-05-13T02:15:11.473908013Z [err]      at Function._load (node:internal/modules/cjs/loader:1192:37)
+2026-05-13T02:15:11.473908954Z [err]      at Object.<anonymous> (/app/server/agents/demoSuite/tenderResponse/index.js:38:31)
+2026-05-13T02:15:11.473922606Z [err]      at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2026-05-13T02:15:11.473927280Z [err]      at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+2026-05-13T02:15:11.475080021Z [err]  
+2026-05-13T02:15:11.475084095Z [err]  Node.js v22.22.2
+2026-05-13T02:15:11.475097361Z [err]      '/app/server/index.js'
+2026-05-13T02:15:11.475101856Z [err]    ]
+2026-05-13T02:15:11.475106522Z [err]  }
+2026-05-13T02:15:12.088214623Z [inf]  [AgentScheduler] Registered "google-ads-monitor" → "0 6,18 * * *"
+2026-05-13T02:15:12.114157631Z [inf]  [AgentScheduler] Registered "ai-visibility-monitor" → "0 7 * * 1"
+2026-05-13T02:15:12.202340309Z [err]      at Object.<anonymous> (/app/server/agents/demoSuite/tenderResponse/index.js:38:31)
+2026-05-13T02:15:12.202340904Z [err]      '/app/server/agents/demoSuite/tenderResponse/index.js',
+2026-05-13T02:15:12.202350468Z [err]      '/app/server/routes/agents.js',
+2026-05-13T02:15:12.202351913Z [err]  node:internal/modules/cjs/loader:1386
+2026-05-13T02:15:12.202352037Z [err]      at Module._compile (node:internal/modules/cjs/loader:1705:14) {
+2026-05-13T02:15:12.202359023Z [err]    code: 'MODULE_NOT_FOUND',
+2026-05-13T02:15:12.202361170Z [err]    throw err;
+2026-05-13T02:15:12.202364604Z [err]      at Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)
+2026-05-13T02:15:12.202367462Z [err]    requireStack: [
+2026-05-13T02:15:12.202368622Z [err]    ^
+2026-05-13T02:15:12.202374590Z [err]      at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+2026-05-13T02:15:12.202374816Z [err]  
+2026-05-13T02:15:12.202382203Z [err]      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+2026-05-13T02:15:12.202382410Z [err]  Error: Cannot find module '../../platform/AgentOrchestrator'
+2026-05-13T02:15:12.202389409Z [err]  Require stack:
+2026-05-13T02:15:12.202389932Z [err]      at Function._load (node:internal/modules/cjs/loader:1192:37)
+2026-05-13T02:15:12.202396650Z [err]  - /app/server/agents/demoSuite/tenderResponse/index.js
+2026-05-13T02:15:12.202396932Z [err]      at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2026-05-13T02:15:12.202402728Z [err]      at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+2026-05-13T02:15:12.202403850Z [err]  - /app/server/routes/agents.js
+2026-05-13T02:15:12.202407977Z [err]      at Module.require (node:internal/modules/cjs/loader:1463:12)
+2026-05-13T02:15:12.202409724Z [err]  - /app/server/index.js
+2026-05-13T02:15:12.202412330Z [err]      at require (node:internal/modules/helpers:147:16)
+2026-05-13T02:15:12.204448377Z [err]  
+2026-05-13T02:15:12.204452848Z [err]  Node.js v22.22.2
+2026-05-13T02:15:12.204473951Z [err]      '/app/server/index.js'
+2026-05-13T02:15:12.204479514Z [err]    ]
+2026-05-13T02:15:12.204483971Z [err]  }
+2026-05-13T02:15:12.998739415Z [inf]  [AgentScheduler] Registered "google-ads-monitor" → "0 6,18 * * *"
+2026-05-13T02:15:13.021651942Z [inf]  [AgentScheduler] Registered "ai-visibility-monitor" → "0 7 * * 1"
+2026-05-13T02:15:13.104080731Z [err]    requireStack: [
+2026-05-13T02:15:13.104087703Z [err]      at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+2026-05-13T02:15:13.104087897Z [err]      '/app/server/agents/demoSuite/tenderResponse/index.js',
+2026-05-13T02:15:13.104093331Z [err]      '/app/server/routes/agents.js',
+2026-05-13T02:15:13.104095642Z [err]      at Module.require (node:internal/modules/cjs/loader:1463:12)
+2026-05-13T02:15:13.104100180Z [err]  node:internal/modules/cjs/loader:1386
+2026-05-13T02:15:13.104101683Z [err]      at require (node:internal/modules/helpers:147:16)
+2026-05-13T02:15:13.104106989Z [err]    throw err;
+2026-05-13T02:15:13.104107180Z [err]      at Object.<anonymous> (/app/server/agents/demoSuite/tenderResponse/index.js:38:31)
+2026-05-13T02:15:13.104113609Z [err]      at Module._compile (node:internal/modules/cjs/loader:1705:14) {
+2026-05-13T02:15:13.104114583Z [err]    ^
+2026-05-13T02:15:13.104121152Z [err]    code: 'MODULE_NOT_FOUND',
+2026-05-13T02:15:13.104121804Z [err]  
+2026-05-13T02:15:13.104125782Z [err]  Error: Cannot find module '../../platform/AgentOrchestrator'
+2026-05-13T02:15:13.104128958Z [err]  Require stack:
+2026-05-13T02:15:13.104131997Z [err]  - /app/server/agents/demoSuite/tenderResponse/index.js
+2026-05-13T02:15:13.104135069Z [err]  - /app/server/routes/agents.js
+2026-05-13T02:15:13.104138281Z [err]  - /app/server/index.js
+2026-05-13T02:15:13.104141475Z [err]      at Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)
+2026-05-13T02:15:13.104144650Z [err]      at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+2026-05-13T02:15:13.104149524Z [err]      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+2026-05-13T02:15:13.104153268Z [err]      at Function._load (node:internal/modules/cjs/loader:1192:37)
+2026-05-13T02:15:13.104156249Z [err]      at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2026-05-13T02:15:13.106301404Z [err]      '/app/server/index.js'
+2026-05-13T02:15:13.106304363Z [err]    ]
+2026-05-13T02:15:13.106307104Z [err]  }
+2026-05-13T02:15:13.106309731Z [err]  
+2026-05-13T02:15:13.106312643Z [err]  Node.js v22.22.2
+2026-05-13T02:15:13.908310435Z [inf]  [AgentScheduler] Registered "google-ads-monitor" → "0 6,18 * * *"
+2026-05-13T02:15:13.930453749Z [inf]  [AgentScheduler] Registered "ai-visibility-monitor" → "0 7 * * 1"
+2026-05-13T02:15:14.015634323Z [err]      at Module._compile (node:internal/modules/cjs/loader:1705:14) {
+2026-05-13T02:15:14.015639105Z [err]    code: 'MODULE_NOT_FOUND',
+2026-05-13T02:15:14.015643603Z [err]    requireStack: [
+2026-05-13T02:15:14.015647523Z [err]      '/app/server/agents/demoSuite/tenderResponse/index.js',
+2026-05-13T02:15:14.015654505Z [err]      '/app/server/routes/agents.js',
+2026-05-13T02:15:14.015655808Z [err]  node:internal/modules/cjs/loader:1386
+2026-05-13T02:15:14.015659618Z [err]    throw err;
+2026-05-13T02:15:14.015662581Z [err]    ^
+2026-05-13T02:15:14.015665555Z [err]  
+2026-05-13T02:15:14.015668528Z [err]  Error: Cannot find module '../../platform/AgentOrchestrator'
+2026-05-13T02:15:14.015671490Z [err]  Require stack:
+2026-05-13T02:15:14.015674461Z [err]  - /app/server/agents/demoSuite/tenderResponse/index.js
+2026-05-13T02:15:14.015677353Z [err]  - /app/server/routes/agents.js
+2026-05-13T02:15:14.015680078Z [err]  - /app/server/index.js
+2026-05-13T02:15:14.015682910Z [err]      at Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)
+2026-05-13T02:15:14.015685538Z [err]      at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+2026-05-13T02:15:14.015688604Z [err]      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+2026-05-13T02:15:14.015691446Z [err]      at Function._load (node:internal/modules/cjs/loader:1192:37)
+2026-05-13T02:15:14.015694139Z [err]      at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2026-05-13T02:15:14.015697314Z [err]      at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+2026-05-13T02:15:14.015700068Z [err]      at Module.require (node:internal/modules/cjs/loader:1463:12)
+2026-05-13T02:15:14.015703612Z [err]      at require (node:internal/modules/helpers:147:16)
+2026-05-13T02:15:14.015706422Z [err]      at Object.<anonymous> (/app/server/agents/demoSuite/tenderResponse/index.js:38:31)
+2026-05-13T02:15:14.017570083Z [err]      '/app/server/index.js'
+2026-05-13T02:15:14.017572863Z [err]    ]
+2026-05-13T02:15:14.017575802Z [err]  }
+2026-05-13T02:15:14.017578807Z [err]  
+2026-05-13T02:15:14.017581693Z [err]  Node.js v22.22.2
+2026-05-13T02:15:14.954121280Z [inf]  [AgentScheduler] Registered "google-ads-monitor" → "0 6,18 * * *"
+2026-05-13T02:15:14.979244900Z [inf]  [AgentScheduler] Registered "ai-visibility-monitor" → "0 7 * * 1"
+2026-05-13T02:15:15.060553220Z [err]  node:internal/modules/cjs/loader:1386
+2026-05-13T02:15:15.060554311Z [err]      at require (node:internal/modules/helpers:147:16)
+2026-05-13T02:15:15.060561999Z [err]    throw err;
+2026-05-13T02:15:15.060563627Z [err]      at Object.<anonymous> (/app/server/agents/demoSuite/tenderResponse/index.js:38:31)
+2026-05-13T02:15:15.060567056Z [err]    ^
+2026-05-13T02:15:15.060571706Z [err]  
+2026-05-13T02:15:15.060573496Z [err]      at Module._compile (node:internal/modules/cjs/loader:1705:14) {
+2026-05-13T02:15:15.060580536Z [err]  Error: Cannot find module '../../platform/AgentOrchestrator'
+2026-05-13T02:15:15.060582288Z [err]    code: 'MODULE_NOT_FOUND',
+2026-05-13T02:15:15.060585306Z [err]  Require stack:
+2026-05-13T02:15:15.060590632Z [err]    requireStack: [
+2026-05-13T02:15:15.060590801Z [err]  - /app/server/agents/demoSuite/tenderResponse/index.js
+2026-05-13T02:15:15.060596108Z [err]  - /app/server/routes/agents.js
+2026-05-13T02:15:15.060600801Z [err]      '/app/server/agents/demoSuite/tenderResponse/index.js',
+2026-05-13T02:15:15.060601384Z [err]  - /app/server/index.js
+2026-05-13T02:15:15.060608910Z [err]      at Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)
+2026-05-13T02:15:15.060609721Z [err]      '/app/server/routes/agents.js',
+2026-05-13T02:15:15.060613372Z [err]      at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+2026-05-13T02:15:15.060616715Z [err]      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+2026-05-13T02:15:15.060619899Z [err]      at Function._load (node:internal/modules/cjs/loader:1192:37)
+2026-05-13T02:15:15.060623072Z [err]      at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2026-05-13T02:15:15.060626976Z [err]      at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+2026-05-13T02:15:15.060629758Z [err]      at Module.require (node:internal/modules/cjs/loader:1463:12)
+2026-05-13T02:15:15.062468034Z [err]      '/app/server/index.js'
+2026-05-13T02:15:15.062471658Z [err]    ]
+2026-05-13T02:15:15.062477455Z [err]  }
+2026-05-13T02:15:15.062481035Z [err]  
+2026-05-13T02:15:15.062484376Z [err]  Node.js v22.22.2

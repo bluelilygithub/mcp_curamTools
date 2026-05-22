@@ -252,7 +252,7 @@ router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) =>
       userMessage,
       conversationHistory: history,
       tools:               googleAdsConversationTools,
-      model:               adminConfig.model          ?? 'claude-sonnet-4-6',
+      model:               adminConfig.model,
       maxTokens:           adminConfig.max_tokens     ?? 8192,
       maxIterations:       adminConfig.max_iterations ?? 10,
       fallbackModel:       adminConfig?.fallback_model ?? null,
@@ -368,7 +368,7 @@ router.post('/keep-warm', requireAuth, async (req, res) => {
     const systemPrompt = [buildSystemPrompt(agentConfig, monitorConfig), runtimePromptContext]
       .filter(Boolean)
       .join('\n\n');
-    const model        = adminConfig.model ?? 'claude-sonnet-4-6';
+    const model        = adminConfig.model;
 
     // Mirror AgentOrchestrator: strip execute + meta fields before sending to provider
     const providerTools = googleAdsConversationTools.map(

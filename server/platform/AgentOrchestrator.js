@@ -15,8 +15,7 @@
  * runFn in createAgentRoute receives context.emit — pass it as onStep so mid-run
  * budget checks can fire on each iteration.
  */
-
-const DEFAULT_MODEL           = 'deepseek-chat';
+const DEFAULT_MODEL           = null;
 const MAX_ITERATIONS_HARD_CAP = 20;
 
 // ─── Session-scoped tool result cache ────────────────────────────────────────
@@ -118,8 +117,13 @@ class AgentOrchestrator {
       const { getCustomProviders } = require('./AgentConfigService');
       customProviders = await getCustomProviders(context.orgId);
     } catch { /* use hardcoded + env var fallback only */ }
-
-    const capped   = Math.min(maxIterations, MAX_ITERATIONS_HARD_CAP);
+        const capped   = Math.min(maxIterations, MAX_ITERATIONS_HARD_CAP);
+    if (!model) {
+      throw new AgentError(
+        'No model configured. Set a default model in Settings > Models or a per-agent model in Admin > Agents.',
+        { iterations: 0, trace: [] }
+      );
+    }
     const provider = getProvider(model, customProviders);
 
     const effectiveSystemPrompt = [systemPrompt, context.runtimePromptContext]

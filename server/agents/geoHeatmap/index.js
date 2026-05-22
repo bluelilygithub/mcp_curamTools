@@ -86,7 +86,7 @@ async function runGeoHeatmap(context) {
     ? context.adminConfig
     : await AgentConfigService.getAdminConfig(TOOL_SLUG);
 
-  const model         = context.req?.body?.model || adminConfig.model || 'claude-sonnet-4-6';
+  const model         = context.req?.body?.model || adminConfig.model;
   const startDate     = req?.body?.startDate ?? null;
   const endDate       = req?.body?.endDate   ?? null;
 

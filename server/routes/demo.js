@@ -647,7 +647,7 @@ Return ONLY a JSON object — no markdown fences, no explanation:
     const customProviders = await AgentConfigService.getCustomProviders(req.user.orgId).catch(() => []);
     const adminConfig     = await AgentConfigService.getAdminConfig('demo-document-analyzer').catch(() => ({}));
     const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(req.user.orgId).catch(() => null);
-    const model           = orgDefaultModel ?? 'deepseek-chat';
+    const model           = orgDefaultModel;
     const maxTokens       = adminConfig.max_tokens ?? 4096;
     const fallback        = adminConfig.fallback_model ?? null;
     const agentConfig     = await AgentConfigService.getAgentConfig(req.user.orgId, 'demo-document-analyzer').catch(() => ({}));
@@ -799,7 +799,7 @@ If this question is about the document above, answer it directly using the conte
     const customProviders = await AgentConfigService.getCustomProviders(req.user.orgId).catch(() => []);
     const adminConfig = await AgentConfigService.getAdminConfig(configSlug).catch(() => ({}));
     const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(req.user.orgId).catch(() => null);
-    const model    = orgDefaultModel ?? 'deepseek-chat';
+    const model    = orgDefaultModel;
     const maxTokens = adminConfig.max_tokens ?? 4096;
     const fallback  = adminConfig.fallback_model ?? null;
 

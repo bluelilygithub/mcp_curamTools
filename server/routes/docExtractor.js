@@ -160,7 +160,7 @@ router.post(
       );
       const allModels = modelsRow.rows[0]?.value ?? [];
       const rec = AgentConfigService.getRecommendedModel('doc-extractor', allModels);
-      model = rec?.id ?? 'claude-sonnet-4-6'; // absolute last resort
+      model = rec?.id ?? null;
     }
 
     // Allow a user-supplied model override if they have permission
@@ -377,7 +377,7 @@ router.get('/config', requireAuth, async (req, res) => {
       );
       const allModels = modelsRow.rows[0]?.value ?? [];
       const rec = AgentConfigService.getRecommendedModel('doc-extractor', allModels);
-      model     = rec?.id   ?? 'claude-sonnet-4-6';
+      model     = rec?.id   ?? null;
       modelName = rec?.name ?? model;
     } else {
       // Look up name from catalogue

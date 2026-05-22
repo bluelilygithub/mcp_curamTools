@@ -32,7 +32,7 @@ async function runAuctionInsights(context) {
     systemPrompt:  buildSystemPrompt(),
     userMessage,
     tools:         auctionInsightsTools,
-    model:         adminConfig.model          ?? 'claude-sonnet-4-6',
+    model:         adminConfig.model,
     maxTokens:     adminConfig.max_tokens     ?? 4096,
     maxIterations: adminConfig.max_iterations ?? 6,
     fallbackModel: adminConfig.fallback_model ?? null,

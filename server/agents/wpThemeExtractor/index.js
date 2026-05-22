@@ -217,7 +217,7 @@ async function runWpThemeExtractor(context) {
     userMessage,
     tools:         [],
     maxIterations: 1,
-    model:         adminConfig.model          ?? 'claude-sonnet-4-6',
+    model:         adminConfig.model,
     maxTokens:     adminConfig.max_tokens     ?? 16384,
     fallbackModel: adminConfig.fallback_model ?? null,
     onStep:        emit,

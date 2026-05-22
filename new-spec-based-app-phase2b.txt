@@ -1,0 +1,74 @@
+The Spec Validator Stage 1 extraction is returning 
+"No calculable claims found" when run against the 
+452 George Street hydraulic calculation document. 
+The document clearly contains a pipe schedule table 
+on page 5 with 8 segments (CW-01 through CW-08), 
+each containing: segment reference, pipe DN, internal 
+diameter (mm), length (m), design flow Q (L/s), 
+stated velocity (m/s), delta-p/m (kPa/m), and 
+delta-P segment (kPa).
+
+Diagnose and fix in this order:
+
+1. Log what Claude actually returns from Stage 1 
+   before any parsing or validation. Add a temporary 
+   console.log in index.js that prints the raw Stage 1 
+   response to the server terminal. This tells us 
+   whether the problem is in extraction or in parsing 
+   of the extraction output.
+
+2. Review the Stage 1 extraction prompt in index.js. 
+   It must explicitly describe the structure of a 
+   hydraulic pipe schedule and instruct Claude to 
+   extract each row as a separate claim object. 
+   The prompt must specify exactly these fields per 
+   segment: segment_ref, description, nominal_dn, 
+   internal_diameter_mm, length_m, flow_rate_ls, 
+   stated_velocity_ms, delta_p_per_m_kpa, 
+   delta_p_segment_kpa. 
+
+   The prompt must also instruct Claude to extract 
+   the pressure budget items from Section 6 as 
+   separate claims: available_pressure_kpa, 
+   elevation_head_loss_kpa, meter_loss_kpa, 
+   backflow_device_loss_kpa, valve_losses_kpa, 
+   stated_friction_loss_kpa, stated_residual_kpa, 
+   minimum_fixture_pressure_kpa.
+
+   The prompt must tell Claude that these values 
+   appear in a tabular format and that it must 
+   extract all rows regardless of whether they 
+   are highlighted or flagged.
+
+3. Review the JSON schema the extraction returns 
+   and confirm it matches exactly what calculator.py 
+   expects on stdin. If there is a mismatch, fix 
+   the schema in the prompt to match what the 
+   Python layer expects — do not change calculator.py.
+
+4. After fixing the extraction prompt, test by 
+   running the agent against the 452 George Street 
+   document. The agent must extract all 8 pipe 
+   segments and all 8 pressure budget line items 
+   before Stage 2 begins.
+
+5. Confirm Stage 2 then correctly identifies:
+   - CW-04: velocity FAIL (calculated 4.09 m/s, 
+     stated 2.51 m/s, limit 3.0 m/s)
+   - CW-06: velocity WARNING (calculated 1.25 m/s, 
+     stated 0.87 m/s — values disagree but within 
+     limit)
+   - CW-03: pressure drop discrepancy (stated 
+     12.4 kPa — verify against Hazen-Williams 
+     at Q=2.08 L/s, DN50 ID=47.0mm, L=8.2m, C=130)
+   - Pressure budget: total friction loss stated 
+     as 97.6 kPa — verify against sum of segment 
+     delta-P values and flag any discrepancy
+
+6. Remove the temporary console.log added in step 1 
+   once the extraction is confirmed working.
+
+Do not change calculator.py. Do not change the 
+HITL review logic or certificate gating. The fix 
+is in the Stage 1 extraction prompt and/or the 
+JSON schema handoff between Stage 1 and Stage 2.

@@ -58,7 +58,7 @@ async function runGoogleAdsFreeform(context) {
     systemPrompt:  buildSystemPrompt(customerConfig, customerVars),
     userMessage:   question,
     tools:         googleAdsFreeformTools,
-    model:         adminConfig.model          ?? 'claude-sonnet-4-6',
+    model:         adminConfig.model,
     maxTokens:     adminConfig.max_tokens     ?? 8192,
     maxIterations: adminConfig.max_iterations ?? 12,
     fallbackModel: adminConfig.fallback_model ?? null,

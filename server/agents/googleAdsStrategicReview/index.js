@@ -36,7 +36,7 @@ async function runGoogleAdsStrategicReview(context) {
     systemPrompt:  buildSystemPrompt(),
     userMessage,
     tools:         googleAdsStrategicReviewTools,
-    model:         adminConfig.model          ?? 'claude-sonnet-4-6',
+    model:         adminConfig.model,
     maxTokens:     adminConfig.max_tokens     ?? 6000,
     maxIterations: adminConfig.max_iterations ?? 8,
     fallbackModel: adminConfig.fallback_model ?? null,

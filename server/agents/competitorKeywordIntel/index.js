@@ -28,7 +28,7 @@ async function runCompetitorKeywordIntel(context) {
     systemPrompt:  buildSystemPrompt(),
     userMessage,
     tools:         competitorKeywordIntelTools,
-    model:         adminConfig.model          ?? 'claude-sonnet-4-6',
+    model:         adminConfig.model,
     maxTokens:     adminConfig.max_tokens     ?? 6144,
     maxIterations: adminConfig.max_iterations ?? 10,
     fallbackModel: adminConfig.fallback_model ?? null,

@@ -1,0 +1,348 @@
+Read DEMO-AGENTS.md, PLATFORM-PRIMITIVES.md, DECISIONS.md, 
+SECTION-3-COMPONENTS.md, and the existing 
+server/agents/demoSuite/documentAnalyzer.js before writing 
+any code. The new agent must follow every pattern and 
+constraint documented in those files.
+
+---
+
+## Agent: Spec Validator
+
+### What it does
+Accepts a PDF hydraulic services calculation document, extracts 
+all quantitative claims (pipe sizes, flow rates, velocities, 
+pressure drops, pressure budgets), runs deterministic 
+Python-based calculations to verify each claim, and returns 
+a structured finding set for human review. A compliance 
+certificate is generated only when all findings have been 
+reviewed and every finding is approved — rejected findings 
+block the certificate permanently; the engineer must resubmit 
+a corrected document.
+
+This agent is distinct from demo-document-analyzer. The 
+document analyser is broad-scope contract review. The Spec 
+Validator is narrow and numerical — it is specifically for 
+engineering calculation documents containing quantitative 
+hydraulic specifications. The follow-up Q&A is scoped 
+exclusively to the discrepancies found in the current run 
+and direct remediation questions arising from them (e.g. 
+"what pipe size would bring segment CW-04 into compliance?"). 
+The system prompt and the user message closing instruction 
+must both enforce this boundary using the same dual-layer 
+pattern documented in DECISIONS.md under 
+"Document Analyzer Follow-up Q&A — Scope Restriction".
+
+---
+
+## Slugs and routing
+
+Internal slug:  spec-validator
+Demo slug:      demo-spec-validator
+
+The agent code is identical for both. Assignment to org type 
+is handled via org_agent_manifest as per DEMO-AGENTS.md. 
+Both slugs must be registered in:
+- server/demo/demoCatalog.js
+- server/routes/agents.js (createAgentRoute for both slugs)
+- server/platform/AgentConfigService.js (AGENT_DEFAULTS and 
+  ADMIN_DEFAULTS for both slugs)
+
+---
+
+## Three-stage pipeline
+
+Stage 1 — Extraction (Claude):
+Claude reads the uploaded PDF and extracts every quantitative 
+claim into a structured JSON object. Each extracted item must 
+include: segment reference, description, parameter name, 
+stated value, unit, and source location in the document 
+(page number and context string). Claude does not perform 
+any calculations at this stage — extraction only.
+
+Stage 2 — Validation (Python subprocess):
+A Python script receives the Stage 1 JSON and runs 
+deterministic calculations for each extracted item. 
+
+The Python layer must:
+- Set up and use appropriate libraries for the calculations. 
+  Choose libraries that are reliable, well-maintained, and 
+  suited to deterministic hydraulic calculations. Do not use 
+  AI or probabilistic methods in this layer.
+- Implement Hazen-Williams pressure drop calculation
+- Implement Darcy-Weisbach as an alternative where 
+  friction factor is specified
+- Implement continuity equation velocity check (Q = V·A)
+- Implement static pressure budget summation and residual 
+  pressure check against AS/NZS 3500.1 minimum fixture 
+  pressures
+- Implement Reynolds number and flow regime classification
+- Show full working for every calculation — intermediate 
+  values, formula used, inputs, result — not just pass/fail
+- Return a structured JSON result for each check: 
+  stated_value, calculated_value, unit, formula_used, 
+  working (step-by-step), status (PASS/FAIL/WARNING), 
+  tolerance_applied, standard_reference
+
+The Python subprocess must be called via execFileAsync 
+(not exec, not spawn with shell:true). Never use child_process 
+shell execution for the calculation layer.
+
+Stage 3 — Synthesis (Claude):
+Claude receives the Stage 2 JSON and produces reviewer-ready 
+findings. Each finding must include: a plain-language 
+explanation of what the discrepancy means in practice 
+(not just what the numbers are), the likely cause of the 
+error, and the recommended remediation. The synthesis must 
+not introduce any new calculations — it interprets and 
+communicates the Python output only.
+
+---
+
+## Finding classification
+
+Two finding types, matching the document analyser pattern:
+
+Deterministic findings (from Python Stage 2):
+- Confidence always 1.0
+- Status: PASS, FAIL, or WARNING
+- FAIL = value outside code limit (e.g. velocity > 3.0 m/s)
+- WARNING = value within limits but anomalous 
+  (e.g. margin < 5 kPa, velocity < 0.5 m/s)
+
+Probabilistic findings (from Claude Stage 3):
+- Confidence 0.0–1.0
+- Flags patterns that require engineering judgment 
+  (e.g. "pipe schedule does not include fittings allowance", 
+  "diversity factor not stated — assumed value used")
+
+Cross-stage overlap detection: implement the same overlap 
+flagging as document analyser. Overlapping findings require 
+a comment before approval (enforced server-side in the 
+PATCH endpoint).
+
+Low confidence (< 0.7) approved findings require a comment. 
+Rejected findings cannot be approved — they permanently 
+block the certificate. The engineer must resubmit a corrected 
+document for a new run.
+
+---
+
+## HITL review flow
+
+Follow the document analyser pattern exactly:
+- Findings stored in agent_runs.result.data
+- Review state updated via 
+  PATCH /api/demo/runs/:runId/review/:findingId
+- Uses jsonb_set — no separate table
+- Syncs finding across all three arrays atomically
+
+Server-side enforcement:
+- status must be approved | rejected | resubmit
+- low confidence + approved with no comment → 422
+- cross-stage overlap + approved with no comment → 422
+- rejected finding → certificate permanently blocked 
+  (no override path)
+
+---
+
+## File upload
+
+Follow the document analyser pattern exactly:
+- FileReader.readAsDataURL, strip prefix, send 
+  {fileData, mimeType, fileName} as JSON body
+- 10 MB client-side limit
+- PDF only (no xlsx or docx at this stage)
+- Vision model enforcement: check provider.supportsVision 
+  before sending — throw a clear error if model does not 
+  support vision, naming the model and directing admin to 
+  configure a vision-capable model
+
+---
+
+## Decision trace
+
+Append trace entries (never mutate) for:
+- input_sanitisation (use shared server/utils/sanitize.js)
+- pdf_extraction (page count, extraction method, token count)
+- python_calculation (library versions, calculation count, 
+  pass/fail/warning breakdown, execution time ms)
+- synthesis (finding count, model used, tokens)
+- review_action (each PATCH — finding_id, decision, 
+  reviewed_by, comment)
+
+---
+
+## Compliance certificate
+
+- Built client-side as HTML string, exported via exportPdf
+- Gated on: all findings reviewed AND all findings approved 
+  (zero rejected, zero pending)
+- Rejected findings permanently block the certificate — 
+  this is by design and must not have an override path
+- Certificate content must include: document name, run date, 
+  model used, total findings, pass/fail/warning breakdown, 
+  Python library versions used for calculations, 
+  reviewer name and timestamp for each finding, 
+  statement that deterministic calculations were performed 
+  by Python (not AI), and the full calculation working 
+  for each FAIL finding
+
+---
+
+## AgentConfigService entries
+
+AGENT_DEFAULTS — both slugs:
+  (no operator settings for demo agents)
+
+ADMIN_DEFAULTS — both slugs (before _platform sentinel):
+  enabled: true
+  model: null          // uses org default — must be vision-capable
+  max_tokens: 8192     // extraction + synthesis JSON can be large
+  max_task_budget_aud: 2.00
+  fallback_model: null
+
+---
+
+## Frontend — demo org (DemoShell)
+
+File: client/src/pages/demo/SpecValidator.jsx
+
+Follow the document analyser UI pattern:
+- Upload zone
+- Three-stage progress indicator (Extracting → Calculating → 
+  Synthesising) with per-stage status and timing
+- Findings panel: deterministic findings first (with full 
+  Python working shown in an expandable section), then 
+  probabilistic findings
+- Each finding: stated value, calculated value, discrepancy, 
+  plain-language explanation, recommended remediation, 
+  confidence badge, approve/reject/resubmit controls
+- Certificate export button (gated, greyed until all approved)
+- Decision log link
+- "Discuss this report" — opens ConversationView scoped 
+  to this run's findings (follow-up boundary enforced)
+
+Route: /demo/run/demo-spec-validator
+Register in App.jsx and DemoSidebar.jsx
+
+---
+
+## Frontend — internal org (AppShell)
+
+File: client/src/pages/tools/SpecValidatorPage.jsx
+
+Same UI as the demo version. No separate implementation — 
+the page component can be shared or thin-wrapped.
+
+Route: /tools/spec-validator
+Register in App.jsx
+
+Sidebar: add to the Tools section using the existing 
+NavItem pattern. Use icon: file-check (register in 
+IconProvider if not already present).
+
+Dashboard card: add to tools.js config with permission 
+for org_member and org_admin. Card description: 
+"Validate hydraulic calculation documents against 
+AS/NZS 3500.1. Deterministic Python verification of 
+pipe velocities, pressure drops, and system pressure 
+budgets."
+
+---
+
+## Frontend — admin org (AppShell)
+
+The Spec Validator must appear in two places for admin users:
+
+1. Dashboard card (same card as members, already handled 
+   by tools.js if permission includes org_admin)
+
+2. Sidebar under Utilities section (already exists): 
+   add a NavItem for Spec Validator under Utilities 
+   using the same pattern as other Utilities items. 
+   Icon: file-check.
+
+Do not create a dedicated admin configuration page — 
+the existing Admin > Agents page handles system prompt 
+and model configuration for this agent.
+
+---
+
+## Demo catalog entry
+
+Add to server/demo/demoCatalog.js:
+  name: 'Spec Validator'
+  slug: 'demo-spec-validator'  
+  description: 'Validates hydraulic services calculation 
+    documents. Extracts quantitative claims, runs 
+    deterministic Python verification of pipe velocities, 
+    pressure drops and pressure budgets, and produces a 
+    reviewer-ready finding set with full calculation working.'
+  icon: 'file-check'
+  category: 'Engineering'
+  pattern: 'three-stage-pipeline'
+
+---
+
+## Demo org provisioning
+
+Do not provision a demo org in this task. The SQL to 
+assign the agent to an existing demo org will be run 
+manually by the developer via Admin > SQL Console 
+using the pattern in DEMO-AGENTS.md.
+
+---
+
+## DECISIONS.md
+
+Add one entry documenting:
+- The three-stage pipeline pattern (Extract → Calculate → 
+  Synthesise) and why Stage 2 is Python not Claude
+- The rejected-finding certificate block (no override) 
+  and the rationale
+- The dual-slug pattern (spec-validator + 
+  demo-spec-validator) and why a single agent code 
+  serves both
+
+---
+
+## CHANGELOG.md
+
+Add a session entry for this implementation.
+
+---
+
+## Wiring files that will need changes
+
+The following files require additions only — 
+no existing lines should be modified:
+- server/routes/agents.js (two createAgentRoute calls)
+- server/demo/demoCatalog.js (one catalog entry)
+- server/platform/AgentConfigService.js 
+  (two entries each in AGENT_DEFAULTS and ADMIN_DEFAULTS)
+- client/src/App.jsx (two routes)
+- client/src/config/tools.js (one entry)
+- client/src/components/layout/Sidebar.jsx 
+  (one NavItem under Tools)
+- client/src/components/layout/DemoSidebar.jsx 
+  (one NavItem)
+
+---
+
+## Constraints — must not violate
+
+- org_id always from req.user.orgId — never from a 
+  request param
+- Always pass customProviders to getProvider
+- Use ?? fallback at call site for nullable admin config — 
+  not JS default params
+- PDF export: exportService.js only
+- https.request for outbound HTTP — never fetch()
+- execFileAsync for Python subprocess — never shell exec
+- Extraction privacy applied post-AI pre-return via 
+  AgentConfigService.getExtractionPrivacySettings(orgId)
+- No hardcoded model default — throw a clear error if 
+  no model is configured
+- Use shared server/utils/sanitize.js for input scanning — 
+  scan filename and any custom prompt text, NOT the 
+  document content

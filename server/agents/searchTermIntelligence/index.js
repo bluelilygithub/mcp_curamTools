@@ -299,7 +299,7 @@ async function runSearchTermIntelligence(context) {
     userMessage:   userMessage,
     tools:         [],
     maxIterations: 1,
-    model:         adminConfig.model          ?? 'claude-sonnet-4-6',
+    model:         adminConfig.model,
     maxTokens:     adminConfig.max_tokens     ?? 6144,
     fallbackModel: adminConfig.fallback_model ?? null,
     onStep:        emit,

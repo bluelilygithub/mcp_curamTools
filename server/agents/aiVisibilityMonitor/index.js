@@ -14,7 +14,7 @@
  * Architecture: pre-fetch pattern — no ReAct loop.
  */
 
-const Anthropic = require('@anthropic-ai/sdk');
+const https = require('https');
 const { pool } = require('../../db');
 const { agentOrchestrator } = require('../../platform/AgentOrchestrator');
 const AgentConfigService    = require('../../platform/AgentConfigService');
@@ -94,34 +94,6 @@ function detectCompetitorMentions(text, competitors) {
     .map((c) => c.name);
 }
 
-/**
- * Extract the plain text response and all cited URLs from a web search API response.
- * The Anthropic web search response content array may contain:
- *   - server_tool_use blocks (the search request)
- *   - web_search_tool_result blocks (search results with URLs)
- *   - text blocks (the final narrative answer)
- */
-function parseWebSearchResponse(content) {
-  let responseText = '';
-  const citedUrls = [];
-
-  for (const block of content) {
-    if (block.type === 'text') {
-      responseText += block.text;
-    } else if (block.type === 'web_search_tool_result') {
-      // Each result item has a url property
-      const items = Array.isArray(block.content) ? block.content : [];
-      for (const item of items) {
-        if (item.url && !citedUrls.includes(item.url)) {
-          citedUrls.push(item.url);
-        }
-      }
-    }
-  }
-
-  return { responseText: responseText.trim(), citedUrls };
-}
-
 // ── Seed default prompts ──────────────────────────────────────────────────────
 
 async function seedDefaultPromptsIfEmpty(orgId) {
@@ -169,31 +141,50 @@ async function seedMissingCategories(orgId) {
 
 // ── Per-prompt web search call ────────────────────────────────────────────────
 
-async function runWebSearchPrompt(wsClient, promptText, model) {
-  const response = await wsClient.messages.create({
-    model:      model,
-    max_tokens: 1024,
-    tools: [
-      {
-        type:          'web_search_20250305',
-        name:          'web_search',
-        max_uses:      3,
-        // Geo-target to Australia (country-level — no city/state bias)
-        user_location: {
-          type:    'approximate',
-          country: 'AU',
-        },
-      },
-    ],
-    messages: [
-      {
-        role:    'user',
-        content: promptText,
-      },
-    ],
+async function runWebSearchPrompt(promptText) {
+  const apiKey = process.env.SEARCH_API_KEY;
+  if (!apiKey) {
+    return { responseText: 'SEARCH_API_KEY not configured.', citedUrls: [] };
+  }
+
+  const params = new URLSearchParams({
+    q: promptText,
+    count: '10',
+    country: 'AU',
+    search_lang: 'en',
   });
 
-  return parseWebSearchResponse(response.content);
+  return new Promise((resolve) => {
+    const req = https.request(
+      {
+        hostname: 'api.search.brave.com',
+        path: `/res/v1/web/search?${params.toString()}`,
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-Encoding': 'gzip',
+          'X-Subscription-Token': apiKey,
+        },
+      },
+      (resp) => {
+        let data = '';
+        resp.on('data', (chunk) => { data += chunk; });
+        resp.on('end', () => {
+          try {
+            const parsed = JSON.parse(data);
+            const results = parsed?.web?.results ?? [];
+            const responseText = results.map((r) => `${r.title}\n${r.description || ''}\n${r.url}`).join('\n\n');
+            const citedUrls = results.map((r) => r.url).filter(Boolean);
+            resolve({ responseText, citedUrls });
+          } catch {
+            resolve({ responseText: 'Failed to parse search results.', citedUrls: [] });
+          }
+        });
+      }
+    );
+    req.on('error', () => resolve({ responseText: 'Search request failed.', citedUrls: [] }));
+    req.end();
+  });
 }
 
 // ── Agent run ─────────────────────────────────────────────────────────────────
@@ -209,7 +200,7 @@ async function runAiVisibilityMonitor(context) {
     ? context.adminConfig
     : await AgentConfigService.getAdminConfig(TOOL_SLUG);
 
-  const model = (adminConfig.model) || 'claude-sonnet-4-6';
+  const model = adminConfig.model;
 
   // ── Resolve competitor list from global settings (falls back to built-in defaults) ──
 
@@ -259,12 +250,7 @@ async function runAiVisibilityMonitor(context) {
     // Non-fatal — proceed without prior comparison
   }
 
-  // ── Create web search client with beta header ─────────────────────────────
-
-  const wsClient = new Anthropic({
-    apiKey:         process.env.ANTHROPIC_API_KEY,
-    defaultHeaders: { 'anthropic-beta': 'web-search-2025-03-05' },
-  });
+  // ── Web search uses Brave Search API via runWebSearchPrompt ───────────────
 
   // ── Run each prompt ───────────────────────────────────────────────────────
 
@@ -280,7 +266,7 @@ async function runAiVisibilityMonitor(context) {
     emit('[' + (i + 1) + '/' + prompts.length + '] Searching: ' + label);
 
     try {
-      const { responseText, citedUrls } = await runWebSearchPrompt(wsClient, p.prompt_text, model);
+      const { responseText, citedUrls } = await runWebSearchPrompt(p.prompt_text);
 
       const brandMentioned       = detectBrandMention(responseText);
       const competitorsMentioned = detectCompetitorMentions(responseText, competitors);

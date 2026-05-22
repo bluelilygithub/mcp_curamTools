@@ -1,0 +1,220 @@
+Read server/platform/AgentConfigService.js, 
+the existing Admin AI Models page component, 
+and its API routes before making any changes.
+
+Add three org-level model configuration fields 
+to the Admin › AI Models page. These replace 
+any per-agent model fields for default and 
+extraction purposes. Members never see model 
+names or have any model selection capability.
+
+---
+
+STEP 1 — Database
+
+Add three columns to the organizations table 
+if they do not already exist:
+
+  default_model        VARCHAR  — the primary 
+    model used for reasoning, synthesis, 
+    conversation, and all non-vision tasks
+  fallback_model       VARCHAR  — used when 
+    the default model fails or is unavailable
+  extraction_model     VARCHAR  — used 
+    exclusively for Stage 1 document extraction 
+    in any agent that reads an uploaded file. 
+    Must be a vision-capable model. Stored 
+    separately so it can be updated independently 
+    of the default without touching agent configs.
+
+Use ALTER TABLE ... ADD COLUMN IF NOT EXISTS.
+Migration must be idempotent — safe to run 
+on a database that already has these columns.
+
+---
+
+STEP 2 — AgentConfigService.js
+
+Add a new method: getOrgModelConfig(orgId)
+
+Returns:
+{
+  defaultModel:    string | null,
+  fallbackModel:   string | null,
+  extractionModel: string | null
+}
+
+Read from the organizations table for the 
+given orgId. Cache with a short TTL (60 seconds) 
+to avoid per-request DB hits — use the same 
+caching pattern already in AgentConfigService 
+if one exists, otherwise a simple Map with 
+timestamp.
+
+Add a second method: clearOrgModelCache(orgId)
+Called after admin saves new model config 
+so the cache is invalidated immediately.
+
+---
+
+STEP 3 — Agent pipeline wiring
+
+Update the base agent execution pattern so 
+every agent automatically uses the correct 
+model for each stage:
+
+Extraction stage (any agent with file input):
+  Use extractionModel from getOrgModelConfig.
+  If extractionModel is null, throw a clear 
+  error: "No extraction model configured. 
+  Set an extraction model in Admin › AI Models. 
+  This must be a vision-capable model 
+  (e.g. claude-sonnet-4-6)."
+  Never fall back to defaultModel for extraction 
+  — the fallback is not guaranteed to be 
+  vision-capable.
+
+Reasoning/synthesis/conversation stages:
+  Use defaultModel from getOrgModelConfig.
+  If defaultModel is null, use fallbackModel.
+  If both are null, throw: "No default model 
+  configured. Set a default model in 
+  Admin › AI Models."
+
+Fallback behaviour:
+  If a call to defaultModel fails with a 
+  provider error (not a validation error), 
+  retry once with fallbackModel and log 
+  the fallback to the decision trace:
+  { step: 'model_fallback', 
+    attempted: defaultModel, 
+    used: fallbackModel, 
+    reason: error.message }
+
+Update specValidator/index.js and 
+documentAnalyzer.js to use getOrgModelConfig 
+rather than reading model from per-agent 
+admin config. Remove the synthesis_model 
+per-agent field from AgentConfigService 
+ADMIN_DEFAULTS for both spec-validator slugs 
+— it is superseded by the org-level config.
+
+The per-agent model override field in 
+ADMIN_DEFAULTS should remain as an escape 
+hatch (null by default). If a per-agent 
+model is explicitly set, it takes precedence 
+over the org-level default for that stage. 
+Document this precedence order in a comment 
+in AgentConfigService.js:
+  // Model resolution order:
+  // 1. Per-agent override (ADMIN_DEFAULTS.model)
+  // 2. Org-level defaultModel / extractionModel
+  // 3. Fallback model (reasoning stages only)
+  // 4. Error — never silently use wrong model
+
+---
+
+STEP 4 — Admin › AI Models page
+
+Add a new section to the existing AI Models 
+admin page above the model availability toggles. 
+Title: "Org Model Defaults"
+
+Three fields, each a dropdown populated from 
+the list of currently enabled models for the org:
+
+  Default model
+  Caption: "Used for reasoning, synthesis, 
+  conversation, and all non-vision agent stages."
+
+  Fallback model  
+  Caption: "Used automatically if the default 
+  model is unavailable. Optional but recommended."
+
+  Extraction model
+  Caption: "Used for reading and extracting 
+  data from uploaded documents. Must be a 
+  vision-capable model (Claude). Applied to 
+  all agents that accept file uploads."
+
+Each dropdown shows only models that are 
+currently toggled ON for the org — a model 
+must be enabled before it can be set as a 
+default.
+
+Below the extraction model dropdown, show 
+a static info note:
+  "The extraction model is used for document 
+  reading only. All other agent stages use 
+  the default model. Members do not see or 
+  select models."
+
+Save button: single save for all three fields 
+together. On save: PATCH /api/admin/org-models. 
+On success: call clearOrgModelCache(orgId), 
+show success toast. On error: show inline 
+error banner.
+
+If the extraction model is changed to a 
+non-vision-capable model (i.e. not in a 
+known vision-capable list on the server), 
+the server must reject the save with a 422 
+and message: "The selected extraction model 
+does not support vision input. Choose a 
+Claude model for document extraction."
+
+Known vision-capable models list (server-side, 
+in a constant):
+  claude-opus-4-6
+  claude-sonnet-4-6
+  claude-haiku-4-5-20251001
+  (extend this list as new Claude models 
+  are added — it is the only place that 
+  needs updating)
+
+---
+
+STEP 5 — API route
+
+Add to server/routes/admin.js (or equivalent):
+
+PATCH /api/admin/org-models
+  Body: { defaultModel, fallbackModel, 
+          extractionModel }
+  Auth: org_admin only
+  Validates extractionModel against 
+  vision-capable list
+  Updates organizations table
+  Calls clearOrgModelCache(orgId)
+  Returns updated config
+
+GET /api/admin/org-models
+  Auth: org_admin only
+  Returns current { defaultModel, 
+    fallbackModel, extractionModel }
+
+---
+
+STEP 6 — DECISIONS.md
+
+Add one entry:
+
+"Org-level model configuration — three-tier 
+model architecture"
+
+Document:
+- Three fields: defaultModel, fallbackModel, 
+  extractionModel
+- Resolution order (repeat the comment from 
+  AgentConfigService.js)
+- Why extraction model is separate and must 
+  be vision-capable
+- Why members never see or select models — 
+  admin configures once, applies everywhere
+- The vision-capable model list is maintained 
+  in one place on the server only
+- Fallback is automatic and logged to the 
+  decision trace — members see no indication 
+  a fallback occurred
+
+Update CHANGELOG.md with a session entry.

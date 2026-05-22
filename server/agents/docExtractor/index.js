@@ -379,7 +379,7 @@ function mergePageResults(pageResults, model) {
  * @param {number} [params.pdfDpi]        Rasterisation DPI: 100 | 150 | 200 (admin-configurable)
  * @returns {Promise<{ document_type, fields, page_count, model, tokensUsed }>}
  */
-async function runDocExtraction({ imageBuffer, mimeType, model = 'claude-sonnet-4-6', maxTokens = 4096, instructions, runtimePromptContext, maxPdfPages = DEFAULT_MAX_PDF_PAGES, pdfDpi = DEFAULT_PDF_DPI, customProviders = [] }) {
+async function runDocExtraction({ imageBuffer, mimeType, model = null, maxTokens = 4096, instructions, runtimePromptContext, maxPdfPages = DEFAULT_MAX_PDF_PAGES, pdfDpi = DEFAULT_PDF_DPI, customProviders = [] }) {
   if (mimeType === 'application/pdf') {
     const pageBuffers = await convertPdfToImages(imageBuffer, maxPdfPages, pdfDpi);
     const total = pageBuffers.length;

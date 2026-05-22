@@ -66,7 +66,7 @@ async function runKeywordOpportunity(context) {
   const config         = await AgentConfigService.getAgentConfig(orgId, TOOL_SLUG);
   const companyProfile = await AgentConfigService.getCompanyProfile(orgId);
 
-  const model      = adminConfig.model ?? 'claude-sonnet-4-6';
+  const model      = adminConfig.model;
   const customerId = req?.body?.customerId ?? null;
 
   // ── Date ranges ────────────────────────────────────────────────────────────
