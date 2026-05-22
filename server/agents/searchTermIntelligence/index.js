@@ -55,7 +55,7 @@ function topN(obj, n) {
 async function runSearchTermIntelligence(context) {
   const { orgId, req, emit } = context;
 
-  const adminConfig = await AgentConfigService.getAdminConfig(TOOL_SLUG);
+  const adminConfig = await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
   const agentConfig = await AgentConfigService.getAgentConfig(orgId, TOOL_SLUG);
 
   let startDate = (req && req.body && req.body.startDate) ? req.body.startDate : null;

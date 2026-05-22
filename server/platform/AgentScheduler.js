@@ -12,6 +12,7 @@ const { pool } = require('../db');
 const { persistRun } = require('./persistRun');
 const { mergePromptVersionIntoResult } = require('./promptVersions');
 const { loadLessonsForAgent, proposeLessonFromRun } = require('../services/LessonRepositoryService');
+const AgentConfigService = require('./AgentConfigService');
 
 
 /**
@@ -127,7 +128,11 @@ class AgentSchedulerClass {
         console.warn(`[AgentScheduler] ${slug} lessons load skipped:`, err.message);
         return '';
       });
-      const outcome = await runFn({ orgId, userId: null, config: {}, adminConfig: {}, runtimePromptContext, emit: () => {} });
+      const adminConfig = await AgentConfigService.getResolvedAdminConfig(slug, orgId).catch((err) => {
+        console.warn(`[AgentScheduler] ${slug} admin config resolution skipped:`, err.message);
+        return {};
+      });
+      const outcome = await runFn({ orgId, userId: null, config: {}, adminConfig, runtimePromptContext, emit: () => {} });
 
       if (Array.isArray(outcome)) {
         // Multi-customer: close the placeholder row then persist one row per customer

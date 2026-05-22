@@ -84,7 +84,7 @@ async function runGeoHeatmap(context) {
 
   const adminConfig = Object.keys(context.adminConfig ?? {}).length > 0
     ? context.adminConfig
-    : await AgentConfigService.getAdminConfig(TOOL_SLUG);
+    : await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
 
   const model         = context.req?.body?.model || adminConfig.model;
   const startDate     = req?.body?.startDate ?? null;

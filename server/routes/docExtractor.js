@@ -57,6 +57,20 @@ const MAX_LABEL_LEN        = 200;
 const MAX_PURPOSE_LEN      = 100;
 const MAX_INSTRUCTIONS_LEN = 2000;
 
+async function getResolvedDocExtractorConfig(orgId) {
+  const adminConfig = await AgentConfigService.getResolvedAdminConfig('doc-extractor', orgId, { useRecommended: true });
+  const allModels = await AgentConfigService.getOrgModels(orgId);
+  const found = allModels.find((m) => m.id === adminConfig.model);
+  return {
+    adminConfig,
+    defaultModel: {
+      id: adminConfig.model ?? null,
+      name: found?.name ?? adminConfig.model ?? null,
+      source: adminConfig.model_source ?? 'unresolved',
+    },
+  };
+}
+
 function cleanText(value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
@@ -117,7 +131,7 @@ router.post(
     const { orgId, id: userId } = req.user;
 
     // ── Admin config ───────────────────────────────────────────────────────
-    const adminConfig = await AgentConfigService.getAdminConfig('doc-extractor');
+    const { adminConfig } = await getResolvedDocExtractorConfig(orgId);
 
     if (!adminConfig.enabled) {
       return res.status(403).json({ error: 'Document Extractor is currently disabled by an administrator.' });
@@ -151,16 +165,11 @@ router.post(
     }
 
     // ── Model resolution ───────────────────────────────────────────────────
-    // If admin hasn't set a model, resolve the best available from the live catalogue
-    // via getRecommendedModel rather than falling back to a hardcoded string.
-    let model = adminConfig.model || null;
+    // Auto means: per-agent admin model → org default model → recommended enabled model.
+    // Do not hardcode a model here; fail loudly if the catalogue/defaults are missing.
+    let model = adminConfig.model;
     if (!model) {
-      const modelsRow = await pool.query(
-        `SELECT value FROM system_settings WHERE key = 'ai_models' LIMIT 1`
-      );
-      const allModels = modelsRow.rows[0]?.value ?? [];
-      const rec = AgentConfigService.getRecommendedModel('doc-extractor', allModels);
-      model = rec?.id ?? null;
+      return res.status(503).json({ error: 'No enabled model is configured for Document Extractor.' });
     }
 
     // Allow a user-supplied model override if they have permission
@@ -367,29 +376,8 @@ router.post(
 
 router.get('/config', requireAuth, async (req, res) => {
   try {
-    const adminConfig = await AgentConfigService.getAdminConfig('doc-extractor');
-    let model = adminConfig.model || null;
-    let modelName = model;
-
-    if (!model) {
-      const modelsRow = await pool.query(
-        `SELECT value FROM system_settings WHERE key = 'ai_models' LIMIT 1`
-      );
-      const allModels = modelsRow.rows[0]?.value ?? [];
-      const rec = AgentConfigService.getRecommendedModel('doc-extractor', allModels);
-      model     = rec?.id   ?? null;
-      modelName = rec?.name ?? model;
-    } else {
-      // Look up name from catalogue
-      const modelsRow = await pool.query(
-        `SELECT value FROM system_settings WHERE key = 'ai_models' LIMIT 1`
-      );
-      const allModels = modelsRow.rows[0]?.value ?? [];
-      const found     = allModels.find((m) => m.id === model);
-      modelName       = found?.name ?? model;
-    }
-
-    res.json({ default_model: { id: model, name: modelName } });
+    const { defaultModel } = await getResolvedDocExtractorConfig(req.user.orgId);
+    res.json({ default_model: defaultModel });
   } catch (err) {
     console.error('[doc-extractor] GET /config error:', err.message);
     res.status(500).json({ error: 'Failed to load config' });

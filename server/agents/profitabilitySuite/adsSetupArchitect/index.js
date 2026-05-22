@@ -6,11 +6,11 @@ const { adsSetupArchitectTools, TOOL_SLUG } = require('./tools');
 const { buildSystemPrompt } = require('./prompt');
 
 async function runAdsSetupArchitect(context) {
-  const { emit } = context;
+  const { orgId, emit } = context;
 
   const adminConfig = Object.keys(context.adminConfig ?? {}).length > 0
     ? context.adminConfig
-    : await AgentConfigService.getAdminConfig(TOOL_SLUG);
+    : await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
 
   const model      = context.req?.body?.model || adminConfig.model;
   const customerId = context.req?.body?.customerId ?? null;

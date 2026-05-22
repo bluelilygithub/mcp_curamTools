@@ -37,7 +37,7 @@ async function runGoogleAdsChangeAudit(context) {
 
   const adminConfig = Object.keys(context.adminConfig ?? {}).length > 0
     ? context.adminConfig
-    : await AgentConfigService.getAdminConfig(TOOL_SLUG);
+    : await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
 
   const customerId = req?.body?.customerId ?? null;
   const windowDays = config.comparison_window_days ?? 7;

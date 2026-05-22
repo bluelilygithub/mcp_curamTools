@@ -62,7 +62,7 @@ async function runWebSearch(wsClient, query, model) {
 async function runKeywordOpportunity(context) {
   const { orgId, req, emit } = context;
 
-  const adminConfig    = await AgentConfigService.getAdminConfig(TOOL_SLUG);
+  const adminConfig    = await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
   const config         = await AgentConfigService.getAgentConfig(orgId, TOOL_SLUG);
   const companyProfile = await AgentConfigService.getCompanyProfile(orgId);
 

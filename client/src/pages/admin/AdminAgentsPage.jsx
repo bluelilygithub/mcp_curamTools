@@ -311,10 +311,11 @@ function AgentCard({ agent, models, onSave, isOpen, onToggle }) {
           </label>
           <select
             value={config.model ?? ''}
-            onChange={(e) => setConfig((c) => ({ ...c, model: e.target.value }))}
+            onChange={(e) => setConfig((c) => ({ ...c, model: e.target.value || null }))}
             className={inputCls}
             style={inputStyle}
           >
+            <option value="">Use organisation default</option>
             {enabledModels.length === 0 && (
               <option value="">No enabled models — add models in Admin › Models</option>
             )}
@@ -334,6 +335,11 @@ function AgentCard({ agent, models, onSave, isOpen, onToggle }) {
                 : `★ ${rec.reason}`}
             </p>
           )}
+          <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+            {config.model
+              ? 'This agent has an explicit model override.'
+              : 'This agent inherits the organisation default model from Settings.'}
+          </p>
         </div>
 
         {/* Fallback model */}

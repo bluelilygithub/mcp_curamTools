@@ -645,9 +645,9 @@ Return ONLY a JSON object — no markdown fences, no explanation:
     const { buildSystemPrompt } = require('../agents/demoDocumentAnalyzer/prompt');
 
     const customProviders = await AgentConfigService.getCustomProviders(req.user.orgId).catch(() => []);
-    const adminConfig     = await AgentConfigService.getAdminConfig('demo-document-analyzer').catch(() => ({}));
-    const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(req.user.orgId).catch(() => null);
-    const model           = orgDefaultModel;
+    const adminConfig     = await AgentConfigService.getResolvedAdminConfig('demo-document-analyzer', req.user.orgId).catch(() => ({}));
+    const model           = adminConfig.model ?? null;
+    if (!model) return res.status(400).json({ error: 'No model configured. Set a default model in Settings > Models.' });
     const maxTokens       = adminConfig.max_tokens ?? 4096;
     const fallback        = adminConfig.fallback_model ?? null;
     const agentConfig     = await AgentConfigService.getAgentConfig(req.user.orgId, 'demo-document-analyzer').catch(() => ({}));
@@ -797,9 +797,9 @@ If this question is about the document above, answer it directly using the conte
     const { getProvider } = require('../platform/AgentOrchestrator');
 
     const customProviders = await AgentConfigService.getCustomProviders(req.user.orgId).catch(() => []);
-    const adminConfig = await AgentConfigService.getAdminConfig(configSlug).catch(() => ({}));
-    const orgDefaultModel = adminConfig.model ?? await AgentConfigService.getOrgDefaultModel(req.user.orgId).catch(() => null);
-    const model    = orgDefaultModel;
+    const adminConfig = await AgentConfigService.getResolvedAdminConfig(configSlug, req.user.orgId).catch(() => ({}));
+    const model    = adminConfig.model ?? null;
+    if (!model) return res.status(400).json({ error: 'No model configured. Set a default model in Settings > Models.' });
     const maxTokens = adminConfig.max_tokens ?? 4096;
     const fallback  = adminConfig.fallback_model ?? null;
 

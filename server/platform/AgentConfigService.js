@@ -310,7 +310,7 @@ function getRecommendedModel(slug, allModels) {
 }
 
 function getDefaultAdminConfig(slug) {
-  return ADMIN_DEFAULTS[slug] ?? { ...ADMIN_DEFAULTS._platform };
+  return { ...(ADMIN_DEFAULTS[slug] ?? ADMIN_DEFAULTS._platform) };
 }
 
 function getDefaultAgentConfig(slug) {
@@ -502,6 +502,70 @@ async function getAdminConfig(slug) {
     console.error(`[AgentConfigService] getAdminConfig error (${slug}):`, err.message);
     return getDefaultAdminConfig(slug);
   }
+}
+
+async function getOrgModels(orgId) {
+  try {
+    let res = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'ai_models' LIMIT 1`,
+      [orgId]
+    );
+    if (res.rows.length === 0 && orgId !== 1) {
+      res = await pool.query(
+        `SELECT value FROM system_settings WHERE org_id = 1 AND key = 'ai_models' LIMIT 1`
+      );
+    }
+    return Array.isArray(res.rows[0]?.value) ? res.rows[0].value : [];
+  } catch (err) {
+    console.error('[AgentConfigService] getOrgModels error:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Returns admin guardrails with Auto model resolution applied for a specific org.
+ *
+ * Resolution order:
+ * 1. per-agent admin model
+ * 2. org default model
+ * 3. optional recommendation from the enabled model catalogue
+ *
+ * Fallback model follows the same "per-agent first, org fallback second" rule.
+ */
+async function getResolvedAdminConfig(slug, orgId, { useRecommended = false } = {}) {
+  const adminConfig = await getAdminConfig(slug);
+
+  let model = adminConfig.model || null;
+  let model_source = model ? 'agent-config' : null;
+
+  if (!model && orgId != null) {
+    const orgDefault = await getOrgDefaultModel(orgId);
+    if (orgDefault) {
+      model = orgDefault;
+      model_source = 'org-default';
+    }
+  }
+
+  if (!model && useRecommended) {
+    const recommended = getRecommendedModel(slug, await getOrgModels(orgId));
+    if (recommended?.id) {
+      model = recommended.id;
+      model_source = 'recommended';
+    }
+  }
+
+  let fallback_model = adminConfig.fallback_model || null;
+  let fallback_model_source = fallback_model ? 'agent-config' : null;
+
+  if (!fallback_model && orgId != null) {
+    const orgFallback = await getOrgFallbackModel(orgId);
+    if (orgFallback) {
+      fallback_model = orgFallback;
+      fallback_model_source = 'org-fallback';
+    }
+  }
+
+  return { ...adminConfig, model, model_source, fallback_model, fallback_model_source };
 }
 
 /**
@@ -988,7 +1052,9 @@ module.exports = {
   getAgentConfigForCustomer,
   updateAgentConfigForCustomer,
   listCustomerConfigs,
+  getOrgModels,
   getAdminConfig,
+  getResolvedAdminConfig,
   updateAdminConfig,
   getOrgBudgetSettings,
   updateOrgBudgetSettings,

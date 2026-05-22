@@ -40,7 +40,8 @@ export default function DocExtractorPage() {
 
   // ── Available models + resolved default (fetched once on mount) ─────────
   const [availableModels, setAvailableModels] = useState([]);
-  const [defaultModelId, setDefaultModelId]   = useState('');
+  const [defaultModelName, setDefaultModelName] = useState('');
+  const [defaultModelSource, setDefaultModelSource] = useState('');
   useEffect(() => {
     Promise.all([
       api.get('/admin/models').catch(() => []),
@@ -48,7 +49,8 @@ export default function DocExtractorPage() {
     ]).then(([models, config]) => {
       const enabled = (models ?? []).filter((m) => m.enabled !== false);
       setAvailableModels(enabled);
-      if (config?.default_model?.id) setDefaultModelId(config.default_model.id);
+      setDefaultModelName(config?.default_model?.name ?? config?.default_model?.id ?? '');
+      setDefaultModelSource(config?.default_model?.source ?? '');
     });
   }, []);
 
@@ -57,7 +59,7 @@ export default function DocExtractorPage() {
   const [label, setLabel]              = useState('');
   const [purpose, setPurpose]          = useState('');
   const [instructions, setInstructions]= useState('');
-  const [modelOverride, setModelOverride] = useState('');  // '' → will be set to defaultModelId once loaded
+  const [modelOverride, setModelOverride] = useState('');  // '' = Auto; server resolves model at run time
   const [uploading, setUploading]      = useState(false);
 
   // ── Extraction progress ───────────────────────────────────────────────────
@@ -102,11 +104,6 @@ export default function DocExtractorPage() {
       setRunsLoading(false);
     }
   }, []);
-
-  // Pre-select default model once it's loaded (only if user hasn't already chosen one)
-  useEffect(() => {
-    if (defaultModelId && modelOverride === '') setModelOverride(defaultModelId);
-  }, [defaultModelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadRuns(page, search, showDeleted); }, [page, search, showDeleted, loadRuns]);
 
@@ -160,7 +157,7 @@ export default function DocExtractorPage() {
       setLabel('');
       setPurpose('');
       setInstructions('');
-      setModelOverride(defaultModelId || '');
+      setModelOverride('');
       if (fileInputRef.current) fileInputRef.current.value = '';
       setPage(1);
       loadRuns(1, search, showDeleted);
@@ -420,7 +417,7 @@ export default function DocExtractorPage() {
         {availableModels.length > 0 && (
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
-              Model <span className="font-normal normal-case" style={{ opacity: 0.7 }}>— override admin default</span>
+              Model <span className="font-normal normal-case" style={{ opacity: 0.7 }}>— optional override</span>
             </label>
             <select
               value={modelOverride}
@@ -428,7 +425,9 @@ export default function DocExtractorPage() {
               className="w-full px-3 py-2 text-sm rounded-lg outline-none"
               style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
             >
-              <option value="">Use admin default</option>
+              <option value="">
+                Auto{defaultModelName ? ` (${defaultModelName}${defaultModelSource ? ` · ${defaultModelSource}` : ''})` : ''}
+              </option>
               {availableModels.map((m) => (
                 <option key={m.id} value={m.id}>{m.name ?? m.id}</option>
               ))}

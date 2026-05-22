@@ -125,7 +125,7 @@ function buildPayload({ notInterestedLeads, progressDetails, searchTerms, active
 async function runNotInterestedReport(context) {
   const { orgId, req, emit } = context;
 
-  const adminConfig = await AgentConfigService.getAdminConfig(TOOL_SLUG);
+  const adminConfig = await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
 
   // Ads date range — accept explicit dates from UI or fall back to days (default 90)
   let startDate = req?.body?.startDate ?? null;

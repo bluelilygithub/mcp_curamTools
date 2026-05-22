@@ -9,7 +9,7 @@ const { buildSystemPrompt }                    = require('./prompt');
 async function runHighIntentAdvisor(context) {
   const { orgId, userId, emit, config = {} } = context;
 
-  const adminConfig = await AgentConfigService.getAdminConfig(TOOL_SLUG);
+  const adminConfig = await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
 
   const todayDate = config.todayDate ?? new Date().toISOString().slice(0, 10);
   const timezone  = config.timezone  ?? 'UTC';

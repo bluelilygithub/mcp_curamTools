@@ -197,7 +197,7 @@ async function runAiVisibilityMonitor(context) {
 
   const adminConfig = Object.keys(context.adminConfig || {}).length > 0
     ? context.adminConfig
-    : await AgentConfigService.getAdminConfig(TOOL_SLUG);
+    : await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
 
   const model = adminConfig.model;
 

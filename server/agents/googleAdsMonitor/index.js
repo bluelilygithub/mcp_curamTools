@@ -196,7 +196,7 @@ async function runGoogleAdsMonitor(context) {
 
   const adminConfig = !isScheduled
     ? context.adminConfig
-    : await AgentConfigService.getAdminConfig(TOOL_SLUG);
+    : await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
 
   let startDate = req?.body?.startDate ?? null;
   let endDate   = req?.body?.endDate   ?? null;

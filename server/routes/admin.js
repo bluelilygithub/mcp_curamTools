@@ -949,18 +949,15 @@ const AUD_PER_USD_SQL = 1.55;
 /**
  * Resolves the best model for the org.
  * Priority: (1) explicit modelId override, (2) org default model (even if not in ai_models —
- * supports custom providers), (3) first enabled advanced tier, (4) first enabled model,
- * (5) hardcoded Sonnet fallback.
+ * supports custom providers), (3) first enabled advanced tier, (4) first enabled model.
  * Returns { id, inputPricePer1M, outputPricePer1M }.
  */
 async function getDefaultModel(orgId, modelId = null) {
-  const [modelsRow, defaultRow] = await Promise.all([
-    pool.query(`SELECT value FROM system_settings WHERE org_id = $1 AND key = 'ai_models' LIMIT 1`, [orgId]),
-    pool.query(`SELECT value FROM system_settings WHERE org_id = $1 AND key = 'default_model' LIMIT 1`, [orgId]),
+  const [models, orgDefaultId] = await Promise.all([
+    AgentConfigService.getOrgModels(orgId),
+    AgentConfigService.getOrgDefaultModel(orgId),
   ]);
-  const models  = Array.isArray(modelsRow.rows[0]?.value) ? modelsRow.rows[0].value : MODEL_DEFAULTS;
   const enabled = models.filter((m) => m.enabled);
-  const orgDefaultId = defaultRow.rows[0]?.value?.model_id ?? null;
 
   if (modelId) {
     const match = enabled.find((m) => m.id === modelId);
@@ -974,12 +971,14 @@ async function getDefaultModel(orgId, modelId = null) {
     // Org default not in ai_models list (e.g. custom provider) — still honor it
     return { id: orgDefaultId, inputPricePer1M: 0, outputPricePer1M: 0 };
   }
-  return (
+  const resolved =
     enabled.find((m) => m.tier === 'advanced') ??
-    enabled[0] ??
-    MODEL_DEFAULTS.find((m) => m.tier === 'advanced') ??
-    { id: 'claude-sonnet-4-6', inputPricePer1M: 3.00, outputPricePer1M: 15.00 }
-  );
+    enabled[0];
+
+  if (!resolved) {
+    throw Object.assign(new Error('No enabled model is configured. Set a default model in Settings > Models.'), { status: 400 });
+  }
+  return resolved;
 }
 
 const WRITE_KEYWORDS = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE'];

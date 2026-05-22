@@ -22,7 +22,7 @@ const { TOOL_SLUG }         = require('./tools');
 async function runAdsBounceAnalysis(context) {
   const { orgId, req, emit } = context;
 
-  const adminConfig   = await AgentConfigService.getAdminConfig(TOOL_SLUG);
+  const adminConfig   = await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
   const monitorConfig = await AgentConfigService.getAgentConfig(orgId, 'google-ads-monitor');
 
   let startDate = req?.body?.startDate ?? null;

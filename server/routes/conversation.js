@@ -198,7 +198,7 @@ router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) =>
     // Load agent admin config for model / token limits
     let adminConfig;
     try {
-      adminConfig = await AgentConfigService.getAdminConfig(TOOL_SLUG);
+      adminConfig = await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
     } catch {
       adminConfig = {};
     }
@@ -351,7 +351,7 @@ router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) =>
 router.post('/keep-warm', requireAuth, async (req, res) => {
   const { orgId } = req.user;
   try {
-    const adminConfig = await AgentConfigService.getAdminConfig(TOOL_SLUG).catch(() => ({}));
+    const adminConfig = await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId).catch(() => ({}));
     if (adminConfig.enabled === false) {
       return res.json({ ok: false, reason: 'agent disabled' });
     }

@@ -91,7 +91,7 @@ async function runDiamondplateData(context) {
 
   const adminConfig = Object.keys(context.adminConfig || {}).length > 0
     ? context.adminConfig
-    : await AgentConfigService.getAdminConfig(TOOL_SLUG);
+    : await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
 
   let startDate = (req && req.body && req.body.startDate) ? req.body.startDate : null;
   let endDate   = (req && req.body && req.body.endDate)   ? req.body.endDate   : null;

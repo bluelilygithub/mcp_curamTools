@@ -137,7 +137,7 @@ function parseThemeJson(text) {
 // ── Main agent function ────────────────────────────────────────────────────
 
 async function runWpThemeExtractor(context) {
-  const { req, emit } = context;
+  const { orgId, req, emit } = context;
 
   const url        = (req?.body?.url  ?? '').trim();
   const pastedHtml = (req?.body?.html ?? '').trim();
@@ -145,7 +145,7 @@ async function runWpThemeExtractor(context) {
 
   if (!url && !pastedHtml) throw new Error('Provide either a URL or paste HTML directly.');
 
-  const adminConfig = await AgentConfigService.getAdminConfig(TOOL_SLUG);
+  const adminConfig = await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
 
   let rawHtml;
   let sourceLabel;

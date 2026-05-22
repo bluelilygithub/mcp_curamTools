@@ -152,7 +152,7 @@ async function runDaypartIntelligence(context) {
 
   const adminConfig = Object.keys(context.adminConfig || {}).length > 0
     ? context.adminConfig
-    : await AgentConfigService.getAdminConfig(TOOL_SLUG);
+    : await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
 
   // Date range — enforce a minimum 90-day window for reliable patterns
   let endDate   = req?.body?.endDate   ?? null;

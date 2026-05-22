@@ -102,7 +102,7 @@ function buildCrmSummary(rawEnquiries) {
 async function runAdsAttributionSummary(context) {
   const { orgId, req, emit } = context;
 
-  const adminConfig = await AgentConfigService.getAdminConfig(TOOL_SLUG);
+  const adminConfig = await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
 
   let startDate = req?.body?.startDate ?? null;
   let endDate   = req?.body?.endDate   ?? null;

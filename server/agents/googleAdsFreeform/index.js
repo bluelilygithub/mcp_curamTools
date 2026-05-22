@@ -29,7 +29,7 @@ async function runGoogleAdsFreeform(context) {
 
   const adminConfig = Object.keys(context.adminConfig ?? {}).length > 0
     ? context.adminConfig
-    : await AgentConfigService.getAdminConfig(TOOL_SLUG);
+    : await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
 
   const question   = req?.body?.question   ?? 'Give me an overview of account performance.';
   const customerId = req?.body?.customerId ?? null;

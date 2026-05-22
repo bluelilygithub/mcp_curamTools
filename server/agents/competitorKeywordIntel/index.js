@@ -13,9 +13,9 @@ const { competitorKeywordIntelTools, TOOL_SLUG } = require('./tools');
 const { buildSystemPrompt }  = require('./prompt');
 
 async function runCompetitorKeywordIntel(context) {
-  const { emit } = context;
+  const { orgId, emit } = context;
 
-  const adminConfig = await AgentConfigService.getAdminConfig(TOOL_SLUG);
+  const adminConfig = await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
   const customerId  = context.req?.body?.customerId ?? null;
 
   const userMessage =
