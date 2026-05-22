@@ -238,6 +238,16 @@ function createAdapter({ hostname, path: apiPath, envVar, label, supportsVision 
         body
       );
 
+      // DEBUG: Log the request model and response status to diagnose DeepSeek 404 issues
+      console.log(`[openai-compatible] ${label} request: model="${model}" status=${status}`, {
+        model,
+        max_tokens: body.max_tokens,
+        systemLength: (body.messages?.[0]?.content || '').length,
+        messagesCount: body.messages?.length ?? 0,
+        error: responseBody?.error ?? null,
+      });
+
+
       if (status !== 200) {
         const errMsg = responseBody?.error?.message ?? `HTTP ${status}`;
         throw new Error(`${label}: ${errMsg}`);
