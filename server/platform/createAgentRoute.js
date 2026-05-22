@@ -127,7 +127,17 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
         // Resolve org default model when no per-agent model is set
         if (!adminConfig.model) {
           const orgDefault = await AgentConfigService.getOrgDefaultModel(orgId);
+          if (orgDefault) {
+            adminConfig = { ...adminConfig, model: orgDefault };
+          } else {
+            console.warn(`[${slug}] No per-agent model and no org default model (orgId=${orgId}) — check Settings > Models`);
+          }
+        }
+        // Resolve org default model when no per-agent model is set
+        if (!adminConfig.model) {
+          const orgDefault = await AgentConfigService.getOrgDefaultModel(orgId);
           if (orgDefault) adminConfig = { ...adminConfig, model: orgDefault };
+        // Resolve org fallback model when no per-agent fallback is set
         }
         // Resolve org fallback model when no per-agent fallback is set
         if (!adminConfig.fallback_model) {
