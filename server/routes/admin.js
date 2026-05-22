@@ -1754,6 +1754,39 @@ router.post('/diagnostics', async (req, res) => {
 // Checks: budget pace, agent over budget, cache health, cost spike,
 //         stale agents, overkill model tier.
 
+function fmtCompactTokens(n) {
+  const value = Number(n ?? 0);
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+  return String(value);
+}
+
+function getLowCacheDrivers(rows, limit = 3) {
+  return rows
+    .map((row) => {
+      const totalInput = Number(row.total_input ?? 0);
+      const cacheRead = Number(row.cache_read ?? 0);
+      return {
+        tool_slug: row.tool_slug,
+        runs: Number(row.runs ?? 0),
+        total_input: totalInput,
+        cache_read: cacheRead,
+        cost_aud: Number(row.cost_aud ?? 0),
+        cache_hit_rate: totalInput > 0 ? cacheRead / totalInput : 0,
+      };
+    })
+    .filter((row) => row.total_input > 0 && row.cache_hit_rate < 0.05)
+    .sort((a, b) => b.total_input - a.total_input)
+    .slice(0, limit);
+}
+
+function describeCacheDrivers(drivers) {
+  if (!drivers.length) return '';
+  return drivers
+    .map((d) => `${d.tool_slug} (${fmtCompactTokens(d.total_input)} input, ${(d.cache_hit_rate * 100).toFixed(1)}% cache)`)
+    .join(', ');
+}
+
 router.get('/usage-warnings', async (req, res) => {
   const orgId = req.user.orgId;
 
@@ -1762,6 +1795,7 @@ router.get('/usage-warnings', async (req, res) => {
       budgetSettings,
       daily7dRes,
       cacheRes,
+      cacheByToolRes,
       spikeRes,
       slugCostRes,
       staleRes,
@@ -1785,6 +1819,20 @@ router.get('/usage-warnings', async (req, res) => {
                 COALESCE(SUM(input_tokens + cache_read_tokens + cache_creation_tokens), 0)::bigint AS total_input
            FROM usage_logs
           WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '7 days'`,
+        [orgId]
+      ),
+
+      pool.query(
+        `SELECT COALESCE(tool_slug, 'unknown') AS tool_slug,
+                COUNT(*)::int AS runs,
+                COALESCE(SUM(cache_read_tokens), 0)::bigint AS cache_read,
+                COALESCE(SUM(input_tokens + cache_read_tokens + cache_creation_tokens), 0)::bigint AS total_input,
+                COALESCE(SUM(cost_aud), 0)::numeric AS cost_aud
+           FROM usage_logs
+          WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '7 days'
+          GROUP BY tool_slug
+          ORDER BY total_input DESC
+          LIMIT 8`,
         [orgId]
       ),
 
@@ -1881,7 +1929,14 @@ router.get('/usage-warnings', async (req, res) => {
     if (cr && Number(cr.runs) >= 5) {
       const hitRate = Number(cr.total_input) > 0 ? Number(cr.cache_read) / Number(cr.total_input) : 0;
       if (hitRate < 0.15) {
-        warnings.push({ type: 'cache_health', severity: 'warning', title: 'Low cache hit rate', detail: `${(hitRate * 100).toFixed(1)}% over last 7 days. Check if system prompts contain dynamic content that breaks the cache key.` });
+        const drivers = getLowCacheDrivers(cacheByToolRes.rows);
+        const driverText = describeCacheDrivers(drivers);
+        warnings.push({
+          type: 'cache_health',
+          severity: 'warning',
+          title: 'Low cache hit rate',
+          detail: `${(hitRate * 100).toFixed(1)}% over last 7 days.${driverText ? ` Largest low-cache input drivers: ${driverText}.` : ''} This may be expected for document, live-data, or pre-fetch agents; optimise these first only if cost pressure appears.`,
+        });
       }
     }
 
@@ -1946,6 +2001,7 @@ router.get('/usage-intelligence', async (req, res) => {
       monthRes,
       daily7dRes,
       cacheRes,
+      cacheByToolRes,
       spikeRes,
       topToolsRes,
       modelUsageRes,
@@ -1977,6 +2033,20 @@ router.get('/usage-intelligence', async (req, res) => {
                 COALESCE(SUM(input_tokens + cache_read_tokens + cache_creation_tokens), 0)::bigint AS total_input
            FROM usage_logs
           WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '7 days'`,
+        [orgId]
+      ),
+
+      pool.query(
+        `SELECT COALESCE(tool_slug, 'unknown') AS tool_slug,
+                COUNT(*)::int AS runs,
+                COALESCE(SUM(cache_read_tokens), 0)::bigint AS cache_read,
+                COALESCE(SUM(input_tokens + cache_read_tokens + cache_creation_tokens), 0)::bigint AS total_input,
+                COALESCE(SUM(cost_aud), 0)::numeric AS cost_aud
+           FROM usage_logs
+          WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '7 days'
+          GROUP BY tool_slug
+          ORDER BY total_input DESC
+          LIMIT 8`,
         [orgId]
       ),
 
@@ -2040,6 +2110,8 @@ router.get('/usage-intelligence', async (req, res) => {
     const cacheRow = cacheRes.rows[0] ?? {};
     const totalInput = Number(cacheRow.total_input ?? 0);
     const cacheHitRate = totalInput > 0 ? Number(cacheRow.cache_read ?? 0) / totalInput : 0;
+    const lowCacheDrivers = getLowCacheDrivers(cacheByToolRes.rows);
+    const lowCacheDriverText = describeCacheDrivers(lowCacheDrivers);
 
     const spikeRow = spikeRes.rows[0] ?? {};
     const avgDaily30 = Number(spikeRow.avg_daily ?? 0);
@@ -2129,8 +2201,8 @@ router.get('/usage-intelligence', async (req, res) => {
         type: 'cache_health',
         severity: 'warning',
         title: 'Prompt cache effectiveness is low',
-        detail: `Cache read rate is ${(cacheHitRate * 100).toFixed(1)}% over the last 7 days.`,
-        action: 'Check agents with dynamic system prompts or large changing context that prevents cache reuse.',
+        detail: `Cache read rate is ${(cacheHitRate * 100).toFixed(1)}% over the last 7 days.${lowCacheDriverText ? ` Largest low-cache input drivers: ${lowCacheDriverText}.` : ''}`,
+        action: 'Treat this as expected for document, live-data, or pre-fetch agents unless costs are rising. If optimisation is needed, start with the listed agents and reduce changing context before changing cache settings.',
         metric: `${cacheRow.runs} recent runs`,
       }));
     }
@@ -2183,6 +2255,10 @@ router.get('/usage-intelligence', async (req, res) => {
         daily_budget_aud: maxDaily,
         avg_7d_aud: avg7dAud,
         daily_budget_pct: dailyBudgetPct,
+      },
+      cacheDiagnostics: {
+        hit_rate: cacheHitRate,
+        low_cache_drivers: lowCacheDrivers,
       },
       topCostDrivers,
       recommendedActions: actions.slice(0, 6),

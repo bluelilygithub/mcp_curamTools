@@ -24,6 +24,7 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - **Usage intelligence endpoint:** Added `GET /api/admin/usage-intelligence` to compute a management summary from usage logs: health status, score, month-end forecast, daily budget pressure, top cost drivers, and recommended actions.
 - **Admin Usage health panel:** `Admin > Usage` now opens with a Usage Health panel before raw tables, showing projected month spend, 7-day daily average, budget pressure, top cost drivers, and concrete actions.
 - **Operational recommendations:** The signal layer now converts overkill model use, daily budget pressure, high average run cost, poor cache effectiveness, and cost spikes into recommended admin actions.
+- **Contextual cache diagnostics:** Low-cache warnings now name the largest low-cache input drivers and explain when low cache may be expected for document, live-data, or pre-fetch agents.
 - **Architecture note:** Extended `PLATFORM-PRIMITIVES.md` to describe Admin > Usage as an operational signal layer rather than only an audit trail.
 
 ### Fixed / discovered
