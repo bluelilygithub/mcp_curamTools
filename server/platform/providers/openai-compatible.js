@@ -237,6 +237,18 @@ function createAdapter({ hostname, path: apiPath, envVar, label, supportsVision 
         { authorization: `Bearer ${apiKey}` },
         body
       );
+      // DEBUG: Log request details to diagnose DeepSeek 404 issues
+      const bodyStr = JSON.stringify(body);
+      console.log(`[openai-compatible] ${label} request: model="${model}" status=${status} bodyBytes=${bodyStr.length}`, {
+        model,
+        max_tokens: body.max_tokens,
+        bodyBytes: bodyStr.length,
+        systemLength: (body.messages?.[0]?.content || '').length,
+        messagesCount: body.messages?.length ?? 0,
+        error: responseBody?.error ?? null,
+      });
+
+
 
       // DEBUG: Log the request model and response status to diagnose DeepSeek 404 issues
       console.log(`[openai-compatible] ${label} request: model="${model}" status=${status}`, {
