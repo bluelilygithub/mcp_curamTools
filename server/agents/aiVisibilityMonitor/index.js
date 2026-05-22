@@ -162,7 +162,6 @@ async function runWebSearchPrompt(promptText) {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'Accept-Encoding': 'gzip',
           'X-Subscription-Token': apiKey,
         },
       },
