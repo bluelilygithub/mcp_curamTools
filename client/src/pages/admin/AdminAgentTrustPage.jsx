@@ -54,6 +54,11 @@ function SignalList({ signals }) {
           <span className="font-mono" style={{ color: 'var(--color-muted)' }}>{signal.source}</span>
           <span style={{ color: 'var(--color-muted)' }}> — </span>
           {signal.reason}
+          {signal.action && (
+            <div style={{ marginTop: 3, color: '#b45309' }}>
+              Fix: {signal.action}
+            </div>
+          )}
         </div>
       ))}
     </div>

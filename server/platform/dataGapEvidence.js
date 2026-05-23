@@ -65,10 +65,25 @@ function summariseDataGapSources(sources = {}) {
 function extractDataGaps(text) {
   if (!text) return { sectionPresent: false, gaps: [] };
 
-  const match = text.match(/###\s*(?:\d+\.\s*)?Data Gaps\s*\n([\s\S]*?)(?=\n###|\n##|$)/i);
-  if (!match) return { sectionPresent: false, gaps: [] };
+  const lines = String(text).split('\n');
+  const startIndex = lines.findIndex((line) => (
+    /^(?:#{1,6}\s*)?(?:\d+[.)]\s*)?Data Gaps\s*:?\s*$/i.test(line.trim())
+  ));
+  if (startIndex === -1) return { sectionPresent: false, gaps: [] };
 
-  const body = match[1].trim();
+  const bodyLines = [];
+  for (let i = startIndex + 1; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const isNextHeading =
+      /^(?:#{1,6}\s+)\S/.test(trimmed) ||
+      /^(?:\d+[.)]\s+)[A-Z][A-Za-z0-9 &/-]+$/.test(trimmed);
+
+    if (isNextHeading) break;
+    bodyLines.push(line);
+  }
+
+  const body = bodyLines.join('\n').trim();
   if (!body || /no data gaps detected/i.test(body)) {
     return { sectionPresent: true, gaps: [] };
   }
@@ -126,13 +141,21 @@ function buildDataGapReview({ slug, summary, evidenceSources = {} }) {
       const message = source?.resultHadError
         ? `Source returned an error but was not acknowledged in Data Gaps: ${source.error ?? 'unknown error'}`
         : 'Source returned no rows but was not acknowledged in Data Gaps.';
-      const gap = { source: sourceId, message, evidence: source };
+      const gap = {
+        source: sourceId,
+        message,
+        evidence: source,
+        details: source?.details ?? [],
+        action: source?.action ?? null,
+      };
       silentGaps.push(gap);
       boundsFailed.push({
         tool: sourceId,
         category: 'silent_data_gap',
         severity: 'review',
         message,
+        details: source?.details ?? [],
+        action: source?.action ?? null,
       });
     }
   }

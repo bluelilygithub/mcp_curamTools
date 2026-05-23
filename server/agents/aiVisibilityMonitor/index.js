@@ -336,7 +336,8 @@ async function runAiVisibilityMonitor(context) {
     priorBrandMentionRate = previousRunData.summaryStats.brandMentionRate ?? null;
     if (previousRunData._runAt) {
       const daysSince = Math.round((Date.now() - new Date(previousRunData._runAt).getTime()) / 86400000);
-      if (daysSince >= 6 && daysSince <= 8)        periodLabel = 'weekly';
+      if (daysSince <= 1)                          periodLabel = 'same-day rerun';
+      else if (daysSince >= 6 && daysSince <= 8)   periodLabel = 'weekly';
       else if (daysSince >= 13 && daysSince <= 16) periodLabel = 'fortnightly';
       else if (daysSince >= 27 && daysSince <= 33) periodLabel = '30-day';
       else                                          periodLabel = `${daysSince}-day`;
@@ -354,6 +355,16 @@ async function runAiVisibilityMonitor(context) {
   };
 
   const searchFailures = promptResults.filter((pr) => pr.error || /not configured|failed/i.test(pr.responseText ?? ''));
+  const searchFailureDetails = searchFailures.map((pr) => ({
+    promptId: pr.promptId,
+    label: pr.label ?? pr.promptText,
+    category: pr.category,
+    promptText: pr.promptText,
+    issue: pr.error || pr.responseText || 'No usable search response returned.',
+    fix: pr.error
+      ? 'Check the search provider/API response for this prompt, then rerun AI Visibility.'
+      : 'Review the prompt wording and search provider result, then rerun AI Visibility.',
+  }));
   const allCitedUrls = promptResults.flatMap((pr) => pr.citedUrls || []);
   const dataGapSources = {
     ...summariseDataGapSources({
@@ -370,6 +381,10 @@ async function runAiVisibilityMonitor(context) {
         ? `${searchFailures.length} monitoring prompt${searchFailures.length === 1 ? '' : 's'} returned an error or unusable search response.`
         : null,
       failedPromptCount: searchFailures.length,
+      details: searchFailureDetails,
+      action: searchFailures.length > 0
+        ? 'Open the failed prompt details, check the search provider/API response, and rerun AI Visibility.'
+        : null,
     },
   };
 

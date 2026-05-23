@@ -1772,6 +1772,8 @@ function deriveTrustSignals(run) {
       severity: warning.severity ?? 'review',
       source: warning.tool ?? 'run',
       reason,
+      details: warning.details ?? [],
+      action: warning.action ?? null,
     });
   }
 
