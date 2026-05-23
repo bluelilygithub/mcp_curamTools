@@ -6,6 +6,7 @@ const DATA_GAP_AGENT_SLUGS = new Set([
   'ads-copy-gate',
   'google-ads-monitor',
   'keyword-opportunity',
+  'ai-visibility-monitor',
 ]);
 
 function normaliseSourceId(value) {

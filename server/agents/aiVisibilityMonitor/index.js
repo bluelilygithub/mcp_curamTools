@@ -18,6 +18,7 @@ const https = require('https');
 const { pool } = require('../../db');
 const { agentOrchestrator } = require('../../platform/AgentOrchestrator');
 const AgentConfigService    = require('../../platform/AgentConfigService');
+const { summariseDataGapSources } = require('../../platform/dataGapEvidence');
 const { buildSystemPrompt } = require('./prompt');
 const { TOOL_SLUG }         = require('./tools');
 
@@ -352,6 +353,26 @@ async function runAiVisibilityMonitor(context) {
     topDomains,
   };
 
+  const searchFailures = promptResults.filter((pr) => pr.error || /not configured|failed/i.test(pr.responseText ?? ''));
+  const allCitedUrls = promptResults.flatMap((pr) => pr.citedUrls || []);
+  const dataGapSources = {
+    ...summariseDataGapSources({
+      monitoringPrompts: prompts,
+      promptResults,
+      citedUrls: allCitedUrls,
+    }),
+    webSearchResults: {
+      type: 'web_search_batch',
+      resultRowCount: promptResults.length,
+      resultWasEmpty: promptResults.length === 0,
+      resultHadError: searchFailures.length > 0,
+      error: searchFailures.length > 0
+        ? `${searchFailures.length} monitoring prompt${searchFailures.length === 1 ? '' : 's'} returned an error or unusable search response.`
+        : null,
+      failedPromptCount: searchFailures.length,
+    },
+  };
+
   // ── Final narrative analysis via Claude (no tools) ─────────────────────────
 
   emit('Analysing AI visibility results...');
@@ -391,7 +412,7 @@ async function runAiVisibilityMonitor(context) {
   return {
     result: {
       summary: run.result?.summary ?? '',
-      data:    { promptResults, summaryStats },
+      data:    { promptResults, summaryStats, data_gap_sources: dataGapSources },
     },
     trace:      run.trace,
     tokensUsed: run.tokensUsed,

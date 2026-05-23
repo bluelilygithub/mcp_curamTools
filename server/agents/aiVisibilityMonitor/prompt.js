@@ -67,6 +67,13 @@ Based on the vehicle, seasonal, bundle, and roi prompt results, identify the hig
 ### 8. Recommendations
 Numbered list of actionable recommendations to improve AI search visibility. Prioritise by impact. Consider: vehicle landing pages, seasonal content, bundle positioning, resale value content, citation opportunities, and competitor weaknesses to exploit.
 
+### Data Gaps
+Bulleted list using exact source IDs. Use only these source IDs: \`monitoringPrompts\`, \`promptResults\`, \`webSearchResults\`, \`citedUrls\`.
+Format each item as:
+- \`source_id\`: what was missing and why it matters
+
+If all sources returned usable data, write exactly: No data gaps detected.
+
 ## Output format
 
 Use clear markdown with the section headings above. Be specific — reference actual prompt text, competitor names, and cited URLs in your analysis. Avoid generic SEO advice; ground every recommendation in what the data actually shows.

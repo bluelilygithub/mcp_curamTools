@@ -69,6 +69,7 @@ Recommended first agents:
 - `ads-copy-gate`
 - `google-ads-monitor`
 - `keyword-opportunity`
+- `ai-visibility-monitor`
 
 These are good demo candidates because they are report-oriented, tool/data dependent, and easy to explain to a client or interviewer.
 
