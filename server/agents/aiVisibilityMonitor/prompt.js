@@ -72,6 +72,8 @@ Bulleted list using exact source IDs. Use only these source IDs: \`monitoringPro
 Format each item as:
 - \`source_id\`: what was missing and why it matters
 
+If any individual monitoring prompt has an error or unusable response, disclose it under \`webSearchResults\` and name the affected prompt label. Treat one failed prompt as a partial evidence gap, not as proof that all visibility checks failed.
+
 If all sources returned usable data, write exactly: No data gaps detected.
 
 ## Output format

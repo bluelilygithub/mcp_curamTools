@@ -95,6 +95,37 @@ function detectCompetitorMentions(text, competitors) {
     .map((c) => c.name);
 }
 
+function getSearchFailureIssue(promptResult) {
+  if (promptResult.error) {
+    if (
+      promptResult.error === promptResult.promptText ||
+      promptResult.error === promptResult.label
+    ) {
+      return 'Search provider returned an error without a useful error message.';
+    }
+    return promptResult.error;
+  }
+
+  const responseText = String(promptResult.responseText ?? '').trim();
+  if (!responseText) {
+    return 'Search provider returned no response text.';
+  }
+  if (/SEARCH_API_KEY not configured/i.test(responseText)) {
+    return 'Search API key is not configured.';
+  }
+  if (/failed to parse search results/i.test(responseText)) {
+    return 'Search provider response could not be parsed.';
+  }
+  if (/search request failed/i.test(responseText)) {
+    return 'Search provider request failed.';
+  }
+  if (responseText === promptResult.promptText || responseText === promptResult.label) {
+    return 'Search provider returned the prompt text instead of usable search results.';
+  }
+
+  return 'Search provider returned an unusable response.';
+}
+
 // ── Seed default prompts ──────────────────────────────────────────────────────
 
 async function seedDefaultPromptsIfEmpty(orgId) {
@@ -360,11 +391,13 @@ async function runAiVisibilityMonitor(context) {
     label: pr.label ?? pr.promptText,
     category: pr.category,
     promptText: pr.promptText,
-    issue: pr.error || pr.responseText || 'No usable search response returned.',
+    issue: getSearchFailureIssue(pr),
     fix: pr.error
       ? 'Check the search provider/API response for this prompt, then rerun AI Visibility.'
       : 'Review the prompt wording and search provider result, then rerun AI Visibility.',
   }));
+  const failedPromptCount = searchFailures.length;
+  const successfulPromptCount = Math.max(promptResults.length - failedPromptCount, 0);
   const allCitedUrls = promptResults.flatMap((pr) => pr.citedUrls || []);
   const dataGapSources = {
     ...summariseDataGapSources({
@@ -374,16 +407,23 @@ async function runAiVisibilityMonitor(context) {
     }),
     webSearchResults: {
       type: 'web_search_batch',
+      label: 'AI Visibility checks',
       resultRowCount: promptResults.length,
       resultWasEmpty: promptResults.length === 0,
       resultHadError: searchFailures.length > 0,
       error: searchFailures.length > 0
-        ? `${searchFailures.length} monitoring prompt${searchFailures.length === 1 ? '' : 's'} returned an error or unusable search response.`
+        ? `${failedPromptCount} of ${promptResults.length} visibility check${promptResults.length === 1 ? '' : 's'} returned an error or unusable response. ${successfulPromptCount} check${successfulPromptCount === 1 ? '' : 's'} returned usable responses.`
         : null,
-      failedPromptCount: searchFailures.length,
+      reviewMessage: searchFailures.length > 0
+        ? `${failedPromptCount} of ${promptResults.length} AI Visibility check${promptResults.length === 1 ? '' : 's'} returned an error or unusable response and ${failedPromptCount === 1 ? 'was' : 'were'} not acknowledged in Data Gaps.`
+        : null,
+      evidenceLevel: 'partial',
+      totalPromptCount: promptResults.length,
+      successfulPromptCount,
+      failedPromptCount,
       details: searchFailureDetails,
       action: searchFailures.length > 0
-        ? 'Open the failed prompt details, check the search provider/API response, and rerun AI Visibility.'
+        ? 'Review the failed check details below. This is a partial evidence gap, not proof that every monitored query failed.'
         : null,
     },
   };

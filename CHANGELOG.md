@@ -21,6 +21,7 @@ If a session changes both platform and one agent, **one root entry** is enough u
 ## 2026-05-23 — Agent Trust Foundation
 
 ### Built
+- **Check-level AI Visibility gaps:** AI Visibility trust warnings now report failed checks as partial evidence gaps, include success/failure counts, separate prompt text from failure reason, and avoid implying that every monitored query failed.
 - **Actionable trust detail:** Data gap checks now accept plain `Data Gaps` headings, show failed source details, include suggested fixes, and label same-day AI Visibility comparisons as same-day reruns instead of `0-day`.
 - **AI Visibility trust coverage:** Added `ai-visibility-monitor` to the Agent Trust pilot so web-search-heavy visibility runs now report Data Gaps against monitoring prompts, web search results, and cited URLs.
 - **Data gaps trust primitive:** Added lightweight Data Gaps parsing and review checks for pilot report agents. Pilot agents now include a mandatory `### Data Gaps` section and return source-level evidence summaries so the platform can detect missing disclosure.

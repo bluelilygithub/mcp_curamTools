@@ -53,9 +53,14 @@ export default function DataGapsPanel({ dataGaps = [], review = null }) {
                 padding: '8px 10px',
               }}>
                 <p style={{ fontSize: 12, color: '#92400e', margin: 0, fontFamily: 'inherit' }}>
-                  <span style={{ fontFamily: 'var(--font-mono, monospace)', marginRight: 6 }}>{gap.source}:</span>
+                  <span style={{ fontFamily: 'var(--font-mono, monospace)', marginRight: 6 }}>{gap.label ?? gap.source}:</span>
                   {gap.message}
                 </p>
+                {gap.evidenceLevel === 'partial' && (
+                  <p style={{ fontSize: 11, color: '#92400e', margin: '4px 0 0', fontFamily: 'inherit' }}>
+                    This is a partial evidence gap. It does not mean every monitored check failed.
+                  </p>
+                )}
                 {gap.action && (
                   <p style={{ fontSize: 11, color: '#92400e', margin: '4px 0 0', fontFamily: 'inherit' }}>
                     Fix: {gap.action}
@@ -67,6 +72,7 @@ export default function DataGapsPanel({ dataGaps = [], review = null }) {
                       <div key={detailIndex} style={{ fontSize: 11, color: '#92400e', fontFamily: 'inherit' }}>
                         <strong>{detail.label ?? detail.promptText ?? `Issue ${detailIndex + 1}`}</strong>
                         {detail.category && <span> · {detail.category}</span>}
+                        {detail.promptText && detail.promptText !== detail.label && <div>Prompt: {detail.promptText}</div>}
                         {detail.issue && <div>Issue: {detail.issue}</div>}
                         {detail.fix && <div>Suggested fix: {detail.fix}</div>}
                       </div>

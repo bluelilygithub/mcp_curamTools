@@ -54,6 +54,11 @@ function SignalList({ signals }) {
           <span className="font-mono" style={{ color: 'var(--color-muted)' }}>{signal.source}</span>
           <span style={{ color: 'var(--color-muted)' }}> — </span>
           {signal.reason}
+          {signal.evidenceLevel === 'partial' && (
+            <div style={{ marginTop: 3, color: '#b45309' }}>
+              Partial evidence gap: this does not mean every check failed.
+            </div>
+          )}
           {signal.action && (
             <div style={{ marginTop: 3, color: '#b45309' }}>
               Fix: {signal.action}

@@ -139,23 +139,27 @@ function buildDataGapReview({ slug, summary, evidenceSources = {} }) {
       confirmedGaps.push({ source: sourceId, statement: declared.statement, evidence: source });
     } else if (weakSource && !declared) {
       const message = source?.resultHadError
-        ? `Source returned an error but was not acknowledged in Data Gaps: ${source.error ?? 'unknown error'}`
-        : 'Source returned no rows but was not acknowledged in Data Gaps.';
+        ? (source.reviewMessage ?? `Source returned an error but was not acknowledged in Data Gaps: ${source.error ?? 'unknown error'}`)
+        : (source.reviewMessage ?? 'Source returned no rows but was not acknowledged in Data Gaps.');
       const gap = {
         source: sourceId,
+        label: source?.label ?? sourceId,
         message,
         evidence: source,
         details: source?.details ?? [],
         action: source?.action ?? null,
+        evidenceLevel: source?.evidenceLevel ?? null,
       };
       silentGaps.push(gap);
       boundsFailed.push({
         tool: sourceId,
+        label: source?.label ?? sourceId,
         category: 'silent_data_gap',
         severity: 'review',
         message,
         details: source?.details ?? [],
         action: source?.action ?? null,
+        evidenceLevel: source?.evidenceLevel ?? null,
       });
     }
   }

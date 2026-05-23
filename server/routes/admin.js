@@ -1770,10 +1770,11 @@ function deriveTrustSignals(run) {
     signals.push({
       type: category,
       severity: warning.severity ?? 'review',
-      source: warning.tool ?? 'run',
+      source: warning.label ?? warning.tool ?? 'run',
       reason,
       details: warning.details ?? [],
       action: warning.action ?? null,
+      evidenceLevel: warning.evidenceLevel ?? null,
     });
   }
 
