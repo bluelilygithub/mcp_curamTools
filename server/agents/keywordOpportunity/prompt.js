@@ -74,7 +74,7 @@ Signals to extract from each source:
 
 ## Output format
 
-Maximum 150 keywords total. Produce exactly these 4 sections.
+Maximum 150 keywords total. Produce exactly these 5 sections.
 
 ### 1. Summary
 
@@ -112,6 +112,14 @@ Minimum 10 keywords. These can be added to the account today.
 
 Format per keyword:
 [KEYWORD] | [Volume] | [Match Type] | [Campaign → Ad Group] | [Why this wins]
+
+### 5. Data Gaps
+
+Bulleted list using exact source IDs. Use only these source IDs: \`activeKeywords\`, \`negativeKeywords\`, \`keywordIdeas\`, \`searchTerms\`, \`campaignPerformance\`, \`trafficSources\`, \`enquiries\`, \`competitorResearch\`.
+Format each item as:
+- \`source_id\`: what was missing and why it matters
+
+If all sources returned usable data, write exactly: No data gaps detected.
 
 ## Rules
 

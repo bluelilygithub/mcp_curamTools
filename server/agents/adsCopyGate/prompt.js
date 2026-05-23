@@ -55,7 +55,7 @@ If playbookResult is null, state that Report 2 has not been run and halt — thi
 
 ## Output format
 
-Produce exactly these 7 sections. Total word count under 1,000 words — brevity is mandatory.
+Produce exactly these 8 sections. Total word count under 1,000 words — brevity is mandatory.
 
 ### 1. Immediate Blocks
 
@@ -165,6 +165,13 @@ Three sentences maximum:
 Sentence 1: How many of Report 2's recommendations are on the go-list vs blocked or held.
 Sentence 2: The single highest-risk item identified and why.
 Sentence 3: What must happen before the next gate review runs.
+
+### Data Gaps
+Bulleted list using exact source IDs. Use only these source IDs: \`playbookResult\`, \`diagnosticResult\`.
+Format each item as:
+- \`source_id\`: what was missing and why it matters
+
+If all sources returned usable data, write exactly: No data gaps detected.
 
 ## Gate rules
 

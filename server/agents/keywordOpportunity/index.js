@@ -17,6 +17,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { agentOrchestrator }  = require('../../platform/AgentOrchestrator');
 const AgentConfigService     = require('../../platform/AgentConfigService');
 const { getAdsServer, getAnalyticsServer, getWordPressServer, callMcpTool } = require('../../platform/mcpTools');
+const { summariseDataGapSources } = require('../../platform/dataGapEvidence');
 const { buildSystemPrompt }  = require('./prompt');
 const { TOOL_SLUG }          = require('./tools');
 
@@ -170,7 +171,26 @@ async function runKeywordOpportunity(context) {
     context:       { ...context, toolSlug: TOOL_SLUG, customerId },
   });
 
-  return { result, trace, tokensUsed };
+  return {
+    result: {
+      ...result,
+      data: {
+        ...(result.data ?? {}),
+        data_gap_sources: summariseDataGapSources({
+          activeKeywords,
+          negativeKeywords,
+          keywordIdeas,
+          searchTerms,
+          campaignPerformance,
+          trafficSources,
+          enquiries,
+          competitorResearch,
+        }),
+      },
+    },
+    trace,
+    tokensUsed,
+  };
 }
 
 module.exports = { runKeywordOpportunity };

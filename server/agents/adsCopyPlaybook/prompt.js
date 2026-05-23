@@ -62,7 +62,7 @@ Use these exact claims. No substitution, no paraphrase:
 
 ## Output format
 
-Produce exactly these 8 sections. Total word count under 2,000 words — brevity is a requirement, not a preference.
+Produce exactly these 9 sections. Total word count under 2,000 words — brevity is a requirement, not a preference.
 
 ### Priority Action List
 Ranked list of all required actions. Maximum 15 items.
@@ -193,6 +193,13 @@ Four weeks, maximum 4 checklist items per week:
 - Week 4: Decision criteria — what does success look like and what triggers the next review
 
 Each item is one line. No explanation unless essential.
+
+### Data Gaps
+Bulleted list using exact source IDs. Use only these source IDs: \`diagnosticResult\`, \`adGroupAds\`, \`assetPerformance\`, \`searchTermsByAdGroup\`, \`qualityScores\`.
+Format each item as:
+- \`source_id\`: what was missing and why it matters
+
+If all sources returned usable data, write exactly: No data gaps detected.
 
 ## Rules
 

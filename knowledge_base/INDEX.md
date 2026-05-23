@@ -73,6 +73,7 @@ knowledge_base/
 | **Prompts reference** | `core/PROMPTS.md` |
 | **Prompt versioning** (`prompt_version` on runs, registry) | `core/PROMPT_VERSIONING.md` |
 | **Platform primitives** | `architecture/PLATFORM_PRIMITIVES.md` |
+| **Report chaining** (agent outputs as accountable downstream inputs) | `architecture/REPORT_CHAINING.md` |
 | **MCP servers & tools** | `architecture/MCP_SERVERS.md` |
 | **Database schema** | `architecture/DATABASE_SCHEMA.md` |
 | **Architectural decisions** | `decisions/DECISIONS.md` |

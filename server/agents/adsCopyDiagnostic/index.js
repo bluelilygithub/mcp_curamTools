@@ -17,6 +17,7 @@
 const { agentOrchestrator } = require('../../platform/AgentOrchestrator');
 const AgentConfigService    = require('../../platform/AgentConfigService');
 const { getAdsServer, getAnalyticsServer, callMcpTool } = require('../../platform/mcpTools');
+const { summariseDataGapSources } = require('../../platform/dataGapEvidence');
 const { buildSystemPrompt } = require('./prompt');
 const { TOOL_SLUG }         = require('./tools');
 
@@ -102,7 +103,25 @@ async function runAdsCopyDiagnostic(context) {
     context:       { ...context, startDate, endDate, toolSlug: TOOL_SLUG, customerId },
   });
 
-  return { result, trace, tokensUsed };
+  return {
+    result: {
+      ...result,
+      data: {
+        ...(result.data ?? {}),
+        data_gap_sources: summariseDataGapSources({
+          adGroupAds,
+          assetPerformance,
+          adGroupPerformance,
+          searchTermsByAdGroup,
+          qualityScores,
+          landingPagePerformance,
+          paidBouncedSessions,
+        }),
+      },
+    },
+    trace,
+    tokensUsed,
+  };
 }
 
 module.exports = { runAdsCopyDiagnostic };

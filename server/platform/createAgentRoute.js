@@ -25,8 +25,10 @@ const { logUsage } = require('../services/UsageLogger');
 const EmbeddingService = require('../services/EmbeddingService');
 const { loadLessonsForAgent, proposeLessonFromRun } = require('../services/LessonRepositoryService');
 const { canRunAgent } = require('../services/PermissionService');
+const ReportDependencyService = require('./ReportDependencyService');
 const { validateToolData } = require('./validateToolData');
 const { mergePromptVersionIntoResult } = require('./promptVersions');
+const { summariseDataGapSources, buildDataGapReview } = require('./dataGapEvidence');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -152,6 +154,42 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
         agentConfig = {};
       }
 
+      let reportDependencyContext = '';
+      let reportDependencies = [];
+      let reportDependencyWarnings = [];
+      try {
+        const resolved = await ReportDependencyService.resolveDependencies({
+          slug,
+          orgId,
+          userId,
+          selections: req.body.reportDependencies ?? req.body.report_dependency_run_ids ?? null,
+        });
+        reportDependencies = resolved.dependencies;
+        reportDependencyWarnings = resolved.warnings;
+        reportDependencyContext = ReportDependencyService.buildDependencyPromptContext(
+          reportDependencies,
+          reportDependencyWarnings
+        );
+        for (const dependency of reportDependencies) {
+          emit('progress', { text: `Using ${dependency.label} from ${new Date(dependency.runAt).toLocaleDateString('en-AU')} as report dependency.` });
+        }
+        for (const warning of reportDependencyWarnings) {
+          if (warning.reason === 'stale') {
+            emit('progress', { text: `${warning.label} dependency is ${warning.ageDays} days old; proceeding with caution.` });
+          }
+          if (warning.reason === 'needs_review') {
+            emit('progress', { text: `${warning.label} dependency is marked needs_review; inherited reasoning is unverified.` });
+          }
+        }
+      } catch (depErr) {
+        if (depErr.name === 'ReportDependencyError') {
+          emit('error', { error: depErr.message, details: depErr.details });
+          await persistRun({ slug, orgId, status: 'error', error: depErr.message, runId });
+          return done();
+        }
+        console.warn(`[${slug}] report dependency resolution skipped:`, depErr.message);
+      }
+
       // Budget setup — load once, check as a pure function during the run
       const maxTaskBudgetAud = adminConfig.max_task_budget_aud ?? null;
       let maxDailyBudgetAud = null;
@@ -193,6 +231,9 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
           config: agentConfig,
           adminConfig,
           runtimePromptContext,
+          reportDependencies,
+          reportDependencyWarnings,
+          reportDependencyContext,
           req,
           // Extended emit: agents may optionally pass tokensUsed to trigger mid-run budget checks.
           // Agents that don't pass tokensUsed still work — cost tracking simply won't accumulate mid-run.
@@ -213,9 +254,21 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
         }
 
         const toolData   = extractToolData(trace);
+        const resultData = result?.data ?? {};
+        const { data_gap_sources: resultDataGapSources = {}, ...persistableResultData } = resultData;
+        const dataGapSources = {
+          ...summariseDataGapSources(toolData),
+          ...resultDataGapSources,
+        };
         const suggestions = extractSuggestions(result?.summary ?? '');
+        const dataGapCheck = buildDataGapReview({
+          slug,
+          summary: result?.summary ?? '',
+          evidenceSources: dataGapSources,
+        });
         const boundsFailed = [
           ...validateToolData(toolData),
+          ...dataGapCheck.boundsFailed,
           ...(result?.boundsFailed ?? []),
         ];
         const runStatus  = boundsFailed.length > 0 ? 'needs_review' : 'complete';
@@ -223,14 +276,22 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
         const resultPayload = mergePromptVersionIntoResult(
           {
             summary:   result?.summary ?? '',
-            data:      { ...toolData, ...(result?.data ?? {}) },
+            data:      { ...toolData, ...persistableResultData },
             suggestions,
+            ...(dataGapCheck.applies && {
+              data_gaps: dataGapCheck.dataGaps,
+              data_gap_review: dataGapCheck.dataGapReview,
+            }),
             tokensUsed: tokensUsed ?? {},
             costAud:   taskCostAud,
             model:     adminConfig.model ?? null,
             startDate: req.body.startDate ?? null,
             endDate:   req.body.endDate   ?? null,
             progressLog,
+            ...(reportDependencies.length > 0 && {
+              report_dependencies: reportDependencies.map(({ summary: _summary, ...dependency }) => dependency),
+              report_dependency_warnings: reportDependencyWarnings,
+            }),
             // Capture prompt/response for Decision Log display
             prompt_text:  result?.prompt_text  ?? null,
             response_text: result?.response_text ?? null,
@@ -301,6 +362,18 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
     } catch (err) {
       console.error(`[${slug}] history error:`, err.message);
       res.status(500).json({ error: 'Failed to load history' });
+    }
+  });
+
+  // ── GET /dependencies ────────────────────────────────────────────────────
+  router.get('/dependencies', requireAuth, async (req, res) => {
+    try {
+      const { orgId } = req.user;
+      const status = await ReportDependencyService.getDependencyStatus({ slug, orgId });
+      res.json(status);
+    } catch (err) {
+      console.error(`[${slug}] dependencies error:`, err.message);
+      res.status(500).json({ error: 'Failed to load report dependencies' });
     }
   });
 

@@ -99,6 +99,13 @@ Each recommendation must:
 - State the fix in one sentence with a concrete replacement headline or description
 - Estimate the likely impact (CTR, CPA, or Quality Score improvement)
 
+### Data Gaps
+Bulleted list using exact source IDs. Use only these source IDs: \`adGroupAds\`, \`assetPerformance\`, \`adGroupPerformance\`, \`searchTermsByAdGroup\`, \`qualityScores\`, \`landingPagePerformance\`, \`paidBouncedSessions\`.
+Format each item as:
+- \`source_id\`: what was missing and why it matters
+
+If all sources returned usable data, write exactly: No data gaps detected.
+
 ### Priority Action List
 Exactly 10 items ranked 1–10. Format each as:
 

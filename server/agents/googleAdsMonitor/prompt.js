@@ -199,6 +199,13 @@ Numbered list. Each recommendation must:
 
 Prioritise by estimated impact — highest first. Limit to ${maxSugg} recommendations maximum.
 
+### Data Gaps
+Bulleted list using exact source IDs. Use only these source IDs: \`campaignPerformance\`, \`dailyPerformance\`, \`searchTerms\`, \`activeKeywords\`, \`sessionsOverview\`.
+Format each item as:
+- \`source_id\`: what was missing and why it matters
+
+If all sources returned usable data, write exactly: No data gaps detected.
+
 Before finalising any recommendation, verify it against the declared account baselines in the Account Intelligence Profile above. If a recommendation contradicts a positive account-level metric, either withdraw it or reframe it as a refinement opportunity rather than a problem.${customPromptBlock}`;
 }
 

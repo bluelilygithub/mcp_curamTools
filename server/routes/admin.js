@@ -1747,6 +1747,121 @@ router.post('/diagnostics', async (req, res) => {
   res.json(results);
 });
 
+// ── Agent Trust ────────────────────────────────────────────────────────────
+//
+// GET /admin/agent-trust
+// Review queue for agent outputs that have weak evidence, stale dependencies,
+// or data integrity warnings. Uses existing agent_runs result metadata only.
+
+function deriveTrustSignals(run) {
+  const result = run.result ?? {};
+  const bounds = Array.isArray(result.boundsFailed) ? result.boundsFailed : [];
+  const dependencyWarnings = Array.isArray(result.report_dependency_warnings)
+    ? result.report_dependency_warnings
+    : [];
+  const gapReview = result.data_gap_review ?? {};
+  const signals = [];
+
+  for (const warning of bounds) {
+    const category = warning.category ?? 'bounds_warning';
+    let reason = warning.message ?? 'Run has a data integrity warning.';
+    if (category === 'missing_gap_section') reason = 'Required Data Gaps section was missing.';
+    if (category === 'silent_data_gap') reason = warning.message ?? 'A source returned no data but the report did not disclose it.';
+    signals.push({
+      type: category,
+      severity: warning.severity ?? 'review',
+      source: warning.tool ?? 'run',
+      reason,
+    });
+  }
+
+  for (const warning of dependencyWarnings) {
+    const label = warning.label ?? warning.slug ?? 'Dependency';
+    const reason = warning.reason === 'stale'
+      ? `${label} dependency is stale (${warning.ageDays} days old).`
+      : `${label} dependency is marked ${warning.reason}.`;
+    signals.push({
+      type: `dependency_${warning.reason}`,
+      severity: 'warn',
+      source: warning.slug ?? 'dependency',
+      reason,
+    });
+  }
+
+  if (run.status === 'needs_review' && signals.length === 0) {
+    signals.push({
+      type: 'needs_review',
+      severity: 'review',
+      source: run.slug,
+      reason: 'Run is marked needs_review.',
+    });
+  }
+
+  return {
+    signals,
+    declaredDataGaps: Array.isArray(result.data_gaps) ? result.data_gaps : [],
+    confirmedDataGaps: Array.isArray(gapReview.confirmedGaps) ? gapReview.confirmedGaps : [],
+    silentDataGaps: Array.isArray(gapReview.silentGaps) ? gapReview.silentGaps : [],
+    fabricatedDataGaps: Array.isArray(gapReview.fabricatedGaps) ? gapReview.fabricatedGaps : [],
+    dependencies: Array.isArray(result.report_dependencies) ? result.report_dependencies : [],
+  };
+}
+
+router.get('/agent-trust', async (req, res) => {
+  const orgId = req.user.orgId;
+  const days = Math.min(Math.max(parseInt(req.query.days ?? '30', 10), 1), 90);
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, slug, status, result, error, run_at, completed_at
+         FROM agent_runs
+        WHERE org_id = $1
+          AND run_at >= NOW() - ($2 || ' days')::interval
+          AND (
+            status = 'needs_review'
+            OR (result IS NOT NULL AND result ? 'data_gap_review')
+            OR (result IS NOT NULL AND result ? 'report_dependency_warnings')
+          )
+        ORDER BY run_at DESC
+        LIMIT 100`,
+      [orgId, days]
+    );
+
+    const runs = rows.map((run) => {
+      const trust = deriveTrustSignals(run);
+      return {
+        id: run.id,
+        slug: run.slug,
+        status: run.status,
+        run_at: run.run_at,
+        completed_at: run.completed_at,
+        error: run.error,
+        result: run.result,
+        ...trust,
+      };
+    });
+
+    const summary = {
+      runs_needing_review: runs.filter((run) => run.status === 'needs_review').length,
+      silent_data_gaps: runs.reduce((sum, run) => sum + run.silentDataGaps.length, 0),
+      missing_gap_sections: runs.reduce(
+        (sum, run) => sum + run.signals.filter((signal) => signal.type === 'missing_gap_section').length,
+        0
+      ),
+      stale_chained_dependencies: runs.reduce(
+        (sum, run) => sum + run.signals.filter((signal) => signal.type === 'dependency_stale').length,
+        0
+      ),
+      total_signals: runs.reduce((sum, run) => sum + run.signals.length, 0),
+    };
+
+    res.json({ days, summary, runs });
+  } catch (err) {
+    console.error('[agent-trust]', err.message);
+    res.status(500).json({ error: 'Failed to load agent trust queue.' });
+  }
+});
+
 // ── Usage Warnings ────────────────────────────────────────────────────────
 //
 // GET /admin/usage-warnings

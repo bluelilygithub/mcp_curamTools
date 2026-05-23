@@ -18,6 +18,41 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-23 — Agent Trust Foundation
+
+### Built
+- **Data gaps trust primitive:** Added lightweight Data Gaps parsing and review checks for pilot report agents. Pilot agents now include a mandatory `### Data Gaps` section and return source-level evidence summaries so the platform can detect missing disclosure.
+- **Shared evidence checker:** Added `dataGapEvidence` helpers to summarise tool/pre-fetch source outcomes, parse declared gaps, detect missing gap sections, and add review warnings through the existing `boundsFailed` / `needs_review` path.
+- **Pilot agent coverage:** Wired Data Gaps into `ads-copy-diagnostic`, `ads-copy-playbook`, `ads-copy-gate`, `google-ads-monitor`, and `keyword-opportunity`.
+- **Agent Trust console:** Added `Admin > Agent Trust`, backed by `GET /api/admin/agent-trust`, showing runs needing review, silent gaps, missing gap sections, stale chained dependencies, and detailed run evidence.
+- **Report UI trust panels:** Added a reusable Data Gaps panel and surfaced trust metadata in Google Ads reports and chained agent cards.
+- **Demo-platform documentation:** Updated `AGENT-INTELLIGENCE-LAYER.md` to mark Stage 1 and the initial Agent Trust Console as implemented foundation primitives.
+
+### Fixed / discovered
+- Pre-fetch agents do not populate the ReAct trace with tool calls, so the trust layer records lightweight pre-fetch evidence summaries rather than relying only on `AgentOrchestrator` trace data.
+
+### Open / next
+- Add review actions such as "mark reviewed" and "false positive" once the trust queue has enough real examples to shape the workflow.
+
+---
+
+## 2026-05-22 — Report Chaining Implementation
+
+### Built
+- **Report dependency resolver:** Added `ReportDependencyService` with declared chain rules for Copy Diagnostic → Copy Playbook → Copy Gate, including required upstream slugs, allowed statuses, stale thresholds, and dependency warnings.
+- **Runtime dependency enforcement:** `createAgentRoute` now resolves report dependencies before chained agents run, blocks missing required upstream reports, passes provenance context into the agent, and persists `report_dependencies` plus warnings on downstream run results.
+- **Copy chain wiring:** Copy Playbook and Copy Gate now consume explicit dependency context instead of silently querying the latest upstream report themselves.
+- **Dashboard dependency surface:** Google Ads agent cards now load `GET /api/agents/:slug/dependencies`, pass selected upstream run IDs on run requests, block missing upstream reports, warn on stale upstream reports, and show persisted dependency provenance beside chained results.
+- **Documentation update:** Expanded `knowledge_base/architecture/REPORT_CHAINING.md` with the implemented service/API/UI behaviour and updated prompt admin descriptions for the copy chain.
+
+### Fixed / discovered
+- The previous copy chain already used prior reports, but the dependency was implicit and not persisted as part of the downstream result. The implementation now makes the selected upstream runs reviewable and auditable.
+
+### Open / next
+- Optional next step: add manual upstream run selection when multiple suitable reports exist, rather than always selecting the latest suitable report.
+
+---
+
 ## 2026-05-22 — Admin Usage Intelligence Console
 
 ### Built
@@ -26,6 +61,8 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - **Operational recommendations:** The signal layer now converts overkill model use, daily budget pressure, high average run cost, poor cache effectiveness, and cost spikes into recommended admin actions.
 - **Contextual cache diagnostics:** Low-cache warnings now name the largest low-cache input drivers and explain when low cache may be expected for document, live-data, or pre-fetch agents.
 - **Architecture note:** Extended `PLATFORM-PRIMITIVES.md` to describe Admin > Usage as an operational signal layer rather than only an audit trail.
+- **Knowledge-base alignment:** Updated `server/CLAUDE.md` and `knowledge_base/architecture/PLATFORM_PRIMITIVES.md` so future sessions see the Usage Health, `usage-intelligence`, and contextual cache diagnostics model.
+- **Report chaining doctrine:** Added `knowledge_base/architecture/REPORT_CHAINING.md` to define report chaining as structured delegation across agents, with prior report outputs treated as explicit, reviewable downstream dependencies.
 
 ### Fixed / discovered
 - The existing warning layer already detected important signals, but the UI presented them as banners below the page header rather than as an executive management summary.

@@ -18,6 +18,7 @@ import StrategicReviewCard from './GoogleAdsMonitor/StrategicReviewCard';
 import DaypartIntelligenceCard from './GoogleAdsMonitor/DaypartIntelligenceCard';
 import AiVisibilityTab from './GoogleAdsMonitor/AiVisibilityTab';
 import BoundsWarningPanel from '../../components/ui/BoundsWarningPanel';
+import DataGapsPanel from '../../components/ui/DataGapsPanel';
 
 const AGENT_SLUG = 'google-ads-monitor';
 
@@ -369,6 +370,7 @@ function AllAgentsHistory({ onDiscuss, userEmail }) {
                           </div>
                           <div style={{ padding: '16px' }}>
                             <BoundsWarningPanel boundsFailed={run.result?.boundsFailed} />
+                            <DataGapsPanel dataGaps={run.result?.data_gaps} review={run.result?.data_gap_review} />
                             <MarkdownRenderer text={summary} />
                           </div>
                         </div>
@@ -800,6 +802,7 @@ export default function GoogleAdsMonitorPage() {
                       )}
                     </div>
                     <BoundsWarningPanel boundsFailed={result.boundsFailed} />
+                    <DataGapsPanel dataGaps={result.data_gaps} review={result.data_gap_review} />
                     {summary && <MarkdownRenderer text={summary} />}
                     {campaigns.length > 0 && (
                       <div className="mt-4">

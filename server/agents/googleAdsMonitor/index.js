@@ -30,6 +30,7 @@ const { agentOrchestrator }  = require('../../platform/AgentOrchestrator');
 const AgentConfigService     = require('../../platform/AgentConfigService');
 const { pool }               = require('../../db');
 const { getAdsServer, getAnalyticsServer, getWordPressServer, callMcpTool } = require('../../platform/mcpTools');
+const { summariseDataGapSources } = require('../../platform/dataGapEvidence');
 const { buildSystemPrompt }  = require('./prompt');
 const { TOOL_SLUG }          = require('./tools');
 
@@ -178,9 +179,22 @@ async function runSingleCustomer(orgId, config, adminConfig, companyProfile, sta
 
   const reconciliationFailures = [...preRunFailures, ...postRunFailures];
 
-  const augmentedResult = reconciliationFailures.length > 0
-    ? { ...result, boundsFailed: reconciliationFailures }
-    : result;
+  const dataGapSources = summariseDataGapSources({
+    campaignPerformance,
+    dailyPerformance,
+    searchTerms,
+    activeKeywords,
+    sessionsOverview,
+  });
+
+  const augmentedResult = {
+    ...result,
+    ...(reconciliationFailures.length > 0 && { boundsFailed: reconciliationFailures }),
+    data: {
+      ...(result.data ?? {}),
+      data_gap_sources: dataGapSources,
+    },
+  };
 
   return { result: augmentedResult, trace, tokensUsed };
 }

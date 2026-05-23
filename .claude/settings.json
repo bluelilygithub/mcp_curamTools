@@ -1,0 +1,25 @@
+{
+  "hooks": {},
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm test:*)",
+      "Bash(npm run:*)",
+      "Bash(npm audit:*)",
+      "Bash(npm show:*)",
+      "Bash(node --check:*)",
+      "Bash(node index.js)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git -C:*)",
+      "Bash(gh repo:*)",
+      "Bash(tasklist)",
+      "Bash(netstat:*)",
+      "Bash(curl:*)",
+      "Edit(*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.anthropic.com)"
+    ]
+  }
+}

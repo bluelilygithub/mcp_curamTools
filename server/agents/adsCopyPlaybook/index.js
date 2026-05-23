@@ -4,9 +4,9 @@
  * Ads Copy Playbook agent — pre-fetch architecture.
  *
  * WHY PRE-FETCH: Data requirements are fixed and enumerable.
- * Fetches the latest ads-copy-diagnostic run result from the DB as confirmed
- * diagnostic input, plus fresh RSA copy, asset labels, search terms, and QS
- * scores from the MCP servers. Single Claude call — no ReAct loop.
+ * Receives the selected ads-copy-diagnostic dependency from createAgentRoute,
+ * plus fresh RSA copy, asset labels, search terms, and QS scores from the MCP
+ * servers. Single Claude call — no ReAct loop.
  *
  * This is Report 2. It prescribes only — it does not re-diagnose.
  * The diagnostic result is passed as context so Claude can reference findings
@@ -15,8 +15,8 @@
 
 const { agentOrchestrator } = require('../../platform/AgentOrchestrator');
 const AgentConfigService    = require('../../platform/AgentConfigService');
-const { pool }              = require('../../db');
 const { getAdsServer, callMcpTool } = require('../../platform/mcpTools');
+const { summariseDataGapSources } = require('../../platform/dataGapEvidence');
 const { buildSystemPrompt } = require('./prompt');
 const { TOOL_SLUG }         = require('./tools');
 
@@ -43,19 +43,11 @@ async function runAdsCopyPlaybook(context) {
   const rangeArgs  = { start_date: startDate, end_date: endDate };
   const cidArgs    = { customer_id: customerId ?? null };
 
-  // ── Pre-fetch: diagnostic result + raw copy data in parallel ─────────────────
+  // ── Pre-fetch: dependency + raw copy data in parallel ────────────────────────
 
   emit('Fetching diagnostic report and ad copy data…');
 
-  const [diagResult, adsServer] = await Promise.all([
-    pool.query(
-      `SELECT result FROM agent_runs
-       WHERE org_id = $1 AND slug = 'ads-copy-diagnostic' AND status = 'complete'
-       ORDER BY run_at DESC LIMIT 1`,
-      [orgId]
-    ).then((r) => r.rows[0]?.result ?? null).catch(() => null),
-    getAdsServer(orgId),
-  ]);
+  const adsServer = await getAdsServer(orgId);
 
   const [
     adGroupAds,
@@ -73,13 +65,21 @@ async function runAdsCopyPlaybook(context) {
 
   emit('Generating optimization playbook…');
 
-  const diagnosticResult = diagResult
-    ? (typeof diagResult.summary === 'string' ? diagResult.summary : JSON.stringify(diagResult))
-    : null;
+  const diagnosticDependency = context.reportDependencies?.find((d) => d.slug === 'ads-copy-diagnostic') ?? null;
+  const diagnosticResult = diagnosticDependency?.summary ?? null;
 
   const payload = {
     period: `${startDate} to ${endDate}`,
     diagnosticResult,
+    diagnosticDependency: diagnosticDependency
+      ? {
+          runId: diagnosticDependency.runId,
+          status: diagnosticDependency.status,
+          runAt: diagnosticDependency.runAt,
+          stale: diagnosticDependency.stale,
+          ageDays: diagnosticDependency.ageDays,
+        }
+      : null,
     adGroupAds,
     assetPerformance,
     searchTermsByAdGroup,
@@ -87,8 +87,8 @@ async function runAdsCopyPlaybook(context) {
   };
 
   const diagNote = diagnosticResult
-    ? 'The Ad Copy Diagnostic Report output is included in diagnosticResult.'
-    : 'No Ad Copy Diagnostic run found for this org — derive findings from raw data.';
+    ? 'The selected Ad Copy Diagnostic Report dependency is included in diagnosticResult. Treat it as inherited reasoning, not raw source data.'
+    : 'No Ad Copy Diagnostic dependency was supplied — halt and state that the required diagnostic report is missing.';
 
   const userMessage =
     `Produce the Ad Copy Optimization Playbook for the period ${startDate} to ${endDate}. ` +
@@ -97,7 +97,7 @@ async function runAdsCopyPlaybook(context) {
 
   const { result, trace, tokensUsed } = await agentOrchestrator.run({
     systemPrompt:  buildSystemPrompt(config, companyProfile),
-    userMessage,
+    userMessage:    context.reportDependencyContext ? `${context.reportDependencyContext}\n\n---\n\n${userMessage}` : userMessage,
     tools:         [],
     maxIterations: 1,
     model:         adminConfig.model,
@@ -107,7 +107,23 @@ async function runAdsCopyPlaybook(context) {
     context:       { ...context, startDate, endDate, toolSlug: TOOL_SLUG, customerId },
   });
 
-  return { result, trace, tokensUsed };
+  return {
+    result: {
+      ...result,
+      data: {
+        ...(result.data ?? {}),
+        data_gap_sources: summariseDataGapSources({
+          diagnosticResult: diagnosticResult ? [diagnosticResult] : [],
+          adGroupAds,
+          assetPerformance,
+          searchTermsByAdGroup,
+          qualityScores,
+        }),
+      },
+    },
+    trace,
+    tokensUsed,
+  };
 }
 
 module.exports = { runAdsCopyPlaybook };

@@ -17,6 +17,8 @@ import { useState, useEffect } from 'react';
 import api from '../../../api/client';
 import Button from '../../../components/ui/Button';
 import MarkdownRenderer from '../../../components/ui/MarkdownRenderer';
+import BoundsWarningPanel from '../../../components/ui/BoundsWarningPanel';
+import DataGapsPanel from '../../../components/ui/DataGapsPanel';
 
 const fmtAud  = (n) => `$${Number(n ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -71,9 +73,13 @@ export default function AgentDashboardCard({ slug, title, description, startDate
   const [recentRunModal, setRecentRunModal] = useState(false);
   const [recentRunMeta,  setRecentRunMeta]  = useState(null); // { hoursAgo, sameRange }
   const [prereqModal,    setPrereqModal]    = useState(false);
-  const [prereqMeta,     setPrereqMeta]     = useState(null); // { state: 'none'|'old', daysAgo }
+  const [prereqMeta,     setPrereqMeta]     = useState(null); // { state: 'none'|'old', ... }
+  const [dependencyInfo, setDependencyInfo] = useState(null);
 
-  useEffect(() => { loadHistory(); }, [slug]);
+  useEffect(() => {
+    loadHistory();
+    loadDependencies();
+  }, [slug]);
 
   async function loadHistory() {
     try {
@@ -84,14 +90,49 @@ export default function AgentDashboardCard({ slug, title, description, startDate
     } catch { /* non-fatal */ }
   }
 
+  async function loadDependencies() {
+    try {
+      const info = await api.get(`/agents/${slug}/dependencies`);
+      setDependencyInfo(info);
+      return info;
+    } catch {
+      setDependencyInfo(null);
+      return null;
+    }
+  }
+
   // Derived from whichever run is currently selected
   const currentRun = runs[runIndex] ?? null;
   const result     = currentRun?.result ?? null;
   const summary    = result?.summary ?? '';
+  const dependencyRequirements = dependencyInfo?.requirements ?? [];
+  const persistedDependencies = result?.report_dependencies ?? [];
+
+  function buildRunDependencies(info = dependencyInfo) {
+    return (info?.requirements ?? [])
+      .filter((req) => req.latestRun?.runId)
+      .map((req) => ({ slug: req.slug, runId: req.latestRun.runId }));
+  }
 
   async function handleRunClick() {
-    // 1. Prerequisite check — does a required prior report exist?
-    if (prerequisiteSlug) {
+    // 1. Report dependency check — dependencies are selected explicitly.
+    const info = await loadDependencies();
+    const requirements = info?.requirements ?? [];
+    if (requirements.length) {
+      const missing = requirements.filter((req) => req.required && !req.latestRun);
+      if (missing.length) {
+        setPrereqMeta({ state: 'none', missing });
+        setPrereqModal(true);
+        return;
+      }
+
+      const stale = requirements.filter((req) => req.latestRun?.stale);
+      if (stale.length) {
+        setPrereqMeta({ state: 'old', stale });
+        setPrereqModal(true);
+        return;
+      }
+    } else if (prerequisiteSlug) {
       try {
         const prereqRows = await api.get(`/agents/${prerequisiteSlug}/history`);
         const latestPrereq = (prereqRows ?? []).find((r) => r.status === 'complete');
@@ -110,7 +151,7 @@ export default function AgentDashboardCard({ slug, title, description, startDate
     }
 
     // 2. Recent-run check
-    if (!runs.length) { handleRun(); return; }
+    if (!runs.length) { handleRun(info); return; }
     const latest    = runs[0];
     const hoursAgo  = (Date.now() - new Date(latest.run_at).getTime()) / 3_600_000;
     const sameRange = latest.result?.startDate === startDate && latest.result?.endDate === endDate;
@@ -118,18 +159,19 @@ export default function AgentDashboardCard({ slug, title, description, startDate
       setRecentRunMeta({ hoursAgo, sameRange });
       setRecentRunModal(true);
     } else {
-      handleRun();
+      handleRun(info);
     }
   }
 
-  async function handleRun() {
+  async function handleRun(dependencySource = dependencyInfo) {
     setRecentRunModal(false);
     setRunning(true);
     setLines([]);
     setError('');
 
     try {
-      const res = await api.stream(`/agents/${slug}/run`, { startDate, endDate });
+      const reportDependencies = buildRunDependencies(dependencySource);
+      const res = await api.stream(`/agents/${slug}/run`, { startDate, endDate, reportDependencies });
       const reader  = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -147,6 +189,7 @@ export default function AgentDashboardCard({ slug, title, description, startDate
           if (raw === '[DONE]') {
             setRunning(false);
             await loadHistory();
+            await loadDependencies();
             return;
           }
           try {
@@ -162,6 +205,7 @@ export default function AgentDashboardCard({ slug, title, description, startDate
     } finally {
       setRunning(false);
       loadHistory();
+      loadDependencies();
     }
   }
 
@@ -258,6 +302,7 @@ export default function AgentDashboardCard({ slug, title, description, startDate
   const runCost        = result?.costAud ?? null;
   const hasResult      = !!result;
   const totalRuns      = runs.length;
+  const hasReportDependencies = dependencyRequirements.length > 0;
 
   const actionBtnStyle = {
     fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'inherit',
@@ -398,6 +443,41 @@ export default function AgentDashboardCard({ slug, title, description, startDate
             </span>
           </div>
 
+          {hasReportDependencies && (
+            <div style={{
+              border: '1px solid var(--color-border)', borderRadius: 12,
+              background: 'var(--color-bg)', padding: '10px 12px', marginBottom: 14,
+            }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text)', marginBottom: 6, fontFamily: 'inherit' }}>
+                Report dependencies
+              </p>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {dependencyRequirements.map((req) => {
+                  const persisted = persistedDependencies.find((dep) => dep.slug === req.slug);
+                  const activeRun = persisted ?? req.latestRun;
+                  return (
+                    <div key={req.slug} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
+                      <span>
+                        {req.label}
+                        {activeRun?.stale && <span style={{ color: '#d97706' }}> · stale</span>}
+                        {activeRun?.status === 'needs_review' && <span style={{ color: '#d97706' }}> · needs review</span>}
+                      </span>
+                      <span style={{ whiteSpace: 'nowrap' }}>
+                        {activeRun?.runAt ? `Run ${fmtDate(activeRun.runAt)}` : 'Missing'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 8, lineHeight: 1.45, fontFamily: 'inherit' }}>
+                These are accountable upstream reports. The selected run IDs are persisted with this output so the handoff can be reviewed later.
+              </p>
+            </div>
+          )}
+
+          <BoundsWarningPanel boundsFailed={result?.boundsFailed} />
+          <DataGapsPanel dataGaps={result?.data_gaps} review={result?.data_gap_review} />
+
           <MarkdownRenderer text={summary} />
         </div>
       )}
@@ -421,21 +501,23 @@ export default function AgentDashboardCard({ slug, title, description, startDate
             borderRadius: 16, padding: 24, width: 420, fontFamily: 'inherit',
           }} onClick={(e) => e.stopPropagation()}>
             <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 8 }}>
-              {prereqMeta.state === 'none' ? 'Run the diagnostic first' : 'Diagnostic report is outdated'}
+              {prereqMeta.state === 'none' ? 'Required report missing' : 'Report dependency is outdated'}
             </p>
             <p style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 16, lineHeight: 1.55 }}>
               {prereqMeta.state === 'none'
-                ? `The ${title} reads the ${prerequisiteTitle ?? 'prerequisite report'} as its primary input — findings, warranty errors, asset ratings, and copy issues are taken directly from that report rather than re-diagnosed. No ${prerequisiteTitle ?? 'prerequisite'} run was found for this account. Run that report first to get accurate, specific recommendations.`
-                : `The ${title} reads the ${prerequisiteTitle ?? 'prerequisite report'} as its primary input. The last ${prerequisiteTitle ?? 'prerequisite'} run was ${prereqMeta.daysAgo} day${prereqMeta.daysAgo === 1 ? '' : 's'} ago — recommendations may reference stale findings. Consider running an updated ${prerequisiteTitle ?? 'diagnostic'} first.`
+                ? `The ${title} requires ${prereqMeta.missing?.map((req) => req.label).join(' and ') || prerequisiteTitle || 'a prerequisite report'} as explicit input. Run the upstream report first so this stage has a reviewed artefact to inherit.`
+                : `The ${title} will inherit reasoning from ${prereqMeta.stale?.map((req) => `${req.label} (${Math.round(req.latestRun.ageDays)} days old)`).join(' and ') || prerequisiteTitle || 'an older report'}. Consider refreshing the upstream report before continuing.`
               }
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
               <Button variant="secondary" onClick={() => setPrereqModal(false)}>
-                {prereqMeta.state === 'none' ? 'Cancel — run diagnostic first' : 'Cancel — update diagnostic first'}
+                {prereqMeta.state === 'none' ? 'Cancel — run upstream first' : 'Cancel — update upstream first'}
               </Button>
-              <Button variant="primary" onClick={() => { setPrereqModal(false); handleRun(); }}>
-                Run anyway
-              </Button>
+              {prereqMeta.state !== 'none' && (
+                <Button variant="primary" onClick={() => { setPrereqModal(false); handleRun(); }}>
+                  Run anyway
+                </Button>
+              )}
             </div>
           </div>
         </div>

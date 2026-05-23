@@ -601,7 +601,15 @@ Browser `window.print()` loses all formatting, is browser-dependent, and require
 
 Cache savings estimate: `cache_read_tokens × ($3.00 − $0.30) / 1M × 1.55 AUD`.
 
-UI: Admin › Token Usage (`/admin/usage`). Period selector: 7d / 30d / 90d.
+### Operational signal layer
+
+`GET /api/admin/usage-warnings` returns warning banners for budget pace, high average agent cost, cache health, cost spikes, stale agents, and overkill model tier usage.
+
+`GET /api/admin/usage-intelligence` returns the management summary for Admin › Usage: health status, score, month-end forecast, 7-day daily average, daily budget pressure, top cost drivers, and recommended actions.
+
+Cache health diagnostics are contextual. Low-cache warnings name the largest low-cache input drivers and explain that low cache can be expected for document, live-data, and pre-fetch agents. Treat the warning as an optimisation pointer, not proof of a cache bug.
+
+UI: Admin › Token Usage (`/admin/usage`). Period selector: 7d / 30d / 90d. Opens with the Usage Health panel, then warnings, summary cards, daily chart, by-model table, and by-agent/tool table.
 
 ---
 

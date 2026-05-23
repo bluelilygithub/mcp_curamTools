@@ -249,7 +249,9 @@ Replaces `{{variable}}` placeholders in prompt templates. Pure function.
 Formats `intelligence_profile` into a prompt-ready account context block. Injected first in system prompt.
 
 ### UsageLogger
-Single write path to `usage_logs`. Called fire-and-forget from `createAgentRoute`.
+Single write path to `usage_logs`. Called fire-and-forget from `createAgentRoute`, conversation turns, and direct AI admin routes. It records model id, input/output tokens, prompt cache read/write tokens, and direct AUD cost so usage can be analysed by organisation, model, agent/tool, and day.
+
+Admin › Usage is no longer only an audit view over this table. `GET /api/admin/usage-stats?days=7|30|90` provides totals and breakdowns, `GET /api/admin/usage-warnings` turns recent usage into warning signals, and `GET /api/admin/usage-intelligence` produces a management summary with health status, score, month-end forecast, budget pressure, top cost drivers, and recommended actions. Low-cache diagnostics name the largest low-cache input drivers so expected document, live-data, or pre-fetch behaviour can be separated from accidental cache-breaking prompt design.
 
 ---
 
