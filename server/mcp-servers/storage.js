@@ -27,11 +27,17 @@ const {
   GetObjectCommand,
   DeleteObjectCommand,
   ListObjectsV2Command,
+  HeadObjectCommand,
 } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { Pool }         = require('pg');
+const crypto           = require('crypto');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+const configuredMaxUploadBytes = parseInt(process.env.STORAGE_MAX_UPLOAD_BYTES || '10485760', 10);
+const MAX_UPLOAD_BYTES = Number.isFinite(configuredMaxUploadBytes) && configuredMaxUploadBytes > 0
+  ? configuredMaxUploadBytes
+  : 10485760; // 10 MiB default
 
 // ── S3 client (shared, one region) ───────────────────────────────────────────
 
@@ -59,6 +65,75 @@ async function getStorageConfig(orgId) {
   };
 }
 
+function getTrustedOrgId(args) {
+  const orgId = parseInt(args.__trusted_org_id, 10);
+  if (!Number.isInteger(orgId) || orgId <= 0) {
+    throw new Error('Trusted organisation scope is required.');
+  }
+  return orgId;
+}
+
+function orgPrefix(orgId) {
+  return `org/${orgId}/`;
+}
+
+function assertOrgStorageKey(storageKey, orgId) {
+  const key = String(storageKey || '');
+  const prefix = orgPrefix(orgId);
+  if (!key.startsWith(prefix) || key.includes('..')) {
+    throw new Error('storage_key is outside the trusted organisation scope.');
+  }
+  return key;
+}
+
+function clampInt(value, fallback, min, max) {
+  const parsed = parseInt(value ?? fallback, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(parsed, max));
+}
+
+function safeFilename(filename) {
+  const raw = String(filename || 'file').slice(0, 160);
+  const safe = raw.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^_+/, '');
+  return safe || 'file';
+}
+
+function safeContentType(contentType) {
+  const value = String(contentType || '').trim().slice(0, 100);
+  if (!/^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$/i.test(value)) {
+    throw new Error('content_type must be a valid MIME type.');
+  }
+  return value.toLowerCase();
+}
+
+function decodeBase64Payload(dataBase64) {
+  if (typeof dataBase64 !== 'string') throw new Error('data_base64 must be a string.');
+  const clean = dataBase64.replace(/\s/g, '');
+  if (!clean || clean.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(clean)) {
+    throw new Error('data_base64 must be valid base64.');
+  }
+  const padding = clean.endsWith('==') ? 2 : clean.endsWith('=') ? 1 : 0;
+  const estimatedBytes = Math.floor((clean.length * 3) / 4) - padding;
+  if (estimatedBytes > MAX_UPLOAD_BYTES) {
+    throw new Error(`File exceeds maximum upload size of ${MAX_UPLOAD_BYTES} bytes.`);
+  }
+  const body = Buffer.from(clean, 'base64');
+  if (body.length > MAX_UPLOAD_BYTES) {
+    throw new Error(`File exceeds maximum upload size of ${MAX_UPLOAD_BYTES} bytes.`);
+  }
+  return body;
+}
+
+async function objectExists(client, bucket, key) {
+  try {
+    await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return true;
+  } catch (err) {
+    if (err?.$metadata?.httpStatusCode === 404 || err?.name === 'NotFound') return false;
+    throw err;
+  }
+}
+
 // ── Tool definitions ──────────────────────────────────────────────────────────
 
 const TOOLS = [
@@ -68,13 +143,12 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        org_id:       { type: 'number',  description: 'Organisation ID.' },
         filename:     { type: 'string',  description: 'Original filename including extension (e.g. invoice.pdf).' },
         content_type: { type: 'string',  description: 'MIME type of the file (e.g. application/pdf, image/png).' },
         data_base64:  { type: 'string',  description: 'Base64-encoded file bytes.' },
         label:        { type: 'string',  description: 'Optional human-readable label for this file.' },
       },
-      required: ['org_id', 'filename', 'content_type', 'data_base64'],
+      required: ['filename', 'content_type', 'data_base64'],
     },
   },
   {
@@ -83,11 +157,10 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        org_id:      { type: 'number', description: 'Organisation ID.' },
         storage_key: { type: 'string', description: 'The storageKey returned when the file was uploaded.' },
         expires_in:  { type: 'number', description: 'URL expiry in seconds. Default 3600 (1 hour). Max 86400 (24 hours).' },
       },
-      required: ['org_id', 'storage_key'],
+      required: ['storage_key'],
     },
   },
   {
@@ -96,10 +169,8 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        org_id:   { type: 'number', description: 'Organisation ID.' },
         max_keys: { type: 'number', description: 'Maximum number of results to return. Default 50, max 200.' },
       },
-      required: ['org_id'],
     },
   },
   {
@@ -108,10 +179,9 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        org_id:      { type: 'number', description: 'Organisation ID.' },
         storage_key: { type: 'string', description: 'The storageKey of the file to delete.' },
       },
-      required: ['org_id', 'storage_key'],
+      required: ['storage_key'],
     },
   },
 ];
@@ -119,7 +189,8 @@ const TOOLS = [
 // ── Tool handlers ─────────────────────────────────────────────────────────────
 
 async function callTool(name, args = {}) {
-  const { bucket, region } = await getStorageConfig(args.org_id);
+  const orgId = getTrustedOrgId(args);
+  const { bucket, region } = await getStorageConfig(orgId);
 
   if (!bucket) throw new Error('S3 bucket not configured — set AWS_S3_BUCKET env var or configure storage_settings');
   if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
@@ -131,42 +202,49 @@ async function callTool(name, args = {}) {
   switch (name) {
 
     case 'storage_put_file': {
-      const body = Buffer.from(args.data_base64, 'base64');
-      const ts   = Date.now();
-      const safe = (args.filename || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
-      const key  = `org/${args.org_id}/${ts}-${safe}`;
+      const body = decodeBase64Payload(args.data_base64);
+      const safe = safeFilename(args.filename);
+      const contentType = safeContentType(args.content_type);
+      const hash = crypto.createHash('sha256').update(safe).update('\0').update(body).digest('hex');
+      const key  = `${orgPrefix(orgId)}${hash}-${safe}`;
+      const duplicate = await objectExists(client, bucket, key);
+
+      if (duplicate) {
+        return { storageKey: key, size: body.length, duplicate: true };
+      }
 
       await client.send(new PutObjectCommand({
         Bucket:               bucket,
         Key:                  key,
         Body:                 body,
-        ContentType:          args.content_type,
+        ContentType:          contentType,
         ServerSideEncryption: 'AES256',
         Metadata: {
-          org_id:   String(args.org_id),
-          filename: args.filename,
-          ...(args.label ? { label: args.label } : {}),
+          org_id:   String(orgId),
+          filename: safe,
+          ...(args.label ? { label: String(args.label).slice(0, 120) } : {}),
         },
       }));
 
-      return { storageKey: key, bucket, size: body.length };
+      return { storageKey: key, size: body.length, duplicate: false };
     }
 
     case 'storage_get_file': {
-      const expiresIn = Math.min(args.expires_in ?? 3600, 86400);
-      const command   = new GetObjectCommand({ Bucket: bucket, Key: args.storage_key });
+      const storageKey = assertOrgStorageKey(args.storage_key, orgId);
+      const expiresIn = clampInt(args.expires_in, 3600, 60, 86400);
+      const command   = new GetObjectCommand({ Bucket: bucket, Key: storageKey });
       const url       = await getSignedUrl(client, command, { expiresIn });
       const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
-      return { url, expiresAt, storageKey: args.storage_key };
+      return { url, expiresAt, storageKey };
     }
 
     case 'storage_list_files': {
-      const maxKeys = Math.min(args.max_keys ?? 50, 200);
-      const prefix  = `org/${args.org_id}/`;
+      const maxKeys = clampInt(args.max_keys, 50, 1, 200);
+      const prefix  = orgPrefix(orgId);
       const res     = await client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, MaxKeys: maxKeys }));
       const files   = (res.Contents ?? []).map((obj) => ({
         storageKey:   obj.Key,
-        filename:     obj.Key.replace(prefix, '').replace(/^\d+-/, ''),
+        filename:     obj.Key.replace(prefix, '').replace(/^[a-f0-9]{64}-/, ''),
         size:         obj.Size,
         lastModified: obj.LastModified?.toISOString() ?? null,
       }));
@@ -174,8 +252,9 @@ async function callTool(name, args = {}) {
     }
 
     case 'storage_delete_file': {
-      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: args.storage_key }));
-      return { deleted: true, storageKey: args.storage_key };
+      const storageKey = assertOrgStorageKey(args.storage_key, orgId);
+      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: storageKey }));
+      return { deleted: true, storageKey };
     }
 
     default:

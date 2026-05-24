@@ -14,6 +14,21 @@ const { Pool }   = require('pg');
 const readline   = require('readline');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+const SUGGESTION_REVIEW_STATUSES = new Set(['pending', 'monitoring']);
+
+function getTrustedOrgId(args) {
+  const orgId = parseInt(args.__trusted_org_id, 10);
+  if (!Number.isInteger(orgId) || orgId <= 0) {
+    throw new Error('Trusted organisation scope is required.');
+  }
+  return orgId;
+}
+
+function clampInt(value, fallback, min, max) {
+  const parsed = parseInt(value ?? fallback, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(parsed, max));
+}
 
 // ── Tool definitions ──────────────────────────────────────────────────────────
 
@@ -23,10 +38,7 @@ const TOOLS = [
     description: 'Lists all agent slugs that have stored report history, with their run counts and most recent run date. Call this first to discover what historical data is available.',
     inputSchema: {
       type: 'object',
-      properties: {
-        org_id: { type: 'number', description: 'Organisation ID to scope results.' },
-      },
-      required: ['org_id'],
+      properties: {},
     },
   },
   {
@@ -35,13 +47,12 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        org_id:     { type: 'number', description: 'Organisation ID.' },
         slug:       { type: 'string', description: 'Agent slug (e.g. google-ads-monitor, google-ads-strategic-review, ads-attribution-summary). Use list_report_agents to find valid slugs.' },
         limit:      { type: 'number', description: 'Number of runs to return. Default 10, max 50.' },
         start_date: { type: 'string', description: 'Only include runs on or after this date (YYYY-MM-DD).' },
         end_date:   { type: 'string', description: 'Only include runs on or before this date (YYYY-MM-DD).' },
       },
-      required: ['org_id', 'slug'],
+      required: ['slug'],
     },
   },
   {
@@ -50,12 +61,11 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        org_id: { type: 'number', description: 'Organisation ID.' },
         query:  { type: 'string', description: 'Search terms (e.g. "CPA conversion rate", "brand campaign", "negative keywords").' },
         slug:   { type: 'string', description: 'Optional: restrict search to a specific agent slug.' },
         limit:  { type: 'number', description: 'Max results to return. Default 10.' },
       },
-      required: ['org_id', 'query'],
+      required: ['query'],
     },
   },
   {
@@ -63,10 +73,7 @@ const TOOLS = [
     description: 'Returns all suggestions for this org with status pending or monitoring, ordered by priority (high first) then created_at DESC. Used by the High Intent Advisor to review its own prior suggestions before generating new ones.',
     inputSchema: {
       type: 'object',
-      properties: {
-        org_id: { type: 'number', description: 'Organisation ID to scope results.' },
-      },
-      required: ['org_id'],
+      properties: {},
     },
   },
   {
@@ -75,13 +82,12 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        org_id:          { type: 'number', description: 'Organisation ID — must match the suggestion org.' },
         suggestion_id:   { type: 'string', description: 'UUID of the suggestion row.' },
         outcome_metrics: { type: 'object', description: 'Current metric values for comparison against baseline.' },
         outcome_notes:   { type: 'string', description: 'Agent assessment of whether this suggestion moved the needle.' },
         status:          { type: 'string', description: 'Updated status if appropriate: monitoring | pending.' },
       },
-      required: ['org_id', 'suggestion_id', 'outcome_metrics', 'outcome_notes'],
+      required: ['suggestion_id', 'outcome_metrics', 'outcome_notes'],
     },
   },
   {
@@ -90,10 +96,8 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        org_id: { type: 'number', description: 'Organisation ID to scope results.' },
         limit:  { type: 'number', description: 'Max rows to return. Default 100, max 200.' },
       },
-      required: ['org_id'],
     },
   },
   {
@@ -102,11 +106,10 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        org_id: { type: 'number', description: 'Organisation ID.' },
         slug:   { type: 'string', description: 'Agent slug whose prompt needs review (e.g. "google-ads-conversation").' },
         reason: { type: 'string', description: 'Concise explanation of why the prompt needs review (max 300 chars).' },
       },
-      required: ['org_id', 'slug', 'reason'],
+      required: ['slug', 'reason'],
     },
   },
 ];
@@ -114,6 +117,8 @@ const TOOLS = [
 // ── Tool handlers ─────────────────────────────────────────────────────────────
 
 async function callTool(name, args = {}) {
+  const orgId = getTrustedOrgId(args);
+
   switch (name) {
 
     case 'list_report_agents': {
@@ -128,7 +133,7 @@ async function callTool(name, args = {}) {
            AND status = 'complete'
          GROUP BY slug
          ORDER BY last_run DESC`,
-        [args.org_id]
+        [orgId]
       );
       return rows.map((r) => ({
         slug:           r.slug,
@@ -139,8 +144,8 @@ async function callTool(name, args = {}) {
     }
 
     case 'get_report_history': {
-      const limit = Math.min(args.limit || 10, 50);
-      const params = [args.org_id, args.slug];
+      const limit = clampInt(args.limit, 10, 1, 50);
+      const params = [orgId, args.slug];
       let sql = `
         SELECT
           id,
@@ -173,8 +178,8 @@ async function callTool(name, args = {}) {
     }
 
     case 'search_report_history': {
-      const limit = Math.min(args.limit || 10, 30);
-      const params = [args.org_id, args.query];
+      const limit = clampInt(args.limit, 10, 1, 30);
+      const params = [orgId, args.query];
       let sql = `
         SELECT
           id,
@@ -208,8 +213,6 @@ async function callTool(name, args = {}) {
     }
 
     case 'get_pending_suggestions': {
-      const { org_id } = args;
-      if (!org_id) throw new Error('org_id is required');
       const { rows } = await pool.query(
         `SELECT id, category, priority, suggestion_text, rationale, status,
                 baseline_metrics, outcome_notes, created_at, reviewed_at
@@ -217,32 +220,35 @@ async function callTool(name, args = {}) {
          WHERE org_id = $1 AND status IN ('pending', 'monitoring')
          ORDER BY CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
                   created_at DESC`,
-        [org_id]
+        [orgId]
       );
       return rows;
     }
 
     case 'update_suggestion_outcome': {
-      const { org_id, suggestion_id, outcome_metrics, outcome_notes, status } = args;
-      if (!org_id || !suggestion_id || !outcome_metrics || !outcome_notes) {
-        throw new Error('org_id, suggestion_id, outcome_metrics, and outcome_notes are required');
+      const { suggestion_id, outcome_metrics, status } = args;
+      const outcome_notes = String(args.outcome_notes || '').slice(0, 2000);
+      if (!suggestion_id || !outcome_metrics || !outcome_notes) {
+        throw new Error('suggestion_id, outcome_metrics, and outcome_notes are required');
       }
-      await pool.query(
+      if (status && !SUGGESTION_REVIEW_STATUSES.has(status)) {
+        throw new Error('status must be pending or monitoring');
+      }
+      const result = await pool.query(
         `UPDATE agent_suggestions
          SET outcome_metrics = $1,
              outcome_notes   = $2,
              reviewed_at     = now(),
              status          = COALESCE($3, status)
          WHERE id = $4 AND org_id = $5`,
-        [outcome_metrics, outcome_notes, status ?? null, suggestion_id, org_id]
+        [outcome_metrics, outcome_notes, status ?? null, suggestion_id, orgId]
       );
+      if (result.rowCount === 0) throw new Error('Suggestion not found for this organisation');
       return { updated: true, suggestion_id };
     }
 
     case 'get_suggestion_history': {
-      const { org_id, limit } = args;
-      if (!org_id) throw new Error('org_id is required');
-      const cap = Math.min(limit || 100, 200);
+      const cap = clampInt(args.limit, 100, 1, 200);
       const { rows } = await pool.query(
         `SELECT user_action, user_reason, outcome_notes, outcome_metrics,
                 baseline_metrics, created_at, acted_on_at, reviewed_at,
@@ -251,17 +257,18 @@ async function callTool(name, args = {}) {
          WHERE org_id = $1
          ORDER BY created_at DESC
          LIMIT $2`,
-        [org_id, cap]
+        [orgId, cap]
       );
       return rows;
     }
 
     case 'flag_prompt_for_review': {
-      const { org_id, slug, reason } = args;
-      if (!org_id || !slug || !reason) throw new Error('org_id, slug, and reason are required');
+      const slug = String(args.slug || '').trim().slice(0, 120);
+      const reason = String(args.reason || '').trim().slice(0, 300);
+      if (!slug || !reason) throw new Error('slug and reason are required');
       await pool.query(
         `INSERT INTO prompt_flags (org_id, slug, reason) VALUES ($1, $2, $3)`,
-        [org_id, slug, reason]
+        [orgId, slug, reason]
       );
       return { flagged: true, slug, reason };
     }

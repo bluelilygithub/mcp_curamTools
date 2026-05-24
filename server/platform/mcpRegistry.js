@@ -186,8 +186,18 @@ class MCPRegistryClass extends EventEmitter {
     const server = await this.get(orgId, serverId);
     if (!server) throw new Error(`MCP server ${serverId} not found for this organisation`);
 
+    const scopedParams = method === 'tools/call' && server.transport_type === 'stdio'
+      ? {
+          ...params,
+          arguments: {
+            ...(params?.arguments && typeof params.arguments === 'object' ? params.arguments : {}),
+            __trusted_org_id: orgId,
+          },
+        }
+      : params;
+
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const message = { jsonrpc: '2.0', id, method, params };
+    const message = { jsonrpc: '2.0', id, method, params: scopedParams };
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {

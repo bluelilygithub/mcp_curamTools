@@ -20,6 +20,20 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejec
 const EMBED_MODEL = 'text-embedding-3-small';
 const MAX_CHARS   = 30000;
 
+function getTrustedOrgId(args) {
+  const orgId = parseInt(args.__trusted_org_id, 10);
+  if (!Number.isInteger(orgId) || orgId <= 0) {
+    throw new Error('Trusted organisation scope is required.');
+  }
+  return orgId;
+}
+
+function clampInt(value, fallback, min, max) {
+  const parsed = parseInt(value ?? fallback, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(parsed, max));
+}
+
 // ── Embedding helper ──────────────────────────────────────────────────────────
 
 function fetchEmbedding(text) {
@@ -67,12 +81,11 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        org_id:      { type: 'number', description: 'Organisation ID.' },
         query:       { type: 'string', description: 'Natural language query — what you are looking for.' },
         source_type: { type: 'string', description: 'Optional filter: "agent_run" for report history, "document" for manually added docs.' },
         limit:       { type: 'number', description: 'Max results to return. Default 8.' },
       },
-      required: ['org_id', 'query'],
+      required: ['query'],
     },
   },
   {
@@ -81,12 +94,11 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        org_id:   { type: 'number', description: 'Organisation ID.' },
         title:    { type: 'string', description: 'Document title.' },
         content:  { type: 'string', description: 'Full document text.' },
         category: { type: 'string', description: 'Optional category label (e.g. "product", "competitor", "sop").' },
       },
-      required: ['org_id', 'title', 'content'],
+      required: ['title', 'content'],
     },
   },
   {
@@ -94,10 +106,7 @@ const TOOLS = [
     description: 'Lists what is indexed in the knowledge base — source types, counts, and most recent entry dates.',
     inputSchema: {
       type: 'object',
-      properties: {
-        org_id: { type: 'number', description: 'Organisation ID.' },
-      },
-      required: ['org_id'],
+      properties: {},
     },
   },
 ];
@@ -105,14 +114,18 @@ const TOOLS = [
 // ── Tool handlers ─────────────────────────────────────────────────────────────
 
 async function callTool(name, args = {}) {
+  const orgId = getTrustedOrgId(args);
+
   switch (name) {
 
     case 'search_knowledge': {
-      const limit  = Math.min(args.limit || 8, 20);
-      const vector = await fetchEmbedding(args.query);
+      const query = String(args.query || '').trim().slice(0, MAX_CHARS);
+      if (!query) throw new Error('query is required');
+      const limit  = clampInt(args.limit, 8, 1, 20);
+      const vector = await fetchEmbedding(query);
       const vecStr = `[${vector.join(',')}]`;
 
-      const params = [args.org_id, vecStr, limit];
+      const params = [orgId, vecStr, limit];
       let sql = `
         SELECT
           id,
@@ -138,9 +151,11 @@ async function callTool(name, args = {}) {
     }
 
     case 'add_document': {
-      const content  = args.content;
-      const metadata = { title: args.title, category: args.category ?? null, added_at: new Date().toISOString() };
-      const sourceId = `doc_${args.title.toLowerCase().replace(/\W+/g, '_').slice(0, 60)}`;
+      const content  = String(args.content || '').slice(0, MAX_CHARS);
+      const title = String(args.title || '').trim().slice(0, 160);
+      if (!title || !content) throw new Error('title and content are required');
+      const metadata = { title, category: args.category ? String(args.category).slice(0, 80) : null, added_at: new Date().toISOString() };
+      const sourceId = `doc_${title.toLowerCase().replace(/\W+/g, '_').slice(0, 60)}`;
 
       const vector = await fetchEmbedding(content);
       const vecStr = `[${vector.join(',')}]`;
@@ -150,10 +165,10 @@ async function callTool(name, args = {}) {
          VALUES ($1, 'document', $2, $3, $4, $5::vector)
          ON CONFLICT (org_id, source_type, source_id)
          DO UPDATE SET content = EXCLUDED.content, metadata = EXCLUDED.metadata, embedding = EXCLUDED.embedding`,
-        [args.org_id, sourceId, content, JSON.stringify(metadata), vecStr]
+        [orgId, sourceId, content, JSON.stringify(metadata), vecStr]
       );
 
-      return { ok: true, source_id: sourceId, title: args.title };
+      return { ok: true, source_id: sourceId, title };
     }
 
     case 'list_knowledge_sources': {
@@ -167,7 +182,7 @@ async function callTool(name, args = {}) {
          WHERE org_id = $1
          GROUP BY source_type, metadata->>'category'
          ORDER BY source_type, count DESC`,
-        [args.org_id]
+        [orgId]
       );
       return rows;
     }

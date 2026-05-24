@@ -17,6 +17,26 @@ const { GoogleAdsService } = require('../services/GoogleAdsService');
 
 const ads = new GoogleAdsService();
 
+function normaliseCustomerId(customerId) {
+  return String(customerId || '').replace(/-/g, '').trim();
+}
+
+const ALLOWED_CUSTOMER_IDS = new Set([
+  normaliseCustomerId(process.env.GOOGLE_ADS_CUSTOMER_ID),
+  ...(process.env.GOOGLE_ADS_ALLOWED_CUSTOMER_IDS || '')
+    .split(',')
+    .map(normaliseCustomerId),
+].filter(Boolean));
+
+function resolveCustomerId(args) {
+  const customerId = normaliseCustomerId(args.customer_id);
+  if (!customerId) return null;
+  if (!ALLOWED_CUSTOMER_IDS.has(customerId)) {
+    throw new Error('customer_id is not allowed for this Google Ads MCP server.');
+  }
+  return customerId;
+}
+
 // ── Shared input schema fragments ─────────────────────────────────────────────
 
 const dateRangeProps = {
@@ -34,7 +54,7 @@ const dateRangeProps = {
   },
   customer_id: {
     type:        'string',
-    description: 'Override the default Google Ads customer ID for multi-account runs.',
+    description: 'Configured Google Ads customer ID override. Must be listed in GOOGLE_ADS_ALLOWED_CUSTOMER_IDS.',
   },
 };
 
@@ -210,7 +230,7 @@ const RESOURCES = [
 // ── Tool handlers ─────────────────────────────────────────────────────────────
 
 async function callTool(name, args = {}) {
-  const cid = args.customer_id ?? null;
+  const cid = resolveCustomerId(args);
 
   switch (name) {
     case 'ads_get_campaign_performance':

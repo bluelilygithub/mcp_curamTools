@@ -18,6 +18,21 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-25 — MCP Scope Guardrails
+
+### Built
+- **Trusted MCP org scope:** `MCPRegistry.send()` now injects trusted org scope into stdio tool calls, and internal Platform, Knowledge Base, and Storage MCP servers use that scope instead of model-supplied `org_id` arguments.
+- **Storage hardening:** Storage tools now enforce org-prefixed keys, cap base64 uploads before decode, validate MIME type/filenames, clamp list/URL expiry limits, and use hash-based duplicate detection for uploads.
+- **Google Ads account guardrail:** Google Ads MCP `customer_id` overrides now require the configured default account or `GOOGLE_ADS_ALLOWED_CUSTOMER_IDS`.
+
+### Fixed / discovered
+- `update_suggestion_outcome` no longer reports success when no suggestion row was updated, and now validates review status values.
+
+### Open / next
+- Add output projection/validation for high-volume MCP responses and plan scoped DB roles before expanding MCP query/write surfaces.
+
+---
+
 ## 2026-05-24 — Agent Route Factory Helpers
 
 ### Built
