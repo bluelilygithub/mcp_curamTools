@@ -9,7 +9,7 @@ This file documents all platform-level abstractions in MCP CuramTools. These are
 **Type:** Route Factory  
 **Location:** `server/platform/createAgentRoute.js`
 
-Returns an Express router with `POST /run` (SSE) and `GET /history` endpoints wired with auth, SSE plumbing, admin config enforcement, run persistence, and error handling.
+Returns an Express router with `POST /run` (SSE), `GET /history`, and `GET /dependencies` endpoints wired with auth, SSE plumbing, admin config enforcement, run persistence, dependency awareness, budget checks, trust review metadata, and error handling.
 
 **Interface:**
 ```js
@@ -24,8 +24,23 @@ createAgentRoute({ slug, runFn, requiredPermission })
 |---|---|---|
 | `POST /run` | requireAuth + requireRole | Loads admin config, checks kill switch, streams SSE, and calls Lessons Repository write-back after a successful persisted run when a reusable lesson/pattern is present |
 | `GET /history` | requireAuth | Returns last 20 `agent_runs` rows for this slug + org |
+| `GET /dependencies` | requireAuth | Returns declared report dependency status for this slug + org |
 
 **SSE result payload:** On successful completion, the final `{ type: 'result', data }` message’s `data` object includes **`runId`** (the UUID of the `agent_runs` row). Clients use it for immediate follow-up calls such as `PATCH /api/demo/runs/:runId/...`. **`runId` is not written into persisted `agent_runs.result` JSON** — only the streamed envelope carries it.
+
+**Factory helpers:** `createAgentRoute.js` now exports the reusable helpers that make up the route factory flow:
+- `createProgressEmitter` — SSE `emit` / `done` helpers and progress capture.
+- `loadRunConfig` — resolved admin config plus agent operator config.
+- `checkAgentAccess` — structured per-agent access decision.
+- `startAgentRun` — initial `running` row creation.
+- `resolveRunDependencies` — report-chain dependency lookup, prompt context, and warnings.
+- `loadBudgetContext` — task/daily budget limits and pre-flight budget check.
+- `createBudgetAwareEmitter` — mid-run token cost checks composed on top of progress emission.
+- `buildRunContext` — stable `runFn` context object.
+- `buildResultPayload` — central result serialisation for summaries, tool data, suggestions, trust metadata, prompt versions, costs, and dependencies.
+- `finalizeAgentRun` — final persistence plus lesson proposal, usage logging, and embedding indexing.
+
+The current `POST /run` route uses these helpers directly, so the abstraction is not just future scaffolding. It keeps the factory behaviour consistent while making the cross-cutting steps easier to test and reuse.
 
 **Budget integration:** Pre-flight daily budget check, mid-run accumulation via `emit(text, partialTokensUsed)`, post-run definitive check. `costAud` added to `resultPayload`.
 

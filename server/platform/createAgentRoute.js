@@ -68,6 +68,264 @@ function extractSuggestions(text) {
   }));
 }
 
+function createProgressEmitter({ res, progressLog }) {
+  const emit = (type, payload) => {
+    res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
+    if (type === 'progress') {
+      progressLog.push({ ts: new Date().toISOString(), text: payload.text });
+    }
+  };
+
+  const done = () => {
+    res.write('data: [DONE]\n\n');
+    res.end();
+  };
+
+  return { emit, done };
+}
+
+async function loadRunConfig({ slug, orgId }) {
+  const adminConfig = await AgentConfigService.getResolvedAdminConfig(slug, orgId);
+  if (!adminConfig.model) {
+    console.warn(`[${slug}] No per-agent model and no org default model (orgId=${orgId}) — check Settings > Models`);
+  }
+
+  let agentConfig;
+  try {
+    agentConfig = await AgentConfigService.getAgentConfig(orgId, slug);
+  } catch {
+    agentConfig = {};
+  }
+
+  return { adminConfig, agentConfig };
+}
+
+async function checkAgentAccess({ userId, requiredPermission, allowedRoles }) {
+  const permitted = await canRunAgent(userId, requiredPermission, allowedRoles);
+  return {
+    permitted,
+    reason: permitted ? null : 'Insufficient permissions.',
+  };
+}
+
+async function startAgentRun({ slug, orgId, startTime }) {
+  return persistRun({ slug, orgId, status: 'running', runAt: startTime });
+}
+
+async function resolveRunDependencies({ slug, orgId, userId, selections, emit }) {
+  try {
+    const resolved = await ReportDependencyService.resolveDependencies({
+      slug,
+      orgId,
+      userId,
+      selections,
+    });
+    const reportDependencies = resolved.dependencies;
+    const reportDependencyWarnings = resolved.warnings;
+    const reportDependencyContext = ReportDependencyService.buildDependencyPromptContext(
+      reportDependencies,
+      reportDependencyWarnings
+    );
+
+    for (const dependency of reportDependencies) {
+      emit('progress', { text: `Using ${dependency.label} from ${new Date(dependency.runAt).toLocaleDateString('en-AU')} as report dependency.` });
+    }
+    for (const warning of reportDependencyWarnings) {
+      if (warning.reason === 'stale') {
+        emit('progress', { text: `${warning.label} dependency is ${warning.ageDays} days old; proceeding with caution.` });
+      }
+      if (warning.reason === 'needs_review') {
+        emit('progress', { text: `${warning.label} dependency is marked needs_review; inherited reasoning is unverified.` });
+      }
+    }
+
+    return { reportDependencyContext, reportDependencies, reportDependencyWarnings };
+  } catch (depErr) {
+    if (depErr.name === 'ReportDependencyError') throw depErr;
+    console.warn(`[${slug}] report dependency resolution skipped:`, depErr.message);
+    return {
+      reportDependencyContext: '',
+      reportDependencies: [],
+      reportDependencyWarnings: [],
+    };
+  }
+}
+
+async function loadBudgetContext({ slug, orgId, adminConfig }) {
+  const budgetContext = {
+    maxTaskBudgetAud: adminConfig.max_task_budget_aud ?? null,
+    maxDailyBudgetAud: null,
+    dailyOrgSpendAud: 0,
+  };
+
+  try {
+    const orgBudget = await AgentConfigService.getOrgBudgetSettings(orgId);
+    budgetContext.maxDailyBudgetAud = orgBudget.max_daily_org_budget_aud ?? null;
+    if (budgetContext.maxDailyBudgetAud != null) {
+      budgetContext.dailyOrgSpendAud = await CostGuardService.getDailyOrgSpendAud(orgId);
+      // Pre-flight: if org is already over daily budget, abort before the run starts
+      CostGuardService.check({
+        taskCostAud: 0,
+        maxTaskBudgetAud: null,
+        dailyOrgSpendAud: budgetContext.dailyOrgSpendAud,
+        maxDailyBudgetAud: budgetContext.maxDailyBudgetAud,
+      });
+    }
+  } catch (budgetErr) {
+    if (budgetErr.name === 'BudgetExceededError') throw budgetErr;
+    // Non-budget errors loading budget config are non-fatal — proceed without limit
+    console.error(`[${slug}] budget config load error:`, budgetErr.message);
+  }
+
+  return budgetContext;
+}
+
+function createBudgetAwareEmitter({ emit, adminConfig, budgetContext, taskCostTracker }) {
+  return (text, partialTokensUsed) => {
+    emit('progress', { text });
+    if (partialTokensUsed) {
+      taskCostTracker.value += CostGuardService.computeCostAud(partialTokensUsed, adminConfig.model);
+      CostGuardService.check({
+        taskCostAud: taskCostTracker.value,
+        maxTaskBudgetAud: budgetContext.maxTaskBudgetAud,
+        dailyOrgSpendAud: budgetContext.dailyOrgSpendAud,
+        maxDailyBudgetAud: budgetContext.maxDailyBudgetAud,
+      });
+    }
+  };
+}
+
+function buildRunContext({
+  orgId,
+  userId,
+  agentConfig,
+  adminConfig,
+  runtimePromptContext,
+  reportDependencies,
+  reportDependencyWarnings,
+  reportDependencyContext,
+  req,
+  emit,
+}) {
+  return {
+    orgId,
+    userId,
+    config: agentConfig,
+    adminConfig,
+    runtimePromptContext,
+    reportDependencies,
+    reportDependencyWarnings,
+    reportDependencyContext,
+    req,
+    emit,
+  };
+}
+
+function buildResultPayload({
+  slug,
+  result,
+  trace,
+  tokensUsed,
+  adminConfig,
+  req,
+  progressLog,
+  reportDependencies,
+  reportDependencyWarnings,
+  taskCostAud,
+  promptVersion,
+}) {
+  const toolData   = extractToolData(trace);
+  const resultData = result?.data ?? {};
+  const { data_gap_sources: resultDataGapSources = {}, ...persistableResultData } = resultData;
+  const dataGapSources = {
+    ...summariseDataGapSources(toolData),
+    ...resultDataGapSources,
+  };
+  const suggestions = extractSuggestions(result?.summary ?? '');
+  const dataGapCheck = buildDataGapReview({
+    slug,
+    summary: result?.summary ?? '',
+    evidenceSources: dataGapSources,
+  });
+  const boundsFailed = [
+    ...validateToolData(toolData),
+    ...dataGapCheck.boundsFailed,
+    ...(result?.boundsFailed ?? []),
+  ];
+  const runStatus  = boundsFailed.length > 0 ? 'needs_review' : 'complete';
+
+  const resultPayload = mergePromptVersionIntoResult(
+    {
+      summary:   result?.summary ?? '',
+      data:      { ...toolData, ...persistableResultData },
+      suggestions,
+      ...(dataGapCheck.applies && {
+        data_gaps: dataGapCheck.dataGaps,
+        data_gap_review: dataGapCheck.dataGapReview,
+      }),
+      tokensUsed: tokensUsed ?? {},
+      costAud:   taskCostAud,
+      model:     adminConfig.model ?? null,
+      startDate: req.body.startDate ?? null,
+      endDate:   req.body.endDate   ?? null,
+      progressLog,
+      ...(reportDependencies.length > 0 && {
+        report_dependencies: reportDependencies.map(({ summary: _summary, ...dependency }) => dependency),
+        report_dependency_warnings: reportDependencyWarnings,
+      }),
+      // Capture prompt/response for Decision Log display
+      prompt_text:  result?.prompt_text  ?? null,
+      response_text: result?.response_text ?? null,
+      ...(boundsFailed.length > 0 && { boundsFailed }),
+    },
+    promptVersion,
+  );
+
+  return { resultPayload, runStatus };
+}
+
+async function finalizeAgentRun({
+  slug,
+  orgId,
+  userId,
+  runId,
+  runStatus,
+  resultPayload,
+  tokensUsed,
+  adminConfig,
+  taskCostAud,
+}) {
+  await persistRun({ slug, orgId, status: runStatus, result: resultPayload, runId });
+
+  // Reflection write-back is review-only: proposals are saved under-review
+  // and never injected into future runs until an admin activates them.
+  proposeLessonFromRun({
+    agentId: slug,
+    organisationId: orgId,
+    runId,
+    summary: resultPayload.summary,
+  }).catch((e) => console.warn(`[${slug}] lesson proposal skipped:`, e.message));
+
+  logUsage({ orgId, userId, slug, modelId: adminConfig.model, tokensUsed: tokensUsed ?? {}, costAud: taskCostAud })
+    .catch(err => console.error(`[${slug}] usage log error:`, err.message));
+
+  // Auto-index summary for RAG — fire and forget, never blocks the response
+  if (resultPayload.summary && process.env.OPENAI_API_KEY) {
+    EmbeddingService.embedAndStore({
+      orgId,
+      sourceType: 'agent_run',
+      sourceId:   runId,
+      content:    resultPayload.summary,
+      metadata: {
+        slug,
+        run_at:    new Date().toISOString(),
+        startDate: resultPayload.startDate ?? null,
+        endDate:   resultPayload.endDate   ?? null,
+      },
+    }).catch((e) => console.warn(`[${slug}] embedding failed (non-fatal):`, e.message));
+  }
+}
+
 // ── Factory ────────────────────────────────────────────────────────────────
 
 /**
@@ -95,41 +353,31 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
       res.setHeader('X-Accel-Buffering', 'no');
       res.flushHeaders();
 
-      const emit = (type, payload) => {
-        res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
-        if (type === 'progress') {
-          progressLog.push({ ts: new Date().toISOString(), text: payload.text });
-        }
-      };
-      const done = () => {
-        res.write('data: [DONE]\n\n');
-        res.end();
-      };
-
       const { orgId, id: userId } = req.user;
       const startTime = new Date();
 
       // Accumulate progress messages for auditing — saved into the run record on completion
       const progressLog = [];
+      const { emit, done } = createProgressEmitter({ res, progressLog });
       let runId;
 
-      // Load admin config and check kill switch
       let adminConfig;
+      let agentConfig;
       try {
-        adminConfig = await AgentConfigService.getResolvedAdminConfig(slug, orgId);
-        if (!adminConfig.model) {
-          console.warn(`[${slug}] No per-agent model and no org default model (orgId=${orgId}) — check Settings > Models`);
-        }
+        ({ adminConfig, agentConfig } = await loadRunConfig({ slug, orgId }));
       } catch (cfgErr) {
-
         emit('error', { error: 'Failed to load agent config' });
         await persistRun({ slug, orgId, status: 'error', error: cfgErr.message, runId });
         return done();
       }
 
-      const permitted = await canRunAgent(userId, requiredPermission, adminConfig.allowed_roles);
-      if (!permitted) {
-        emit('error', { error: 'Insufficient permissions.' });
+      const access = await checkAgentAccess({
+        userId,
+        requiredPermission,
+        allowedRoles: adminConfig.allowed_roles,
+      });
+      if (!access.permitted) {
+        emit('error', { error: access.reason });
         return done();
       }
 
@@ -140,80 +388,51 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
 
       // Insert initial 'running' row only after config/access checks pass.
       try {
-        runId = await persistRun({ slug, orgId, status: 'running', runAt: startTime });
+        runId = await startAgentRun({ slug, orgId, startTime });
       } catch (dbErr) {
         emit('error', { error: 'Failed to record run start' });
         return done();
-      }
-
-      // Load operator config
-      let agentConfig;
-      try {
-        agentConfig = await AgentConfigService.getAgentConfig(orgId, slug);
-      } catch (cfgErr) {
-        agentConfig = {};
       }
 
       let reportDependencyContext = '';
       let reportDependencies = [];
       let reportDependencyWarnings = [];
       try {
-        const resolved = await ReportDependencyService.resolveDependencies({
+        ({
+          reportDependencyContext,
+          reportDependencies,
+          reportDependencyWarnings,
+        } = await resolveRunDependencies({
           slug,
           orgId,
           userId,
           selections: req.body.reportDependencies ?? req.body.report_dependency_run_ids ?? null,
-        });
-        reportDependencies = resolved.dependencies;
-        reportDependencyWarnings = resolved.warnings;
-        reportDependencyContext = ReportDependencyService.buildDependencyPromptContext(
-          reportDependencies,
-          reportDependencyWarnings
-        );
-        for (const dependency of reportDependencies) {
-          emit('progress', { text: `Using ${dependency.label} from ${new Date(dependency.runAt).toLocaleDateString('en-AU')} as report dependency.` });
-        }
-        for (const warning of reportDependencyWarnings) {
-          if (warning.reason === 'stale') {
-            emit('progress', { text: `${warning.label} dependency is ${warning.ageDays} days old; proceeding with caution.` });
-          }
-          if (warning.reason === 'needs_review') {
-            emit('progress', { text: `${warning.label} dependency is marked needs_review; inherited reasoning is unverified.` });
-          }
-        }
+          emit,
+        }));
       } catch (depErr) {
-        if (depErr.name === 'ReportDependencyError') {
-          emit('error', { error: depErr.message, details: depErr.details });
-          await persistRun({ slug, orgId, status: 'error', error: depErr.message, runId });
-          return done();
-        }
-        console.warn(`[${slug}] report dependency resolution skipped:`, depErr.message);
+        emit('error', { error: depErr.message, details: depErr.details });
+        await persistRun({ slug, orgId, status: 'error', error: depErr.message, runId });
+        return done();
       }
 
       // Budget setup — load once, check as a pure function during the run
-      const maxTaskBudgetAud = adminConfig.max_task_budget_aud ?? null;
-      let maxDailyBudgetAud = null;
-      let dailyOrgSpendAud = 0;
+      let budgetContext;
       try {
-        const orgBudget = await AgentConfigService.getOrgBudgetSettings(orgId);
-        maxDailyBudgetAud = orgBudget.max_daily_org_budget_aud ?? null;
-        if (maxDailyBudgetAud != null) {
-          dailyOrgSpendAud = await CostGuardService.getDailyOrgSpendAud(orgId);
-          // Pre-flight: if org is already over daily budget, abort before the run starts
-          CostGuardService.check({ taskCostAud: 0, maxTaskBudgetAud: null, dailyOrgSpendAud, maxDailyBudgetAud });
-        }
+        budgetContext = await loadBudgetContext({ slug, orgId, adminConfig });
       } catch (budgetErr) {
-        if (budgetErr.name === 'BudgetExceededError') {
-          emit('error', { error: budgetErr.message });
-          await persistRun({ slug, orgId, status: 'error', error: budgetErr.message, runId });
-          return done();
-        }
-        // Non-budget errors loading budget config are non-fatal — proceed without limit
-        console.error(`[${slug}] budget config load error:`, budgetErr.message);
+        emit('error', { error: budgetErr.message });
+        await persistRun({ slug, orgId, status: 'error', error: budgetErr.message, runId });
+        return done();
       }
 
       // Accumulated task cost tracker — updated by the emit callback below
-      let taskCostAud = 0;
+      const taskCostTracker = { value: 0 };
+      const agentEmit = createBudgetAwareEmitter({
+        emit,
+        adminConfig,
+        budgetContext,
+        taskCostTracker,
+      });
 
       // Run the agent
       try {
@@ -225,10 +444,10 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
           console.warn(`[${slug}] lessons load skipped:`, err.message);
         }
 
-        const { result, trace, tokensUsed, promptVersion } = await runFn({
+        const { result, trace, tokensUsed, promptVersion } = await runFn(buildRunContext({
           orgId,
           userId,
-          config: agentConfig,
+          agentConfig,
           adminConfig,
           runtimePromptContext,
           reportDependencies,
@@ -237,98 +456,46 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
           req,
           // Extended emit: agents may optionally pass tokensUsed to trigger mid-run budget checks.
           // Agents that don't pass tokensUsed still work — cost tracking simply won't accumulate mid-run.
-          emit: (text, partialTokensUsed) => {
-            emit('progress', { text });
-            if (partialTokensUsed) {
-              taskCostAud += CostGuardService.computeCostAud(partialTokensUsed, adminConfig.model);
-              CostGuardService.check({ taskCostAud, maxTaskBudgetAud, dailyOrgSpendAud, maxDailyBudgetAud });
-            }
-          },
-        });
+          emit: agentEmit,
+        }));
 
         // Post-run budget check using final tokensUsed (catches agents that don't emit partial costs)
         if (tokensUsed) {
           const finalCostAud = CostGuardService.computeCostAud(tokensUsed, adminConfig.model);
-          taskCostAud = Math.max(taskCostAud, finalCostAud); // use final if higher than accumulated
-          CostGuardService.check({ taskCostAud, maxTaskBudgetAud, dailyOrgSpendAud, maxDailyBudgetAud });
+          taskCostTracker.value = Math.max(taskCostTracker.value, finalCostAud); // use final if higher than accumulated
+          CostGuardService.check({
+            taskCostAud: taskCostTracker.value,
+            maxTaskBudgetAud: budgetContext.maxTaskBudgetAud,
+            dailyOrgSpendAud: budgetContext.dailyOrgSpendAud,
+            maxDailyBudgetAud: budgetContext.maxDailyBudgetAud,
+          });
         }
 
-        const toolData   = extractToolData(trace);
-        const resultData = result?.data ?? {};
-        const { data_gap_sources: resultDataGapSources = {}, ...persistableResultData } = resultData;
-        const dataGapSources = {
-          ...summariseDataGapSources(toolData),
-          ...resultDataGapSources,
-        };
-        const suggestions = extractSuggestions(result?.summary ?? '');
-        const dataGapCheck = buildDataGapReview({
+        const { resultPayload, runStatus } = buildResultPayload({
           slug,
-          summary: result?.summary ?? '',
-          evidenceSources: dataGapSources,
-        });
-        const boundsFailed = [
-          ...validateToolData(toolData),
-          ...dataGapCheck.boundsFailed,
-          ...(result?.boundsFailed ?? []),
-        ];
-        const runStatus  = boundsFailed.length > 0 ? 'needs_review' : 'complete';
-
-        const resultPayload = mergePromptVersionIntoResult(
-          {
-            summary:   result?.summary ?? '',
-            data:      { ...toolData, ...persistableResultData },
-            suggestions,
-            ...(dataGapCheck.applies && {
-              data_gaps: dataGapCheck.dataGaps,
-              data_gap_review: dataGapCheck.dataGapReview,
-            }),
-            tokensUsed: tokensUsed ?? {},
-            costAud:   taskCostAud,
-            model:     adminConfig.model ?? null,
-            startDate: req.body.startDate ?? null,
-            endDate:   req.body.endDate   ?? null,
-            progressLog,
-            ...(reportDependencies.length > 0 && {
-              report_dependencies: reportDependencies.map(({ summary: _summary, ...dependency }) => dependency),
-              report_dependency_warnings: reportDependencyWarnings,
-            }),
-            // Capture prompt/response for Decision Log display
-            prompt_text:  result?.prompt_text  ?? null,
-            response_text: result?.response_text ?? null,
-            ...(boundsFailed.length > 0 && { boundsFailed }),
-          },
+          result,
+          trace,
+          tokensUsed,
+          adminConfig,
+          req,
+          progressLog,
+          reportDependencies,
+          reportDependencyWarnings,
+          taskCostAud: taskCostTracker.value,
           promptVersion,
-        );
+        });
 
-        await persistRun({ slug, orgId, status: runStatus, result: resultPayload, runId });
-
-        // Reflection write-back is review-only: proposals are saved under-review
-        // and never injected into future runs until an admin activates them.
-        proposeLessonFromRun({
-          agentId: slug,
-          organisationId: orgId,
+        await finalizeAgentRun({
+          slug,
+          orgId,
+          userId,
           runId,
-          summary: resultPayload.summary,
-        }).catch((e) => console.warn(`[${slug}] lesson proposal skipped:`, e.message));
-
-        logUsage({ orgId, userId, slug, modelId: adminConfig.model, tokensUsed: tokensUsed ?? {}, costAud: taskCostAud })
-          .catch(err => console.error(`[${slug}] usage log error:`, err.message));
-
-        // Auto-index summary for RAG — fire and forget, never blocks the response
-        if (resultPayload.summary && process.env.OPENAI_API_KEY) {
-          EmbeddingService.embedAndStore({
-            orgId,
-            sourceType: 'agent_run',
-            sourceId:   runId,
-            content:    resultPayload.summary,
-            metadata: {
-              slug,
-              run_at:    new Date().toISOString(),
-              startDate: resultPayload.startDate ?? null,
-              endDate:   resultPayload.endDate   ?? null,
-            },
-          }).catch((e) => console.warn(`[${slug}] embedding failed (non-fatal):`, e.message));
-        }
+          runStatus,
+          resultPayload,
+          tokensUsed,
+          adminConfig,
+          taskCostAud: taskCostTracker.value,
+        });
 
         // Include runId on the streamed payload so clients can PATCH review endpoints
         // before reloading from GET /demo/runs/:id (persisted result omits this envelope field).
@@ -380,4 +547,18 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
   return router;
 }
 
-module.exports = { createAgentRoute, extractToolData, extractSuggestions };
+module.exports = {
+  createAgentRoute,
+  extractToolData,
+  extractSuggestions,
+  createProgressEmitter,
+  loadRunConfig,
+  checkAgentAccess,
+  startAgentRun,
+  resolveRunDependencies,
+  loadBudgetContext,
+  createBudgetAwareEmitter,
+  buildRunContext,
+  buildResultPayload,
+  finalizeAgentRun,
+};

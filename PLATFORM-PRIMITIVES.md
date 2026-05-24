@@ -16,7 +16,7 @@ These files are the source of truth. The documents below derive from them and re
 ### createAgentRoute
 **Type:** Route Factory
 **Location:** `server/platform/createAgentRoute.js`
-**What it does:** Returns an Express router with `POST /run` (SSE) and `GET /history` endpoints wired with auth, SSE plumbing, admin config enforcement, run persistence, and error handling — zero agent-specific code.
+**What it does:** Returns an Express router with `POST /run` (SSE), `GET /history`, and `GET /dependencies` endpoints wired with auth, SSE plumbing, admin config enforcement, run persistence, dependency awareness, budget checks, trust review metadata, and error handling — zero agent-specific code.
 **Interface:**
 ```js
 createAgentRoute({ slug, runFn, requiredPermission })
@@ -30,12 +30,25 @@ Returns an Express router. Two endpoints are registered:
 |---|---|---|
 | `POST /run` | requireAuth + requirePermission(requiredPermission) | Loads admin config, checks kill switch, streams SSE: `{ type: 'progress', text }` → `{ type: 'result', data }` → `[DONE]` (or `{ type: 'error', error }` → `[DONE]`). On success, **`data` includes `runId`** (the `agent_runs.id` UUID) alongside `summary`, nested `data`, `tokensUsed`, etc., so clients can call org-scoped demo PATCH routes before reloading the row; **`runId` is not added to the JSON persisted** in `agent_runs.result` (only the streamed copy). Runs can submit an under-review Lessons Repository proposal via `proposeLessonFromRun` when the output contains an explicit reusable lesson/pattern; new agents get this wiring automatically when they use `createAgentRoute`. |
 | `GET /history` | requireAuth | Returns last 20 `agent_runs` rows for this slug + org, ordered by `run_at DESC` |
+| `GET /dependencies` | requireAuth | Returns declared report dependency status for this slug + org so clients can block missing upstream reports or warn on stale/needs-review inherited reasoning |
 
 Internal helpers exported from this file:
 - `extractToolData(trace)` — keyed tool results from AgentOrchestrator trace
 - `extractSuggestions(text)` — parses `### Recommendations` numbered list into `[{text, priority}]`
+- `createProgressEmitter({ res, progressLog })` — creates the SSE `emit` / `done` helpers and records progress messages for persistence
+- `loadRunConfig({ slug, orgId })` — resolves admin config, model fallback state, and agent operator config in one place
+- `checkAgentAccess({ userId, requiredPermission, allowedRoles })` — wraps per-agent role/capability checks with a structured allow/deny result
+- `startAgentRun({ slug, orgId, startTime })` — creates the initial `running` row and returns the `agent_runs.id`
+- `resolveRunDependencies({ slug, orgId, userId, selections, emit })` — resolves report-chain dependencies, builds prompt context, and emits dependency warnings
+- `loadBudgetContext({ slug, orgId, adminConfig })` — loads task/daily budget limits and performs the pre-flight daily budget check
+- `createBudgetAwareEmitter({ emit, adminConfig, budgetContext, taskCostTracker })` — wraps agent progress emission with optional mid-run token cost checks
+- `buildRunContext(...)` — constructs the consistent context object passed to each agent `runFn`
+- `buildResultPayload(...)` — serialises summaries, tool data, suggestions, data gaps, trust bounds, prompt version, cost, model, dates, and dependency metadata
+- `finalizeAgentRun(...)` — persists the final row and triggers fire-and-forget lesson proposal, usage logging, and embedding indexing
 
 Run rows are written only via **`persistRun`** from **`server/platform/persistRun.js`** (imported by this factory and by **`AgentScheduler`**).
+
+**Factory helper design:** The `POST /run` handler is intentionally assembled from small exported helpers rather than one long inline routine. This keeps the cross-cutting concerns reusable for future route factories or tests, while preserving the same external contract for existing agents. The highest-leverage helpers are `createProgressEmitter`, `buildResultPayload`, `finalizeAgentRun`, and `loadRunConfig` because every agent run needs streaming, consistent persistence, post-run side effects, and resolved configuration.
 
 **Stage 3 budget integration (additive — public interface unchanged):**
 - After the kill switch check, `createAgentRoute` loads org budget settings (`AgentConfigService.getOrgBudgetSettings`) and the daily org spend (`CostGuardService.getDailyOrgSpendAud`) in a single DB query. If the daily budget is already exceeded before the run starts, the route aborts immediately with a `BudgetExceededError`.

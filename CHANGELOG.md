@@ -18,6 +18,21 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-24 — Agent Route Factory Helpers
+
+### Built
+- **Factory helper extraction:** Refactored `server/platform/createAgentRoute.js` into exported helper functions for progress streaming, config loading, access checks, run start, dependency resolution, budget context, budget-aware emission, run context construction, result payload building, and final run finalisation.
+- **Current route uses the helpers:** The existing `POST /run` path now calls the new helpers directly, so the abstractions are active in the current application rather than dormant future scaffolding.
+- **Factory documentation:** Updated `PLATFORM-PRIMITIVES.md` and `knowledge_base/architecture/PLATFORM_PRIMITIVES.md` with the route factory contract, dependency endpoint, and exported helper responsibilities.
+
+### Fixed / discovered
+- The factory was carrying several cross-cutting concerns inline. Extracting them reduces the risk of future agents or route factories drifting in how they stream, persist, budget-check, and serialise trust metadata.
+
+### Open / next
+- Add focused unit tests for `buildResultPayload`, `createProgressEmitter`, and `resolveRunDependencies` when the project test harness is expanded.
+
+---
+
 ## 2026-05-23 — Agent Trust Foundation
 
 ### Built
