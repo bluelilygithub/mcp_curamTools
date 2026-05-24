@@ -21,6 +21,7 @@ If a session changes both platform and one agent, **one root entry** is enough u
 ## 2026-05-24 — Agent Route Factory Helpers
 
 ### Built
+- **Agent Trust log-first UI:** Changed Admin > Agent Trust from a review-queue-first report viewer into a log-first page that loads all recent agent runs by default, adds filters for trust signals/data gaps/dependencies/errors, and keeps the full report summary collapsed until requested.
 - **Factory helper extraction:** Refactored `server/platform/createAgentRoute.js` into exported helper functions for progress streaming, config loading, access checks, run start, dependency resolution, budget context, budget-aware emission, run context construction, result payload building, and final run finalisation.
 - **Current route uses the helpers:** The existing `POST /run` path now calls the new helpers directly, so the abstractions are active in the current application rather than dormant future scaffolding.
 - **Factory documentation:** Updated `PLATFORM-PRIMITIVES.md` and `knowledge_base/architecture/PLATFORM_PRIMITIVES.md` with the route factory contract, dependency endpoint, and exported helper responsibilities.

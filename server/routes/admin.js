@@ -1800,6 +1800,15 @@ function deriveTrustSignals(run) {
     });
   }
 
+  if (run.status === 'error') {
+    signals.push({
+      type: 'error',
+      severity: 'error',
+      source: run.slug,
+      reason: run.error ?? 'Run ended with an error.',
+    });
+  }
+
   return {
     signals,
     declaredDataGaps: Array.isArray(result.data_gaps) ? result.data_gaps : [],
@@ -1813,6 +1822,8 @@ function deriveTrustSignals(run) {
 router.get('/agent-trust', async (req, res) => {
   const orgId = req.user.orgId;
   const days = Math.min(Math.max(parseInt(req.query.days ?? '30', 10), 1), 90);
+  const scope = req.query.scope === 'review' ? 'review' : 'all';
+  const includeAllRuns = scope === 'all';
 
   try {
     const { rows } = await pool.query(
@@ -1820,14 +1831,15 @@ router.get('/agent-trust', async (req, res) => {
          FROM agent_runs
         WHERE org_id = $1
           AND run_at >= NOW() - ($2 || ' days')::interval
-          AND (
+          AND ($3::boolean OR (
             status = 'needs_review'
+            OR status = 'error'
             OR (result IS NOT NULL AND result ? 'data_gap_review')
             OR (result IS NOT NULL AND result ? 'report_dependency_warnings')
-          )
+          ))
         ORDER BY run_at DESC
         LIMIT 100`,
-      [orgId, days]
+      [orgId, days, includeAllRuns]
     );
 
     const runs = rows.map((run) => {
@@ -1845,7 +1857,11 @@ router.get('/agent-trust', async (req, res) => {
     });
 
     const summary = {
+      total_runs: runs.length,
       runs_needing_review: runs.filter((run) => run.status === 'needs_review').length,
+      error_runs: runs.filter((run) => run.status === 'error').length,
+      runs_with_signals: runs.filter((run) => run.signals.length > 0).length,
+      clean_runs: runs.filter((run) => run.signals.length === 0).length,
       silent_data_gaps: runs.reduce((sum, run) => sum + run.silentDataGaps.length, 0),
       missing_gap_sections: runs.reduce(
         (sum, run) => sum + run.signals.filter((signal) => signal.type === 'missing_gap_section').length,
@@ -1858,7 +1874,7 @@ router.get('/agent-trust', async (req, res) => {
       total_signals: runs.reduce((sum, run) => sum + run.signals.length, 0),
     };
 
-    res.json({ days, summary, runs });
+    res.json({ days, scope, summary, runs });
   } catch (err) {
     console.error('[agent-trust]', err.message);
     res.status(500).json({ error: 'Failed to load agent trust queue.' });
