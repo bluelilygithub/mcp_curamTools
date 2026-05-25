@@ -225,6 +225,7 @@ function AgentCard({ agent, models, roleOptions, onSave, isOpen, onToggle }) {
 
   const enabledModels = models.filter((m) => m.enabled !== false);
   const rec           = agent.recommended_model; // { id, name, tier, reason } | null
+  const requiredCapabilities = agent.model_requirements?.capabilities ?? [];
   const hasMismatch   = rec && config.model && config.model !== rec.id;
   const supportsRoleAccess = Boolean(agent.default_required_permission);
   const allowedRoles   = Array.isArray(config.allowed_roles) ? config.allowed_roles : [];
@@ -385,6 +386,11 @@ function AgentCard({ agent, models, roleOptions, onSave, isOpen, onToggle }) {
               ? 'This agent has an explicit model override.'
               : 'This agent inherits the organisation default model from Settings.'}
           </p>
+          {requiredCapabilities.length > 0 && (
+            <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+              Required capabilities: {requiredCapabilities.join(', ')}.
+            </p>
+          )}
         </div>
 
         {supportsRoleAccess && (

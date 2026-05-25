@@ -68,13 +68,14 @@ If a local Git hook is installed, it may run this automatically when these files
 4. Create `server/agents/<slug>/prompt.js` — exports `buildSystemPrompt(config, customerVars = {})`
 5. Add `AGENT_DEFAULTS` entry in `AgentConfigService.js`
 6. Add `ADMIN_DEFAULTS` entry in `AgentConfigService.js`
-7. Register in `server/routes/agents.js` via `createAgentRoute({ slug, runFn, requiredPermission })`
-8. Add cron in `agents.js` via `AgentScheduler.register` if scheduled — document UTC↔AEST offset
-9. Update `CRON.md` if scheduled
-10. Create `client/src/pages/tools/<NamePage>.jsx`
-11. Add route in `client/src/App.jsx`
-12. Add entry in `client/src/config/tools.js`
-13. Update `LESSON_COVERAGE_SECTIONS` in `AdminLessonsPage.jsx`
+7. Add `AGENT_MODEL_REQUIREMENTS` capabilities if the agent requires tool use, vision, reliable JSON, or long context
+8. Register in `server/routes/agents.js` via `createAgentRoute({ slug, runFn, requiredPermission })`
+9. Add cron in `agents.js` via `AgentScheduler.register` if scheduled — document UTC↔AEST offset
+10. Update `CRON.md` if scheduled
+11. Create `client/src/pages/tools/<NamePage>.jsx`
+12. Add route in `client/src/App.jsx`
+13. Add entry in `client/src/config/tools.js`
+14. Update `LESSON_COVERAGE_SECTIONS` in `AdminLessonsPage.jsx`
 
 ---
 

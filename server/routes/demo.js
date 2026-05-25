@@ -645,7 +645,7 @@ Return ONLY a JSON object — no markdown fences, no explanation:
     const { buildSystemPrompt } = require('../agents/demoDocumentAnalyzer/prompt');
 
     const customProviders = await AgentConfigService.getCustomProviders(req.user.orgId).catch(() => []);
-    const adminConfig     = await AgentConfigService.getResolvedAdminConfig('demo-document-analyzer', req.user.orgId).catch(() => ({}));
+    const adminConfig     = await AgentConfigService.getResolvedAdminConfig('demo-document-analyzer', req.user.orgId);
     const model           = adminConfig.model ?? null;
     if (!model) return res.status(400).json({ error: 'No model configured. Set a default model in Settings > Models.' });
     const maxTokens       = adminConfig.max_tokens ?? 4096;
@@ -797,7 +797,7 @@ If this question is about the document above, answer it directly using the conte
     const { getProvider } = require('../platform/AgentOrchestrator');
 
     const customProviders = await AgentConfigService.getCustomProviders(req.user.orgId).catch(() => []);
-    const adminConfig = await AgentConfigService.getResolvedAdminConfig(configSlug, req.user.orgId).catch(() => ({}));
+    const adminConfig = await AgentConfigService.getResolvedAdminConfig(configSlug, req.user.orgId);
     const model    = adminConfig.model ?? null;
     if (!model) return res.status(400).json({ error: 'No model configured. Set a default model in Settings > Models.' });
     const maxTokens = adminConfig.max_tokens ?? 4096;

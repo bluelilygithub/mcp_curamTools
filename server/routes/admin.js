@@ -500,26 +500,7 @@ router.delete('/org-roles/:id', async (req, res) => {
 
 // ── Models ────────────────────────────────────────────────────────────────
 
-const MODEL_DEFAULTS = [
-  {
-    id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5', tier: 'standard', enabled: true,
-    emoji: '⚡', label: 'Economy', tagline: 'Fast & cost-effective',
-    desc: 'Best for high-volume tasks and simple tool calls.',
-    inputPricePer1M: 0.80, outputPricePer1M: 4.00, contextWindow: 200000,
-  },
-  {
-    id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', tier: 'advanced', enabled: true,
-    emoji: '🧠', label: 'Standard', tagline: 'Smart & balanced',
-    desc: 'Best for most work — writing, analysis, and agent tool workloads.',
-    inputPricePer1M: 3.00, outputPricePer1M: 15.00, contextWindow: 200000,
-  },
-  {
-    id: 'claude-opus-4-6', name: 'Claude Opus 4.6', tier: 'premium', enabled: false,
-    emoji: '🔬', label: 'Premium', tagline: 'Most capable',
-    desc: 'Best for complex reasoning and advanced multi-step agent tasks.',
-    inputPricePer1M: 15.00, outputPricePer1M: 75.00, contextWindow: 200000,
-  },
-];
+const MODEL_DEFAULTS = AgentConfigService.MODEL_DEFAULTS;
 
 router.get('/models', async (req, res) => {
   try {
@@ -527,7 +508,7 @@ router.get('/models', async (req, res) => {
       `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'ai_models'`,
       [req.user.orgId]
     );
-    res.json(r.rows[0]?.value ?? MODEL_DEFAULTS);
+    res.json(r.rows.length > 0 ? AgentConfigService.normalizeModelList(r.rows[0]?.value) : MODEL_DEFAULTS);
   } catch (err) {
     res.status(500).json({ error: 'Failed to load models.' });
   }
@@ -536,12 +517,13 @@ router.get('/models', async (req, res) => {
 router.put('/models', async (req, res) => {
   const { models } = req.body;
   if (!Array.isArray(models)) return res.status(400).json({ error: 'models must be an array.' });
+  const normalizedModels = AgentConfigService.normalizeModelList(models);
   try {
     await pool.query(
       `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
        VALUES ($1, 'ai_models', $2, $3, NOW())
        ON CONFLICT (org_id, key) DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
-      [req.user.orgId, JSON.stringify(models), req.user.id]
+      [req.user.orgId, JSON.stringify(normalizedModels), req.user.id]
     );
     res.json({ ok: true });
   } catch (err) {
@@ -726,7 +708,9 @@ router.get('/agents', async (req, res) => {
       `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'ai_models'`,
       [req.user.orgId]
     );
-    const allModels = modelsRow.rows[0]?.value ?? MODEL_DEFAULTS;
+    const allModels = modelsRow.rows.length > 0
+      ? AgentConfigService.normalizeModelList(modelsRow.rows[0]?.value)
+      : MODEL_DEFAULTS;
 
     const configs = await Promise.all(
       slugs.map(async (slug) => {
@@ -736,6 +720,7 @@ router.get('/agents', async (req, res) => {
           ...(await AgentConfigService.getAdminConfig(slug, req.user.orgId)),
           default_required_permission: defaultAccess.roleName,
           default_access_label:        defaultAccess.label,
+          model_requirements: AgentConfigService.AGENT_MODEL_REQUIREMENTS[slug] ?? AgentConfigService.AGENT_MODEL_REQUIREMENTS._platform,
           recommended_model: AgentConfigService.getRecommendedModel(slug, allModels),
         };
       })
@@ -754,6 +739,7 @@ router.get('/agents/:slug', async (req, res) => {
       ...config,
       default_required_permission: defaultAccess.roleName,
       default_access_label:        defaultAccess.label,
+      model_requirements: AgentConfigService.AGENT_MODEL_REQUIREMENTS[req.params.slug] ?? AgentConfigService.AGENT_MODEL_REQUIREMENTS._platform,
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load agent admin config.' });
@@ -2091,7 +2077,9 @@ router.get('/usage-warnings', async (req, res) => {
     }
 
     // 6. Overkill model
-    const allModels = Array.isArray(modelsRow.rows[0]?.value) ? modelsRow.rows[0].value : MODEL_DEFAULTS;
+    const allModels = modelsRow.rows.length > 0
+      ? AgentConfigService.normalizeModelList(modelsRow.rows[0]?.value)
+      : MODEL_DEFAULTS;
     const modelTierMap = Object.fromEntries(allModels.map((m) => [m.id, m.tier]));
     const TIER_RANK    = { standard: 0, advanced: 1 };
     const { AGENT_MODEL_REQUIREMENTS } = AgentConfigService;
@@ -2268,7 +2256,9 @@ router.get('/usage-intelligence', async (req, res) => {
 
     const actions = [];
 
-    const allModels = Array.isArray(modelsRow.rows[0]?.value) ? modelsRow.rows[0].value : MODEL_DEFAULTS;
+    const allModels = modelsRow.rows.length > 0
+      ? AgentConfigService.normalizeModelList(modelsRow.rows[0]?.value)
+      : MODEL_DEFAULTS;
     const modelTierMap = Object.fromEntries(allModels.map((m) => [m.id, m.tier]));
     const TIER_RANK = { standard: 0, advanced: 1, premium: 2 };
     const { AGENT_MODEL_REQUIREMENTS } = AgentConfigService;

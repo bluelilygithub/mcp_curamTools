@@ -12,8 +12,17 @@ async function runAdsSetupArchitect(context) {
     ? context.adminConfig
     : await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
 
-  const model      = context.req?.body?.model || adminConfig.model;
+  const modelOverride = context.req?.body?.model || null;
+  const model      = modelOverride || adminConfig.model;
   const customerId = context.req?.body?.customerId ?? null;
+  if (modelOverride) {
+    await AgentConfigService.validateModelCapabilities({
+      slug: TOOL_SLUG,
+      orgId,
+      modelId: modelOverride,
+      role: 'request override',
+    });
+  }
 
   const userMessage =
     'Analyze the competitive landscape and design a comprehensive Google Ads setup blueprint for Diamond Plate Australia. ' +

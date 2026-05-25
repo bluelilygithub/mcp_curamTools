@@ -199,8 +199,9 @@ router.post('/:id/message', requireAuth, messageRateLimiter, async (req, res) =>
     let adminConfig;
     try {
       adminConfig = await AgentConfigService.getResolvedAdminConfig(TOOL_SLUG, orgId);
-    } catch {
-      adminConfig = {};
+    } catch (err) {
+      emit('error', { error: err.message });
+      return done();
     }
 
     if (adminConfig.enabled === false) {

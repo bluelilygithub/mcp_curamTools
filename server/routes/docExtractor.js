@@ -179,6 +179,12 @@ router.post(
       if (!allowed) {
         return res.status(403).json({ error: `Model "${requested}" is not permitted for this tool.` });
       }
+      await AgentConfigService.validateModelCapabilities({
+        slug: 'doc-extractor',
+        orgId,
+        modelId: requested,
+        role: 'request override',
+      });
       model = requested;
     }
 

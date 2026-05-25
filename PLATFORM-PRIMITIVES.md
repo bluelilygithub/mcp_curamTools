@@ -273,6 +273,9 @@ AgentConfigService.getResolvedAdminConfig(slug, orgId, { useRecommended = false 
 //   1. per-agent fallback model
 //   2. organisation fallback model
 // No hardcoded runtime model fallback is applied.
+// If AGENT_MODEL_REQUIREMENTS declares required capabilities for the slug
+// (for example tool_use, vision, json_reliable), the selected primary and
+// fallback models must declare those capabilities in the model catalogue.
 
 AgentConfigService.updateAdminConfig(slug, patch, updatedBy)
 // Saves merged config to system_settings. Returns merged result.
@@ -310,7 +313,7 @@ AgentConfigService.updateOrgLessonModel(orgId, modelId, updatedBy)
 
 **Used by:** `createAgentRoute.js`; all agent `index.js` files; `PUT /api/agent-configs/:slug`; `PUT /api/agent-configs/:slug/customers/:customerId`; `AgentScheduler._tick` (array-return multi-customer path).
 **Reuse contract:** New agents add entries to `AGENT_DEFAULTS` and `ADMIN_DEFAULTS`. Runtime code must use `getResolvedAdminConfig(slug, orgId)` for model-bearing admin guardrails, or consume the already-resolved `adminConfig` passed by `createAgentRoute` / `AgentScheduler`. Agent code reads operator config via `getAgentConfig` or `getAgentConfigForCustomer` — never queries tables directly. `custom_prompt` and `intelligence_profile` are returned as top-level fields on the merged config object alongside the JSONB config fields.
-**Model contract:** "Auto" / blank per-agent model means inherit the organisation default. Do not write `?? 'claude-sonnet-4-6'`, `|| 'deepseek-chat'`, or any other hardcoded model fallback inside an agent. Literal model IDs are acceptable only in model catalog defaults, pricing tables, provider examples, or tests/diagnostics that explicitly name the model they are testing.
+**Model contract:** "Auto" / blank per-agent model means inherit the organisation default. Do not write `?? 'claude-sonnet-4-6'`, `|| 'deepseek-chat'`, or any other hardcoded model fallback inside an agent. Literal model IDs are acceptable only in model catalog defaults, pricing tables, provider examples, or tests/diagnostics that explicitly name the model they are testing. Model catalogue entries include operational capabilities (`tool_use`, `vision`, `long_context`, `json_reliable`); any agent in `AGENT_MODEL_REQUIREMENTS` that declares required capabilities will fail before the run if the resolved primary or fallback model does not support them.
 **Does not handle:** Permission checks (route layer). Cron rescheduling (route calls `AgentScheduler.updateSchedule` separately).
 
 ---

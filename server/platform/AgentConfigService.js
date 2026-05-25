@@ -242,35 +242,98 @@ const ADMIN_DEFAULTS = {
 // reason: shown in the Admin UI next to the recommendation.
 
 const AGENT_MODEL_REQUIREMENTS = {
-  'google-ads-conversation':     { tier: 'advanced', reason: 'Multi-turn reasoning with dynamic tool selection' },
+  'google-ads-conversation':     { tier: 'advanced', capabilities: ['tool_use'], reason: 'Multi-turn reasoning with dynamic tool selection' },
   'sql-console-nlp':             { tier: 'advanced', reason: 'Natural-language SQL generation must reason over schema and query safety constraints' },
   'media-gen':                   { tier: 'standard', reason: 'External media generation request with short prompt-to-result workflow' },
-  'google-ads-strategic-review': { tier: 'advanced', reason: 'Multi-step hypothesis validation against live data' },
+  'google-ads-strategic-review': { tier: 'advanced', capabilities: ['tool_use'], reason: 'Multi-step hypothesis validation against live data' },
   'google-ads-change-audit':     { tier: 'advanced', reason: 'Complex narrative audit with before/after comparison' },
   'google-ads-monitor':          { tier: 'advanced', reason: 'Multi-section performance report with cross-source analysis' },
   'google-ads-change-impact':    { tier: 'advanced', reason: 'Timeline analysis with performance discontinuity detection' },
-  'google-ads-freeform':         { tier: 'advanced', reason: 'Open-ended Q&A with live data retrieval' },
-  'competitor-keyword-intel':    { tier: 'advanced', reason: 'Competitive gap analysis requiring detailed reasoning' },
+  'google-ads-freeform':         { tier: 'advanced', capabilities: ['tool_use'], reason: 'Open-ended Q&A with live data retrieval' },
+  'competitor-keyword-intel':    { tier: 'advanced', capabilities: ['tool_use'], reason: 'Competitive gap analysis requiring detailed reasoning' },
   'ads-attribution-summary':     { tier: 'standard', reason: 'Brief structured summary from pre-fetched data' },
   'ads-bounce-analysis':         { tier: 'standard', reason: 'Structured bounce report from pre-fetched data' },
   'ads-copy-diagnostic':         { tier: 'advanced', reason: 'Multi-section ad copy audit across campaigns, ad groups, and search term alignment' },
   'ads-copy-playbook':           { tier: 'advanced', reason: 'Prescriptive 8-section playbook with paste-ready replacements, tables, and structural recommendations' },
   'ads-copy-gate':               { tier: 'advanced', reason: 'QA gate with independent character recounts, sequencing conflict detection, and binary cleared/held/blocked verdicts' },
   'keyword-opportunity':         { tier: 'advanced', reason: 'Multi-source keyword research combining Ads, GA4, CRM enquiries, and live competitor web searches' },
-  'auction-insights':            { tier: 'standard', reason: 'Structured competitive metrics report' },
+  'auction-insights':            { tier: 'standard', capabilities: ['tool_use'], reason: 'Structured competitive metrics report' },
   'diamondplate-data':           { tier: 'advanced', reason: 'Cross-source CRM lead intelligence with channel, device, and conversion analysis' },
   'search-term-intelligence':    { tier: 'advanced', reason: 'Cross-source analysis joining Ads search terms, GA4 bounce data, and CRM lead outcomes' },
   'ai-visibility-monitor':       { tier: 'advanced', reason: 'Multi-prompt web search with cross-source brand and competitor analysis' },
-  'doc-extractor':               { tier: 'advanced', reason: 'Vision extraction quality scales with model capability — Sonnet handles complex layouts, poor scans, and dense forms significantly better than Haiku' },
-  'high-intent-advisor':         { tier: 'advanced', reason: 'Three-phase cross-source analysis with ReAct loop — requires strong reasoning to connect Ads, GA4, and CRM signals into actionable suggestions' },
+  'doc-extractor':               { tier: 'advanced', capabilities: ['vision', 'json_reliable'], reason: 'Vision extraction quality scales with model capability — Sonnet handles complex layouts, poor scans, and dense forms significantly better than Haiku' },
+  'high-intent-advisor':         { tier: 'advanced', capabilities: ['tool_use'], reason: 'Three-phase cross-source analysis with ReAct loop — requires strong reasoning to connect Ads, GA4, and CRM signals into actionable suggestions' },
   'wp-theme-extractor':          { tier: 'advanced', reason: 'Generates 9 complete PHP/CSS files from raw HTML — requires layout analysis, CSS conversion, and WP template knowledge' },
   'not-interested-report':       { tier: 'advanced', reason: 'Cross-source narrative analysis joining CRM not-interested reasons, sales call notes, and Ads keyword/search term data' },
   'geo-heatmap':                 { tier: 'standard', reason: 'Single analysis call on pre-fetched geocoded lead data' },
+  'ads-setup-architect':         { tier: 'advanced', capabilities: ['tool_use'], reason: 'Multi-tool campaign setup analysis across Ads, CRM, and knowledge base data' },
+  'spec-validator':              { tier: 'advanced', capabilities: ['vision', 'json_reliable'], reason: 'Vision extraction and structured JSON synthesis over specification documents' },
+  'demo-spec-validator':         { tier: 'advanced', capabilities: ['vision', 'json_reliable'], reason: 'Vision extraction and structured JSON synthesis over specification documents' },
+  'demo-tender-response':        { tier: 'advanced', capabilities: ['vision', 'json_reliable'], reason: 'RFT extraction requires vision-capable structured document analysis' },
+  'demo-document-analyzer':      { tier: 'advanced', capabilities: ['vision', 'json_reliable'], reason: 'Document analysis requires vision-capable structured extraction' },
   _platform:                     { tier: 'advanced', reason: 'Default for unrecognised agents' },
 };
 
 // Tier capability order: standard < advanced < premium
 const TIER_ORDER = ['standard', 'advanced', 'premium'];
+
+const KNOWN_CAPABILITIES = ['tool_use', 'vision', 'long_context', 'json_reliable'];
+
+function inferModelCapabilities(model = {}) {
+  const id = String(model.id || '').toLowerCase();
+  const provider = String(model.provider || '').toLowerCase();
+  const contextWindow = parseInt(model.contextWindow ?? 0, 10) || 0;
+  const isClaude = provider === 'anthropic' || id.startsWith('claude-');
+  const isGemini = provider === 'gemini' || id.startsWith('gemini-');
+  const isModernOpenAI = provider === 'openai' || /^(gpt-4|gpt-5|o[134]|chatgpt)/.test(id);
+
+  return {
+    tool_use:      isClaude || isGemini || isModernOpenAI,
+    vision:        isClaude || isGemini || /gpt-4o|gpt-5|vision|image/.test(id),
+    long_context:  contextWindow >= 100000 || isClaude || isGemini,
+    json_reliable: isClaude || isGemini || isModernOpenAI,
+  };
+}
+
+function normalizeModelCapabilities(model = {}) {
+  const inferred = inferModelCapabilities(model);
+  const explicit = model.capabilities && typeof model.capabilities === 'object'
+    ? model.capabilities
+    : {};
+  return KNOWN_CAPABILITIES.reduce((caps, key) => {
+    caps[key] = explicit[key] ?? inferred[key] ?? false;
+    return caps;
+  }, {});
+}
+
+function normalizeModel(model = {}) {
+  return { ...model, capabilities: normalizeModelCapabilities(model) };
+}
+
+function normalizeModelList(models) {
+  return Array.isArray(models) ? models.map(normalizeModel) : [];
+}
+
+const MODEL_DEFAULTS = normalizeModelList([
+  {
+    id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5', tier: 'standard', enabled: true,
+    provider: 'anthropic', emoji: '⚡', label: 'Economy', tagline: 'Fast & cost-effective',
+    desc: 'Best for high-volume tasks and simple tool calls.',
+    inputPricePer1M: 0.80, outputPricePer1M: 4.00, contextWindow: 200000,
+  },
+  {
+    id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', tier: 'advanced', enabled: true,
+    provider: 'anthropic', emoji: '🧠', label: 'Standard', tagline: 'Smart & balanced',
+    desc: 'Best for most work — writing, analysis, and agent tool workloads.',
+    inputPricePer1M: 3.00, outputPricePer1M: 15.00, contextWindow: 200000,
+  },
+  {
+    id: 'claude-opus-4-6', name: 'Claude Opus 4.6', tier: 'premium', enabled: false,
+    provider: 'anthropic', emoji: '🔬', label: 'Premium', tagline: 'Most capable',
+    desc: 'Best for complex reasoning and advanced multi-step agent tasks.',
+    inputPricePer1M: 15.00, outputPricePer1M: 75.00, contextWindow: 200000,
+  },
+]);
 
 /**
  * Given a list of all models (from admin/models), return the recommended model
@@ -283,12 +346,18 @@ const TIER_ORDER = ['standard', 'advanced', 'premium'];
 function getRecommendedModel(slug, allModels) {
   const req         = AGENT_MODEL_REQUIREMENTS[slug] ?? AGENT_MODEL_REQUIREMENTS._platform;
   const requiredIdx = TIER_ORDER.indexOf(req.tier);
-  const enabled     = allModels.filter((m) => m.enabled !== false);
+  const enabled     = normalizeModelList(allModels).filter((m) => m.enabled !== false);
+  const requiredCapabilities = req.capabilities ?? [];
 
   if (enabled.length === 0) return null;
 
-  const atOrAbove = enabled.filter((m) => TIER_ORDER.indexOf(m.tier ?? 'advanced') >= requiredIdx);
-  const below     = enabled.filter((m) => TIER_ORDER.indexOf(m.tier ?? 'advanced') <  requiredIdx);
+  const supportsRequiredCapabilities = (model) =>
+    requiredCapabilities.every((capability) => model.capabilities?.[capability] === true);
+
+  const capable = enabled.filter(supportsRequiredCapabilities);
+  const candidatePool = capable.length > 0 ? capable : enabled;
+  const atOrAbove = candidatePool.filter((m) => TIER_ORDER.indexOf(m.tier ?? 'advanced') >= requiredIdx);
+  const below     = candidatePool.filter((m) => TIER_ORDER.indexOf(m.tier ?? 'advanced') <  requiredIdx);
 
   atOrAbove.sort((a, b) => {
     const ai = TIER_ORDER.indexOf(a.tier ?? 'advanced');
@@ -306,7 +375,14 @@ function getRecommendedModel(slug, allModels) {
 
   const pick = atOrAbove[0] ?? below[0];
   if (!pick) return null;
-  return { id: pick.id, name: pick.name, tier: pick.tier, reason: req.reason };
+  return {
+    id: pick.id,
+    name: pick.name,
+    tier: pick.tier,
+    reason: req.reason,
+    required_capabilities: requiredCapabilities,
+    capabilities: pick.capabilities,
+  };
 }
 
 function getDefaultAdminConfig(slug) {
@@ -531,11 +607,44 @@ async function getOrgModels(orgId) {
         `SELECT value FROM system_settings WHERE org_id = 1 AND key = 'ai_models' LIMIT 1`
       );
     }
-    return Array.isArray(res.rows[0]?.value) ? res.rows[0].value : [];
+    return res.rows.length > 0 ? normalizeModelList(res.rows[0]?.value) : MODEL_DEFAULTS;
   } catch (err) {
     console.error('[AgentConfigService] getOrgModels error:', err.message);
     return [];
   }
+}
+
+async function getModelFromCatalogue(orgId, modelId) {
+  if (!modelId) return null;
+  const models = await getOrgModels(orgId);
+  return models.find((model) => model.id === modelId) ?? null;
+}
+
+async function validateModelCapabilities({ slug, orgId, modelId, role = 'primary' }) {
+  if (!modelId) return null;
+  const req = AGENT_MODEL_REQUIREMENTS[slug] ?? AGENT_MODEL_REQUIREMENTS._platform;
+  const requiredCapabilities = req.capabilities ?? [];
+  if (requiredCapabilities.length === 0) return null;
+
+  const model = await getModelFromCatalogue(orgId, modelId);
+  if (!model) {
+    throw new Error(`Model "${modelId}" is not in the model catalogue, so its capabilities cannot be validated for ${slug}.`);
+  }
+  if (model.enabled === false) {
+    throw new Error(`Model "${modelId}" is disabled and cannot be used as the ${role} model for ${slug}.`);
+  }
+
+  const missing = requiredCapabilities.filter((capability) => model.capabilities?.[capability] !== true);
+  if (missing.length > 0) {
+    throw new Error(
+      `Model "${modelId}" cannot be used as the ${role} model for ${slug}; missing required capabilities: ${missing.join(', ')}.`
+    );
+  }
+
+  return {
+    required_capabilities: requiredCapabilities,
+    model_capabilities: model.capabilities,
+  };
 }
 
 /**
@@ -570,6 +679,8 @@ async function getResolvedAdminConfig(slug, orgId, { useRecommended = false } = 
     }
   }
 
+  const modelCapabilityMeta = await validateModelCapabilities({ slug, orgId, modelId: model, role: 'primary' });
+
   let fallback_model = adminConfig.fallback_model || null;
   let fallback_model_source = fallback_model ? 'agent-config' : null;
 
@@ -580,8 +691,19 @@ async function getResolvedAdminConfig(slug, orgId, { useRecommended = false } = 
       fallback_model_source = 'org-fallback';
     }
   }
+  const fallbackCapabilityMeta = await validateModelCapabilities({ slug, orgId, modelId: fallback_model, role: 'fallback' });
 
-  return { ...adminConfig, model, model_source, fallback_model, fallback_model_source };
+  return {
+    ...adminConfig,
+    model,
+    model_source,
+    fallback_model,
+    fallback_model_source,
+    ...(modelCapabilityMeta ?? {}),
+    ...(fallbackCapabilityMeta?.model_capabilities && {
+      fallback_model_capabilities: fallbackCapabilityMeta.model_capabilities,
+    }),
+  };
 }
 
 /**
@@ -1086,9 +1208,12 @@ module.exports = {
   updateStorageSettings,
   getCustomProviders,
   updateCustomProviders,
+  MODEL_DEFAULTS,
   AGENT_DEFAULTS,
   ADMIN_DEFAULTS,
   AGENT_MODEL_REQUIREMENTS,
   getRecommendedModel,
+  normalizeModelList,
+  validateModelCapabilities,
 };
 

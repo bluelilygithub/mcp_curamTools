@@ -128,10 +128,14 @@ class AgentSchedulerClass {
         console.warn(`[AgentScheduler] ${slug} lessons load skipped:`, err.message);
         return '';
       });
-      const adminConfig = await AgentConfigService.getResolvedAdminConfig(slug, orgId).catch((err) => {
-        console.warn(`[AgentScheduler] ${slug} admin config resolution skipped:`, err.message);
-        return {};
-      });
+      let adminConfig;
+      try {
+        adminConfig = await AgentConfigService.getResolvedAdminConfig(slug, orgId);
+      } catch (err) {
+        await persistRun({ slug, orgId, status: 'error', error: err.message, runId });
+        console.warn(`[AgentScheduler] ${slug} admin config resolution failed:`, err.message);
+        return;
+      }
       const outcome = await runFn({ orgId, userId: null, config: {}, adminConfig, runtimePromptContext, emit: () => {} });
 
       if (Array.isArray(outcome)) {
