@@ -18,6 +18,21 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-26 — Agent Observability Console
+
+### Built
+- **Agent Trust as observability:** Expanded Admin > Agent Trust into an additive run observability console without replacing existing tool histories or usage pages.
+- **Run metadata summary:** Standard route-factory runs now persist compact model-resolution metadata, capability warnings, fallback configuration, and a trace summary with iterations, tool calls, and fallback events.
+- **Admin reporting surface:** Agent Trust now shows cost, token totals, fallback counts, duration, model/source, prompt version, tool-call summary, progress-step counts, and fallback/config warnings for selected runs.
+
+### Fixed / discovered
+- Existing logging was useful but split across run history, usage logs, and transaction logs. The admin surface now brings the most operational fields together while keeping detailed usage reporting in Admin > Usage.
+
+### Open / next
+- Backfill is not attempted; older runs simply show the metadata that already exists. Custom routes and scheduled jobs may still provide less detail than standard `createAgentRoute` runs.
+
+---
+
 ## 2026-05-26 — Model Capability Guardrails
 
 ### Built

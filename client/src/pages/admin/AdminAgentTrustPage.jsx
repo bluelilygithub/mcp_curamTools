@@ -15,6 +15,7 @@ const FILTERS = [
   { id: 'needs_review', label: 'Needs review' },
   { id: 'data_gaps', label: 'Data gaps' },
   { id: 'dependencies', label: 'Dependencies' },
+  { id: 'fallbacks', label: 'Fallbacks' },
   { id: 'errors', label: 'Errors' },
 ];
 
@@ -33,11 +34,41 @@ function fmtDate(value) {
   }
 }
 
+function fmtDuration(ms) {
+  if (ms == null) return '—';
+  const seconds = Math.round(Number(ms) / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${minutes}m ${rest}s`;
+}
+
+function fmtAud(value) {
+  return `$${Number(value ?? 0).toFixed(4)}`;
+}
+
+function fmtTokens(value) {
+  const n = Number(value ?? 0);
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
 function StatCard({ label, value, sub }) {
   return (
     <div className="rounded-xl border p-4" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
       <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>{label}</p>
       <p className="text-2xl font-bold mt-1" style={{ color: 'var(--color-text)' }}>{value}</p>
+      {sub && <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>{sub}</p>}
+    </div>
+  );
+}
+
+function DetailCard({ label, value, sub }) {
+  return (
+    <div className="rounded-xl border p-3" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+      <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>{label}</p>
+      <p className="text-sm font-semibold mt-1 break-words" style={{ color: 'var(--color-text)' }}>{value ?? '—'}</p>
       {sub && <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>{sub}</p>}
     </div>
   );
@@ -97,6 +128,57 @@ function DependencyList({ dependencies }) {
   );
 }
 
+function ObservabilityPanel({ run }) {
+  const obs = run?.observability ?? {};
+  const tokens = obs.tokens ?? {};
+  const toolCalls = obs.trace_summary?.tool_calls ?? [];
+  const fallbackEvents = obs.fallback_events ?? [];
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <DetailCard label="Model" value={obs.model} sub={obs.model_source ? `source: ${obs.model_source}` : null} />
+        <DetailCard label="Fallback" value={obs.fallback_model || 'None'} sub={obs.fallback_model_source ? `source: ${obs.fallback_model_source}` : null} />
+        <DetailCard label="Cost" value={fmtAud(obs.cost_aud)} sub={`${fmtTokens(tokens.input)} in · ${fmtTokens(tokens.output)} out`} />
+        <DetailCard label="Duration" value={fmtDuration(obs.duration_ms)} sub={obs.prompt_version ? `prompt: ${obs.prompt_version}` : null} />
+      </div>
+
+      {(obs.capability_warnings?.length > 0 || fallbackEvents.length > 0 || toolCalls.length > 0 || obs.progress_count > 0) && (
+        <div className="rounded-xl border p-3 space-y-2" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>Run Trail</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs" style={{ color: 'var(--color-muted)' }}>
+            <span>Progress steps: {obs.progress_count ?? 0}</span>
+            <span>Iterations: {obs.trace_summary?.iterations ?? 0}</span>
+            <span>Tool calls: {toolCalls.length}</span>
+            <span>Fallbacks: {fallbackEvents.length}</span>
+          </div>
+          {obs.capability_warnings?.map((warning, index) => (
+            <p key={`cap-${index}`} className="text-xs" style={{ color: '#b45309' }}>{warning}</p>
+          ))}
+          {fallbackEvents.map((event, index) => (
+            <p key={`fallback-${index}`} className="text-xs" style={{ color: '#b45309' }}>
+              Fallback: {event.from} → {event.to}{event.reason ? ` (${event.reason})` : ''}
+            </p>
+          ))}
+          {toolCalls.length > 0 && (
+            <div className="flex gap-1 flex-wrap">
+              {toolCalls.slice(0, 8).map((tool, index) => (
+                <span
+                  key={`${tool.name}-${index}`}
+                  className="text-xs rounded px-1.5 py-0.5"
+                  style={{ background: 'var(--color-surface)', color: tool.status === 'error' ? '#dc2626' : 'var(--color-muted)' }}
+                >
+                  {tool.name}{tool.fromCache ? ' cache' : ''}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminAgentTrustPage() {
   const [days, setDays] = useState(30);
   const [filter, setFilter] = useState('all');
@@ -134,6 +216,7 @@ export default function AdminAgentTrustPage() {
       ));
     }
     if (filter === 'dependencies') return runs.filter((run) => run.dependencies?.length > 0 || run.signals?.some((signal) => signal.type?.startsWith('dependency_')));
+    if (filter === 'fallbacks') return runs.filter((run) => run.observability?.fallback_used);
     if (filter === 'errors') return runs.filter((run) => run.status === 'error');
     return runs;
   }, [filter, runs]);
@@ -175,12 +258,14 @@ export default function AdminAgentTrustPage() {
         <p className="text-sm" style={{ color: 'var(--color-muted)' }}>Loading…</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-7 gap-4">
             <StatCard label="Log entries" value={summary.total_runs ?? runs.length} sub={`last ${days} days`} />
             <StatCard label="Needs review" value={summary.runs_needing_review ?? 0} sub="runs" />
             <StatCard label="Errors" value={summary.error_runs ?? 0} sub="failed runs" />
             <StatCard label="Silent gaps" value={summary.silent_data_gaps ?? 0} sub="undisclosed missing data" />
             <StatCard label="Signals" value={summary.total_signals ?? 0} sub={`last ${days} days`} />
+            <StatCard label="Cost" value={fmtAud(summary.total_cost_aud)} sub={`${fmtTokens(summary.total_input_tokens)} in · ${fmtTokens(summary.total_output_tokens)} out`} />
+            <StatCard label="Fallbacks" value={summary.fallback_runs ?? 0} sub="model retries" />
           </div>
 
           <section className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
@@ -231,7 +316,9 @@ export default function AdminAgentTrustPage() {
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
                       <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>{run.slug}</p>
-                      <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>{fmtDate(run.run_at)}</p>
+                      <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+                        {fmtDate(run.run_at)} · {run.observability?.model ?? 'no model'} · {fmtAud(run.observability?.cost_aud)}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs rounded-full px-2 py-1" style={{ color: 'var(--color-muted)', background: 'var(--color-surface)' }}>
@@ -268,6 +355,7 @@ export default function AdminAgentTrustPage() {
                 </div>
 
                 <SignalList signals={selectedRun.signals} />
+                <ObservabilityPanel run={selectedRun} />
                 <DependencyList dependencies={selectedRun.dependencies} />
                 <BoundsWarningPanel boundsFailed={selectedRun.result?.boundsFailed} />
                 <DataGapsPanel dataGaps={selectedRun.declaredDataGaps} review={selectedRun.result?.data_gap_review} />

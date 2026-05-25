@@ -221,6 +221,38 @@ function buildRunContext({
   };
 }
 
+function summariseTrace(trace = []) {
+  if (!Array.isArray(trace)) {
+    return { iterations: 0, tool_calls: [], fallback_events: [] };
+  }
+
+  const fallbackEvents = trace
+    .filter((step) => step?.type === 'fallback')
+    .map((step) => ({
+      from: step.from ?? null,
+      to: step.to ?? null,
+      reason: step.reason ?? null,
+      timestamp: step.timestamp ?? null,
+    }));
+
+  const toolCalls = trace.flatMap((step) => (
+    Array.isArray(step?.toolResults)
+      ? step.toolResults.map((tool) => ({
+          name: tool.name,
+          durationMs: tool.durationMs ?? null,
+          fromCache: tool.fromCache === true,
+          status: tool.result?.error ? 'error' : 'ok',
+        }))
+      : []
+  ));
+
+  return {
+    iterations: trace.filter((step) => step && step.type !== 'fallback').length,
+    tool_calls: toolCalls,
+    fallback_events: fallbackEvents,
+  };
+}
+
 function buildResultPayload({
   slug,
   result,
@@ -266,6 +298,15 @@ function buildResultPayload({
       tokensUsed: tokensUsed ?? {},
       costAud:   taskCostAud,
       model:     adminConfig.model ?? null,
+      model_source: adminConfig.model_source ?? null,
+      fallback_model: adminConfig.fallback_model ?? null,
+      fallback_model_source: adminConfig.fallback_model_source ?? null,
+      required_capabilities: adminConfig.required_capabilities ?? [],
+      model_capabilities: adminConfig.model_capabilities ?? null,
+      missing_capabilities: adminConfig.missing_capabilities ?? [],
+      capability_warnings: adminConfig.capability_warnings ?? [],
+      fallback_capability_warnings: adminConfig.fallback_capability_warnings ?? [],
+      trace_summary: summariseTrace(trace),
       startDate: req.body.startDate ?? null,
       endDate:   req.body.endDate   ?? null,
       progressLog,

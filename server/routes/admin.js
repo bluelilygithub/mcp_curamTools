@@ -1805,6 +1805,44 @@ function deriveTrustSignals(run) {
   };
 }
 
+function deriveRunObservability(run) {
+  const result = run.result ?? {};
+  const tokens = result.tokensUsed ?? {};
+  const runAt = run.run_at ? new Date(run.run_at).getTime() : null;
+  const completedAt = run.completed_at ? new Date(run.completed_at).getTime() : null;
+  const traceSummary = result.trace_summary ?? {};
+  const fallbackEvents = Array.isArray(traceSummary.fallback_events) ? traceSummary.fallback_events : [];
+  const progressLog = Array.isArray(result.progressLog) ? result.progressLog : [];
+  const capabilityWarnings = [
+    ...(Array.isArray(result.capability_warnings) ? result.capability_warnings : []),
+    ...(Array.isArray(result.fallback_capability_warnings) ? result.fallback_capability_warnings : []),
+  ];
+
+  return {
+    model: result.model ?? null,
+    model_source: result.model_source ?? null,
+    fallback_model: result.fallback_model ?? null,
+    fallback_model_source: result.fallback_model_source ?? null,
+    fallback_used: fallbackEvents.length > 0,
+    fallback_events: fallbackEvents,
+    prompt_version: result.prompt_version ?? null,
+    cost_aud: Number(result.costAud ?? 0),
+    tokens: {
+      input: Number(tokens.input ?? 0),
+      output: Number(tokens.output ?? 0),
+      cacheRead: Number(tokens.cacheRead ?? 0),
+      cacheWrite: Number(tokens.cacheWrite ?? 0),
+    },
+    duration_ms: runAt && completedAt ? Math.max(0, completedAt - runAt) : null,
+    progress_count: progressLog.length,
+    trace_summary: {
+      iterations: Number(traceSummary.iterations ?? 0),
+      tool_calls: Array.isArray(traceSummary.tool_calls) ? traceSummary.tool_calls : [],
+    },
+    capability_warnings: capabilityWarnings,
+  };
+}
+
 router.get('/agent-trust', async (req, res) => {
   const orgId = req.user.orgId;
   const days = Math.min(Math.max(parseInt(req.query.days ?? '30', 10), 1), 90);
@@ -1830,6 +1868,7 @@ router.get('/agent-trust', async (req, res) => {
 
     const runs = rows.map((run) => {
       const trust = deriveTrustSignals(run);
+      const observability = deriveRunObservability(run);
       return {
         id: run.id,
         slug: run.slug,
@@ -1838,6 +1877,7 @@ router.get('/agent-trust', async (req, res) => {
         completed_at: run.completed_at,
         error: run.error,
         result: run.result,
+        observability,
         ...trust,
       };
     });
@@ -1858,6 +1898,10 @@ router.get('/agent-trust', async (req, res) => {
         0
       ),
       total_signals: runs.reduce((sum, run) => sum + run.signals.length, 0),
+      total_cost_aud: runs.reduce((sum, run) => sum + Number(run.observability.cost_aud ?? 0), 0),
+      fallback_runs: runs.filter((run) => run.observability.fallback_used).length,
+      total_input_tokens: runs.reduce((sum, run) => sum + Number(run.observability.tokens.input ?? 0), 0),
+      total_output_tokens: runs.reduce((sum, run) => sum + Number(run.observability.tokens.output ?? 0), 0),
     };
 
     res.json({ days, scope, summary, runs });
