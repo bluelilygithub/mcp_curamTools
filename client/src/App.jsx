@@ -38,6 +38,7 @@ import AdminLessonsPage from './pages/admin/AdminLessonsPage';
 import AdminProvidersPage from './pages/admin/AdminProvidersPage';
 import AdminUsagePage from './pages/admin/AdminUsagePage';
 import AdminAgentTrustPage from './pages/admin/AdminAgentTrustPage';
+import AdminMonitoringPage from './pages/admin/AdminMonitoringPage';
 import AdminClaudeSessionPage from './pages/admin/AdminClaudeSessionPage';
 import GoogleAdsMonitorPage      from './pages/tools/GoogleAdsMonitorPage';
 import DiamondPlateDataPage      from './pages/tools/DiamondPlateDataPage';
@@ -106,9 +107,13 @@ export default function App() {
                   <Route path="/admin/knowledge" element={<AdminKnowledgePage />} />
                   <Route path="/admin/lessons" element={<AdminLessonsPage />} />
                   <Route path="/admin/providers" element={<AdminProvidersPage />} />
+                  <Route path="/admin/monitoring" element={<AdminMonitoringPage />} />
                   <Route path="/admin/usage" element={<AdminUsagePage />} />
                   <Route path="/admin/agent-trust" element={<AdminAgentTrustPage />} />
                   <Route path="/admin/claude-sessions" element={<AdminClaudeSessionPage />} />
+                  <Route path="/admin/monitoring/decision-log" element={<DecisionLogPage />} />
+                  <Route path="/admin/monitoring/transactions" element={<TransactionLogPage />} />
+                  <Route path="/admin/monitoring/events" element={<AgentEventLogPage />} />
                 </Route>
 
 				{/* Demo org routes */}

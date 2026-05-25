@@ -9,7 +9,7 @@
  */
 import { useEffect, useState, useCallback } from 'react';
 import { useIcon } from '../../providers/IconProvider';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useLocation, useSearchParams, Link } from 'react-router-dom';
 import api from '../../api/client';
 import LogTable from '../../components/logs/LogTable';
 import InlineBanner from '../../components/ui/InlineBanner';
@@ -25,6 +25,7 @@ const TRANSACTION_COLUMNS = [
 
 export default function TransactionLogPage() {
   const getIcon = useIcon();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -56,8 +57,12 @@ export default function TransactionLogPage() {
     a.click();
   };
 
+  const eventLogPath = location.pathname.startsWith('/admin/')
+    ? '/admin/monitoring/events'
+    : '/demo/logs/events';
+
   const renderDetail = (tx) => (
-    <TransactionDetail tx={tx} getIcon={getIcon} />
+    <TransactionDetail tx={tx} getIcon={getIcon} eventLogPath={eventLogPath} />
   );
 
   return (
@@ -87,7 +92,7 @@ export default function TransactionLogPage() {
   );
 }
 
-function TransactionDetail({ tx, getIcon }) {
+function TransactionDetail({ tx, getIcon, eventLogPath }) {
   const [events, setEvents] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -104,7 +109,7 @@ function TransactionDetail({ tx, getIcon }) {
     <div className="p-4 space-y-3">
       {/* Metadata grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <MetaItem label="Session ID" value={tx.session_id} mono linkTo={`/demo/logs/events?session_id=${tx.session_id}`} />
+        <MetaItem label="Session ID" value={tx.session_id} mono linkTo={`${eventLogPath}?session_id=${tx.session_id}`} />
         <MetaItem label="Transaction ID" value={tx.id} mono />
         <MetaItem label="Agent" value={tx.agent_slug} />
         <MetaItem label="Action" value={tx.action} />

@@ -13,7 +13,7 @@
  */
 import { useEffect, useState, useCallback } from 'react';
 import { useIcon } from '../../providers/IconProvider';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useLocation, useSearchParams, Link } from 'react-router-dom';
 import api from '../../api/client';
 import LogTable from '../../components/logs/LogTable';
 import InlineBanner from '../../components/ui/InlineBanner';
@@ -28,6 +28,7 @@ const BASE_COLUMNS = [
 
 export default function AgentEventLogPage() {
   const getIcon = useIcon();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -103,8 +104,17 @@ export default function AgentEventLogPage() {
     return row;
   });
 
+  const transactionLogPath = location.pathname.startsWith('/admin/')
+    ? '/admin/monitoring/transactions'
+    : '/demo/logs/transactions';
+
   const renderDetail = (ev) => (
-    <EventDetail ev={ev} agentFields={agentFields[ev.agent_slug]} getIcon={getIcon} />
+    <EventDetail
+      ev={ev}
+      agentFields={agentFields[ev.agent_slug]}
+      getIcon={getIcon}
+      transactionLogPath={transactionLogPath}
+    />
   );
 
   return (
@@ -157,13 +167,13 @@ export default function AgentEventLogPage() {
   );
 }
 
-function EventDetail({ ev, agentFields, getIcon }) {
+function EventDetail({ ev, agentFields, getIcon, transactionLogPath }) {
   return (
     <div className="p-4 space-y-3">
       {/* Core metadata */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetaItem label="Event ID" value={ev.id} mono />
-        <MetaItem label="Session ID" value={ev.session_id} mono linkTo={`/demo/logs/transactions?session_id=${ev.session_id}`} />
+        <MetaItem label="Session ID" value={ev.session_id} mono linkTo={`${transactionLogPath}?session_id=${ev.session_id}`} />
         <MetaItem label="Agent" value={ev.agent_slug} />
         <MetaItem label="Type" value={ev.event_type} />
       </div>

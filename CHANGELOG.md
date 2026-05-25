@@ -24,9 +24,11 @@ If a session changes both platform and one agent, **one root entry** is enough u
 - **Agent Trust as observability:** Expanded Admin > Agent Trust into an additive run observability console without replacing existing tool histories or usage pages.
 - **Run metadata summary:** Standard route-factory runs now persist compact model-resolution metadata, capability warnings, fallback configuration, and a trace summary with iterations, tool calls, and fallback events.
 - **Admin reporting surface:** Agent Trust now shows cost, token totals, fallback counts, duration, model/source, prompt version, tool-call summary, progress-step counts, and fallback/config warnings for selected runs.
+- **Monitoring hub:** Added a single Admin > Monitoring entry point that groups Agent Runs, Usage & Cost, raw logs, transaction logs, agent event logs, Claude Sessions, and Diagnostics so admins no longer hunt across scattered sidebar links.
 
 ### Fixed / discovered
 - Existing logging was useful but split across run history, usage logs, and transaction logs. The admin surface now brings the most operational fields together while keeping detailed usage reporting in Admin > Usage.
+- Direct legacy routes still work, but the sidebar now points admins to Monitoring as the starting point.
 
 ### Open / next
 - Backfill is not attempted; older runs simply show the metadata that already exists. Custom routes and scheduled jobs may still provide less detail than standard `createAgentRoute` runs.
