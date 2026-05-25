@@ -20,26 +20,31 @@ router.use(requireAuth);
 
 // ── Model defaults ──────────────────────────────────────────────────────────
 
-const MODEL_DEFAULTS = [
+const MODEL_DEFAULTS = AgentConfigService.normalizeModelList([
   {
     id: 'deepseek-chat', name: 'DeepSeek V3', tier: 'advanced', enabled: true,
+    provider: 'deepseek',
     emoji: '🧠', label: 'Standard', tagline: 'Smart & cost-effective',
     desc: 'Default model for all agents — analysis, writing, and tool workloads.',
     inputPricePer1M: 0.27, outputPricePer1M: 1.10, contextWindow: 64000,
+    capabilities: { tool_use: true, vision: false, long_context: false, json_reliable: true },
   },
   {
     id: 'deepseek-reasoner', name: 'DeepSeek R1', tier: 'premium', enabled: true,
+    provider: 'deepseek',
     emoji: '🔬', label: 'Premium', tagline: 'Deep reasoning',
     desc: 'Best for complex multi-step reasoning tasks.',
     inputPricePer1M: 0.55, outputPricePer1M: 2.19, contextWindow: 64000,
+    capabilities: { tool_use: true, vision: false, long_context: false, json_reliable: true },
   },
   {
     id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', tier: 'advanced', enabled: false,
+    provider: 'anthropic',
     emoji: '🧠', label: 'Claude', tagline: 'Anthropic fallback',
     desc: 'Fallback option if DeepSeek is unavailable.',
     inputPricePer1M: 3.00, outputPricePer1M: 15.00, contextWindow: 200000,
   },
-];
+]);
 
 // ── Models CRUD ─────────────────────────────────────────────────────────────
 
@@ -49,7 +54,7 @@ router.get('/models', async (req, res) => {
       `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'ai_models'`,
       [req.user.orgId]
     );
-    res.json(r.rows[0]?.value ?? MODEL_DEFAULTS);
+    res.json(r.rows.length > 0 ? AgentConfigService.normalizeModelList(r.rows[0]?.value) : MODEL_DEFAULTS);
   } catch (err) {
     res.status(500).json({ error: 'Failed to load models.' });
   }
@@ -58,12 +63,13 @@ router.get('/models', async (req, res) => {
 router.put('/models', async (req, res) => {
   const { models } = req.body;
   if (!Array.isArray(models)) return res.status(400).json({ error: 'models must be an array.' });
+  const normalizedModels = AgentConfigService.normalizeModelList(models);
   try {
     await pool.query(
       `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
        VALUES ($1, 'ai_models', $2, $3, NOW())
        ON CONFLICT (org_id, key) DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
-      [req.user.orgId, JSON.stringify(models), req.user.id]
+      [req.user.orgId, JSON.stringify(normalizedModels), req.user.id]
     );
     res.json({ ok: true });
   } catch (err) {

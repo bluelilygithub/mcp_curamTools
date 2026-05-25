@@ -17,6 +17,12 @@ import Button from '../ui/Button';
 import InlineBanner from '../ui/InlineBanner';
 
 const TIERS = ['standard', 'advanced', 'premium'];
+const CAPABILITIES = [
+  { key: 'tool_use', label: 'Tool use' },
+  { key: 'vision', label: 'Vision' },
+  { key: 'long_context', label: 'Long context' },
+  { key: 'json_reliable', label: 'Reliable JSON' },
+];
 
 const TIER_META = {
   standard: { label: 'Economy',  color: '#059669', bg: 'rgba(5,150,105,0.1)'   },
@@ -28,6 +34,7 @@ const EMPTY_FORM = {
   id: '', name: '', tier: 'advanced', provider: 'anthropic',
   emoji: '🤖', label: '', tagline: '', desc: '',
   inputPricePer1M: '', outputPricePer1M: '', contextWindow: 200000,
+  capabilities: { tool_use: true, vision: false, long_context: true, json_reliable: true },
   enabled: true,
 };
 
@@ -46,6 +53,13 @@ function Field({ label, hint, children }) {
       {children}
     </div>
   );
+}
+
+function normaliseCapabilities(capabilities) {
+  return CAPABILITIES.reduce((next, capability) => {
+    next[capability.key] = capabilities?.[capability.key] === true;
+    return next;
+  }, {});
 }
 
 function Section({ title, children }) {
@@ -137,7 +151,7 @@ export default function ModelsTab() {
   }
 
   function openEdit(m) {
-    setForm({ ...m });
+    setForm({ ...m, capabilities: normaliseCapabilities(m.capabilities) });
     setEditingId(m.id);
   }
 
@@ -154,6 +168,7 @@ export default function ModelsTab() {
       inputPricePer1M:  parseFloat(form.inputPricePer1M)  || 0,
       outputPricePer1M: parseFloat(form.outputPricePer1M) || 0,
       contextWindow:    parseInt(form.contextWindow, 10)   || 200000,
+      capabilities:     normaliseCapabilities(form.capabilities),
     };
     let updated;
     if (editingId === 'new') {
@@ -471,6 +486,28 @@ export default function ModelsTab() {
                 value={form.desc} onChange={(e) => setForm((f) => ({ ...f, desc: e.target.value }))} />
             </Field>
 
+            <Field label="Capabilities" hint="used to validate model choices before an agent run">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {CAPABILITIES.map((capability) => (
+                  <label
+                    key={capability.key}
+                    className="flex items-center gap-2 text-xs rounded-xl border px-3 py-2"
+                    style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={form.capabilities?.[capability.key] === true}
+                      onChange={(e) => setForm((f) => ({
+                        ...f,
+                        capabilities: { ...normaliseCapabilities(f.capabilities), [capability.key]: e.target.checked },
+                      }))}
+                    />
+                    {capability.label}
+                  </label>
+                ))}
+              </div>
+            </Field>
+
             <div className="flex gap-2 pt-1">
               <Button variant="primary" onClick={handleSave} disabled={saving || !form.id.trim() || !form.name.trim()}>
                 {saving ? 'Saving…' : editingId === 'new' ? 'Add model' : 'Save changes'}
@@ -559,6 +596,19 @@ export default function ModelsTab() {
                         <div className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
                           ${m.inputPricePer1M}/1M in · ${m.outputPricePer1M}/1M out
                           {m.contextWindow ? ` · ${(m.contextWindow / 1000).toFixed(0)}k ctx` : ''}
+                        </div>
+                      )}
+                      {m.capabilities && (
+                        <div className="flex gap-1 flex-wrap mt-1">
+                          {CAPABILITIES.filter((capability) => m.capabilities?.[capability.key]).map((capability) => (
+                            <span
+                              key={capability.key}
+                              className="text-xs px-1.5 py-0.5 rounded"
+                              style={{ background: 'var(--color-bg)', color: 'var(--color-muted)' }}
+                            >
+                              {capability.label}
+                            </span>
+                          ))}
                         </div>
                       )}
                     </div>

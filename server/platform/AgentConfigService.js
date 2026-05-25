@@ -278,6 +278,7 @@ const AGENT_MODEL_REQUIREMENTS = {
 const TIER_ORDER = ['standard', 'advanced', 'premium'];
 
 const KNOWN_CAPABILITIES = ['tool_use', 'vision', 'long_context', 'json_reliable'];
+const HARD_REQUIRED_CAPABILITIES = new Set(['vision']);
 
 function inferModelCapabilities(model = {}) {
   const id = String(model.id || '').toLowerCase();
@@ -285,13 +286,14 @@ function inferModelCapabilities(model = {}) {
   const contextWindow = parseInt(model.contextWindow ?? 0, 10) || 0;
   const isClaude = provider === 'anthropic' || id.startsWith('claude-');
   const isGemini = provider === 'gemini' || id.startsWith('gemini-');
+  const isDeepSeek = provider === 'deepseek' || id.startsWith('deepseek-');
   const isModernOpenAI = provider === 'openai' || /^(gpt-4|gpt-5|o[134]|chatgpt)/.test(id);
 
   return {
-    tool_use:      isClaude || isGemini || isModernOpenAI,
+    tool_use:      isClaude || isGemini || isModernOpenAI || isDeepSeek,
     vision:        isClaude || isGemini || /gpt-4o|gpt-5|vision|image/.test(id),
     long_context:  contextWindow >= 100000 || isClaude || isGemini,
-    json_reliable: isClaude || isGemini || isModernOpenAI,
+    json_reliable: isClaude || isGemini || isModernOpenAI || isDeepSeek,
   };
 }
 
@@ -625,25 +627,68 @@ async function validateModelCapabilities({ slug, orgId, modelId, role = 'primary
   const req = AGENT_MODEL_REQUIREMENTS[slug] ?? AGENT_MODEL_REQUIREMENTS._platform;
   const requiredCapabilities = req.capabilities ?? [];
   if (requiredCapabilities.length === 0) return null;
+  const hardRequiredCapabilities = requiredCapabilities.filter((capability) =>
+    HARD_REQUIRED_CAPABILITIES.has(capability)
+  );
 
   const model = await getModelFromCatalogue(orgId, modelId);
   if (!model) {
-    throw new Error(`Model "${modelId}" is not in the model catalogue, so its capabilities cannot be validated for ${slug}.`);
+    if (hardRequiredCapabilities.length > 0) {
+      const message = `Model "${modelId}" is not in the model catalogue, so required capabilities cannot be validated for ${slug}: ${hardRequiredCapabilities.join(', ')}.`;
+      if (role === 'fallback') {
+        return {
+          required_capabilities: requiredCapabilities,
+          model_capabilities: null,
+          invalid: true,
+          capability_warnings: [message],
+        };
+      }
+      throw new Error(message);
+    }
+    return {
+      required_capabilities: requiredCapabilities,
+      model_capabilities: null,
+      capability_warnings: [
+        `Model "${modelId}" is not in the model catalogue, so advisory capabilities were not validated for ${slug}: ${requiredCapabilities.join(', ')}.`,
+      ],
+    };
   }
   if (model.enabled === false) {
-    throw new Error(`Model "${modelId}" is disabled and cannot be used as the ${role} model for ${slug}.`);
+    const message = `Model "${modelId}" is disabled and cannot be used as the ${role} model for ${slug}.`;
+    if (role === 'fallback') {
+      return {
+        required_capabilities: requiredCapabilities,
+        model_capabilities: model.capabilities,
+        invalid: true,
+        capability_warnings: [message],
+      };
+    }
+    throw new Error(message);
   }
 
   const missing = requiredCapabilities.filter((capability) => model.capabilities?.[capability] !== true);
-  if (missing.length > 0) {
-    throw new Error(
-      `Model "${modelId}" cannot be used as the ${role} model for ${slug}; missing required capabilities: ${missing.join(', ')}.`
-    );
+  const missingHard = missing.filter((capability) => HARD_REQUIRED_CAPABILITIES.has(capability));
+  if (missingHard.length > 0) {
+    const message = `Model "${modelId}" cannot be used as the ${role} model for ${slug}; missing required capabilities: ${missingHard.join(', ')}.`;
+    if (role === 'fallback') {
+      return {
+        required_capabilities: requiredCapabilities,
+        model_capabilities: model.capabilities,
+        invalid: true,
+        missing_capabilities: missing,
+        capability_warnings: [message],
+      };
+    }
+    throw new Error(message);
   }
 
   return {
     required_capabilities: requiredCapabilities,
     model_capabilities: model.capabilities,
+    missing_capabilities: missing,
+    capability_warnings: missing.length > 0
+      ? [`Model "${modelId}" is missing advisory capabilities for ${slug}: ${missing.join(', ')}.`]
+      : [],
   };
 }
 
@@ -692,6 +737,10 @@ async function getResolvedAdminConfig(slug, orgId, { useRecommended = false } = 
     }
   }
   const fallbackCapabilityMeta = await validateModelCapabilities({ slug, orgId, modelId: fallback_model, role: 'fallback' });
+  if (fallbackCapabilityMeta?.invalid) {
+    fallback_model = null;
+    fallback_model_source = null;
+  }
 
   return {
     ...adminConfig,
@@ -702,6 +751,9 @@ async function getResolvedAdminConfig(slug, orgId, { useRecommended = false } = 
     ...(modelCapabilityMeta ?? {}),
     ...(fallbackCapabilityMeta?.model_capabilities && {
       fallback_model_capabilities: fallbackCapabilityMeta.model_capabilities,
+    }),
+    ...(fallbackCapabilityMeta?.capability_warnings?.length > 0 && {
+      fallback_capability_warnings: fallbackCapabilityMeta.capability_warnings,
     }),
   };
 }

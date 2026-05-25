@@ -22,11 +22,13 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ### Built
 - **Operational model capabilities:** Model catalogue entries now carry capability flags for tool use, vision, long context, and reliable JSON, with existing saved catalogue rows normalised on read/save.
-- **Resolver validation:** `getResolvedAdminConfig()` now validates primary and fallback models against each agent's declared requirements before a run starts, so vision/tool-use mismatches fail with clear configuration errors instead of model-call surprises.
-- **Admin visibility:** Admin model cards and edit forms expose capabilities, and Admin > Agents shows required capabilities for agents that declare them.
+- **Resolver validation:** `getResolvedAdminConfig()` now validates model capabilities before a run starts. Vision remains a hard requirement; advisory capabilities such as tool use and reliable JSON are recorded without blocking capable text models.
+- **Admin visibility:** Admin and Settings model cards/edit forms expose capabilities, and Admin > Agents shows required capabilities for agents that declare them.
 
 ### Fixed / discovered
 - Custom document extraction and demo follow-up routes now surface model-resolution failures directly rather than masking them as a missing model.
+- Settings > Models was the primary model editor in daily use, so it now shares the same capability controls and backend normalisation as Admin > Models.
+- DeepSeek catalogue entries are inferred as text/tool/JSON-capable but not vision-capable, matching the current OpenAI-compatible adapter behaviour.
 
 ### Open / next
 - Keep this as validation-only for now; defer autonomous "choose cheapest capable model" routing until real usage shows it is needed.
