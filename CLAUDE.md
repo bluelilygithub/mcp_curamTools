@@ -78,6 +78,19 @@ If a local Git hook is installed, it may run this automatically when these files
 
 ---
 
+## Adding a new built-in MCP server — required steps
+
+1. Create `server/mcp-servers/<name>.js` with `TOOLS`, `callTool`, and stdio JSON-RPC handlers.
+2. Add the server to `server/mcp-servers/manifest.js`. This is what auto-registers built-in servers into `mcp_servers` on app startup.
+3. Add any required env names to the manifest `requiredEnv` list. Do not rely on inherited full process env.
+4. Add or update resolver helpers in `server/platform/mcpTools.js` if agents need to find the server by name.
+5. Wire agent tools to call it with `callMcpTool(context.orgId, server, toolName, args)`.
+6. Document tools and data shapes in `MCP-SERVERS.md`.
+
+Do not depend on dropping a `.js` file into `server/mcp-servers/` alone. The app does not poll or auto-scan the folder; only manifest entries are bootstrapped.
+
+---
+
 ## Platform primitives — use these, don't reinvent
 
 | Need | Use |

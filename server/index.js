@@ -88,8 +88,18 @@ app.use((err, req, res, _next) => {
 const PORT = process.env.PORT || 3001;
 
 const MCPRegistry = require('./platform/mcpRegistry');
+const { bootstrapBuiltinMcpServers } = require('./platform/bootstrapBuiltinMcpServers');
 
 initSchema()
+  .then(async () => {
+    const result = await bootstrapBuiltinMcpServers();
+    if (!result.skipped) {
+      logger.info('Built-in MCP servers registered', {
+        orgCount: result.orgCount,
+        serverCount: result.serverCount,
+      });
+    }
+  })
   .then(() => {
     const server = app.listen(PORT, () => {
       logger.info(`MCP_curamTools running on port ${PORT}`);

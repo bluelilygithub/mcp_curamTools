@@ -185,7 +185,11 @@ Registered in `server/agents/profitabilitySuite/adsSetupArchitect/`.
 
 ## MCP Server Registration Notes
 
-All servers use stdio transport with these command patterns:
+Built-in servers are declared in `server/mcp-servers/manifest.js`. On app startup, `server/platform/bootstrapBuiltinMcpServers.js` upserts those manifest entries into the `mcp_servers` table for existing organisations.
+
+There is no folder polling: adding a `.js` file under `server/mcp-servers/` does not make it available unless it is also added to the manifest.
+
+All built-in servers use stdio transport with these command patterns:
 - `google-ads.js`: `node server/mcp-servers/google-ads.js`
 - `google-analytics.js`: `node server/mcp-servers/google-analytics.js`
 - `wordpress.js`: `node server/mcp-servers/wordpress.js`
