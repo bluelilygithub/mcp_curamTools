@@ -93,7 +93,10 @@
       "PowerShell(Get-ChildItem \"C:\\\\Users\\\\micha\\\\Local Sites\\\\mcp_curamTools\" -Name | Where-Object { $_ -notmatch \"node_modules\" })",
       "PowerShell(Get-ChildItem \"C:\\\\Users\\\\micha\\\\Local Sites\\\\mcp_curamTools\\\\server\" -Name | Where-Object { $_ -notmatch \"node_modules\" })",
       "PowerShell(Get-ChildItem \"C:\\\\Users\\\\micha\\\\Local Sites\\\\mcp_curamTools\\\\client\\\\src\" -Recurse -Name | Where-Object { $_ -notmatch \"node_modules\" } | Select-Object -First 80)",
-      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\micha\\\\Local Sites\\\\mcp_curamTools\\\\client\\\\src\" -Recurse -Name | Where-Object { $_ -notmatch \"node_modules\" } | Select-Object -Skip 80)"
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\micha\\\\Local Sites\\\\mcp_curamTools\\\\client\\\\src\" -Recurse -Name | Where-Object { $_ -notmatch \"node_modules\" } | Select-Object -Skip 80)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\micha\\\\Local Sites\\\\mcp_curamTools\\\\server\\\\agents\" -Directory)",
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(Sort-Object)"
     ]
   }
 }

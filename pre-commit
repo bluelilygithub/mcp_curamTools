@@ -1,0 +1,119 @@
+#!/bin/sh
+# .git/hooks/pre-commit
+# Same critical rules as .claude/settings.json hooks — enforced at commit time
+# regardless of which editor or AI tool made the change.
+#
+# Install: copy to .git/hooks/pre-commit and run: chmod +x .git/hooks/pre-commit
+# Or use Husky to commit this to the repo so it applies for all contributors.
+
+FAIL=0
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. EmailService must use https.request not fetch — silent MailChannels failure
+# ─────────────────────────────────────────────────────────────────────────────
+if [ -f "server/services/EmailService.js" ]; then
+  if grep -nE "^\s*[^/]*\bfetch\s*\(" server/services/EmailService.js > /dev/null 2>&1; then
+    echo "FAIL: EmailService.js uses fetch() — must use https.request (silent delivery failure)"
+    grep -nE "^\s*[^/]*\bfetch\s*\(" server/services/EmailService.js
+    FAIL=1
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. No hardcoded model fallbacks in agent code
+# ─────────────────────────────────────────────────────────────────────────────
+if find server/agents -name "index.js" 2>/dev/null | xargs grep -lE "\?\?\s*'(claude|deepseek|gemini)-|\|\|\s*'(claude|deepseek|gemini)-" 2>/dev/null | grep -q .; then
+  echo "FAIL: Hardcoded model fallback in agent code — use getResolvedAdminConfig (PLATFORM-PRIMITIVES.md)"
+  find server/agents -name "index.js" | xargs grep -nE "\?\?\s*'(claude|deepseek|gemini)-|\|\|\s*'(claude|deepseek|gemini)-" 2>/dev/null
+  FAIL=1
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. Never use client-supplied orgId — always req.user.orgId
+# ─────────────────────────────────────────────────────────────────────────────
+if find server/routes -name "*.js" 2>/dev/null | xargs grep -nE "req\.(body|query|params)\.(org_?id|orgId)" 2>/dev/null | grep -v "req\.user" | grep -q .; then
+  echo "FAIL: Client-supplied orgId detected — use req.user.orgId (PERMISSIONS.md)"
+  find server/routes -name "*.js" | xargs grep -nE "req\.(body|query|params)\.(org_?id|orgId)" 2>/dev/null | grep -v "req\.user"
+  FAIL=1
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. agent_runs must only be written via persistRun
+# ─────────────────────────────────────────────────────────────────────────────
+if find server/agents server/routes -name "*.js" 2>/dev/null | xargs grep -nEi "INSERT\s+INTO\s+agent_runs" 2>/dev/null | grep -q .; then
+  echo "FAIL: Direct INSERT into agent_runs — use persistRun only (PLATFORM-PRIMITIVES.md)"
+  find server/agents server/routes -name "*.js" | xargs grep -nEi "INSERT\s+INTO\s+agent_runs" 2>/dev/null
+  FAIL=1
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. agent_configs must not be queried directly — use AgentConfigService
+# ─────────────────────────────────────────────────────────────────────────────
+if find server/agents server/routes -name "*.js" 2>/dev/null | xargs grep -nEi "FROM\s+agent_configs|INTO\s+agent_configs" 2>/dev/null | grep -q .; then
+  echo "FAIL: Direct agent_configs query — use AgentConfigService (PLATFORM-PRIMITIVES.md)"
+  find server/agents server/routes -name "*.js" | xargs grep -nEi "FROM\s+agent_configs|INTO\s+agent_configs" 2>/dev/null
+  FAIL=1
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. MarkdownRenderer must use text= prop not content=
+# ─────────────────────────────────────────────────────────────────────────────
+if find client/src -name "*.jsx" -not -name "MarkdownRenderer.jsx" 2>/dev/null | xargs grep -nE "MarkdownRenderer" 2>/dev/null | grep "content=" | grep -q .; then
+  echo "FAIL: MarkdownRenderer uses content= prop — must use text= (DECISIONS.md)"
+  find client/src -name "*.jsx" -not -name "MarkdownRenderer.jsx" | xargs grep -nE "MarkdownRenderer" 2>/dev/null | grep "content="
+  FAIL=1
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. No direct SpeechRecognition — use MicButton + useSpeechInput
+# ─────────────────────────────────────────────────────────────────────────────
+if find client/src/pages -name "*.jsx" 2>/dev/null | xargs grep -nE "new\s+(webkit)?SpeechRecognition" 2>/dev/null | grep -v "//" | grep -q .; then
+  echo "FAIL: Direct SpeechRecognition — use MicButton + useSpeechInput (PLATFORM-PRIMITIVES.md)"
+  find client/src/pages -name "*.jsx" | xargs grep -nE "new\s+(webkit)?SpeechRecognition" 2>/dev/null | grep -v "//"
+  FAIL=1
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. wordpress.js must use pool.query() not pool.execute()
+# ─────────────────────────────────────────────────────────────────────────────
+if [ -f "server/mcp-servers/wordpress.js" ]; then
+  if grep -nE "pool\.execute\s*\(" server/mcp-servers/wordpress.js | grep -v "//" | grep -q .; then
+    echo "FAIL: wordpress.js uses pool.execute() — must use pool.query() (prepared statement bug with LIMIT)"
+    grep -nE "pool\.execute\s*\(" server/mcp-servers/wordpress.js | grep -v "//"
+    FAIL=1
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 9. Syntax check all staged server JS files
+# ─────────────────────────────────────────────────────────────────────────────
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep "^server/.*\.js$")
+for f in $STAGED; do
+  if [ -f "$f" ]; then
+    if ! node --check "$f" 2>&1; then
+      echo "FAIL: Syntax error in $f"
+      FAIL=1
+    fi
+  fi
+done
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 10. Golden-path smoke — run if platform spine files are staged
+# ─────────────────────────────────────────────────────────────────────────────
+SPINE_TOUCHED=$(git diff --cached --name-only | grep -E "markdownPdfBuffer|routes/export|createAgentRoute|AgentScheduler|promptVersions|tenderResponse/index")
+if [ -n "$SPINE_TOUCHED" ]; then
+  echo "Platform spine file staged — running golden-path smoke test (npm test)..."
+  if ! npm test 2>&1; then
+    echo "FAIL: Golden-path smoke failed — fix before committing (PROJECT_IDENTITY.md)"
+    FAIL=1
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+if [ "$FAIL" -eq 1 ]; then
+  echo ""
+  echo "Commit blocked. Fix the above before committing."
+  exit 1
+fi
+
+exit 0

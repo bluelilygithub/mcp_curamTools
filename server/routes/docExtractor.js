@@ -271,29 +271,58 @@ router.post(
         }
 
         // ── S3 storage — fire-and-forget, non-fatal ───────────────────────
-        // store_original: upload the raw file bytes (before extraction privacy,
-        //   which only affects the DB record — the file itself is unchanged).
-        // store_redacted: not yet implemented for native PDFs — falls back to do_not_store.
-        // do_not_store:   skip.
-        //
-        // Storage happens after privacy is applied to result.fields so the
-        // storageKey can be saved alongside the extraction result in the DB.
+        // store_original:  upload raw file bytes before any processing.
+        // store_redacted:  upload privacy-stripped extraction result as JSON.
+        //                  Runs after field exclusions so the stored payload
+        //                  never contains excluded PII fields.
+        // do_not_store:    skip entirely.
         let storageKey = null;
-        if (storageSettings.enabled && storageSettings.default_behaviour === 'store_original') {
-          const storageBucket = storageSettings.aws_bucket ?? process.env.AWS_S3_BUCKET;
-          const storageRegion = storageSettings.aws_region ?? process.env.AWS_S3_REGION ?? 'ap-southeast-2';
-          if (storageBucket && process.env.AWS_ACCESS_KEY_ID) {
-            const safe = originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-            const key  = `org/${orgId}/${Date.now()}-${safe}`;
-            StorageService.put({ bucket: storageBucket, region: storageRegion, key, body: buffer, contentType: mimetype, metadata: { orgId: String(orgId), runId: String(runId) } })
-              .then(({ storageKey: sk }) => {
-                storageKey = sk;
-                return pool.query(
-                  `UPDATE doc_extraction_runs SET storage_key = $1 WHERE id = $2`,
-                  [sk, runId]
-                );
-              })
-              .catch((err) => console.warn(`[doc-extractor] S3 upload failed (non-fatal):`, err.message));
+        const storageBucket = storageSettings.aws_bucket ?? process.env.AWS_S3_BUCKET;
+        const storageRegion = storageSettings.aws_region ?? process.env.AWS_S3_REGION ?? 'ap-southeast-2';
+
+        if (storageSettings.enabled && storageBucket && process.env.AWS_ACCESS_KEY_ID) {
+          const safe = originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+          if (storageSettings.default_behaviour === 'store_original') {
+            const key = `org/${orgId}/${Date.now()}-${safe}`;
+            StorageService.put({
+              bucket:      storageBucket,
+              region:      storageRegion,
+              key,
+              body:        buffer,
+              contentType: mimetype,
+              metadata:    { orgId: String(orgId), runId: String(runId) },
+            })
+              .then(({ storageKey: sk }) => pool.query(
+                `UPDATE doc_extraction_runs SET storage_key = $1 WHERE id = $2`,
+                [sk, runId]
+              ))
+              .catch((err) => console.warn(`[doc-extractor] S3 original upload failed (non-fatal):`, err.message));
+
+          } else if (storageSettings.default_behaviour === 'store_redacted') {
+            // Upload privacy-stripped extraction result (fields already excluded above).
+            // Original document is not stored — only the structured output after PII removal.
+            const key  = `org/${orgId}/${Date.now()}-${safe}.extracted.json`;
+            const body = Buffer.from(JSON.stringify({
+              filename:         originalname,
+              extracted_at:     new Date().toISOString(),
+              document_type:    result.document_type   ?? null,
+              fields:           result.fields,           // privacy-stripped
+              quality_advisory: result.quality_advisory ?? null,
+            }), 'utf8');
+            StorageService.put({
+              bucket:      storageBucket,
+              region:      storageRegion,
+              key,
+              body,
+              contentType: 'application/json',
+              metadata:    { orgId: String(orgId), runId: String(runId), source: 'redacted-extraction' },
+            })
+              .then(({ storageKey: sk }) => pool.query(
+                `UPDATE doc_extraction_runs SET storage_key = $1 WHERE id = $2`,
+                [sk, runId]
+              ))
+              .catch((err) => console.warn(`[doc-extractor] S3 redacted upload failed (non-fatal):`, err.message));
           }
         }
 

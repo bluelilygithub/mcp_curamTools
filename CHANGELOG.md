@@ -18,6 +18,18 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-27 — Doc Extractor: store_redacted implemented
+
+### Built
+- **`store_redacted` storage behaviour now live** (`server/routes/docExtractor.js`): uploads privacy-stripped extraction result as a `.extracted.json` file to S3 rather than the original document. Payload contains `filename`, `extracted_at`, `document_type`, `fields` (after PII exclusions), and `quality_advisory`. Original document is never stored under this policy.
+- Storage block refactored: bucket/region resolved once outside the if/else branches (was duplicated). Pattern is fire-and-forget non-fatal — identical to `store_original`.
+- `server/CLAUDE.md` updated: all three `default_behaviour` values documented as implemented.
+
+### Why this matters
+`store_redacted` closes the gap between the documented storage policy options and what was actually enforced. The prior code silently fell back to `do_not_store` when admins selected `store_redacted`, with no error or indication. Agents handling sensitive documents can now persist the structured output for audit/archival without retaining the source file.
+
+---
+
 ## 2026-05-26 — Pre-run Model + Capability Enforcement
 
 ### Built / Fixed

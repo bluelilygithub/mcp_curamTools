@@ -4,7 +4,9 @@
 
 Internal AI agent platform for one organisation (Blue Lily). Solo developer. Invite-only users. Not a SaaS, not a public product, not multi-tenant beyond a single org. Railway-hosted, single instance.
 
-**Consequence:** Recommend proportionate solutions. No AWS Secrets Manager, no SOC2, no dedicated security team. Simple wins over complete.
+**Infrastructure:** AWS S3 is used for file storage. Railway hosts the app. No AWS Secrets Manager, no enterprise IAM, no SOC2, no dedicated security team.
+
+**Consequence:** Recommend proportionate solutions. Simple wins over complete.
 
 ---
 
@@ -43,6 +45,8 @@ The following rules are project guardrails for all AI agents working in this rep
 
 **WordPress LIMIT** — embed as integer string directly in SQL, not as a `?` placeholder.
 
+**PII / Data privacy** — any agent that extracts structured fields or handles personal data must apply platform field exclusion. Load `AgentConfigService.getExtractionPrivacySettings(orgId)` before processing; filter `result.fields` post-AI, pre-DB-save. Never save then strip. Full pattern in `server/CLAUDE.md`.
+
 ---
 
 ## Golden-path smoke test
@@ -63,18 +67,20 @@ If a local Git hook is installed, it may run this automatically when these files
 ## Adding a new agent — required steps in order
 
 1. Read `server/agents/adsAttributionSummary/index.js` first
-2. Create `server/agents/<slug>/index.js` — exports `run<Name>(context)`
-3. Create `server/agents/<slug>/tools.js` — exports `{ <name>Tools, TOOL_SLUG }`
-4. Create `server/agents/<slug>/prompt.js` — exports `buildSystemPrompt(config, customerVars = {})`
-5. Add `AGENT_DEFAULTS` entry in `AgentConfigService.js`
-6. Add `ADMIN_DEFAULTS` entry in `AgentConfigService.js`
-7. Add `AGENT_MODEL_REQUIREMENTS` capabilities if the agent requires tool use, vision, reliable JSON, or long context
-8. **Add one entry to `server/agents/manifest.js`** — `{ slug, module, export, permission, rateLimit?, schedule? }`. Do NOT edit `server/routes/agents.js` for basic registration; the loop picks up manifest entries automatically.
-9. If scheduled, add cron in the manifest `schedule` field — document UTC↔AEST offset. Update `CRON.md`.
-10. Create `client/src/pages/tools/<NamePage>.jsx`
-11. Add route in `client/src/App.jsx`
-12. Add entry in `client/src/config/tools.js`
-13. Update `LESSON_COVERAGE_SECTIONS` in `AdminLessonsPage.jsx`
+2. **State which platform primitives from the table below you will use. Do not create any files until this is confirmed.**
+3. Decide: **pre-fetch or ReAct?** If all data sources are known before Claude runs → pre-fetch (`maxIterations: 1`, `tools: []`). ReAct only if data requirements are genuinely dynamic. Pre-fetch is 5–10× cheaper.
+4. Create `server/agents/<slug>/index.js` — exports `run<Name>(context)`
+5. Create `server/agents/<slug>/tools.js` — exports `{ <name>Tools, TOOL_SLUG }`
+6. Create `server/agents/<slug>/prompt.js` — exports `buildSystemPrompt(config, customerVars = {})`
+7. Add `AGENT_DEFAULTS` entry in `AgentConfigService.js`
+8. Add `ADMIN_DEFAULTS` entry in `AgentConfigService.js`
+9. Add `AGENT_MODEL_REQUIREMENTS` capabilities if the agent requires tool use, vision, reliable JSON, or long context
+10. **Add one entry to `server/agents/manifest.js`** — `{ slug, module, export, permission, rateLimit?, schedule? }`. Do NOT edit `server/routes/agents.js` for basic registration; the loop picks up manifest entries automatically.
+11. If scheduled, add cron in the manifest `schedule` field — document UTC↔AEST offset. Update `CRON.md`.
+12. Create `client/src/pages/tools/<NamePage>.jsx`
+13. Add route in `client/src/App.jsx`
+14. Add entry in `client/src/config/tools.js`
+15. Update `LESSON_COVERAGE_SECTIONS` in `AdminLessonsPage.jsx`
 
 **Exception:** agents with bespoke sub-routes (suggestions CRUD, custom email endpoints, prompt management) must also add those routes directly in `server/routes/agents.js` under the "Custom sub-routes" section. The manifest only covers the standard SSE run + history endpoints.
 
