@@ -24,303 +24,135 @@ const { createAgentRoute } = require('../platform/createAgentRoute');
 const { AgentScheduler }   = require('../platform/AgentScheduler');
 const { send: sendEmail }  = require('../services/EmailService');
 
+/**
+ * Isolate per-agent load failures so one broken module cannot take down all 31+ agents.
+ * Returns the named export on success, null on failure (logs the error).
+ */
+function tryLoad(modulePath, exportName, slug) {
+  try {
+    return require(modulePath)[exportName] ?? null;
+  } catch (err) {
+    console.error(`[agents] ⚠ Failed to load agent "${slug}": ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Registers an agent route. When runFn is null (load failure), mounts a 503 stub
+ * so the broken agent is visible without affecting other routes.
+ */
+function registerAgent(path, opts) {
+  const { slug, runFn, requiredPermission, rateLimit } = opts;
+  if (!runFn) {
+    agentsRouter.all(`/${slug}/*`, (req, res) =>
+      res.status(503).json({ error: `Agent "${slug}" unavailable — module failed to load. Check server logs.` })
+    );
+    agentsRouter.all(`/${slug}`, (req, res) =>
+      res.status(503).json({ error: `Agent "${slug}" unavailable — module failed to load. Check server logs.` })
+    );
+    return;
+  }
+  agentsRouter.use(path, createAgentRoute({ slug, runFn, requiredPermission, rateLimit }));
+}
+
 // ── Google Ads Monitor ────────────────────────────────────────────────────
-const { runGoogleAdsMonitor }      = require('../agents/googleAdsMonitor');
-const { runGoogleAdsFreeform }     = require('../agents/googleAdsFreeform');
-const { runGoogleAdsChangeImpact } = require('../agents/googleAdsChangeImpact');
-const { runGoogleAdsChangeAudit }  = require('../agents/googleAdsChangeAudit');
+const runGoogleAdsMonitor      = tryLoad('../agents/googleAdsMonitor',      'runGoogleAdsMonitor',      'google-ads-monitor');
+const runGoogleAdsFreeform     = tryLoad('../agents/googleAdsFreeform',     'runGoogleAdsFreeform',     'google-ads-freeform');
+const runGoogleAdsChangeImpact = tryLoad('../agents/googleAdsChangeImpact', 'runGoogleAdsChangeImpact', 'google-ads-change-impact');
+const runGoogleAdsChangeAudit  = tryLoad('../agents/googleAdsChangeAudit',  'runGoogleAdsChangeAudit',  'google-ads-change-audit');
 
-agentsRouter.use(
-  '/google-ads-monitor',
-  createAgentRoute({
-    slug:               'google-ads-monitor',
-    runFn:              runGoogleAdsMonitor,
-    requiredPermission: 'ads_operator',
-  })
-);
-
-AgentScheduler.register({
-  slug:     'google-ads-monitor',
-  schedule: '0 6,18 * * *',
-  runFn:    runGoogleAdsMonitor,
-});
+registerAgent('/google-ads-monitor',      { slug: 'google-ads-monitor',      runFn: runGoogleAdsMonitor,      requiredPermission: 'ads_operator' });
+if (runGoogleAdsMonitor) AgentScheduler.register({ slug: 'google-ads-monitor', schedule: '0 6,18 * * *', runFn: runGoogleAdsMonitor });
 
 // ── Google Ads Freeform ───────────────────────────────────────────────────
-agentsRouter.use(
-  '/google-ads-freeform',
-  createAgentRoute({
-    slug:               'google-ads-freeform',
-    runFn:              runGoogleAdsFreeform,
-    requiredPermission: 'ads_operator',
-  })
-);
+registerAgent('/google-ads-freeform',     { slug: 'google-ads-freeform',     runFn: runGoogleAdsFreeform,     requiredPermission: 'ads_operator' });
 
 // ── Google Ads Change Impact ──────────────────────────────────────────────
-agentsRouter.use(
-  '/google-ads-change-impact',
-  createAgentRoute({
-    slug:               'google-ads-change-impact',
-    runFn:              runGoogleAdsChangeImpact,
-    requiredPermission: 'ads_operator',
-  })
-);
+registerAgent('/google-ads-change-impact',{ slug: 'google-ads-change-impact', runFn: runGoogleAdsChangeImpact, requiredPermission: 'ads_operator' });
 
 // ── Google Ads Change Audit ───────────────────────────────────────────────
-agentsRouter.use(
-  '/google-ads-change-audit',
-  createAgentRoute({
-    slug:               'google-ads-change-audit',
-    runFn:              runGoogleAdsChangeAudit,
-    requiredPermission: 'ads_operator',
-  })
-);
+registerAgent('/google-ads-change-audit', { slug: 'google-ads-change-audit',  runFn: runGoogleAdsChangeAudit,  requiredPermission: 'ads_operator' });
 
 // ── Ads Bounce Analysis ───────────────────────────────────────────────────
-const { runAdsBounceAnalysis } = require('../agents/adsBounceAnalysis');
-
-agentsRouter.use(
-  '/ads-bounce-analysis',
-  createAgentRoute({
-    slug:               'ads-bounce-analysis',
-    runFn:              runAdsBounceAnalysis,
-    requiredPermission: 'ads_operator',
-  })
-);
+const runAdsBounceAnalysis    = tryLoad('../agents/adsBounceAnalysis',    'runAdsBounceAnalysis',    'ads-bounce-analysis');
+registerAgent('/ads-bounce-analysis',     { slug: 'ads-bounce-analysis',     runFn: runAdsBounceAnalysis,    requiredPermission: 'ads_operator' });
 
 // ── Auction Insights ──────────────────────────────────────────────────────
-const { runAuctionInsights } = require('../agents/auctionInsights');
-
-agentsRouter.use(
-  '/auction-insights',
-  createAgentRoute({
-    slug:               'auction-insights',
-    runFn:              runAuctionInsights,
-    requiredPermission: 'ads_operator',
-  })
-);
+const runAuctionInsights      = tryLoad('../agents/auctionInsights',      'runAuctionInsights',      'auction-insights');
+registerAgent('/auction-insights',        { slug: 'auction-insights',        runFn: runAuctionInsights,      requiredPermission: 'ads_operator' });
 
 // ── Competitor Keyword Intel ──────────────────────────────────────────────
-const { runCompetitorKeywordIntel } = require('../agents/competitorKeywordIntel');
-
-agentsRouter.use(
-  '/competitor-keyword-intel',
-  createAgentRoute({
-    slug:               'competitor-keyword-intel',
-    runFn:              runCompetitorKeywordIntel,
-    requiredPermission: 'ads_operator',
-  })
-);
+const runCompetitorKeywordIntel = tryLoad('../agents/competitorKeywordIntel', 'runCompetitorKeywordIntel', 'competitor-keyword-intel');
+registerAgent('/competitor-keyword-intel',{ slug: 'competitor-keyword-intel', runFn: runCompetitorKeywordIntel, requiredPermission: 'ads_operator' });
 
 // ── Google Ads Strategic Review ───────────────────────────────────────────
-const { runGoogleAdsStrategicReview } = require('../agents/googleAdsStrategicReview');
-
-agentsRouter.use(
-  '/google-ads-strategic-review',
-  createAgentRoute({
-    slug:               'google-ads-strategic-review',
-    runFn:              runGoogleAdsStrategicReview,
-    requiredPermission: 'ads_operator',
-  })
-);
+const runGoogleAdsStrategicReview = tryLoad('../agents/googleAdsStrategicReview', 'runGoogleAdsStrategicReview', 'google-ads-strategic-review');
+registerAgent('/google-ads-strategic-review', { slug: 'google-ads-strategic-review', runFn: runGoogleAdsStrategicReview, requiredPermission: 'ads_operator' });
 
 // ── Keyword Opportunity ───────────────────────────────────────────────────
-const { runKeywordOpportunity } = require('../agents/keywordOpportunity');
-
-agentsRouter.use(
-  '/keyword-opportunity',
-  createAgentRoute({
-    slug:               'keyword-opportunity',
-    runFn:              runKeywordOpportunity,
-    requiredPermission: 'ads_operator',
-  })
-);
+const runKeywordOpportunity   = tryLoad('../agents/keywordOpportunity',   'runKeywordOpportunity',   'keyword-opportunity');
+registerAgent('/keyword-opportunity',     { slug: 'keyword-opportunity',     runFn: runKeywordOpportunity,   requiredPermission: 'ads_operator' });
 
 // ── Ads Copy Gate ─────────────────────────────────────────────────────────
-const { runAdsCopyGate } = require('../agents/adsCopyGate');
-
-agentsRouter.use(
-  '/ads-copy-gate',
-  createAgentRoute({
-    slug:               'ads-copy-gate',
-    runFn:              runAdsCopyGate,
-    requiredPermission: 'ads_operator',
-  })
-);
+const runAdsCopyGate          = tryLoad('../agents/adsCopyGate',          'runAdsCopyGate',          'ads-copy-gate');
+registerAgent('/ads-copy-gate',           { slug: 'ads-copy-gate',           runFn: runAdsCopyGate,          requiredPermission: 'ads_operator' });
 
 // ── Ads Copy Playbook ─────────────────────────────────────────────────────
-const { runAdsCopyPlaybook } = require('../agents/adsCopyPlaybook');
-
-agentsRouter.use(
-  '/ads-copy-playbook',
-  createAgentRoute({
-    slug:               'ads-copy-playbook',
-    runFn:              runAdsCopyPlaybook,
-    requiredPermission: 'ads_operator',
-  })
-);
+const runAdsCopyPlaybook      = tryLoad('../agents/adsCopyPlaybook',      'runAdsCopyPlaybook',      'ads-copy-playbook');
+registerAgent('/ads-copy-playbook',       { slug: 'ads-copy-playbook',       runFn: runAdsCopyPlaybook,      requiredPermission: 'ads_operator' });
 
 // ── Ads Setup Architect ───────────────────────────────────────────────────
-const { runAdsSetupArchitect } = require('../agents/profitabilitySuite/adsSetupArchitect');
-
-agentsRouter.use(
-  '/ads-setup-architect',
-  createAgentRoute({
-    slug:               'ads-setup-architect',
-    runFn:              runAdsSetupArchitect,
-    requiredPermission: 'ads_operator',
-  })
-);
+const runAdsSetupArchitect    = tryLoad('../agents/profitabilitySuite/adsSetupArchitect', 'runAdsSetupArchitect', 'ads-setup-architect');
+registerAgent('/ads-setup-architect',     { slug: 'ads-setup-architect',     runFn: runAdsSetupArchitect,    requiredPermission: 'ads_operator' });
 
 // ── Ads Copy Diagnostic ───────────────────────────────────────────────────
-const { runAdsCopyDiagnostic } = require('../agents/adsCopyDiagnostic');
-
-agentsRouter.use(
-  '/ads-copy-diagnostic',
-  createAgentRoute({
-    slug:               'ads-copy-diagnostic',
-    runFn:              runAdsCopyDiagnostic,
-    requiredPermission: 'ads_operator',
-  })
-);
+const runAdsCopyDiagnostic    = tryLoad('../agents/adsCopyDiagnostic',    'runAdsCopyDiagnostic',    'ads-copy-diagnostic');
+registerAgent('/ads-copy-diagnostic',     { slug: 'ads-copy-diagnostic',     runFn: runAdsCopyDiagnostic,    requiredPermission: 'ads_operator' });
 
 // ── Ads Attribution Summary ───────────────────────────────────────────────
-const { runAdsAttributionSummary } = require('../agents/adsAttributionSummary');
+const runAdsAttributionSummary = tryLoad('../agents/adsAttributionSummary', 'runAdsAttributionSummary', 'ads-attribution-summary');
+registerAgent('/ads-attribution-summary', { slug: 'ads-attribution-summary', runFn: runAdsAttributionSummary, requiredPermission: 'ads_operator' });
 
-agentsRouter.use(
-  '/ads-attribution-summary',
-  createAgentRoute({
-    slug:               'ads-attribution-summary',
-    runFn:              runAdsAttributionSummary,
-    requiredPermission: 'ads_operator',
-  })
-);
-
-// ── WP Theme Extractor ───────────────────────────────────────────────────
-const { runWpThemeExtractor } = require('../agents/wpThemeExtractor');
-
-agentsRouter.use(
-  '/wp-theme-extractor',
-  createAgentRoute({
-    slug:               'wp-theme-extractor',
-    runFn:              runWpThemeExtractor,
-    requiredPermission: 'org_member',
-    rateLimit:          20,
-  })
-);
+// ── WP Theme Extractor ────────────────────────────────────────────────────
+const runWpThemeExtractor     = tryLoad('../agents/wpThemeExtractor',     'runWpThemeExtractor',     'wp-theme-extractor');
+registerAgent('/wp-theme-extractor',      { slug: 'wp-theme-extractor',      runFn: runWpThemeExtractor,     requiredPermission: 'org_member', rateLimit: 20 });
 
 // ── DiamondPlate Data ─────────────────────────────────────────────────────
-const { runDiamondplateData } = require('../agents/diamondplateData');
+const runDiamondplateData     = tryLoad('../agents/diamondplateData',     'runDiamondplateData',     'diamondplate-data');
+registerAgent('/diamondplate-data',       { slug: 'diamondplate-data',       runFn: runDiamondplateData,     requiredPermission: 'org_member' });
 
-agentsRouter.use(
-  '/diamondplate-data',
-  createAgentRoute({
-    slug:               'diamondplate-data',
-    runFn:              runDiamondplateData,
-    requiredPermission: 'org_member',
-  })
-);
+// ── Search Term Intelligence ──────────────────────────────────────────────
+const runSearchTermIntelligence = tryLoad('../agents/searchTermIntelligence', 'runSearchTermIntelligence', 'search-term-intelligence');
+registerAgent('/search-term-intelligence',{ slug: 'search-term-intelligence', runFn: runSearchTermIntelligence, requiredPermission: 'org_member' });
 
-// ── Search Term Intelligence ──────────────────────────────────────────────────
-const { runSearchTermIntelligence } = require('../agents/searchTermIntelligence');
+// ── Daypart Intelligence ──────────────────────────────────────────────────
+const runDaypartIntelligence  = tryLoad('../agents/daypartIntelligence',  'runDaypartIntelligence',  'daypart-intelligence');
+registerAgent('/daypart-intelligence',    { slug: 'daypart-intelligence',    runFn: runDaypartIntelligence,  requiredPermission: 'ads_operator' });
 
-agentsRouter.use(
-  '/search-term-intelligence',
-  createAgentRoute({
-    slug:               'search-term-intelligence',
-    runFn:              runSearchTermIntelligence,
-    requiredPermission: 'org_member',
-  })
-);
+// ── Cost Per Booked Job ───────────────────────────────────────────────────
+const runCostPerBookedJob     = tryLoad('../agents/costPerBookedJob',     'runCostPerBookedJob',     'cost-per-booked-job');
+registerAgent('/cost-per-booked-job',     { slug: 'cost-per-booked-job',     runFn: runCostPerBookedJob,     requiredPermission: 'ads_operator' });
 
-// ── Daypart Intelligence ──────────────────────────────────────────────────────
-const { runDaypartIntelligence } = require('../agents/daypartIntelligence');
-
-agentsRouter.use(
-  '/daypart-intelligence',
-  createAgentRoute({
-    slug:               'daypart-intelligence',
-    runFn:              runDaypartIntelligence,
-    requiredPermission: 'ads_operator',
-  })
-);
-
-// ── Cost Per Booked Job ───────────────────────────────────────────────────────
-const { runCostPerBookedJob } = require('../agents/costPerBookedJob');
-
-agentsRouter.use(
-  '/cost-per-booked-job',
-  createAgentRoute({
-    slug:               'cost-per-booked-job',
-    runFn:              runCostPerBookedJob,
-    requiredPermission: 'ads_operator',
-  })
-);
-
-// ── Lead Velocity ─────────────────────────────────────────────────────────────
-const { runLeadVelocity } = require('../agents/leadVelocity');
-
-agentsRouter.use(
-  '/lead-velocity',
-  createAgentRoute({
-    slug:               'lead-velocity',
-    runFn:              runLeadVelocity,
-    requiredPermission: 'org_member',
-  })
-);
+// ── Lead Velocity ─────────────────────────────────────────────────────────
+const runLeadVelocity         = tryLoad('../agents/leadVelocity',         'runLeadVelocity',         'lead-velocity');
+registerAgent('/lead-velocity',           { slug: 'lead-velocity',           runFn: runLeadVelocity,         requiredPermission: 'org_member' });
 
 // ── AI Visibility Monitor ─────────────────────────────────────────────────
-const { runAiVisibilityMonitor } = require('../agents/aiVisibilityMonitor');
-
-agentsRouter.use(
-  '/ai-visibility-monitor',
-  createAgentRoute({
-    slug:               'ai-visibility-monitor',
-    runFn:              runAiVisibilityMonitor,
-    requiredPermission: 'org_member',
-  })
-);
-
-AgentScheduler.register({
-  slug:     'ai-visibility-monitor',
-  schedule: '0 7 * * 1',
-  runFn:    runAiVisibilityMonitor,
-});
+const runAiVisibilityMonitor  = tryLoad('../agents/aiVisibilityMonitor',  'runAiVisibilityMonitor',  'ai-visibility-monitor');
+registerAgent('/ai-visibility-monitor',   { slug: 'ai-visibility-monitor',   runFn: runAiVisibilityMonitor,  requiredPermission: 'org_member' });
+if (runAiVisibilityMonitor) AgentScheduler.register({ slug: 'ai-visibility-monitor', schedule: '0 7 * * 1', runFn: runAiVisibilityMonitor });
 
 // ── Not Interested Report ─────────────────────────────────────────────────
-const { runNotInterestedReport } = require('../agents/notInterestedReport');
-
-agentsRouter.use(
-  '/not-interested-report',
-  createAgentRoute({
-    slug:               'not-interested-report',
-    runFn:              runNotInterestedReport,
-    requiredPermission: 'org_admin',
-  })
-);
+const runNotInterestedReport  = tryLoad('../agents/notInterestedReport',  'runNotInterestedReport',  'not-interested-report');
+registerAgent('/not-interested-report',   { slug: 'not-interested-report',   runFn: runNotInterestedReport,  requiredPermission: 'org_admin' });
 
 // ── Geo Heatmap ───────────────────────────────────────────────────────────
-const { runGeoHeatmap } = require('../agents/geoHeatmap');
-
-agentsRouter.use(
-  '/geo-heatmap',
-  createAgentRoute({
-    slug:               'geo-heatmap',
-    runFn:              runGeoHeatmap,
-    requiredPermission: 'org_member',
-  })
-);
+const runGeoHeatmap           = tryLoad('../agents/geoHeatmap',           'runGeoHeatmap',           'geo-heatmap');
+registerAgent('/geo-heatmap',             { slug: 'geo-heatmap',             runFn: runGeoHeatmap,           requiredPermission: 'org_member' });
 
 // ── High Intent Advisor ───────────────────────────────────────────────────
-const { runHighIntentAdvisor } = require('../agents/highIntentAdvisor');
-
-agentsRouter.use(
-  '/high-intent-advisor',
-  createAgentRoute({
-    slug:               'high-intent-advisor',
-    runFn:              runHighIntentAdvisor,
-    requiredPermission: 'org_admin',
-  })
-);
+const runHighIntentAdvisor    = tryLoad('../agents/highIntentAdvisor',    'runHighIntentAdvisor',    'high-intent-advisor');
+registerAgent('/high-intent-advisor',     { slug: 'high-intent-advisor',     runFn: runHighIntentAdvisor,    requiredPermission: 'org_admin' });
 // AgentScheduler cron registration deferred — add after manual QA
 
 // GET /api/agents/high-intent-advisor/suggestions
@@ -462,53 +294,17 @@ agentsRouter.post('/google-ads-monitor/email', requireAuth, async (req, res) => 
 });
 
 // ── Demo Suite — Document Analyzer ───────────────────────────────────────
-const { runDocumentAnalyzer } = require('../agents/demoSuite/documentAnalyzer');
-
-agentsRouter.use(
-  '/demo-document-analyzer',
-  createAgentRoute({
-    slug:               'demo-document-analyzer',
-    runFn:              runDocumentAnalyzer,
-    requiredPermission: 'org_member',
-    rateLimit:          20, // interactive demo — allow more frequent runs than report agents
-  })
-);
+const runDocumentAnalyzer = tryLoad('../agents/demoSuite/documentAnalyzer', 'runDocumentAnalyzer', 'demo-document-analyzer');
+registerAgent('/demo-document-analyzer',  { slug: 'demo-document-analyzer',  runFn: runDocumentAnalyzer,  requiredPermission: 'org_member', rateLimit: 20 });
 
 // ── Spec Validator (internal + demo) ─────────────────────────────────────
-const { runSpecValidator } = require('../agents/specValidator/index');
-
-agentsRouter.use(
-  '/spec-validator',
-  createAgentRoute({
-    slug:               'spec-validator',
-    runFn:              runSpecValidator,
-    requiredPermission: 'org_member',
-    rateLimit:          10,
-  })
-);
-
-agentsRouter.use(
-  '/demo-spec-validator',
-  createAgentRoute({
-    slug:               'demo-spec-validator',
-    runFn:              runSpecValidator,
-    requiredPermission: 'org_member',
-    rateLimit:          20,
-  })
-);
+const runSpecValidator    = tryLoad('../agents/specValidator/index',         'runSpecValidator',    'spec-validator');
+registerAgent('/spec-validator',          { slug: 'spec-validator',          runFn: runSpecValidator,     requiredPermission: 'org_member', rateLimit: 10 });
+registerAgent('/demo-spec-validator',     { slug: 'demo-spec-validator',     runFn: runSpecValidator,     requiredPermission: 'org_member', rateLimit: 20 });
 
 // ── Demo Suite — Tender Response Generator ───────────────────────────────
-const { runTenderResponse } = require('../agents/demoSuite/tenderResponse');
-
-agentsRouter.use(
-  '/demo-tender-response',
-  createAgentRoute({
-    slug:               'demo-tender-response',
-    runFn:              runTenderResponse,
-    requiredPermission: 'org_member',
-    rateLimit:          10,
-  })
-);
+const runTenderResponse   = tryLoad('../agents/demoSuite/tenderResponse',    'runTenderResponse',   'demo-tender-response');
+registerAgent('/demo-tender-response',    { slug: 'demo-tender-response',    runFn: runTenderResponse,    requiredPermission: 'org_member', rateLimit: 10 });
 
 // ── Agent config routes (/api/agent-configs/:slug) ────────────────────────
 
