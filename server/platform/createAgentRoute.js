@@ -96,7 +96,9 @@ function createProgressEmitter({ res, progressLog }) {
 async function loadRunConfig({ slug, orgId }) {
   const adminConfig = await AgentConfigService.getResolvedAdminConfig(slug, orgId);
   if (!adminConfig.model) {
-    console.warn(`[${slug}] No per-agent model and no org default model (orgId=${orgId}) — check Settings > Models`);
+    throw new Error(
+      `No model configured for agent "${slug}". Set a per-agent model in Admin › Agents or an org default in Settings › Models.`
+    );
   }
 
   let agentConfig;
@@ -438,7 +440,7 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5, trus
       try {
         ({ adminConfig, agentConfig } = await loadRunConfig({ slug, orgId }));
       } catch (cfgErr) {
-        emit('error', { error: 'Failed to load agent config' });
+        emit('error', { error: cfgErr.message });
         await persistRun({ slug, orgId, status: 'error', error: cfgErr.message, runId });
         return done();
       }
@@ -456,6 +458,12 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5, trus
       if (!adminConfig.enabled) {
         emit('error', { error: 'Agent is currently disabled by an administrator.' });
         return done();
+      }
+
+      // Emit advisory capability warnings before compute starts so the user sees them.
+      // Hard capability mismatches already threw in loadRunConfig; these are advisory only.
+      for (const w of (adminConfig.capability_warnings ?? [])) {
+        emit('progress', { text: `⚠ Model capability warning: ${w}` });
       }
 
       // Insert initial 'running' row only after config/access checks pass.
