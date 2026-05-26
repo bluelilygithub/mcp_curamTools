@@ -81,10 +81,12 @@ await logUsage({ orgId, userId, slug, modelId, tokensUsed, costAud })
 ```
 `cost_usd` is derived internally as `costAud / 1.55`. `cost_aud` is the source of truth.
 
-**Analytics endpoints:** `GET /api/admin/usage-stats?days=7|30|90` returns aggregated totals, per-model, per-tool, and daily breakdowns. `GET /api/admin/usage-intelligence` returns health, forecast, recommended actions, cost drivers, cache diagnostics, and accounting diagnostics. `GET /api/admin/operations-overview` returns a per-agent admin posture view that combines model resolution, budgets, access mode, trust/dependency contracts, workflow contracts, privacy coverage, latest run status, and 30-day usage health. Cache savings estimated at `cache_read_tokens × $2.70/1M USD × 1.55`.
+**Analytics endpoints:** `GET /api/admin/usage-stats?days=7|30|90` returns aggregated totals, per-model, per-tool, and daily breakdowns. `GET /api/admin/usage-intelligence` returns health, forecast, recommended actions, cost drivers, cache diagnostics, and accounting diagnostics. `GET /api/admin/operations-overview` returns a per-agent admin posture view that combines model resolution, budgets, access mode, trust/dependency contracts, workflow contracts, UX transparency, privacy coverage, latest run status, and 30-day usage health. Cache savings estimated at `cache_read_tokens × $2.70/1M USD × 1.55`.
 
 **UI:** Admin › Token Usage (`/admin/usage`) — `AdminUsagePage.jsx`.
 Admin › Operations (`/admin/operations`) — `AdminOperationsOverviewPage.jsx` — is the cross-cutting posture view. It does not replace the detailed model, agent, usage, privacy, or trust pages.
+
+**UX transparency contract:** `server/platform/uxTransparencyRegistry.js` is a read-only coverage register for output trust features. It records whether each agent surface has streaming progress, saved history, run links, evidence panels, Data Gaps, review warnings, grounded follow-up, export, human review, dependency visibility, and workflow visibility. This is intentionally descriptive, not a UI builder; admins use it to see uneven coverage and prioritise standardisation.
 
 **Callers:** `createAgentRoute` (all SSE agents), `routes/conversation.js` (each turn), `routes/admin.js` (NLP SQL). Called fire-and-forget — errors are logged but never rethrow.
 

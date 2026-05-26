@@ -18,6 +18,18 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-26 — UX Transparency Posture
+
+### Built
+- **UX transparency registry:** Added `server/platform/uxTransparencyRegistry.js` to declare each agent's visible trust features: progress, history, run links, evidence panels, Data Gaps, review warnings, grounded follow-up, export, human review, dependencies, and workflow visibility.
+- **Admin posture visibility:** Admin > Operations now shows UX coverage score/status per agent, grouped covered/partial/missing features, surface links, and a UX gaps filter.
+- **Operations API extension:** `/api/admin/operations-overview` now returns `ux_transparency` metadata and summary counts for strong/partial/thin UX coverage.
+
+### Fixed / discovered
+- UX transparency existed unevenly across tools. The new view makes that unevenness visible without pretending every agent has the same level of evidence, review, or follow-up support.
+
+---
+
 ## 2026-05-26 — Admin Operations Overview
 
 ### Built

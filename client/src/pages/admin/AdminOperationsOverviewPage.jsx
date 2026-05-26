@@ -10,6 +10,7 @@ const FILTERS = [
   { id: 'workflows', label: 'Workflows' },
   { id: 'chained', label: 'Chained' },
   { id: 'privacy', label: 'Privacy covered' },
+  { id: 'ux_gaps', label: 'UX gaps' },
 ];
 
 function fmtAud(value) {
@@ -45,6 +46,12 @@ function signalColor(severity) {
   return 'var(--color-primary)';
 }
 
+function uxColor(status) {
+  if (status === 'strong') return '#16a34a';
+  if (status === 'partial') return '#d97706';
+  return '#dc2626';
+}
+
 function StatCard({ label, value, sub }) {
   return (
     <div className="rounded-2xl border p-4" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
@@ -68,6 +75,11 @@ function AgentCard({ agent }) {
   const warningSignals = agent.signals?.filter((signal) => ['critical', 'warning'].includes(signal.severity)) ?? [];
   const dependencies = agent.trust_contract?.dependency_contract ?? [];
   const workflow = agent.workflow_contract;
+  const ux = agent.ux_transparency;
+  const uxFeatures = ux?.features ?? [];
+  const coveredUx = uxFeatures.filter((feature) => feature.status === 'covered');
+  const partialUx = uxFeatures.filter((feature) => feature.status === 'partial');
+  const missingUx = uxFeatures.filter((feature) => feature.status === 'missing');
 
   return (
     <section className="rounded-2xl border p-5 space-y-4" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
@@ -88,6 +100,11 @@ function AgentCard({ agent }) {
             {dependencies.length > 0 && (
               <span className="text-[11px] rounded-full px-2 py-0.5" style={{ background: '#f5f3ff', color: '#6d28d9' }}>
                 chained
+              </span>
+            )}
+            {ux && (
+              <span className="text-[11px] rounded-full px-2 py-0.5" style={{ background: 'var(--color-bg)', color: uxColor(ux.status), border: '1px solid var(--color-border)' }}>
+                UX {ux.score}%
               </span>
             )}
           </div>
@@ -125,6 +142,40 @@ function AgentCard({ agent }) {
         <Detail label="Tokens" value={fmtTokens(agent.usage_30d?.total_tokens)} />
       </div>
 
+      {ux && (
+        <div className="rounded-xl border p-3 space-y-2" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+                UX Transparency
+              </p>
+              <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>{ux.summary}</p>
+            </div>
+            <span className="text-xs font-semibold" style={{ color: uxColor(ux.status) }}>
+              {ux.status} · {ux.score}%
+            </span>
+          </div>
+          <div className="grid md:grid-cols-3 gap-2 text-xs">
+            <div>
+              <p className="font-semibold mb-1" style={{ color: '#16a34a' }}>Covered</p>
+              <p style={{ color: 'var(--color-muted)' }}>{coveredUx.map((feature) => feature.label).join(', ') || 'None'}</p>
+            </div>
+            <div>
+              <p className="font-semibold mb-1" style={{ color: '#d97706' }}>Partial</p>
+              <p style={{ color: 'var(--color-muted)' }}>{partialUx.map((feature) => feature.label).join(', ') || 'None'}</p>
+            </div>
+            <div>
+              <p className="font-semibold mb-1" style={{ color: '#dc2626' }}>Missing</p>
+              <p style={{ color: 'var(--color-muted)' }}>{missingUx.map((feature) => feature.label).join(', ') || 'None'}</p>
+            </div>
+          </div>
+          <div className="flex gap-3 flex-wrap text-xs">
+            {ux.userSurface && <Link to={ux.userSurface} style={{ color: 'var(--color-primary)' }}>Open user surface</Link>}
+            {ux.adminSurface && <Link to={ux.adminSurface} style={{ color: 'var(--color-primary)' }}>Open admin surface</Link>}
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-2 flex-wrap text-xs">
         <span className="rounded-full px-2.5 py-1" style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)' }}>
           Trust: {agent.trust_contract ? 'policy declared' : 'none'}
@@ -137,6 +188,9 @@ function AgentCard({ agent }) {
         </span>
         <span className="rounded-full px-2.5 py-1" style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)' }}>
           Privacy: {agent.privacy_coverage?.length ? agent.privacy_coverage.join(', ') : 'not targeted'}
+        </span>
+        <span className="rounded-full px-2.5 py-1" style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)' }}>
+          UX: {ux ? `${ux.status} (${ux.score}%)` : 'not declared'}
         </span>
         {agent.has_custom_prompt && (
           <span className="rounded-full px-2.5 py-1" style={{ background: 'var(--color-bg)', color: 'var(--color-muted)', border: '1px solid var(--color-border)' }}>
@@ -174,6 +228,7 @@ export default function AdminOperationsOverviewPage() {
     if (filter === 'workflows') return agents.filter((agent) => agent.workflow_contract);
     if (filter === 'chained') return agents.filter((agent) => agent.trust_contract?.dependency_contract?.length > 0);
     if (filter === 'privacy') return agents.filter((agent) => agent.privacy_coverage?.length > 0);
+    if (filter === 'ux_gaps') return agents.filter((agent) => agent.ux_transparency?.status !== 'strong');
     return agents;
   }, [agents, filter]);
 
@@ -217,7 +272,7 @@ export default function AdminOperationsOverviewPage() {
             <StatCard label="Default Model" value={summary.default_model ?? 'Not set'} sub="org default" />
             <StatCard label="Fallback" value={summary.fallback_model ?? 'None'} sub="org fallback" />
             <StatCard label="Workflows" value={summary.workflow_agents ?? 0} sub="hybrid contracts" />
-            <StatCard label="Privacy Fields" value={(summary.extraction_privacy_fields ?? 0) + (summary.crm_privacy_fields ?? 0)} sub="targeted exclusions" />
+            <StatCard label="UX Strong" value={summary.strong_ux_agents ?? 0} sub={`${summary.thin_ux_agents ?? 0} thin`} />
           </div>
 
           <section className="rounded-2xl border overflow-hidden" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>

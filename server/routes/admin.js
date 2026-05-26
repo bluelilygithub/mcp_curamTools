@@ -31,6 +31,10 @@ const {
   resolveTrustContract,
   summariseTrustContract,
 } = require('../platform/agentTrustContract');
+const {
+  resolveUxTransparencyContract,
+  summariseUxTransparency,
+} = require('../platform/uxTransparencyRegistry');
 const CostGuardService = require('../services/CostGuardService');
 const EmailTemplateService = require('../services/EmailTemplateService');
 const { proposeLessonFromRun } = require('../services/LessonRepositoryService');
@@ -855,7 +859,7 @@ const PRIVACY_COVERAGE_BY_AGENT = {
   'not-interested-report': ['crm'],
 };
 
-function buildPostureSignals({ config, resolvedConfig, latestRun, usage, trustContract, workflowContract, privacyCoverage, resolutionError }) {
+function buildPostureSignals({ config, resolvedConfig, latestRun, usage, trustContract, workflowContract, privacyCoverage, uxTransparency, resolutionError }) {
   const signals = [];
   if (resolutionError) {
     signals.push({ severity: 'critical', label: 'Model resolution error', detail: resolutionError });
@@ -888,6 +892,11 @@ function buildPostureSignals({ config, resolvedConfig, latestRun, usage, trustCo
   }
   if (privacyCoverage.length > 0) {
     signals.push({ severity: 'info', label: 'Privacy coverage', detail: privacyCoverage.join(', ') });
+  }
+  if (uxTransparency?.status === 'thin') {
+    signals.push({ severity: 'warning', label: 'Thin UX transparency', detail: `${uxTransparency.score}% UX coverage declared.` });
+  } else if (uxTransparency?.status === 'partial') {
+    signals.push({ severity: 'info', label: 'Partial UX transparency', detail: `${uxTransparency.score}% UX coverage declared.` });
   }
   return signals;
 }
@@ -974,6 +983,7 @@ router.get('/operations-overview', async (req, res) => {
       const defaultAccess = getDefaultAccess(slug);
       const trustContract = summariseTrustContract(resolveTrustContract(slug, {}));
       const workflowContract = summariseWorkflowContract(resolveWorkflowContract(slug));
+      const uxTransparency = summariseUxTransparency(resolveUxTransparencyContract(slug));
       const latestRun = latestBySlug.get(slug) ?? null;
       const runUsage = runAggBySlug.get(slug) ?? {};
       const tokenUsage = usageBySlug.get(slug) ?? {};
@@ -987,6 +997,7 @@ router.get('/operations-overview', async (req, res) => {
         trustContract,
         workflowContract,
         privacyCoverage,
+        uxTransparency,
         resolutionError,
       });
 
@@ -1008,6 +1019,7 @@ router.get('/operations-overview', async (req, res) => {
         has_intelligence_profile: operatorConfig.has_intelligence_profile === true,
         trust_contract: trustContract,
         workflow_contract: workflowContract,
+        ux_transparency: uxTransparency,
         privacy_coverage: privacyCoverage,
         latest_run: latestRun ? {
           id: latestRun.id,
@@ -1039,6 +1051,9 @@ router.get('/operations-overview', async (req, res) => {
       agents_needing_attention: agents.filter((agent) => agent.signals.some((signal) => ['critical', 'warning'].includes(signal.severity))).length,
       workflow_agents: agents.filter((agent) => agent.workflow_contract).length,
       chained_agents: agents.filter((agent) => agent.trust_contract?.dependency_contract?.length > 0).length,
+      strong_ux_agents: agents.filter((agent) => agent.ux_transparency?.status === 'strong').length,
+      partial_ux_agents: agents.filter((agent) => agent.ux_transparency?.status === 'partial').length,
+      thin_ux_agents: agents.filter((agent) => agent.ux_transparency?.status === 'thin').length,
       daily_budget_aud: orgBudget.max_daily_org_budget_aud ?? null,
       daily_spend_aud: Number(dailySpendAud ?? 0),
       default_model: defaultModel,
