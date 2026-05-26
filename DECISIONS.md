@@ -26,6 +26,19 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### Model configuration errors are hard failures, not silent warnings
+**Date:** 2026-05-26
+**Status:** Settled
+**Context:** `loadRunConfig` logged `console.warn` when `adminConfig.model` was null and continued execution, passing null to the provider registry which silently fell back to a default. Hard capability mismatches in `getResolvedAdminConfig` already threw, but the catch block displayed a generic "Failed to load agent config" message — the specific error was invisible to callers. Advisory capability warnings only appeared in the persisted result payload, never before compute started.
+**Decision:**
+- Null model → `throw new Error(...)` with a message naming the agent and directing the operator to the correct admin screen. No silent fallback, no provider guessing.
+- Config error catch block → emit `cfgErr.message` directly so null-model and capability errors reach the user with context.
+- Advisory `capability_warnings` → emitted as progress events before `startAgentRun`, so they are visible in the stream before compute is spent. Advisory: non-blocking. Hard: already blocking via throw in `AgentConfigService`.
+**Rationale:** The platform's stated invariant is "if no model is configured, the run should fail clearly; if the wrong model is configured, the same should apply." The prior behaviour violated that invariant for null model and made hard capability errors appear as a generic system error. Silent fallbacks create invisible cost surprises and make debugging model selection issues much harder.
+**References:** `server/platform/createAgentRoute.js` — `loadRunConfig`; `server/platform/AgentConfigService.js` — `validateModelCapabilities`; CHANGELOG 2026-05-26.
+
+---
+
 ### Agent registration — manifest pattern + load isolation
 **Date:** 2026-05-26
 **Status:** Settled

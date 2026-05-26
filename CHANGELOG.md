@@ -18,6 +18,18 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-26 — Pre-run Model + Capability Enforcement
+
+### Built / Fixed
+- **Null model now throws:** `loadRunConfig` throws a clear error when no model is configured (neither per-agent nor org default). Previously logged a warning and continued — the provider registry silently picked a fallback. Run now fails immediately with: *"No model configured for agent X. Set a per-agent model in Admin › Agents or an org default in Settings › Models."*
+- **Config error message surfaced:** The catch block for config load failures now emits `cfgErr.message` directly. Previously all config errors (null model, hard capability mismatch) displayed the generic "Failed to load agent config" string — specific errors were server-log only.
+- **Advisory capability warnings in stream:** `capability_warnings` from model resolution are now emitted as progress events before compute starts. Hard capability mismatches already threw in `AgentConfigService.getResolvedAdminConfig`; advisory mismatches previously only appeared in the persisted result payload. Now visible to the user before the run spends money.
+
+### Why this matters
+The platform's stated position is "run fails clearly if wrong model is configured." That was true for hard capability mismatches and disabled agents, but false for null model and false for advisory warnings. All three cases now behave consistently with the stated position.
+
+---
+
 ## 2026-05-26 — Agent Load Isolation + Manifest Registration
 
 ### Built
