@@ -18,6 +18,41 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-26 — Admin Operations Overview
+
+### Built
+- **Operations Overview API:** Added `/api/admin/operations-overview`, combining per-agent model resolution, fallback state, token/iteration limits, budgets, access mode, custom prompt status, trust/dependency contracts, workflow contracts, privacy coverage, latest run status, and 30-day usage health.
+- **Operations UI:** Added Admin > Operations as a one-page posture view, linked from the sidebar and Monitoring hub.
+- **Accurate privacy framing:** The overview explicitly labels extraction and CRM privacy as targeted controls, not a universal prompt-redaction layer.
+
+### Fixed / discovered
+- Operational controls were visible but spread across several admin pages. The new view gives admins a fast way to spot agents missing models, budgets, or healthy recent runs without replacing the detailed pages.
+
+---
+
+## 2026-05-26 — Hybrid Workflow Contracts
+
+### Built
+- **Workflow contract registry:** Added `server/platform/hybridWorkflowRegistry.js` as the read-only source of truth for high-stakes hybrid flows, starting with Spec Validator and Tender Response.
+- **Run-level visibility:** Standard route-factory runs now persist `workflow_contract` metadata and expose `/api/agents/:slug/workflow-contract` for operator UIs.
+- **Admin visibility:** Admin > Agent Trust can filter workflow-backed runs and shows each stage, deterministic authority, and export/review gates.
+- **Certificate gate hardening:** Spec Validator certificate export now uses a shared review gate helper on the client and the email-certificate route blocks server-side sends when findings are still pending, rejected, or marked resubmit.
+
+### Fixed / discovered
+- The hybrid design pattern existed in agent code, but the stage contract was implicit. It is now visible to admins and operators without making workflow design admin-editable.
+
+---
+
+## 2026-05-26 — Controlled Chaining Visibility
+
+### Built
+- **Richer dependency contracts:** Report dependencies now carry allowed statuses, freshness policy, review policy, max age, usage, state, and freshness metadata through status checks and persisted run results.
+- **Blocked-run audit trail:** Missing required dependencies now persist structured dependency error details on the failed `agent_runs` row, making blocked chains reviewable in Agent Trust.
+- **Operator visibility:** Google Ads agent cards now show dependency run IDs, status, age, freshness, allowed states, and usage before/after execution.
+- **Admin traceability:** Admin > Agent Trust now shows dependency contract details, dependency run IDs, status/freshness badges, and can jump to upstream runs when they are present in the loaded trust log.
+
+---
+
 ## 2026-05-26 — Usage Accounting Diagnostics
 
 ### Fixed

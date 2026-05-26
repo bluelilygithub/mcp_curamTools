@@ -34,6 +34,10 @@ const {
   summariseTrustContract,
   buildTrustPromptContext,
 } = require('./agentTrustContract');
+const {
+  resolveWorkflowContract,
+  summariseWorkflowContract,
+} = require('./hybridWorkflowRegistry');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -272,6 +276,7 @@ function buildResultPayload({
   reportDependencies,
   reportDependencyWarnings,
   trustContract,
+  workflowContract,
   taskCostAud,
   promptVersion,
 }) {
@@ -317,12 +322,23 @@ function buildResultPayload({
       capability_warnings: adminConfig.capability_warnings ?? [],
       fallback_capability_warnings: adminConfig.fallback_capability_warnings ?? [],
       trust_contract: summariseTrustContract(trustContract),
+      ...(workflowContract && { workflow_contract: summariseWorkflowContract(workflowContract) }),
       trace_summary: summariseTrace(trace),
       startDate: req.body.startDate ?? null,
       endDate:   req.body.endDate   ?? null,
       progressLog,
       ...(reportDependencies.length > 0 && {
         report_dependencies: reportDependencies.map(({ summary: _summary, ...dependency }) => dependency),
+        report_dependency_contract: (trustContract.dependencies ?? []).map((dependency) => ({
+          slug: dependency.slug,
+          label: dependency.label,
+          required: dependency.required !== false,
+          maxAgeDays: dependency.maxAgeDays ?? null,
+          allowedStatuses: dependency.allowedStatuses,
+          stalePolicy: dependency.stalePolicy ?? 'warn',
+          reviewPolicy: dependency.reviewPolicy ?? 'warn',
+          usage: dependency.usage ?? null,
+        })),
         report_dependency_warnings: reportDependencyWarnings,
       }),
       // Capture prompt/response for Decision Log display
@@ -386,10 +402,12 @@ async function finalizeAgentRun({
  * @param {string}   requiredPermission — role or capability; org_admin always satisfies the check
  * @param {number}   [rateLimit=5]      — max runs per user per 5-minute window
  * @param {object|false} [trust]        — optional trust contract override; false disables Data Gaps enforcement
+ * @param {object|false} [workflow]     — optional hybrid workflow contract override; false disables workflow metadata
  */
-function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5, trust = {} }) {
+function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5, trust = {}, workflow = null }) {
   const router = express.Router();
   const trustContract = resolveTrustContract(slug, trust);
+  const workflowContract = resolveWorkflowContract(slug, workflow);
 
   // N agent runs per user per 5 minutes — default 5 for expensive report agents
   const runRateLimiter = createRateLimiter({ windowMs: 5 * 60_000, max: rateLimit });
@@ -466,7 +484,22 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5, trus
         }));
       } catch (depErr) {
         emit('error', { error: depErr.message, details: depErr.details });
-        await persistRun({ slug, orgId, status: 'error', error: depErr.message, runId });
+        await persistRun({
+          slug,
+          orgId,
+          status: 'error',
+          error: depErr.message,
+          runId,
+          result: {
+            progressLog,
+            trust_contract: summariseTrustContract(trustContract),
+            ...(workflowContract && { workflow_contract: summariseWorkflowContract(workflowContract) }),
+            report_dependency_error: {
+              message: depErr.message,
+              details: depErr.details ?? [],
+            },
+          },
+        });
         return done();
       }
 
@@ -542,6 +575,7 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5, trus
           reportDependencies,
           reportDependencyWarnings,
           trustContract,
+          workflowContract,
           taskCostAud: taskCostTracker.value,
           promptVersion,
         });
@@ -607,6 +641,15 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5, trus
       console.error(`[${slug}] dependencies error:`, err.message);
       res.status(500).json({ error: 'Failed to load report dependencies' });
     }
+  });
+
+  // ── GET /workflow-contract ────────────────────────────────────────────────
+  router.get('/workflow-contract', requireAuth, async (req, res) => {
+    res.json({
+      slug,
+      hasWorkflow: !!workflowContract,
+      workflow: summariseWorkflowContract(workflowContract),
+    });
   });
 
   return router;

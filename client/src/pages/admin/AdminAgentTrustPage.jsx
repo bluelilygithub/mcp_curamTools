@@ -15,6 +15,7 @@ const FILTERS = [
   { id: 'needs_review', label: 'Needs review' },
   { id: 'data_gaps', label: 'Data gaps' },
   { id: 'dependencies', label: 'Dependencies' },
+  { id: 'workflows', label: 'Workflows' },
   { id: 'fallbacks', label: 'Fallbacks' },
   { id: 'errors', label: 'Errors' },
 ];
@@ -109,21 +110,107 @@ function SignalList({ signals }) {
   );
 }
 
-function DependencyList({ dependencies }) {
-  if (!dependencies?.length) return null;
+function DependencyList({ dependencies, contract = [], runs = [], onSelectRun }) {
+  if (!dependencies?.length && !contract?.length) return null;
+  const runIds = new Set(runs.map((run) => run.id));
   return (
     <div className="rounded-xl border p-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)' }}>
       <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-muted)' }}>
         Chained Dependencies
       </p>
-      <div className="space-y-1">
+      {contract?.length > 0 && (
+        <div className="mb-3 space-y-1">
+          {contract.map((dep) => (
+            <div key={`contract-${dep.slug}`} className="text-xs" style={{ color: 'var(--color-muted)' }}>
+              <span className="font-mono">{dep.slug}</span>
+              <span> · {dep.required ? 'required' : 'optional'}</span>
+              {dep.maxAgeDays != null && <span> · max {dep.maxAgeDays}d</span>}
+              {dep.allowedStatuses?.length > 0 && <span> · allowed: {dep.allowedStatuses.join(', ')}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="space-y-2">
         {dependencies.map((dep) => (
-          <div key={dep.runId} className="flex justify-between gap-3 text-xs">
-            <span style={{ color: 'var(--color-text)' }}>{dep.label ?? dep.slug}</span>
-            <span style={{ color: 'var(--color-muted)' }}>{fmtDate(dep.runAt)}</span>
+          <div key={dep.runId} className="rounded-lg border p-2" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
+            <div className="flex justify-between gap-3 text-xs">
+              <span style={{ color: 'var(--color-text)' }}>{dep.label ?? dep.slug}</span>
+              <span style={{ color: dep.stale || dep.status === 'needs_review' ? '#d97706' : '#16a34a' }}>
+                {dep.stale ? 'stale' : dep.status === 'needs_review' ? 'needs review' : 'valid'}
+              </span>
+            </div>
+            <div className="flex justify-between gap-3 text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+              <span>{fmtDate(dep.runAt)}{dep.ageDays != null ? ` · ${dep.ageDays}d old` : ''}</span>
+              <span>{dep.usage}</span>
+            </div>
+            <button
+              type="button"
+              disabled={!runIds.has(dep.runId)}
+              onClick={() => onSelectRun?.(dep.runId)}
+              className="text-xs font-mono mt-1 text-left"
+              style={{
+                color: runIds.has(dep.runId) ? 'var(--color-primary)' : 'var(--color-muted)',
+                background: 'transparent',
+                border: 0,
+                padding: 0,
+                cursor: runIds.has(dep.runId) ? 'pointer' : 'default',
+              }}
+            >
+              run_id: {dep.runId}{runIds.has(dep.runId) ? ' · open upstream' : ''}
+            </button>
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function WorkflowContractPanel({ workflow }) {
+  if (!workflow) return null;
+  const stages = workflow.stages ?? [];
+  const gates = workflow.gates ?? [];
+  return (
+    <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)' }}>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+          Hybrid Workflow Contract
+        </p>
+        <p className="text-sm font-semibold mt-1" style={{ color: 'var(--color-text)' }}>{workflow.label}</p>
+        {workflow.purpose && <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>{workflow.purpose}</p>}
+        {workflow.deterministicAuthority && (
+          <p className="text-xs mt-2 rounded-lg px-2 py-1.5" style={{ color: '#92400e', background: '#fef3c7' }}>
+            {workflow.deterministicAuthority}
+          </p>
+        )}
+      </div>
+
+      {stages.length > 0 && (
+        <div className="space-y-1.5">
+          {stages.map((stage, index) => (
+            <div key={stage.id ?? `${stage.label}-${index}`} className="rounded-lg border p-2" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
+              <div className="flex justify-between gap-3 text-xs">
+                <span className="font-semibold" style={{ color: 'var(--color-text)' }}>{index + 1}. {stage.label}</span>
+                <span style={{ color: stage.blocksOnFailure ? '#dc2626' : 'var(--color-muted)' }}>
+                  {stage.kind}{stage.blocksOnFailure ? ' · blocking' : ''}
+                </span>
+              </div>
+              <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+                {stage.actor ? `${stage.actor}: ` : ''}{stage.output}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {gates.length > 0 && (
+        <div className="space-y-1">
+          {gates.map((gate) => (
+            <p key={gate.id} className="text-xs" style={{ color: 'var(--color-muted)' }}>
+              <span className="font-semibold" style={{ color: 'var(--color-text)' }}>{gate.label}:</span> {gate.condition}
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -216,6 +303,7 @@ export default function AdminAgentTrustPage() {
       ));
     }
     if (filter === 'dependencies') return runs.filter((run) => run.dependencies?.length > 0 || run.signals?.some((signal) => signal.type?.startsWith('dependency_')));
+    if (filter === 'workflows') return runs.filter((run) => run.workflowContract);
     if (filter === 'fallbacks') return runs.filter((run) => run.observability?.fallback_used);
     if (filter === 'errors') return runs.filter((run) => run.status === 'error');
     return runs;
@@ -324,6 +412,11 @@ export default function AdminAgentTrustPage() {
                       <span className="text-xs rounded-full px-2 py-1" style={{ color: 'var(--color-muted)', background: 'var(--color-surface)' }}>
                         {run.signals?.length ?? 0} signal{run.signals?.length === 1 ? '' : 's'}
                       </span>
+                      {run.workflowContract && (
+                        <span className="text-xs rounded-full px-2 py-1" style={{ color: 'var(--color-primary)', background: 'var(--color-bg)' }}>
+                          workflow
+                        </span>
+                      )}
                       <span className="text-xs font-semibold uppercase" style={{ color: statusColor(run.status) }}>
                         {run.status}
                       </span>
@@ -356,7 +449,16 @@ export default function AdminAgentTrustPage() {
 
                 <SignalList signals={selectedRun.signals} />
                 <ObservabilityPanel run={selectedRun} />
-                <DependencyList dependencies={selectedRun.dependencies} />
+                <WorkflowContractPanel workflow={selectedRun.workflowContract} />
+                <DependencyList
+                  dependencies={selectedRun.dependencies}
+                  contract={selectedRun.dependencyContract}
+                  runs={runs}
+                  onSelectRun={(runId) => {
+                    setSelectedId(runId);
+                    setShowReport(false);
+                  }}
+                />
                 <BoundsWarningPanel boundsFailed={selectedRun.result?.boundsFailed} />
                 <DataGapsPanel dataGaps={selectedRun.declaredDataGaps} review={selectedRun.result?.data_gap_review} />
 

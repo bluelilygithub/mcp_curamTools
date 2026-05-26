@@ -16,7 +16,7 @@ These files are the source of truth. The documents below derive from them and re
 ### createAgentRoute
 **Type:** Route Factory
 **Location:** `server/platform/createAgentRoute.js`
-**What it does:** Returns an Express router with `POST /run` (SSE), `GET /history`, and `GET /dependencies` endpoints wired with auth, SSE plumbing, admin config enforcement, run persistence, dependency awareness, budget checks, trust review metadata, and error handling — zero agent-specific code.
+**What it does:** Returns an Express router with `POST /run` (SSE), `GET /history`, `GET /dependencies`, and `GET /workflow-contract` endpoints wired with auth, SSE plumbing, admin config enforcement, run persistence, dependency awareness, workflow visibility, budget checks, trust review metadata, and error handling — zero agent-specific code.
 **Interface:**
 ```js
 createAgentRoute({ slug, runFn, requiredPermission })
@@ -24,14 +24,16 @@ createAgentRoute({ slug, runFn, requiredPermission })
 // runFn: async (context) => { result, trace?, tokensUsed, promptVersion? } — optional promptVersion persisted as result.prompt_version
 // requiredPermission: string — legacy role name or capability; org_admin always satisfies the check
 // trust?: object|false — optional override for the default platform trust contract
+// workflow?: object|false — optional override for persisted/read-only hybrid workflow contract metadata
 ```
-Returns an Express router. Two endpoints are registered:
+Returns an Express router. Four endpoints are registered:
 
 | Endpoint | Auth | Behaviour |
 |---|---|---|
 | `POST /run` | requireAuth + requirePermission(requiredPermission) | Loads admin config, checks kill switch, streams SSE: `{ type: 'progress', text }` → `{ type: 'result', data }` → `[DONE]` (or `{ type: 'error', error }` → `[DONE]`). On success, **`data` includes `runId`** (the `agent_runs.id` UUID) alongside `summary`, nested `data`, `tokensUsed`, etc., so clients can call org-scoped demo PATCH routes before reloading the row; **`runId` is not added to the JSON persisted** in `agent_runs.result` (only the streamed copy). Runs can submit an under-review Lessons Repository proposal via `proposeLessonFromRun` when the output contains an explicit reusable lesson/pattern; new agents get this wiring automatically when they use `createAgentRoute`. |
 | `GET /history` | requireAuth | Returns last 20 `agent_runs` rows for this slug + org, ordered by `run_at DESC` |
 | `GET /dependencies` | requireAuth | Returns declared report dependency status for this slug + org so clients can block missing upstream reports or warn on stale/needs-review inherited reasoning |
+| `GET /workflow-contract` | requireAuth | Returns the read-only hybrid workflow contract for this slug when one is declared in `server/platform/hybridWorkflowRegistry.js` |
 
 Internal helpers exported from this file:
 - `extractToolData(trace)` — keyed tool results from AgentOrchestrator trace
@@ -58,7 +60,8 @@ Run rows are written only via **`persistRun`** from **`server/platform/persistRu
 - `costAud` is added to `resultPayload` and persisted in `agent_runs.result` JSONB on every completed run.
 - **Optional `prompt_version`:** If `runFn` returns **`promptVersion`** (string), `createAgentRoute` merges it into the persisted payload as **`prompt_version`** (see `server/platform/promptVersions.js`, `knowledge_base/core/PROMPT_VERSIONING.md`). Agents that omit it are unchanged.
 - **Observability metadata:** Standard route-factory runs persist model source, fallback configuration, capability warnings, progress log, compact trace summary (`iterations`, tool call names/statuses, fallback events), token usage, and cost. Admin > Agent Trust uses these fields as an observability console; older/custom runs may show partial metadata.
-- **Trust contract:** Standard route-factory runs inherit `server/platform/agentTrustContract.js` by default. The platform injects a required `### Data Gaps` instruction into runtime prompt context, validates the final output with `dataGapEvidence`, persists `trust_contract` metadata, and marks the run `needs_review` when the section is missing or a weak source is not disclosed. Agent-specific dependency chains also live in the trust contract and are enforced before the run starts.
+- **Trust contract:** Standard route-factory runs inherit `server/platform/agentTrustContract.js` by default. The platform injects a required `### Data Gaps` instruction into runtime prompt context, validates the final output with `dataGapEvidence`, persists `trust_contract` metadata, and marks the run `needs_review` when the section is missing or a weak source is not disclosed. Agent-specific dependency chains also live in the trust contract and are enforced before the run starts. Dependency metadata includes required/optional state, allowed statuses, max age, stale/review policies, selected upstream run IDs, freshness, and age. Missing required dependencies block execution and persist a structured `report_dependency_error`; stale or `needs_review` dependencies proceed with warnings and are visible in Admin > Agent Trust.
+- **Hybrid workflow contract:** Standard route-factory runs can inherit read-only stage/gate metadata from `server/platform/hybridWorkflowRegistry.js`. This is documentation made executable enough to persist and display: it records where AI extraction/synthesis, deterministic validation, human review, and export gates sit, but it is not a workflow engine or admin-editable process designer.
 
 **Used by:** Google Ads Monitor (`server/routes/agents/`); all future agents.
 **Reuse contract:** Provide `slug` (stable, lowercase, hyphen-separated), a `runFn(context)` that returns `{ result, trace, tokensUsed }` (and optionally `promptVersion` for lineage), and a `requiredPermission` capability or legacy role name. Register the returned router in `server/index.js` under `/api/agents/:slug`. Every new agent must be covered by the Lessons Repository: use `createAgentRoute`/`AgentScheduler` for normal agents, or add an explicit `proposeLessonFromRun` hook in any custom route that bypasses those platform paths. Also update the visible coverage list in `client/src/pages/admin/AdminLessonsPage.jsx` so Admin > Lessons & Rules shows the new agent/routine.
@@ -78,9 +81,10 @@ await logUsage({ orgId, userId, slug, modelId, tokensUsed, costAud })
 ```
 `cost_usd` is derived internally as `costAud / 1.55`. `cost_aud` is the source of truth.
 
-**Analytics endpoints:** `GET /api/admin/usage-stats?days=7|30|90` returns aggregated totals, per-model, per-tool, and daily breakdowns. `GET /api/admin/usage-intelligence` returns health, forecast, recommended actions, cost drivers, cache diagnostics, and accounting diagnostics. Cache savings estimated at `cache_read_tokens × $2.70/1M USD × 1.55`.
+**Analytics endpoints:** `GET /api/admin/usage-stats?days=7|30|90` returns aggregated totals, per-model, per-tool, and daily breakdowns. `GET /api/admin/usage-intelligence` returns health, forecast, recommended actions, cost drivers, cache diagnostics, and accounting diagnostics. `GET /api/admin/operations-overview` returns a per-agent admin posture view that combines model resolution, budgets, access mode, trust/dependency contracts, workflow contracts, privacy coverage, latest run status, and 30-day usage health. Cache savings estimated at `cache_read_tokens × $2.70/1M USD × 1.55`.
 
 **UI:** Admin › Token Usage (`/admin/usage`) — `AdminUsagePage.jsx`.
+Admin › Operations (`/admin/operations`) — `AdminOperationsOverviewPage.jsx` — is the cross-cutting posture view. It does not replace the detailed model, agent, usage, privacy, or trust pages.
 
 **Callers:** `createAgentRoute` (all SSE agents), `routes/conversation.js` (each turn), `routes/admin.js` (NLP SQL). Called fire-and-forget — errors are logged but never rethrow.
 

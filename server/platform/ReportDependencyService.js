@@ -38,18 +38,24 @@ function rowToDependency(def, row, selectedByUserId = null) {
   if (!row) return null;
   const age = ageDays(row.run_at);
   const stale = def.maxAgeDays != null && age != null && age > def.maxAgeDays;
+  const underReview = row.status === 'needs_review';
   return {
     slug: def.slug,
     label: def.label,
     usage: def.usage,
     required: def.required !== false,
+    allowedStatuses: def.allowedStatuses,
+    stalePolicy: def.stalePolicy ?? 'warn',
+    reviewPolicy: def.reviewPolicy ?? 'warn',
     runId: row.id,
     status: row.status,
+    state: underReview ? 'under_review' : 'valid',
     runAt: row.run_at,
     completedAt: row.completed_at,
     selectedByUserId,
     selectedAt: new Date().toISOString(),
     stale,
+    freshness: stale ? 'stale' : 'fresh',
     ageDays: age == null ? null : Math.round(age * 10) / 10,
     maxAgeDays: def.maxAgeDays ?? null,
     summary: getSummary(row.result),
@@ -98,6 +104,8 @@ async function resolveDependencies({ slug, orgId, userId = null, selections = nu
         slug: def.slug,
         label: def.label,
         required: def.required !== false,
+        allowedStatuses: def.allowedStatuses,
+        maxAgeDays: def.maxAgeDays ?? null,
         reason: selectedBySlug[def.slug] ? 'selected_run_unavailable' : 'no_suitable_run',
       };
       if (def.required !== false) missing.push(detail);
@@ -113,8 +121,10 @@ async function resolveDependencies({ slug, orgId, userId = null, selections = nu
         slug: def.slug,
         label: def.label,
         reason: 'stale',
+        runId: dependency.runId,
         ageDays: dependency.ageDays,
         maxAgeDays: dependency.maxAgeDays,
+        policy: dependency.stalePolicy,
       });
     }
     if (dependency.status === 'needs_review') {
@@ -122,6 +132,8 @@ async function resolveDependencies({ slug, orgId, userId = null, selections = nu
         slug: def.slug,
         label: def.label,
         reason: 'needs_review',
+        runId: dependency.runId,
+        policy: dependency.reviewPolicy,
       });
     }
   }
@@ -149,14 +161,19 @@ async function getDependencyStatus({ slug, orgId, definitions = null }) {
       required: def.required !== false,
       maxAgeDays: def.maxAgeDays ?? null,
       allowedStatuses: def.allowedStatuses,
+      stalePolicy: def.stalePolicy ?? 'warn',
+      reviewPolicy: def.reviewPolicy ?? 'warn',
       usage: def.usage,
       latestRun: latestRun
         ? {
             runId: latestRun.runId,
             status: latestRun.status,
+            state: latestRun.state,
             runAt: latestRun.runAt,
             stale: latestRun.stale,
+            freshness: latestRun.freshness,
             ageDays: latestRun.ageDays,
+            maxAgeDays: latestRun.maxAgeDays,
           }
         : null,
     });

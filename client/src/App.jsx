@@ -39,6 +39,7 @@ import AdminProvidersPage from './pages/admin/AdminProvidersPage';
 import AdminUsagePage from './pages/admin/AdminUsagePage';
 import AdminAgentTrustPage from './pages/admin/AdminAgentTrustPage';
 import AdminMonitoringPage from './pages/admin/AdminMonitoringPage';
+import AdminOperationsOverviewPage from './pages/admin/AdminOperationsOverviewPage';
 import AdminClaudeSessionPage from './pages/admin/AdminClaudeSessionPage';
 import GoogleAdsMonitorPage      from './pages/tools/GoogleAdsMonitorPage';
 import DiamondPlateDataPage      from './pages/tools/DiamondPlateDataPage';
@@ -108,6 +109,7 @@ export default function App() {
                   <Route path="/admin/lessons" element={<AdminLessonsPage />} />
                   <Route path="/admin/providers" element={<AdminProvidersPage />} />
                   <Route path="/admin/monitoring" element={<AdminMonitoringPage />} />
+                  <Route path="/admin/operations" element={<AdminOperationsOverviewPage />} />
                   <Route path="/admin/usage" element={<AdminUsagePage />} />
                   <Route path="/admin/agent-trust" element={<AdminAgentTrustPage />} />
                   <Route path="/admin/claude-sessions" element={<AdminClaudeSessionPage />} />

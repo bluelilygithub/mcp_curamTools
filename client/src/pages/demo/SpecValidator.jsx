@@ -6,6 +6,7 @@ import { exportPdf } from '../../utils/exportService';
 import useAuthStore from '../../stores/authStore';
 import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
 import ProcessingModal from '../../components/shared/ProcessingModal';
+import { evaluateSpecCertificateGate } from '../../utils/reviewGate';
 
 const LOW_CONFIDENCE = 0.7;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -36,6 +37,40 @@ function reviewPill(status) {
     resubmit:       { bg: '#e0e7ff', color: '#3730a3', label: 'Resubmit' },
   };
   return map[status] ?? map.pending_review;
+}
+
+function WorkflowContractCard({ workflow }) {
+  if (!workflow) return null;
+  const stages = workflow.stages ?? [];
+  const gates = workflow.gates ?? [];
+  return (
+    <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+          Workflow Contract
+        </p>
+        <p className="text-sm font-semibold mt-1" style={{ color: 'var(--color-text)' }}>{workflow.label}</p>
+        <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+          {workflow.purpose}
+        </p>
+      </div>
+      <div className="grid md:grid-cols-3 gap-2">
+        {stages.slice(0, 6).map((stage, index) => (
+          <div key={stage.id ?? stage.label} className="rounded-lg px-3 py-2" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
+            <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{index + 1}. {stage.label}</p>
+            <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-muted)' }}>
+              {stage.kind}{stage.blocksOnFailure ? ' · blocking' : ''}
+            </p>
+          </div>
+        ))}
+      </div>
+      {gates.length > 0 && (
+        <p className="text-xs" style={{ color: '#92400e' }}>
+          Export gate: {gates[0].condition}
+        </p>
+      )}
+    </div>
+  );
 }
 
 // ── SSE helper ────────────────────────────────────────────────────────────────
@@ -648,6 +683,7 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
   const [followUpHistory, setFollowUpHistory]   = useState([]);
   const [followUpLoading, setFollowUpLoading]   = useState(false);
   const [followUpError, setFollowUpError]       = useState('');
+  const [workflowContract, setWorkflowContract] = useState(null);
   const fileInputRef  = useRef(null);
   const cancelledRef  = useRef(false);
 
@@ -664,6 +700,13 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
     setRunsLoading(true);
     fetchRecentRuns().finally(() => setRunsLoading(false));
   }, [fetchRecentRuns]);
+
+  useEffect(() => {
+    api
+      .get(`/agents/${slug}/workflow-contract`)
+      .then((payload) => setWorkflowContract(payload.workflow ?? null))
+      .catch(() => setWorkflowContract(null));
+  }, [slug]);
 
   const handleLoadRun = useCallback(
     async (id) => {
@@ -824,6 +867,8 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
     setCertLoading(true);
     setCertError('');
     try {
+      const gate = evaluateSpecCertificateGate(runResult);
+      if (!gate.allowed) throw new Error(gate.reason);
       const orgName = user?.orgName ?? 'Curam Engineering';
       const html    = buildCertificateHtml(runResult, orgName);
       const safe    = (runResult?.file_name ?? 'document')
@@ -846,6 +891,11 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
   const handleViewCertificate = () => {
     setViewLoading(true);
     try {
+      const gate = evaluateSpecCertificateGate(runResult);
+      if (!gate.allowed) {
+        setCertError(gate.reason);
+        return;
+      }
       const orgName = user?.orgName ?? 'Curam Engineering';
       const html    = buildCertificateHtml(runResult, orgName);
       const blob    = new Blob([html], { type: 'text/html' });
@@ -865,6 +915,8 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
     setEmailError('');
     setEmailSent(false);
     try {
+      const gate = evaluateSpecCertificateGate(runResult);
+      if (!gate.allowed) throw new Error(gate.reason);
       const orgName = user?.orgName ?? 'Curam Engineering';
       const html    = buildCertificateHtml(runResult, orgName);
       const safe    = (runResult?.file_name ?? 'document')
@@ -912,7 +964,8 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
   const pendingCount  = allFindings.filter((f) => f.status === 'pending_review').length;
   const rejectedCount = allFindings.filter((f) => f.status === 'rejected').length;
   const resubmitCount = allFindings.filter((f) => f.status === 'resubmit').length;
-  const allApproved   = allFindings.length > 0 && pendingCount === 0 && rejectedCount === 0 && resubmitCount === 0;
+  const certificateGate = evaluateSpecCertificateGate(runResult);
+  const allApproved   = certificateGate.allowed;
   const failCount     = detFindings.filter((f) => f.check_status === 'FAIL').length;
   const warnCount     = detFindings.filter((f) => f.check_status === 'WARNING').length;
   const passCount     = detFindings.filter((f) => f.check_status === 'PASS').length;
@@ -930,6 +983,8 @@ export default function SpecValidator({ slug = 'demo-spec-validator' }) {
           Upload a hydraulic services calculation document — deterministic Python verification of pipe velocities, pressure drops, and system pressure budgets against AS/NZS 3500.1.
         </p>
       </div>
+
+      <WorkflowContractCard workflow={runResult?.workflow_contract ?? workflowContract} />
 
       {loadingPastRun && !runResult && (
         <div className="flex items-center gap-2" style={{ color: 'var(--color-muted)' }}>

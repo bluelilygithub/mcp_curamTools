@@ -93,6 +93,8 @@ function cloneDependencies(dependencies = []) {
   return dependencies.map((dependency) => ({
     ...dependency,
     allowedStatuses: dependency.allowedStatuses ?? ['complete', 'needs_review'],
+    stalePolicy: dependency.stalePolicy ?? 'warn',
+    reviewPolicy: dependency.reviewPolicy ?? 'warn',
   }));
 }
 
@@ -132,6 +134,16 @@ function summariseTrustContract(contract = DEFAULT_TRUST_CONTRACT) {
     requires_data_gaps: contract.requiresDataGaps !== false,
     data_gap_source_ids: contract.dataGapSourceIds ?? [],
     dependency_count: contract.dependencies?.length ?? 0,
+    dependency_contract: cloneDependencies(contract.dependencies ?? []).map((dependency) => ({
+      slug: dependency.slug,
+      label: dependency.label,
+      required: dependency.required !== false,
+      maxAgeDays: dependency.maxAgeDays ?? null,
+      allowedStatuses: dependency.allowedStatuses,
+      stalePolicy: dependency.stalePolicy,
+      reviewPolicy: dependency.reviewPolicy,
+      usage: dependency.usage ?? null,
+    })),
   };
 }
 

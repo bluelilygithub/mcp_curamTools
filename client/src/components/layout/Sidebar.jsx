@@ -130,6 +130,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
               </p>
             )}
             <NavItem to="/admin/monitoring" icon="activity" label="Monitoring" collapsed={collapsed} onClick={onLinkClick} />
+            <NavItem to="/admin/operations" icon="shield" label="Operations" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/diagnostics" icon="zap" label="Diagnostics" collapsed={collapsed} onClick={onLinkClick} />
             <NavItem to="/admin/sql" icon="database" label="SQL Console" collapsed={collapsed} onClick={onLinkClick} />
 

@@ -34,7 +34,7 @@ const fmtDay = (s) => {
   return `${d}/${m}/${y}`;
 };
 
-const STATUS_COLOR = { complete: '#16a34a', error: '#dc2626', running: '#d97706' };
+const STATUS_COLOR = { complete: '#16a34a', error: '#dc2626', running: '#d97706', needs_review: '#d97706' };
 
 function printContent(title, text) {
   const win = window.open('', '_blank');
@@ -57,6 +57,56 @@ function printContent(title, text) {
   win.document.close();
   win.focus();
   win.print();
+}
+
+function DependencyStatusPanel({ requirements = [], persistedDependencies = [] }) {
+  if (!requirements.length) return null;
+
+  return (
+    <div style={{
+      border: '1px solid var(--color-border)', borderRadius: 12,
+      background: 'var(--color-bg)', padding: '10px 12px', marginBottom: 14,
+    }}>
+      <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text)', marginBottom: 6, fontFamily: 'inherit' }}>
+        Report dependencies
+      </p>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {requirements.map((req) => {
+          const persisted = persistedDependencies.find((dep) => dep.slug === req.slug);
+          const activeRun = persisted ?? req.latestRun;
+          const stateColor = !activeRun ? '#dc2626' : activeRun.stale || activeRun.status === 'needs_review' ? '#d97706' : '#16a34a';
+          return (
+            <div key={req.slug} style={{ display: 'grid', gap: 3, fontSize: 11, fontFamily: 'inherit' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, color: 'var(--color-muted)' }}>
+                <span>
+                  <strong style={{ color: 'var(--color-text)' }}>{req.label}</strong>
+                  {req.required && <span> · required</span>}
+                  {req.maxAgeDays != null && <span> · max {req.maxAgeDays}d</span>}
+                </span>
+                <span style={{ color: stateColor, whiteSpace: 'nowrap' }}>
+                  {!activeRun ? 'Missing' : activeRun.stale ? 'Stale' : activeRun.status === 'needs_review' ? 'Needs review' : 'Ready'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, color: 'var(--color-muted)' }}>
+                <span>{req.usage ?? 'Upstream report context'}</span>
+                <span style={{ whiteSpace: 'nowrap' }}>
+                  {activeRun?.runAt ? `Run ${fmtDate(activeRun.runAt)}` : (req.allowedStatuses ? `Allowed: ${req.allowedStatuses.join(', ')}` : '')}
+                </span>
+              </div>
+              {activeRun?.runId && (
+                <div style={{ color: 'var(--color-muted)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  run_id: {activeRun.runId}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <p style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 8, lineHeight: 1.45, fontFamily: 'inherit' }}>
+        These upstream reports are selected before execution and persisted with the downstream output for later review.
+      </p>
+    </div>
+  );
 }
 
 export default function AgentDashboardCard({ slug, title, description, startDate, endDate, expanded, onToggle, onContinueInConversation, prerequisiteSlug, prerequisiteTitle }) {
@@ -302,7 +352,6 @@ export default function AgentDashboardCard({ slug, title, description, startDate
   const runCost        = result?.costAud ?? null;
   const hasResult      = !!result;
   const totalRuns      = runs.length;
-  const hasReportDependencies = dependencyRequirements.length > 0;
 
   const actionBtnStyle = {
     fontSize: 11, padding: '3px 10px', borderRadius: 6, fontFamily: 'inherit',
@@ -443,37 +492,7 @@ export default function AgentDashboardCard({ slug, title, description, startDate
             </span>
           </div>
 
-          {hasReportDependencies && (
-            <div style={{
-              border: '1px solid var(--color-border)', borderRadius: 12,
-              background: 'var(--color-bg)', padding: '10px 12px', marginBottom: 14,
-            }}>
-              <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text)', marginBottom: 6, fontFamily: 'inherit' }}>
-                Report dependencies
-              </p>
-              <div style={{ display: 'grid', gap: 6 }}>
-                {dependencyRequirements.map((req) => {
-                  const persisted = persistedDependencies.find((dep) => dep.slug === req.slug);
-                  const activeRun = persisted ?? req.latestRun;
-                  return (
-                    <div key={req.slug} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
-                      <span>
-                        {req.label}
-                        {activeRun?.stale && <span style={{ color: '#d97706' }}> · stale</span>}
-                        {activeRun?.status === 'needs_review' && <span style={{ color: '#d97706' }}> · needs review</span>}
-                      </span>
-                      <span style={{ whiteSpace: 'nowrap' }}>
-                        {activeRun?.runAt ? `Run ${fmtDate(activeRun.runAt)}` : 'Missing'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              <p style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 8, lineHeight: 1.45, fontFamily: 'inherit' }}>
-                These are accountable upstream reports. The selected run IDs are persisted with this output so the handoff can be reviewed later.
-              </p>
-            </div>
-          )}
+          <DependencyStatusPanel requirements={dependencyRequirements} persistedDependencies={persistedDependencies} />
 
           <BoundsWarningPanel boundsFailed={result?.boundsFailed} />
           <DataGapsPanel dataGaps={result?.data_gaps} review={result?.data_gap_review} />
@@ -484,6 +503,7 @@ export default function AgentDashboardCard({ slug, title, description, startDate
 
       {expanded && !hasResult && !running && (
         <div style={{ borderTop: '1px solid var(--color-border)', padding: '24px 16px', textAlign: 'center' }}>
+          <DependencyStatusPanel requirements={dependencyRequirements} persistedDependencies={persistedDependencies} />
           <p style={{ fontSize: 13, color: 'var(--color-muted)', fontFamily: 'inherit' }}>
             No results yet — click "Run now" to generate this report.
           </p>

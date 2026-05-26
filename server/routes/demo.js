@@ -19,6 +19,7 @@ const { requireRole } = require('../middleware/requireRole');
 const { DEMO_CATALOG } = require('../demo/demoCatalog');
 const StorageService = require('../services/StorageService');
 const { proposeLessonFromRun } = require('../services/LessonRepositoryService');
+const { evaluateSpecCertificateGate } = require('../platform/reviewGate');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -479,10 +480,15 @@ router.post('/runs/:runId/email-certificate', async (req, res) => {
 
   // Verify run belongs to this org before sending
   const { rows } = await pool.query(
-    `SELECT id FROM agent_runs WHERE id = $1 AND org_id = $2`,
+    `SELECT id, slug, result FROM agent_runs WHERE id = $1 AND org_id = $2`,
     [req.params.runId, req.user.orgId]
   );
   if (!rows.length) return res.status(404).json({ error: 'Run not found.' });
+
+  if (['spec-validator', 'demo-spec-validator'].includes(rows[0].slug)) {
+    const gate = evaluateSpecCertificateGate(rows[0].result);
+    if (!gate.allowed) return res.status(409).json({ error: gate.reason, gate });
+  }
 
   // Generate PDF via Puppeteer (same pattern as routes/export.js)
   const puppeteer = require('puppeteer-core');

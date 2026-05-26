@@ -23,6 +23,14 @@ const { createInvitation, resendInvitation } = require('../services/InvitationSe
 const AgentConfigService = require('../platform/AgentConfigService');
 const { SYSTEM_ROLE_OPTIONS, getDefaultAccess } = require('../platform/AgentAccessRegistry');
 const { buildCredentialScopeReport } = require('../platform/credentialScopeRegistry');
+const {
+  resolveWorkflowContract,
+  summariseWorkflowContract,
+} = require('../platform/hybridWorkflowRegistry');
+const {
+  resolveTrustContract,
+  summariseTrustContract,
+} = require('../platform/agentTrustContract');
 const CostGuardService = require('../services/CostGuardService');
 const EmailTemplateService = require('../services/EmailTemplateService');
 const { proposeLessonFromRun } = require('../services/LessonRepositoryService');
@@ -834,6 +842,224 @@ router.get('/agents/:slug/access-preview', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load agent access preview.' });
+  }
+});
+
+// ── Operations Overview ───────────────────────────────────────────────────
+
+const PRIVACY_COVERAGE_BY_AGENT = {
+  'doc-extractor': ['extraction'],
+  'demo-document-analyzer': ['extraction'],
+  'spec-validator': ['extraction'],
+  'demo-spec-validator': ['extraction'],
+  'not-interested-report': ['crm'],
+};
+
+function buildPostureSignals({ config, resolvedConfig, latestRun, usage, trustContract, workflowContract, privacyCoverage, resolutionError }) {
+  const signals = [];
+  if (resolutionError) {
+    signals.push({ severity: 'critical', label: 'Model resolution error', detail: resolutionError });
+  }
+  if (config.enabled === false) {
+    signals.push({ severity: 'warning', label: 'Disabled', detail: 'Agent kill switch is off.' });
+  }
+  if (!resolvedConfig?.model && !resolutionError) {
+    signals.push({ severity: 'critical', label: 'No model', detail: 'No agent model or organisation default model is resolved.' });
+  }
+  if (!config.max_task_budget_aud) {
+    signals.push({ severity: 'warning', label: 'No per-run budget', detail: 'This agent has no explicit max_task_budget_aud.' });
+  }
+  if (latestRun?.status === 'error') {
+    signals.push({ severity: 'critical', label: 'Last run failed', detail: latestRun.error ?? 'Last run ended with error status.' });
+  } else if (latestRun?.status === 'needs_review') {
+    signals.push({ severity: 'warning', label: 'Review needed', detail: 'The latest run is waiting for human review.' });
+  }
+  if (Number(usage?.review_runs ?? 0) > 0) {
+    signals.push({ severity: 'warning', label: 'Review backlog', detail: `${usage.review_runs} run(s) needed review in the last 30 days.` });
+  }
+  if (Number(usage?.error_runs ?? 0) > 0) {
+    signals.push({ severity: 'warning', label: 'Recent errors', detail: `${usage.error_runs} error run(s) in the last 30 days.` });
+  }
+  if (trustContract?.dependency_contract?.length > 0) {
+    signals.push({ severity: 'info', label: 'Chained report', detail: `${trustContract.dependency_contract.length} upstream dependency rule(s).` });
+  }
+  if (workflowContract) {
+    signals.push({ severity: 'info', label: 'Hybrid workflow', detail: `${workflowContract.stage_count} stage(s), ${workflowContract.gate_count} gate(s).` });
+  }
+  if (privacyCoverage.length > 0) {
+    signals.push({ severity: 'info', label: 'Privacy coverage', detail: privacyCoverage.join(', ') });
+  }
+  return signals;
+}
+
+router.get('/operations-overview', async (req, res) => {
+  const orgId = req.user.orgId;
+  const slugs = Object.keys(AgentConfigService.ADMIN_DEFAULTS).filter((slug) => slug !== '_platform');
+
+  try {
+    const [
+      orgBudget,
+      dailySpendAud,
+      defaultModel,
+      fallbackModel,
+      extractionPrivacy,
+      crmPrivacy,
+      latestRuns,
+      runAgg,
+      usageAgg,
+      operatorRows,
+    ] = await Promise.all([
+      AgentConfigService.getOrgBudgetSettings(orgId),
+      CostGuardService.getDailyOrgSpendAud(orgId).catch(() => 0),
+      AgentConfigService.getOrgDefaultModel(orgId).catch(() => null),
+      AgentConfigService.getOrgFallbackModel(orgId).catch(() => null),
+      AgentConfigService.getExtractionPrivacySettings(orgId).catch(() => ({ excluded_field_names: [] })),
+      AgentConfigService.getCrmPrivacySettings(orgId).catch(() => ({ excluded_fields: [] })),
+      pool.query(
+        `SELECT DISTINCT ON (slug) slug, status, error, run_at, completed_at, result
+           FROM agent_runs
+          WHERE org_id = $1
+          ORDER BY slug, run_at DESC`,
+        [orgId]
+      ),
+      pool.query(
+        `SELECT slug,
+                COUNT(*)::int AS runs,
+                COUNT(*) FILTER (WHERE status = 'needs_review')::int AS review_runs,
+                COUNT(*) FILTER (WHERE status = 'error')::int AS error_runs,
+                COALESCE(SUM((result->>'costAud')::numeric), 0)::numeric AS cost_aud,
+                MAX(run_at) AS last_run_at
+           FROM agent_runs
+          WHERE org_id = $1 AND run_at >= NOW() - INTERVAL '30 days'
+          GROUP BY slug`,
+        [orgId]
+      ),
+      pool.query(
+        `SELECT tool_slug AS slug,
+                COUNT(*)::int AS usage_rows,
+                COALESCE(SUM(cost_aud), 0)::numeric AS usage_cost_aud,
+                COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens), 0)::bigint AS total_tokens,
+                MAX(created_at) AS last_usage_at
+           FROM usage_logs
+          WHERE org_id = $1 AND created_at >= NOW() - INTERVAL '30 days'
+            AND tool_slug IS NOT NULL
+          GROUP BY tool_slug`,
+        [orgId]
+      ),
+      pool.query(
+        `SELECT slug,
+                custom_prompt IS NOT NULL AND length(trim(custom_prompt)) > 0 AS has_custom_prompt,
+                intelligence_profile IS NOT NULL AS has_intelligence_profile
+           FROM agent_configs
+          WHERE org_id = $1 AND customer_id IS NULL`,
+        [orgId]
+      ),
+    ]);
+
+    const latestBySlug = new Map(latestRuns.rows.map((row) => [row.slug, row]));
+    const runAggBySlug = new Map(runAgg.rows.map((row) => [row.slug, row]));
+    const usageBySlug = new Map(usageAgg.rows.map((row) => [row.slug, row]));
+    const operatorBySlug = new Map(operatorRows.rows.map((row) => [row.slug, row]));
+
+    const agents = await Promise.all(slugs.map(async (slug) => {
+      const config = await AgentConfigService.getAdminConfig(slug, orgId);
+      let resolvedConfig = null;
+      let resolutionError = null;
+      try {
+        resolvedConfig = await AgentConfigService.getResolvedAdminConfig(slug, orgId);
+      } catch (err) {
+        resolutionError = err.message;
+      }
+
+      const defaultAccess = getDefaultAccess(slug);
+      const trustContract = summariseTrustContract(resolveTrustContract(slug, {}));
+      const workflowContract = summariseWorkflowContract(resolveWorkflowContract(slug));
+      const latestRun = latestBySlug.get(slug) ?? null;
+      const runUsage = runAggBySlug.get(slug) ?? {};
+      const tokenUsage = usageBySlug.get(slug) ?? {};
+      const operatorConfig = operatorBySlug.get(slug) ?? {};
+      const privacyCoverage = PRIVACY_COVERAGE_BY_AGENT[slug] ?? [];
+      const signals = buildPostureSignals({
+        config,
+        resolvedConfig,
+        latestRun,
+        usage: runUsage,
+        trustContract,
+        workflowContract,
+        privacyCoverage,
+        resolutionError,
+      });
+
+      return {
+        slug,
+        enabled: config.enabled !== false,
+        model: resolvedConfig?.model ?? config.model ?? null,
+        model_source: resolvedConfig?.model_source ?? (config.model ? 'agent-config' : null),
+        fallback_model: resolvedConfig?.fallback_model ?? null,
+        fallback_model_source: resolvedConfig?.fallback_model_source ?? null,
+        max_tokens: config.max_tokens ?? null,
+        max_iterations: config.max_iterations ?? null,
+        max_task_budget_aud: config.max_task_budget_aud ?? null,
+        allowed_roles: config.allowed_roles ?? null,
+        default_access_label: defaultAccess.label,
+        default_required_permission: defaultAccess.roleName,
+        access_mode: Array.isArray(config.allowed_roles) && config.allowed_roles.length > 0 ? 'configured_roles' : 'code_default',
+        has_custom_prompt: operatorConfig.has_custom_prompt === true,
+        has_intelligence_profile: operatorConfig.has_intelligence_profile === true,
+        trust_contract: trustContract,
+        workflow_contract: workflowContract,
+        privacy_coverage: privacyCoverage,
+        latest_run: latestRun ? {
+          id: latestRun.id,
+          status: latestRun.status,
+          error: latestRun.error,
+          run_at: latestRun.run_at,
+          completed_at: latestRun.completed_at,
+        } : null,
+        usage_30d: {
+          runs: Number(runUsage.runs ?? 0),
+          review_runs: Number(runUsage.review_runs ?? 0),
+          error_runs: Number(runUsage.error_runs ?? 0),
+          run_cost_aud: Number(runUsage.cost_aud ?? 0),
+          usage_rows: Number(tokenUsage.usage_rows ?? 0),
+          usage_cost_aud: Number(tokenUsage.usage_cost_aud ?? 0),
+          total_tokens: Number(tokenUsage.total_tokens ?? 0),
+          last_run_at: runUsage.last_run_at ?? null,
+          last_usage_at: tokenUsage.last_usage_at ?? null,
+        },
+        resolution_error: resolutionError,
+        signals,
+      };
+    }));
+
+    const summary = {
+      agents_total: agents.length,
+      enabled_agents: agents.filter((agent) => agent.enabled).length,
+      agents_with_errors: agents.filter((agent) => agent.signals.some((signal) => signal.severity === 'critical')).length,
+      agents_needing_attention: agents.filter((agent) => agent.signals.some((signal) => ['critical', 'warning'].includes(signal.severity))).length,
+      workflow_agents: agents.filter((agent) => agent.workflow_contract).length,
+      chained_agents: agents.filter((agent) => agent.trust_contract?.dependency_contract?.length > 0).length,
+      daily_budget_aud: orgBudget.max_daily_org_budget_aud ?? null,
+      daily_spend_aud: Number(dailySpendAud ?? 0),
+      default_model: defaultModel,
+      fallback_model: fallbackModel,
+      extraction_privacy_fields: extractionPrivacy.excluded_field_names?.length ?? 0,
+      crm_privacy_fields: crmPrivacy.excluded_fields?.length ?? 0,
+    };
+
+    res.json({
+      generated_at: new Date().toISOString(),
+      summary,
+      privacy: {
+        extraction: extractionPrivacy,
+        crm: crmPrivacy,
+        note: 'Privacy exclusions are targeted controls for extraction and CRM flows, not a universal prompt redaction layer.',
+      },
+      agents,
+    });
+  } catch (err) {
+    console.error('[operations-overview]', err.message);
+    res.status(500).json({ error: 'Failed to load operations overview.' });
   }
 });
 
@@ -1863,7 +2089,26 @@ function deriveTrustSignals(run) {
       severity: 'warn',
       source: warning.slug ?? 'dependency',
       reason,
+      details: [
+        warning.runId ? `run: ${warning.runId}` : null,
+        warning.policy ? `policy: ${warning.policy}` : null,
+      ].filter(Boolean),
     });
+  }
+
+  if (result.report_dependency_error?.details?.length > 0) {
+    for (const detail of result.report_dependency_error.details) {
+      signals.push({
+        type: `dependency_${detail.reason ?? 'missing'}`,
+        severity: 'error',
+        source: detail.slug ?? 'dependency',
+        reason: `${detail.label ?? detail.slug ?? 'Dependency'} could not be resolved before the run started.`,
+        details: [
+          detail.allowedStatuses ? `allowed: ${detail.allowedStatuses.join(', ')}` : null,
+          detail.maxAgeDays != null ? `max age: ${detail.maxAgeDays} days` : null,
+        ].filter(Boolean),
+      });
+    }
   }
 
   if (run.status === 'needs_review' && signals.length === 0) {
@@ -1891,6 +2136,11 @@ function deriveTrustSignals(run) {
     silentDataGaps: Array.isArray(gapReview.silentGaps) ? gapReview.silentGaps : [],
     fabricatedDataGaps: Array.isArray(gapReview.fabricatedGaps) ? gapReview.fabricatedGaps : [],
     dependencies: Array.isArray(result.report_dependencies) ? result.report_dependencies : [],
+    dependencyContract: Array.isArray(result.report_dependency_contract)
+      ? result.report_dependency_contract
+      : result.trust_contract?.dependency_contract ?? [],
+    dependencyWarnings,
+    workflowContract: result.workflow_contract ?? summariseWorkflowContract(resolveWorkflowContract(run.slug)),
   };
 }
 

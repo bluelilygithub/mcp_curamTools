@@ -7,6 +7,12 @@ const MONITORING_GROUPS = [
     description: 'Inspect what agents ran, what they produced, and whether outputs need review.',
     items: [
       {
+        title: 'Operations Overview',
+        path: '/admin/operations',
+        icon: 'activity',
+        summary: 'One-page posture view for model routing, budgets, access, trust, workflow contracts, privacy coverage, and recent health.',
+      },
+      {
         title: 'Agent Runs',
         path: '/admin/agent-trust',
         icon: 'shield',
