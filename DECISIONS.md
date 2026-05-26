@@ -26,6 +26,19 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### Agent registration — manifest pattern + load isolation
+**Date:** 2026-05-26
+**Status:** Settled
+**Context:** `server/routes/agents.js` accumulated 31+ agents as top-level `require()` calls. One bad module import at server startup (syntax error, missing dependency, bad refactor) silenced every agent route simultaneously. The blast radius grew with every new agent added.
+**Decision:** Two-phase refactor:
+1. **Load isolation** — each `require()` wrapped in `tryLoad()`. Failure logs a warning and mounts a 503 stub for that agent; other agents continue unaffected.
+2. **Manifest pattern** — all standard SSE agent registrations moved to `server/agents/manifest.js` as a flat array of config objects (`slug`, `module`, `export`, `permission`, `rateLimit?`, `schedule?`). `agents.js` loops the manifest; no per-agent code lives in the route file.
+**Rationale:** Blast radius is now one route, not the server. Adding an agent = one manifest entry + agent files. `agents.js` is stable infrastructure that almost never needs editing.
+**Constraints:** Agents with bespoke sub-routes (suggestions CRUD, email endpoints, prompt management) still add those directly in `agents.js` under the explicit "Custom sub-routes" section — the manifest only covers the standard `createAgentRoute` endpoints.
+**References:** `server/agents/manifest.js`; `server/routes/agents.js`; CHANGELOG 2026-05-26.
+
+---
+
 ### Demo org UI — supplemental CSS layer (future industry demos)
 **Date:** 2026-05-14
 **Status:** Settled (design intent; implementation when needed)

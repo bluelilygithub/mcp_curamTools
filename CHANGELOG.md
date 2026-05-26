@@ -18,6 +18,22 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-26 — Agent Load Isolation + Manifest Registration
+
+### Built
+- **`tryLoad` / `registerAgent` helpers:** Each agent module is now wrapped in a try-catch at startup. A broken `require()` logs a warning and mounts a 503 stub for that agent — other agents are unaffected. Previously one bad import silenced all 31+ routes.
+- **`server/agents/manifest.js`:** Single source of truth for all SSE agent registrations. Each entry is one object: `{ slug, module, export, permission, rateLimit?, schedule? }`. `agents.js` loops the manifest — no per-agent code in the route file.
+- **Scheduler guard:** `AgentScheduler.register` is gated on `runFn` truthy; a failed agent module no longer crashes the scheduler.
+
+### Fixed
+- Blast radius of a bad agent deploy reduced from "all agents 500" to "one agent 503".
+- Adding an agent no longer requires editing `server/routes/agents.js`; manifest entry + agent files is sufficient.
+
+### What's next
+- Phase 2 complete. If an agent needs bespoke sub-routes (suggestions CRUD, custom email) those still live in `agents.js` under the explicit "Custom sub-routes" section.
+
+---
+
 ## 2026-05-26 — UX Transparency Posture
 
 ### Built

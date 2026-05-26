@@ -69,13 +69,14 @@ If a local Git hook is installed, it may run this automatically when these files
 5. Add `AGENT_DEFAULTS` entry in `AgentConfigService.js`
 6. Add `ADMIN_DEFAULTS` entry in `AgentConfigService.js`
 7. Add `AGENT_MODEL_REQUIREMENTS` capabilities if the agent requires tool use, vision, reliable JSON, or long context
-8. Register in `server/routes/agents.js` via `createAgentRoute({ slug, runFn, requiredPermission })`
-9. Add cron in `agents.js` via `AgentScheduler.register` if scheduled — document UTC↔AEST offset
-10. Update `CRON.md` if scheduled
-11. Create `client/src/pages/tools/<NamePage>.jsx`
-12. Add route in `client/src/App.jsx`
-13. Add entry in `client/src/config/tools.js`
-14. Update `LESSON_COVERAGE_SECTIONS` in `AdminLessonsPage.jsx`
+8. **Add one entry to `server/agents/manifest.js`** — `{ slug, module, export, permission, rateLimit?, schedule? }`. Do NOT edit `server/routes/agents.js` for basic registration; the loop picks up manifest entries automatically.
+9. If scheduled, add cron in the manifest `schedule` field — document UTC↔AEST offset. Update `CRON.md`.
+10. Create `client/src/pages/tools/<NamePage>.jsx`
+11. Add route in `client/src/App.jsx`
+12. Add entry in `client/src/config/tools.js`
+13. Update `LESSON_COVERAGE_SECTIONS` in `AdminLessonsPage.jsx`
+
+**Exception:** agents with bespoke sub-routes (suggestions CRUD, custom email endpoints, prompt management) must also add those routes directly in `server/routes/agents.js` under the "Custom sub-routes" section. The manifest only covers the standard SSE run + history endpoints.
 
 ---
 
