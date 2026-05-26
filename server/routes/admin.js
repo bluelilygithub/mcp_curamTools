@@ -23,6 +23,7 @@ const { createInvitation, resendInvitation } = require('../services/InvitationSe
 const AgentConfigService = require('../platform/AgentConfigService');
 const { SYSTEM_ROLE_OPTIONS, getDefaultAccess } = require('../platform/AgentAccessRegistry');
 const { buildCredentialScopeReport } = require('../platform/credentialScopeRegistry');
+const CostGuardService = require('../services/CostGuardService');
 const EmailTemplateService = require('../services/EmailTemplateService');
 const { proposeLessonFromRun } = require('../services/LessonRepositoryService');
 
@@ -2246,6 +2247,74 @@ function usageAction({ type, severity = 'info', title, detail, action, metric = 
   return { type, severity, title, detail, action, metric };
 }
 
+function buildUsageAccountingDiagnostics({ modelUsageRows, models, zeroCostRunsWithTokens, cacheRow, recentRuns }) {
+  const modelMap = new Map(models.map((model) => [model.id, model]));
+  const usageByModel = new Map();
+
+  for (const row of modelUsageRows) {
+    const modelId = row.model_id ?? 'unknown';
+    const current = usageByModel.get(modelId) ?? { model_id: modelId, runs: 0 };
+    current.runs += Number(row.runs ?? 0);
+    usageByModel.set(modelId, current);
+  }
+
+  const modelPricing = [...usageByModel.values()].map((usage) => {
+    const model = modelMap.get(usage.model_id);
+    return {
+      ...usage,
+      listed_in_catalogue: !!model,
+      ...CostGuardService.describePricingForModel(usage.model_id, model),
+    };
+  });
+
+  const fallbackPricedModels = modelPricing.filter((entry) => entry.source === 'fallback_sonnet');
+  const providerPricedModels = modelPricing.filter((entry) => entry.source === 'provider_prefix' || entry.source === 'known_table');
+  const configuredPricedModels = modelPricing.filter((entry) => entry.source === 'configured_model');
+  const cacheTrackedRuns = Number(cacheRow?.runs ?? 0);
+  const cacheReadTokens = Number(cacheRow?.cache_read ?? 0);
+
+  const warnings = [];
+  if (zeroCostRunsWithTokens > 0) {
+    warnings.push({
+      type: 'zero_cost_with_tokens',
+      severity: 'warning',
+      title: 'Some usage has tokens but zero cost',
+      detail: `${zeroCostRunsWithTokens} recent run${zeroCostRunsWithTokens === 1 ? '' : 's'} recorded tokens with no AUD cost.`,
+      action: 'Check model pricing and direct routes that bypass the shared cost guard.',
+    });
+  }
+  if (fallbackPricedModels.length > 0) {
+    warnings.push({
+      type: 'fallback_pricing',
+      severity: 'info',
+      title: 'Some models use fallback pricing',
+      detail: fallbackPricedModels.map((entry) => entry.model_id).join(', '),
+      action: 'Add these models to Settings > Models with explicit input/output prices for cleaner reporting.',
+    });
+  }
+
+  return {
+    accounting_mode: 'response_delta',
+    accounting_label: 'Live budget checks use per-response token deltas',
+    recent_runs: recentRuns,
+    zero_cost_runs_with_tokens: zeroCostRunsWithTokens,
+    cache_tracking: {
+      tracked_runs: cacheTrackedRuns,
+      cache_read_tokens: cacheReadTokens,
+      provider_note: cacheReadTokens > 0
+        ? 'Prompt cache reads are being reported by at least one provider.'
+        : 'No cache reads reported in the last 7 days. This is normal for non-Anthropic providers or low-volume periods.',
+    },
+    pricing_sources: {
+      configured_model: configuredPricedModels.length,
+      built_in_or_prefix: providerPricedModels.length,
+      fallback_sonnet: fallbackPricedModels.length,
+    },
+    model_pricing: modelPricing.sort((a, b) => b.runs - a.runs).slice(0, 8),
+    warnings,
+  };
+}
+
 router.get('/usage-intelligence', async (req, res) => {
   const orgId = req.user.orgId;
 
@@ -2260,6 +2329,7 @@ router.get('/usage-intelligence', async (req, res) => {
       topToolsRes,
       modelUsageRes,
       modelsRow,
+      zeroCostRes,
     ] = await Promise.all([
       AgentConfigService.getOrgBudgetSettings(orgId),
 
@@ -2345,6 +2415,19 @@ router.get('/usage-intelligence', async (req, res) => {
         `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'ai_models' LIMIT 1`,
         [orgId]
       ),
+
+      pool.query(
+        `SELECT COUNT(*)::int AS runs
+           FROM usage_logs
+          WHERE org_id = $1
+            AND created_at >= NOW() - INTERVAL '30 days'
+            AND COALESCE(cost_aud, 0) = 0
+            AND COALESCE(input_tokens, 0)
+              + COALESCE(output_tokens, 0)
+              + COALESCE(cache_read_tokens, 0)
+              + COALESCE(cache_creation_tokens, 0) > 0`,
+        [orgId]
+      ),
     ]);
 
     const monthCost = Number(monthRes.rows[0]?.cost_aud ?? 0);
@@ -2391,6 +2474,13 @@ router.get('/usage-intelligence', async (req, res) => {
     const allModels = modelsRow.rows.length > 0
       ? AgentConfigService.normalizeModelList(modelsRow.rows[0]?.value)
       : MODEL_DEFAULTS;
+    const accountingDiagnostics = buildUsageAccountingDiagnostics({
+      modelUsageRows: modelUsageRes.rows,
+      models: allModels,
+      zeroCostRunsWithTokens: Number(zeroCostRes.rows[0]?.runs ?? 0),
+      cacheRow,
+      recentRuns: monthRuns,
+    });
     const modelTierMap = Object.fromEntries(allModels.map((m) => [m.id, m.tier]));
     const TIER_RANK = { standard: 0, advanced: 1, premium: 2 };
     const { AGENT_MODEL_REQUIREMENTS } = AgentConfigService;
@@ -2516,6 +2606,7 @@ router.get('/usage-intelligence', async (req, res) => {
         hit_rate: cacheHitRate,
         low_cache_drivers: lowCacheDrivers,
       },
+      accountingDiagnostics,
       topCostDrivers,
       recommendedActions: actions.slice(0, 6),
     });

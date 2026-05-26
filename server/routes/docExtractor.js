@@ -302,7 +302,7 @@ router.post(
           output:     result.tokensUsed?.output_tokens               ?? 0,
           cacheRead:  result.tokensUsed?.cache_read_input_tokens     ?? 0,
           cacheWrite: result.tokensUsed?.cache_creation_input_tokens ?? 0,
-        });
+        }, model, model === adminConfig.model ? adminConfig.model_pricing : null);
         batchCostAud += costAud;
 
         // Check per-file task budget and daily org budget

@@ -692,6 +692,17 @@ async function validateModelCapabilities({ slug, orgId, modelId, role = 'primary
   };
 }
 
+function extractModelPricing(model) {
+  if (!model) return null;
+  return {
+    id: model.id,
+    provider: model.provider ?? null,
+    tier: model.tier ?? null,
+    inputPricePer1M: Number(model.inputPricePer1M ?? 0),
+    outputPricePer1M: Number(model.outputPricePer1M ?? 0),
+  };
+}
+
 /**
  * Returns admin guardrails with Auto model resolution applied for a specific org.
  *
@@ -725,6 +736,7 @@ async function getResolvedAdminConfig(slug, orgId, { useRecommended = false } = 
   }
 
   const modelCapabilityMeta = await validateModelCapabilities({ slug, orgId, modelId: model, role: 'primary' });
+  const modelPricing = await getModelFromCatalogue(orgId, model).then(extractModelPricing).catch(() => null);
 
   let fallback_model = adminConfig.fallback_model || null;
   let fallback_model_source = fallback_model ? 'agent-config' : null;
@@ -741,6 +753,9 @@ async function getResolvedAdminConfig(slug, orgId, { useRecommended = false } = 
     fallback_model = null;
     fallback_model_source = null;
   }
+  const fallbackModelPricing = fallback_model
+    ? await getModelFromCatalogue(orgId, fallback_model).then(extractModelPricing).catch(() => null)
+    : null;
 
   return {
     ...adminConfig,
@@ -748,6 +763,8 @@ async function getResolvedAdminConfig(slug, orgId, { useRecommended = false } = 
     model_source,
     fallback_model,
     fallback_model_source,
+    model_pricing: modelPricing,
+    fallback_model_pricing: fallbackModelPricing,
     ...(modelCapabilityMeta ?? {}),
     ...(fallbackCapabilityMeta?.model_capabilities && {
       fallback_model_capabilities: fallbackCapabilityMeta.model_capabilities,

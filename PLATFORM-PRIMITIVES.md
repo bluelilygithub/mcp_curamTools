@@ -53,7 +53,7 @@ Run rows are written only via **`persistRun`** from **`server/platform/persistRu
 
 **Stage 3 budget integration (additive — public interface unchanged):**
 - After the kill switch check, `createAgentRoute` loads org budget settings (`AgentConfigService.getOrgBudgetSettings`) and the daily org spend (`CostGuardService.getDailyOrgSpendAud`) in a single DB query. If the daily budget is already exceeded before the run starts, the route aborts immediately with a `BudgetExceededError`.
-- `emit` accepts an optional second parameter: `emit(text, partialTokensUsed)`. If provided, the route accumulates `taskCostAud` and calls `CostGuardService.check()` mid-run. Existing agents calling `emit(text)` are unaffected.
+- `emit` accepts an optional second parameter: `emit(text, partialTokensUsed)`. `partialTokensUsed` must be a per-response delta, not cumulative run totals. If provided, the route accumulates `taskCostAud` and calls `CostGuardService.check()` mid-run. Existing agents calling `emit(text)` are unaffected.
 - A definitive post-run `CostGuardService.check()` always runs using the final `tokensUsed` returned by `runFn`.
 - `costAud` is added to `resultPayload` and persisted in `agent_runs.result` JSONB on every completed run.
 - **Optional `prompt_version`:** If `runFn` returns **`promptVersion`** (string), `createAgentRoute` merges it into the persisted payload as **`prompt_version`** (see `server/platform/promptVersions.js`, `knowledge_base/core/PROMPT_VERSIONING.md`). Agents that omit it are unchanged.
@@ -78,7 +78,7 @@ await logUsage({ orgId, userId, slug, modelId, tokensUsed, costAud })
 ```
 `cost_usd` is derived internally as `costAud / 1.55`. `cost_aud` is the source of truth.
 
-**Analytics endpoint:** `GET /api/admin/usage-stats?days=7|30|90` returns aggregated totals, per-model, per-tool, and daily breakdowns. Cache savings estimated at `cache_read_tokens × $2.70/1M USD × 1.55`.
+**Analytics endpoints:** `GET /api/admin/usage-stats?days=7|30|90` returns aggregated totals, per-model, per-tool, and daily breakdowns. `GET /api/admin/usage-intelligence` returns health, forecast, recommended actions, cost drivers, cache diagnostics, and accounting diagnostics. Cache savings estimated at `cache_read_tokens × $2.70/1M USD × 1.55`.
 
 **UI:** Admin › Token Usage (`/admin/usage`) — `AdminUsagePage.jsx`.
 
@@ -1077,7 +1077,7 @@ router.post('/example', requireAuth, requirePermission('models:manage'), handler
 ### CostGuardService
 **Type:** Service
 **Location:** `server/services/CostGuardService.js`
-**What it does:** All budget enforcement logic for the platform. Four exports: a cost conversion function, a DB query for daily org spend, a pure synchronous check function, and a typed error class. No export performs IO except `getDailyOrgSpendAud`.
+**What it does:** All budget enforcement logic for the platform. It converts token usage into AUD cost, describes which pricing source was used, loads daily org spend, performs pure synchronous budget checks, and exposes a typed budget error. No export performs IO except `getDailyOrgSpendAud`.
 
 **Token cost constants:**
 ```js
@@ -1093,9 +1093,13 @@ const AUD_PER_USD = 1.55;  // approximate; documented as such in the source file
 **Interface:**
 ```js
 // Pure function — no IO
-computeCostAud({ input, output, cacheRead, cacheWrite })
+computeCostAud({ input, output, cacheRead, cacheWrite }, modelId, modelPricing?)
 // tokensUsed object → AUD cost as a number
-// Uses the rate constants above × AUD_PER_USD
+// Prefers resolved model catalogue pricing, then built-in provider rates,
+// then a conservative Sonnet fallback estimate.
+
+describePricingForModel(modelId, modelPricing?)
+// Returns source metadata for Admin > Usage accounting diagnostics.
 
 // Single DB query — call once at run start
 getDailyOrgSpendAud(orgId)

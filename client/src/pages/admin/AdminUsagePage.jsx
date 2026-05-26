@@ -277,6 +277,114 @@ function HealthPanel({ intelligence }) {
   );
 }
 
+function AccountingDiagnosticsPanel({ diagnostics }) {
+  if (!diagnostics) return null;
+
+  const pricing = diagnostics.pricing_sources ?? {};
+  const cache = diagnostics.cache_tracking ?? {};
+  const warnings = diagnostics.warnings ?? [];
+  const modelPricing = diagnostics.model_pricing ?? [];
+
+  return (
+    <section
+      className="rounded-2xl border p-6 space-y-4"
+      style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
+    >
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>
+            Accounting Diagnostics
+          </p>
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>
+            {diagnostics.accounting_label ?? 'Usage accounting status'}
+          </h2>
+          <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+            Verifies how cost data is calculated and where estimates are being used.
+          </p>
+        </div>
+        <span
+          className="text-xs rounded-full px-2.5 py-1 font-medium"
+          style={{ color: '#166534', background: '#dcfce7' }}
+        >
+          {diagnostics.accounting_mode === 'response_delta' ? 'Delta-safe' : diagnostics.accounting_mode}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Recent runs', value: diagnostics.recent_runs ?? 0 },
+          { label: 'Zero-cost token runs', value: diagnostics.zero_cost_runs_with_tokens ?? 0 },
+          { label: 'Configured pricing', value: pricing.configured_model ?? 0 },
+          { label: 'Fallback estimates', value: pricing.fallback_sonnet ?? 0 },
+        ].map((item) => (
+          <div key={item.label} className="rounded-xl border p-3" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+            <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>{item.label}</p>
+            <p className="text-lg font-semibold mt-1" style={{ color: 'var(--color-text)' }}>{item.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border p-3" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>Prompt cache reporting</p>
+          <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+            {fmtTokens(cache.cache_read_tokens)} cache-read tokens / {cache.tracked_runs ?? 0} runs
+          </p>
+        </div>
+        <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>{cache.provider_note}</p>
+      </div>
+
+      {warnings.length > 0 && (
+        <div className="space-y-2">
+          {warnings.map((warning) => {
+            const style = WARNING_STYLES[warning.severity] ?? WARNING_STYLES.info;
+            return (
+              <div key={warning.type} className="rounded-xl border p-3" style={{ borderColor: style.border, background: style.bg }}>
+                <p className="text-sm font-semibold" style={{ color: style.text }}>{warning.title}</p>
+                <p className="text-xs mt-1" style={{ color: style.text }}>{warning.detail}</p>
+                <p className="text-xs mt-2 font-medium" style={{ color: style.text }}>{warning.action}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {modelPricing.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>
+            Pricing Source By Model
+          </p>
+          <div className="grid gap-2">
+            {modelPricing.map((entry) => (
+              <div
+                key={entry.model_id}
+                className="rounded-xl border p-3 flex items-center justify-between gap-3 flex-wrap"
+                style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}
+              >
+                <div>
+                  <p className="text-xs font-mono" style={{ color: 'var(--color-text)' }}>{entry.model_id}</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+                    {entry.label} {entry.matchedModel ? `(${entry.matchedModel})` : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs rounded-full px-2 py-0.5" style={{ color: '#fff', background: entry.listed_in_catalogue ? '#16a34a' : '#d97706' }}>
+                    {entry.listed_in_catalogue ? 'catalogue' : 'not listed'}
+                  </span>
+                  <span className="text-xs rounded-full px-2 py-0.5" style={{ color: '#fff', background: entry.source === 'fallback_sonnet' ? '#d97706' : '#2563eb' }}>
+                    {entry.source}
+                  </span>
+                  <span className="text-xs" style={{ color: 'var(--color-muted)' }}>{entry.runs} runs</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function AdminUsagePage() {
   const [days,     setDays]     = useState(30);
   const [data,     setData]     = useState(null);
@@ -345,6 +453,7 @@ export default function AdminUsagePage() {
       ) : (
         <>
           <HealthPanel intelligence={intel} />
+          <AccountingDiagnosticsPanel diagnostics={intel?.accountingDiagnostics} />
 
           {/* Warnings */}
           {warnings.length > 0 && (

@@ -190,7 +190,7 @@ function createBudgetAwareEmitter({ emit, adminConfig, budgetContext, taskCostTr
   return (text, partialTokensUsed) => {
     emit('progress', { text });
     if (partialTokensUsed) {
-      taskCostTracker.value += CostGuardService.computeCostAud(partialTokensUsed, adminConfig.model);
+      taskCostTracker.value += CostGuardService.computeCostAud(partialTokensUsed, adminConfig.model, adminConfig.model_pricing);
       CostGuardService.check({
         taskCostAud: taskCostTracker.value,
         maxTaskBudgetAud: budgetContext.maxTaskBudgetAud,
@@ -312,6 +312,7 @@ function buildResultPayload({
       fallback_model_source: adminConfig.fallback_model_source ?? null,
       required_capabilities: adminConfig.required_capabilities ?? [],
       model_capabilities: adminConfig.model_capabilities ?? null,
+      model_pricing: adminConfig.model_pricing ?? null,
       missing_capabilities: adminConfig.missing_capabilities ?? [],
       capability_warnings: adminConfig.capability_warnings ?? [],
       fallback_capability_warnings: adminConfig.fallback_capability_warnings ?? [],
@@ -520,7 +521,7 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5, trus
 
         // Post-run budget check using final tokensUsed (catches agents that don't emit partial costs)
         if (tokensUsed) {
-          const finalCostAud = CostGuardService.computeCostAud(tokensUsed, adminConfig.model);
+          const finalCostAud = CostGuardService.computeCostAud(tokensUsed, adminConfig.model, adminConfig.model_pricing);
           taskCostTracker.value = Math.max(taskCostTracker.value, finalCostAud); // use final if higher than accumulated
           CostGuardService.check({
             taskCostAud: taskCostTracker.value,

@@ -54,23 +54,70 @@ const MODEL_RATES = {
   }
 };
 
+function ratesFromModelConfig(modelConfig, cacheRates = null) {
+  const inputPrice = Number(modelConfig?.inputPricePer1M);
+  const outputPrice = Number(modelConfig?.outputPricePer1M);
+  if (!Number.isFinite(inputPrice) || !Number.isFinite(outputPrice) || inputPrice <= 0 || outputPrice <= 0) {
+    return null;
+  }
+  return {
+    input:      inputPrice * AUD_PER_USD / 1_000_000,
+    output:     outputPrice * AUD_PER_USD / 1_000_000,
+    // The model editor does not store cache-specific prices yet. For known
+    // providers, keep their cache rates; for custom models, use input rate.
+    cacheRead:  cacheRates?.cacheRead  ?? inputPrice * AUD_PER_USD / 1_000_000,
+    cacheWrite: cacheRates?.cacheWrite ?? inputPrice * AUD_PER_USD / 1_000_000,
+  };
+}
+
+function getKnownRateMatch(modelId) {
+  if (!modelId) return { rates: SONNET_RATES, source: 'fallback_sonnet', matchedModel: 'claude-sonnet-4-6' };
+  const lower = modelId.toLowerCase();
+
+  if (MODEL_RATES[lower]) return { rates: MODEL_RATES[lower], source: 'known_table', matchedModel: lower };
+
+  if (lower.startsWith('deepseek-')) return { rates: DEEPSEEK_RATES, source: 'provider_prefix', matchedModel: 'deepseek-*' };
+  if (lower.startsWith('claude-haiku-') || lower.startsWith('claude-3-5-haiku')) {
+    return { rates: HAIKU_RATES, source: 'provider_prefix', matchedModel: 'claude-haiku-*' };
+  }
+  if (lower.startsWith('claude-sonnet-') || lower.startsWith('claude-3-5-sonnet')) {
+    return { rates: SONNET_RATES, source: 'provider_prefix', matchedModel: 'claude-sonnet-*' };
+  }
+
+  return { rates: SONNET_RATES, source: 'fallback_sonnet', matchedModel: 'claude-sonnet-4-6' };
+}
+
 /**
  * Get the rates for a given model ID.
- * Falls back to Sonnet rates if the model is unknown.
+ * Uses editable model catalogue prices when supplied, then known provider rates,
+ * then a conservative Sonnet fallback if the model is unknown.
  */
-function getRatesForModel(modelId) {
-  if (!modelId) return SONNET_RATES;
-  const lower = modelId.toLowerCase();
-  
-  // Direct match
-  if (MODEL_RATES[lower]) return MODEL_RATES[lower];
-  
-  // Prefix matches
-  if (lower.startsWith('deepseek-')) return DEEPSEEK_RATES;
-  if (lower.startsWith('claude-3-5-haiku')) return HAIKU_RATES;
-  if (lower.startsWith('claude-3-5-sonnet')) return SONNET_RATES;
-  
-  return SONNET_RATES;
+function getRatesForModel(modelId, modelConfig = null) {
+  const known = getKnownRateMatch(modelId);
+  const configuredRates = ratesFromModelConfig(modelConfig, known.source === 'fallback_sonnet' ? null : known.rates);
+  if (configuredRates) return configuredRates;
+  return known.rates;
+}
+
+function describePricingForModel(modelId, modelConfig = null) {
+  const known = getKnownRateMatch(modelId);
+  const configuredRates = ratesFromModelConfig(modelConfig, known.source === 'fallback_sonnet' ? null : known.rates);
+  if (configuredRates) {
+    return {
+      modelId,
+      source: 'configured_model',
+      label: 'Model catalogue pricing',
+      matchedModel: modelConfig.id ?? modelId,
+      hasConfiguredPricing: true,
+    };
+  }
+  return {
+    modelId,
+    source: known.source,
+    label: known.source === 'fallback_sonnet' ? 'Fallback Sonnet estimate' : 'Built-in provider pricing',
+    matchedModel: known.matchedModel,
+    hasConfiguredPricing: false,
+  };
 }
 
 // ── Error type ─────────────────────────────────────────────────────────────
@@ -103,8 +150,8 @@ class BudgetExceededError extends Error {
  * tokensUsed: { input, output, cacheRead, cacheWrite } — all fields optional.
  * modelId: string — used to select the correct pricing rates.
  */
-function computeCostAud(tokensUsed = {}, modelId = null) {
-  const rates = getRatesForModel(modelId);
+function computeCostAud(tokensUsed = {}, modelId = null, modelConfig = null) {
+  const rates = getRatesForModel(modelId, modelConfig);
   return (
     (tokensUsed.input      || 0) * (rates.input      || 0) +
     (tokensUsed.output     || 0) * (rates.output     || 0) +
@@ -157,6 +204,8 @@ function check({ taskCostAud, maxTaskBudgetAud, dailyOrgSpendAud, maxDailyBudget
 module.exports = {
   BudgetExceededError,
   computeCostAud,
+  describePricingForModel,
+  getRatesForModel,
   getDailyOrgSpendAud,
   check,
 };

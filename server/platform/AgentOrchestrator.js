@@ -164,7 +164,7 @@ class AgentOrchestrator {
           console.warn('[AgentOrchestrator] provider fallback', {
             primaryModel: model, fallbackModel, error: err.message, orgId: context.orgId,
           });
-          if (typeof onStep === 'function') onStep(alertMsg, tokensUsed);
+          if (typeof onStep === 'function') onStep(alertMsg);
 
           try {
             response = await getProvider(fallbackModel, customProviders).chat({
@@ -204,12 +204,19 @@ class AgentOrchestrator {
         }
       }
 
-      // Accumulate tokens
+      // Accumulate tokens. `onStep` receives this response's delta only; callers
+      // use it for live budget checks and must not be handed cumulative totals.
       const u = response.usage ?? {};
-      tokensUsed.input      += u.input_tokens                ?? 0;
-      tokensUsed.output     += u.output_tokens               ?? 0;
-      tokensUsed.cacheRead  += u.cache_read_input_tokens     ?? 0;
-      tokensUsed.cacheWrite += u.cache_creation_input_tokens ?? 0;
+      const stepTokens = {
+        input:      u.input_tokens                ?? 0,
+        output:     u.output_tokens               ?? 0,
+        cacheRead:  u.cache_read_input_tokens     ?? 0,
+        cacheWrite: u.cache_creation_input_tokens ?? 0,
+      };
+      tokensUsed.input      += stepTokens.input;
+      tokensUsed.output     += stepTokens.output;
+      tokensUsed.cacheRead  += stepTokens.cacheRead;
+      tokensUsed.cacheWrite += stepTokens.cacheWrite;
 
       // Build trace step
       const step = {
@@ -235,7 +242,7 @@ class AgentOrchestrator {
       if (response.stop_reason !== 'tool_use' || step.toolCalls.length === 0) {
         trace.push(step);
         if (typeof onStep === 'function') {
-          onStep(`Completed in ${iteration} iteration${iteration === 1 ? '' : 's'}.`, tokensUsed);
+          onStep(`Completed in ${iteration} iteration${iteration === 1 ? '' : 's'}.`, stepTokens);
         }
         return { result: { summary: step.text ?? '' }, trace, iterations: iteration, tokensUsed };
       }
@@ -269,7 +276,7 @@ class AgentOrchestrator {
 
           if (!fromCache) {
             try {
-              if (typeof onStep === 'function') onStep(`Running ${toolCall.name}…`, tokensUsed);
+              if (typeof onStep === 'function') onStep(`Running ${toolCall.name}…`);
               result = await tool.execute(toolCall.input, context);
               if (cacheable && !result?.error) {
                 sessionCache.get(sessionKey).set(cacheKey, { result, timestamp: Date.now() });
@@ -296,7 +303,7 @@ class AgentOrchestrator {
       messages.push({ role: 'user',      content: toolResultBlocks });
 
       trace.push(step);
-      if (typeof onStep === 'function') onStep(`Iteration ${iteration} complete.`, tokensUsed);
+      if (typeof onStep === 'function') onStep(`Iteration ${iteration} complete.`, stepTokens);
     }
 
     throw new AgentError(

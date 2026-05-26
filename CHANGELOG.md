@@ -18,6 +18,17 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-26 — Usage Accounting Diagnostics
+
+### Fixed
+- **Live budget accounting:** Agent progress events now pass per-response token deltas instead of cumulative token totals, preventing mid-run budget checks from overcounting multi-iteration runs.
+- **Model pricing basis:** Shared agent and conversation costing can now use the resolved model catalogue pricing when available, falling back to built-in provider estimates only when needed.
+
+### Built
+- **Admin diagnostics:** Admin > Token Usage now includes an Accounting Diagnostics panel showing zero-cost token runs, pricing source by model, prompt-cache reporting status, and fallback-estimate warnings.
+
+---
+
 ## 2026-05-26 — Credential Scope Visibility
 
 ### Built
