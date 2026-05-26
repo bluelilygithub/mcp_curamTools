@@ -29,6 +29,11 @@ const ReportDependencyService = require('./ReportDependencyService');
 const { validateToolData } = require('./validateToolData');
 const { mergePromptVersionIntoResult } = require('./promptVersions');
 const { summariseDataGapSources, buildDataGapReview } = require('./dataGapEvidence');
+const {
+  resolveTrustContract,
+  summariseTrustContract,
+  buildTrustPromptContext,
+} = require('./agentTrustContract');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -112,13 +117,14 @@ async function startAgentRun({ slug, orgId, startTime }) {
   return persistRun({ slug, orgId, status: 'running', runAt: startTime });
 }
 
-async function resolveRunDependencies({ slug, orgId, userId, selections, emit }) {
+async function resolveRunDependencies({ slug, orgId, userId, selections, trustContract, emit }) {
   try {
     const resolved = await ReportDependencyService.resolveDependencies({
       slug,
       orgId,
       userId,
       selections,
+      definitions: trustContract.dependencies,
     });
     const reportDependencies = resolved.dependencies;
     const reportDependencyWarnings = resolved.warnings;
@@ -204,6 +210,7 @@ function buildRunContext({
   reportDependencies,
   reportDependencyWarnings,
   reportDependencyContext,
+  trustContract,
   req,
   emit,
 }) {
@@ -216,6 +223,7 @@ function buildRunContext({
     reportDependencies,
     reportDependencyWarnings,
     reportDependencyContext,
+    trustContract,
     req,
     emit,
   };
@@ -263,6 +271,7 @@ function buildResultPayload({
   progressLog,
   reportDependencies,
   reportDependencyWarnings,
+  trustContract,
   taskCostAud,
   promptVersion,
 }) {
@@ -275,9 +284,9 @@ function buildResultPayload({
   };
   const suggestions = extractSuggestions(result?.summary ?? '');
   const dataGapCheck = buildDataGapReview({
-    slug,
     summary: result?.summary ?? '',
     evidenceSources: dataGapSources,
+    trustContract,
   });
   const boundsFailed = [
     ...validateToolData(toolData),
@@ -306,6 +315,7 @@ function buildResultPayload({
       missing_capabilities: adminConfig.missing_capabilities ?? [],
       capability_warnings: adminConfig.capability_warnings ?? [],
       fallback_capability_warnings: adminConfig.fallback_capability_warnings ?? [],
+      trust_contract: summariseTrustContract(trustContract),
       trace_summary: summariseTrace(trace),
       startDate: req.body.startDate ?? null,
       endDate:   req.body.endDate   ?? null,
@@ -374,9 +384,11 @@ async function finalizeAgentRun({
  * @param {Function} runFn              — async (context) => { result, trace?, tokensUsed? }
  * @param {string}   requiredPermission — role or capability; org_admin always satisfies the check
  * @param {number}   [rateLimit=5]      — max runs per user per 5-minute window
+ * @param {object|false} [trust]        — optional trust contract override; false disables Data Gaps enforcement
  */
-function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
+function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5, trust = {} }) {
   const router = express.Router();
+  const trustContract = resolveTrustContract(slug, trust);
 
   // N agent runs per user per 5 minutes — default 5 for expensive report agents
   const runRateLimiter = createRateLimiter({ windowMs: 5 * 60_000, max: rateLimit });
@@ -448,6 +460,7 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
           orgId,
           userId,
           selections: req.body.reportDependencies ?? req.body.report_dependency_run_ids ?? null,
+          trustContract,
           emit,
         }));
       } catch (depErr) {
@@ -480,9 +493,13 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
         emit('progress', { text: 'Starting agent run…' });
         let runtimePromptContext = '';
         try {
-          runtimePromptContext = await loadLessonsForAgent(slug, orgId);
+          runtimePromptContext = [
+            buildTrustPromptContext(trustContract),
+            await loadLessonsForAgent(slug, orgId),
+          ].filter(Boolean).join('\n\n');
         } catch (err) {
           console.warn(`[${slug}] lessons load skipped:`, err.message);
+          runtimePromptContext = buildTrustPromptContext(trustContract);
         }
 
         const { result, trace, tokensUsed, promptVersion } = await runFn(buildRunContext({
@@ -494,6 +511,7 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
           reportDependencies,
           reportDependencyWarnings,
           reportDependencyContext,
+          trustContract,
           req,
           // Extended emit: agents may optionally pass tokensUsed to trigger mid-run budget checks.
           // Agents that don't pass tokensUsed still work — cost tracking simply won't accumulate mid-run.
@@ -522,6 +540,7 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
           progressLog,
           reportDependencies,
           reportDependencyWarnings,
+          trustContract,
           taskCostAud: taskCostTracker.value,
           promptVersion,
         });
@@ -577,7 +596,11 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5 }) {
   router.get('/dependencies', requireAuth, async (req, res) => {
     try {
       const { orgId } = req.user;
-      const status = await ReportDependencyService.getDependencyStatus({ slug, orgId });
+      const status = await ReportDependencyService.getDependencyStatus({
+        slug,
+        orgId,
+        definitions: trustContract.dependencies,
+      });
       res.json(status);
     } catch (err) {
       console.error(`[${slug}] dependencies error:`, err.message);

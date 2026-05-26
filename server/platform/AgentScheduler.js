@@ -11,6 +11,12 @@ const cron = require('node-cron');
 const { pool } = require('../db');
 const { persistRun } = require('./persistRun');
 const { mergePromptVersionIntoResult } = require('./promptVersions');
+const { buildDataGapReview } = require('./dataGapEvidence');
+const {
+  resolveTrustContract,
+  summariseTrustContract,
+  buildTrustPromptContext,
+} = require('./agentTrustContract');
 const { loadLessonsForAgent, proposeLessonFromRun } = require('../services/LessonRepositoryService');
 const AgentConfigService = require('./AgentConfigService');
 
@@ -36,6 +42,36 @@ function peelScheduledRunOutcome(outcome) {
     return { base: rest, promptVersion };
   }
   return { base: outcome, promptVersion: undefined };
+}
+
+function applyScheduledTrustContract(slug, base) {
+  const trustContract = resolveTrustContract(slug);
+  const result = base && typeof base === 'object' && !Array.isArray(base) ? base : {};
+  const resultData = result.data ?? {};
+  const { data_gap_sources: dataGapSources = {}, ...persistableResultData } = resultData;
+  const dataGapCheck = buildDataGapReview({
+    summary: result.summary ?? '',
+    evidenceSources: dataGapSources,
+    trustContract,
+  });
+  const boundsFailed = [
+    ...(dataGapCheck.boundsFailed ?? []),
+    ...(Array.isArray(result.boundsFailed) ? result.boundsFailed : []),
+  ];
+
+  return {
+    status: boundsFailed.length > 0 ? 'needs_review' : 'complete',
+    result: {
+      ...result,
+      data: persistableResultData,
+      ...(dataGapCheck.applies && {
+        data_gaps: dataGapCheck.dataGaps,
+        data_gap_review: dataGapCheck.dataGapReview,
+      }),
+      trust_contract: summariseTrustContract(trustContract),
+      ...(boundsFailed.length > 0 && { boundsFailed }),
+    },
+  };
 }
 
 class AgentSchedulerClass {
@@ -124,10 +160,13 @@ class AgentSchedulerClass {
       // Single opening 'running' row — used for single-run agents; array-run agents
       // create their own rows per customer below and close this one immediately.
       runId = await persistRun({ slug, orgId, status: 'running', runAt: startTime });
+      const trustContract = resolveTrustContract(slug);
+      const trustPromptContext = buildTrustPromptContext(trustContract);
       const runtimePromptContext = await loadLessonsForAgent(slug, orgId).catch((err) => {
         console.warn(`[AgentScheduler] ${slug} lessons load skipped:`, err.message);
         return '';
       });
+      const combinedRuntimePromptContext = [trustPromptContext, runtimePromptContext].filter(Boolean).join('\n\n');
       let adminConfig;
       try {
         adminConfig = await AgentConfigService.getResolvedAdminConfig(slug, orgId);
@@ -136,7 +175,15 @@ class AgentSchedulerClass {
         console.warn(`[AgentScheduler] ${slug} admin config resolution failed:`, err.message);
         return;
       }
-      const outcome = await runFn({ orgId, userId: null, config: {}, adminConfig, runtimePromptContext, emit: () => {} });
+      const outcome = await runFn({
+        orgId,
+        userId: null,
+        config: {},
+        adminConfig,
+        runtimePromptContext: combinedRuntimePromptContext,
+        trustContract,
+        emit: () => {},
+      });
 
       if (Array.isArray(outcome)) {
         // Multi-customer: close the placeholder row then persist one row per customer
@@ -152,11 +199,12 @@ class AgentSchedulerClass {
             campaignId: item.campaignId ?? null,
           });
           const { base, promptVersion } = peelScheduledRunOutcome(item);
+          const trusted = item.error ? { status: 'error', result: base ?? null } : applyScheduledTrustContract(slug, base);
           await persistRun({
             slug,
             orgId,
-            status: item.status ?? (item.error ? 'error' : 'complete'),
-            result: mergePromptVersionIntoResult(base ?? null, promptVersion),
+            status: item.status ?? trusted.status,
+            result: mergePromptVersionIntoResult(trusted.result, promptVersion),
             error: item.error ?? null,
             customerId: item.customerId ?? null,
             campaignId: item.campaignId ?? null,
@@ -167,7 +215,7 @@ class AgentSchedulerClass {
               agentId: slug,
               organisationId: orgId,
               runId: customerRunId,
-              summary: base?.summary ?? base?.result?.summary ?? '',
+              summary: trusted.result?.summary ?? trusted.result?.result?.summary ?? '',
             }).catch((e) => console.warn(`[AgentScheduler] ${slug} lesson proposal skipped:`, e.message));
           }
         }
@@ -175,18 +223,19 @@ class AgentSchedulerClass {
       } else {
         // Single-run (backward compatible)
         const { base, promptVersion } = peelScheduledRunOutcome(outcome);
+        const trusted = applyScheduledTrustContract(slug, base);
         await persistRun({
           slug,
           orgId,
-          status: 'complete',
-          result: mergePromptVersionIntoResult(base, promptVersion),
+          status: trusted.status,
+          result: mergePromptVersionIntoResult(trusted.result, promptVersion),
           runId,
         });
         proposeLessonFromRun({
           agentId: slug,
           organisationId: orgId,
           runId,
-          summary: base?.summary ?? base?.result?.summary ?? '',
+          summary: trusted.result?.summary ?? trusted.result?.result?.summary ?? '',
         }).catch((e) => console.warn(`[AgentScheduler] ${slug} lesson proposal skipped:`, e.message));
         console.log(`[AgentScheduler] ${slug} completed at ${new Date().toISOString()}`);
       }

@@ -18,6 +18,22 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-26 — Universal Agent Trust Contract
+
+### Built
+- **Trust contract primitive:** Added `server/platform/agentTrustContract.js` as the shared source of truth for default Data Gaps requirements, agent-specific source IDs, and report dependency chains.
+- **Universal Data Gaps enforcement:** Standard `createAgentRoute` agents now receive a platform-injected `### Data Gaps` instruction and are automatically marked `needs_review` if the section is missing or a known weak source is not disclosed.
+- **Scheduled trust coverage:** `AgentScheduler` now injects the same trust prompt context and applies Data Gaps review before persisting scheduled run results.
+- **Dependency declarations moved:** Ads Copy report chaining now lives in the trust contract rather than inside `ReportDependencyService`, keeping provenance rules beside other trust policy.
+
+### Fixed / discovered
+- The trust foundation was real but scoped to selected agents. New route-factory agents now inherit trust review by default; agents can still opt out through the route `trust` override when a report-style output is not appropriate.
+
+### Open / next
+- Existing prompts may still need tuning if any model ignores the injected trust section; those runs will surface as `needs_review` rather than silently passing.
+
+---
+
 ## 2026-05-26 — Agent Observability Console
 
 ### Built

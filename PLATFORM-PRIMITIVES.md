@@ -23,6 +23,7 @@ createAgentRoute({ slug, runFn, requiredPermission })
 // slug: string — agent identifier (e.g. 'google-ads-monitor')
 // runFn: async (context) => { result, trace?, tokensUsed, promptVersion? } — optional promptVersion persisted as result.prompt_version
 // requiredPermission: string — legacy role name or capability; org_admin always satisfies the check
+// trust?: object|false — optional override for the default platform trust contract
 ```
 Returns an Express router. Two endpoints are registered:
 
@@ -57,6 +58,7 @@ Run rows are written only via **`persistRun`** from **`server/platform/persistRu
 - `costAud` is added to `resultPayload` and persisted in `agent_runs.result` JSONB on every completed run.
 - **Optional `prompt_version`:** If `runFn` returns **`promptVersion`** (string), `createAgentRoute` merges it into the persisted payload as **`prompt_version`** (see `server/platform/promptVersions.js`, `knowledge_base/core/PROMPT_VERSIONING.md`). Agents that omit it are unchanged.
 - **Observability metadata:** Standard route-factory runs persist model source, fallback configuration, capability warnings, progress log, compact trace summary (`iterations`, tool call names/statuses, fallback events), token usage, and cost. Admin > Agent Trust uses these fields as an observability console; older/custom runs may show partial metadata.
+- **Trust contract:** Standard route-factory runs inherit `server/platform/agentTrustContract.js` by default. The platform injects a required `### Data Gaps` instruction into runtime prompt context, validates the final output with `dataGapEvidence`, persists `trust_contract` metadata, and marks the run `needs_review` when the section is missing or a weak source is not disclosed. Agent-specific dependency chains also live in the trust contract and are enforced before the run starts.
 
 **Used by:** Google Ads Monitor (`server/routes/agents/`); all future agents.
 **Reuse contract:** Provide `slug` (stable, lowercase, hyphen-separated), a `runFn(context)` that returns `{ result, trace, tokensUsed }` (and optionally `promptVersion` for lineage), and a `requiredPermission` capability or legacy role name. Register the returned router in `server/index.js` under `/api/agents/:slug`. Every new agent must be covered by the Lessons Repository: use `createAgentRoute`/`AgentScheduler` for normal agents, or add an explicit `proposeLessonFromRun` hook in any custom route that bypasses those platform paths. Also update the visible coverage list in `client/src/pages/admin/AdminLessonsPage.jsx` so Admin > Lessons & Rules shows the new agent/routine.
@@ -125,7 +127,7 @@ On each cron tick: resolves `orgId` if omitted, calls `runFn`, persists result t
 **Multi-customer array return:** If `runFn` returns an array of `{ customerId, result, status, error, promptVersion? }` objects, `_tick` persists one `agent_runs` row per element (with `customer_id` populated) and closes the initial placeholder row with `{ multi: true, count: N }`. Single-object returns (existing agents) are unchanged — backward compatible.
 
 **Used by:** Google Ads Monitor registration (schedule: `'0 6,18 * * *'`).
-**Reuse contract:** Provide `slug`, a valid cron expression, and a `runFn`. Document the UTC↔local offset in a comment at the registration site. For multi-customer agents: return an array from `runFn`; each element must include `{ customerId, status }` at minimum.
+**Reuse contract:** Provide `slug`, a valid cron expression, and a `runFn`. Document the UTC↔local offset in a comment at the registration site. For multi-customer agents: return an array from `runFn`; each element must include `{ customerId, status }` at minimum. Scheduled runs also inherit the platform trust contract: the scheduler injects the same Data Gaps runtime instruction, persists `trust_contract`, and stores `needs_review` when trust validation fails.
 **Does not handle:** HTTP-triggered runs (those go through `createAgentRoute`). Does not parse or validate cron expressions — invalid expressions are passed directly to node-cron.
 
 ---

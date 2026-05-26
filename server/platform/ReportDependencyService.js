@@ -1,37 +1,7 @@
 'use strict';
 
 const { pool } = require('../db');
-
-const CHAIN_DEFINITIONS = {
-  'ads-copy-playbook': [
-    {
-      slug: 'ads-copy-diagnostic',
-      label: 'Copy Diagnostic',
-      required: true,
-      maxAgeDays: 7,
-      allowedStatuses: ['complete', 'needs_review'],
-      usage: 'confirmed diagnostic input',
-    },
-  ],
-  'ads-copy-gate': [
-    {
-      slug: 'ads-copy-playbook',
-      label: 'Copy Playbook',
-      required: true,
-      maxAgeDays: 7,
-      allowedStatuses: ['complete', 'needs_review'],
-      usage: 'primary gated playbook',
-    },
-    {
-      slug: 'ads-copy-diagnostic',
-      label: 'Copy Diagnostic',
-      required: true,
-      maxAgeDays: 14,
-      allowedStatuses: ['complete', 'needs_review'],
-      usage: 'supporting diagnostic context',
-    },
-  ],
-};
+const { getReportDependenciesForAgent } = require('./agentTrustContract');
 
 class ReportDependencyError extends Error {
   constructor(message, details = []) {
@@ -42,7 +12,7 @@ class ReportDependencyError extends Error {
 }
 
 function getChainDefinition(slug) {
-  return CHAIN_DEFINITIONS[slug] ?? [];
+  return getReportDependenciesForAgent(slug);
 }
 
 function ageDays(runAt) {
@@ -114,14 +84,14 @@ async function loadDependencyRun(orgId, def, selectedRunId = null) {
   return rows[0] ?? null;
 }
 
-async function resolveDependencies({ slug, orgId, userId = null, selections = null }) {
-  const definitions = getChainDefinition(slug);
+async function resolveDependencies({ slug, orgId, userId = null, selections = null, definitions = null }) {
+  const definitionsToUse = definitions ?? getChainDefinition(slug);
   const selectedBySlug = normalizeSelections(selections);
   const dependencies = [];
   const warnings = [];
   const missing = [];
 
-  for (const def of definitions) {
+  for (const def of definitionsToUse) {
     const row = await loadDependencyRun(orgId, def, selectedBySlug[def.slug] ?? null);
     if (!row) {
       const detail = {
@@ -163,14 +133,14 @@ async function resolveDependencies({ slug, orgId, userId = null, selections = nu
     );
   }
 
-  return { definitions, dependencies, warnings };
+  return { definitions: definitionsToUse, dependencies, warnings };
 }
 
-async function getDependencyStatus({ slug, orgId }) {
-  const definitions = getChainDefinition(slug);
+async function getDependencyStatus({ slug, orgId, definitions = null }) {
+  const definitionsToUse = definitions ?? getChainDefinition(slug);
   const requirements = [];
 
-  for (const def of definitions) {
+  for (const def of definitionsToUse) {
     const row = await loadDependencyRun(orgId, def);
     const latestRun = rowToDependency(def, row);
     requirements.push({
@@ -221,7 +191,6 @@ function buildDependencyPromptContext(dependencies = [], warnings = []) {
 }
 
 module.exports = {
-  CHAIN_DEFINITIONS,
   ReportDependencyError,
   getChainDefinition,
   resolveDependencies,

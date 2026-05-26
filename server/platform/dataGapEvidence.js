@@ -1,14 +1,5 @@
 'use strict';
 
-const DATA_GAP_AGENT_SLUGS = new Set([
-  'ads-copy-diagnostic',
-  'ads-copy-playbook',
-  'ads-copy-gate',
-  'google-ads-monitor',
-  'keyword-opportunity',
-  'ai-visibility-monitor',
-]);
-
 function normaliseSourceId(value) {
   return String(value ?? '')
     .replace(/[`*_]/g, '')
@@ -111,8 +102,8 @@ function findDeclaredGapForSource(gaps, sourceId) {
   return gaps.find((gap) => normaliseSourceId(gap.source) === normalisedSource);
 }
 
-function buildDataGapReview({ slug, summary, evidenceSources = {} }) {
-  if (!DATA_GAP_AGENT_SLUGS.has(slug)) {
+function buildDataGapReview({ summary, evidenceSources = {}, trustContract = {} }) {
+  if (trustContract.requiresDataGaps === false) {
     return { applies: false, dataGaps: [], dataGapReview: null, boundsFailed: [] };
   }
 
@@ -179,7 +170,6 @@ function buildDataGapReview({ slug, summary, evidenceSources = {} }) {
 }
 
 module.exports = {
-  DATA_GAP_AGENT_SLUGS,
   summariseDataGapSource,
   summariseDataGapSources,
   extractDataGaps,
