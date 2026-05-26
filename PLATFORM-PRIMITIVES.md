@@ -981,6 +981,22 @@ CREATE UNIQUE INDEX idx_resource_perm_role ON resource_permissions(org_id, resou
 
 ---
 
+### Credential Scope Registry
+**Type:** Platform Primitive
+**Location:** `server/platform/credentialScopeRegistry.js`
+**What it does:** Declares the platform's credential-scope reality without exposing secret values. Each integration is classified as `global_shared`, `org_configured`, `external_account_scoped`, or `org_secret` ready, with required env var names, risk, owner, boundary notes, and rotation notes.
+**Interface:**
+```js
+buildCredentialScopeReport(orgId)
+// Returns { generatedAt, orgId, summary, entries[] }
+// entries[].env.vars[] exposes only { name, configured }, never secret values.
+```
+**Used by:** `GET /api/admin/credential-scopes`, rendered in Admin > Security.
+**Reuse contract:** Add any new integration or credential dependency here when adding a provider, MCP server, storage backend, or external API. Shared credentials are acceptable, but they must declare their compensating boundary.
+**Does not handle:** Secret storage, credential rotation, or per-org secret encryption. It is visibility/governance, not a secrets manager.
+
+---
+
 ### PermissionService — Resource Methods
 **Type:** Service extension
 **Location:** `server/services/PermissionService.js`

@@ -22,6 +22,7 @@ const { grantRole, revokeRole, getUserRoles, getAgentAccessDecision } = require(
 const { createInvitation, resendInvitation } = require('../services/InvitationService');
 const AgentConfigService = require('../platform/AgentConfigService');
 const { SYSTEM_ROLE_OPTIONS, getDefaultAccess } = require('../platform/AgentAccessRegistry');
+const { buildCredentialScopeReport } = require('../platform/credentialScopeRegistry');
 const EmailTemplateService = require('../services/EmailTemplateService');
 const { proposeLessonFromRun } = require('../services/LessonRepositoryService');
 
@@ -987,6 +988,16 @@ router.put('/security', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update security settings.' });
+  }
+});
+
+router.get('/credential-scopes', async (req, res) => {
+  try {
+    const report = await buildCredentialScopeReport(req.user.orgId);
+    res.json(report);
+  } catch (err) {
+    console.error('[admin/credential-scopes]', err.message);
+    res.status(500).json({ error: 'Failed to load credential scope report.' });
   }
 });
 

@@ -18,6 +18,21 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-26 — Credential Scope Visibility
+
+### Built
+- **Credential scope registry:** Added a platform registry that classifies credentials as global shared, org configured, external-account scoped, or org secret ready, without exposing secret values.
+- **Admin visibility:** Admin > Security now shows credential configuration status, scope type, risk, owner, boundary notes, rotation notes, and current org usage indicators.
+- **Security API:** Added `/api/admin/credential-scopes` so future development can inspect credential assumptions from a single endpoint.
+
+### Fixed / discovered
+- Tenant isolation was mostly application-level org scoping, while several credentials remain intentionally shared env vars. The new view makes that trade-off explicit instead of implied.
+
+### Open / next
+- This is visibility and governance only; it does not move secrets into per-org storage or rotate credentials automatically.
+
+---
+
 ## 2026-05-26 — Guardrail Hardening
 
 ### Built
