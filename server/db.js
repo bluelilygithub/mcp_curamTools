@@ -302,6 +302,25 @@ async function initSchema() {
         WHERE role_name IS NOT NULL
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sql_audit_logs (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id              INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        user_id             INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        source              TEXT NOT NULL DEFAULT 'manual',
+        sql_text            TEXT NOT NULL,
+        command             TEXT,
+        allow_write         BOOLEAN DEFAULT FALSE,
+        write_confirmed     BOOLEAN DEFAULT FALSE,
+        status              TEXT NOT NULL CHECK (status IN ('success', 'error')),
+        row_count           INTEGER,
+        duration_ms         INTEGER,
+        error_message       TEXT,
+        generated_from_nlp  BOOLEAN DEFAULT FALSE,
+        created_at          TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
     // ── Org structure tables ───────────────────────────────────────────────
 
     // Idempotent: add default_model_id to users

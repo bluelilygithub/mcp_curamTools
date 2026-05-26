@@ -25,6 +25,7 @@ const { pool } = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
 const { requirePermission } = require('../middleware/requirePermission');
 const MCPRegistry = require('../platform/mcpRegistry');
+const { cleanString, rejectUnknownKeys } = require('../platform/inputGuards');
 const logger = require('../utils/logger');
 const {
   grantResourcePermission,
@@ -48,16 +49,16 @@ router.get('/mcp-servers', async (req, res) => {
 });
 
 router.post('/mcp-servers', async (req, res) => {
-  const { name, transportType, endpointUrl, config } = req.body;
-  if (!name || !transportType) {
-    return res.status(400).json({ error: 'name and transportType are required.' });
-  }
   try {
+    rejectUnknownKeys(req.body, ['name', 'transportType', 'endpointUrl', 'config'], 'MCP server request');
+    const name = cleanString(req.body.name, { max: 80, field: 'name', required: true });
+    const transportType = cleanString(req.body.transportType, { max: 20, field: 'transportType', required: true });
+    const endpointUrl = cleanString(req.body.endpointUrl ?? '', { max: 1000, field: 'endpointUrl' }) || null;
     const server = await MCPRegistry.register(req.user.orgId, {
       name,
       transportType,
-      endpointUrl: endpointUrl || null,
-      config: config || {},
+      endpointUrl,
+      config: req.body.config || {},
     });
     res.status(201).json(server);
   } catch (err) {
@@ -67,11 +68,11 @@ router.post('/mcp-servers', async (req, res) => {
 });
 
 router.put('/mcp-servers/:id', async (req, res) => {
-  const { name, transportType, endpointUrl, config } = req.body;
-  if (!name || !transportType) {
-    return res.status(400).json({ error: 'name and transportType are required.' });
-  }
   try {
+    rejectUnknownKeys(req.body, ['name', 'transportType', 'endpointUrl', 'config'], 'MCP server request');
+    const name = cleanString(req.body.name, { max: 80, field: 'name', required: true });
+    const transportType = cleanString(req.body.transportType, { max: 20, field: 'transportType', required: true });
+    const endpointUrl = cleanString(req.body.endpointUrl ?? '', { max: 1000, field: 'endpointUrl' }) || null;
     const result = await pool.query(
       `UPDATE mcp_servers
           SET name           = $1,
@@ -80,7 +81,7 @@ router.put('/mcp-servers/:id', async (req, res) => {
               config         = $4
         WHERE id = $5 AND org_id = $6
         RETURNING *`,
-      [name, transportType, endpointUrl || null, JSON.stringify(config || {}), req.params.id, req.user.orgId]
+      [name, transportType, endpointUrl, JSON.stringify(req.body.config || {}), req.params.id, req.user.orgId]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'MCP server not found for this organisation.' });
@@ -125,7 +126,7 @@ router.get('/mcp-servers/:id/resources', async (req, res) => {
     if (!existing || existing.status !== 'connected') {
       await MCPRegistry.connect(req.user.orgId, req.params.id);
     }
-    const result = await MCPRegistry.send(req.user.orgId, req.params.id, 'resources/list');
+    const result = await MCPRegistry.send(req.user.orgId, req.params.id, 'resources/list', {}, { userId: req.user.id });
     res.json(result.resources || []);
   } catch (err) {
     logger.error('admin/mcp-servers/resources', { error: err.message });
@@ -135,15 +136,15 @@ router.get('/mcp-servers/:id/resources', async (req, res) => {
 
 // NEW: Read a resource from a connected MCP server
 router.post('/mcp-servers/:id/resources/read', async (req, res) => {
-  const { uri } = req.body;
-  if (!uri) return res.status(400).json({ error: 'uri is required.' });
   try {
+    rejectUnknownKeys(req.body, ['uri'], 'MCP resource read request');
+    const uri = cleanString(req.body.uri, { max: 1000, field: 'uri', required: true });
     // Auto-connect if not already connected
     const existing = MCPRegistry._connections.get(req.params.id);
     if (!existing || existing.status !== 'connected') {
       await MCPRegistry.connect(req.user.orgId, req.params.id);
     }
-    const result = await MCPRegistry.send(req.user.orgId, req.params.id, 'resources/read', { uri });
+    const result = await MCPRegistry.send(req.user.orgId, req.params.id, 'resources/read', { uri }, { userId: req.user.id });
     res.json(result);
   } catch (err) {
     logger.error('admin/mcp-servers/resources/read', { error: err.message });
@@ -152,16 +153,16 @@ router.post('/mcp-servers/:id/resources/read', async (req, res) => {
 });
 
 router.post('/mcp-servers/:id/call', async (req, res) => {
-  const { toolName, args } = req.body;
-  if (!toolName) return res.status(400).json({ error: 'toolName is required.' });
   try {
+    rejectUnknownKeys(req.body, ['toolName', 'args'], 'MCP tool call request');
+    const toolName = cleanString(req.body.toolName, { max: 120, field: 'toolName', required: true });
     const existing = MCPRegistry._connections.get(req.params.id);
     if (!existing || existing.status !== 'connected') {
       await MCPRegistry.connect(req.user.orgId, req.params.id);
     }
     const result = await MCPRegistry.send(req.user.orgId, req.params.id, 'tools/call', {
       name: toolName,
-      arguments: args || {},
+      arguments: req.body.args || {},
     });
     res.json(result);
   } catch (err) {
@@ -215,11 +216,12 @@ router.get('/mcp-resources', async (req, res) => {
 });
 
 router.post('/mcp-resources', async (req, res) => {
-  const { serverId, uri, name, description, metadata } = req.body;
-  if (!serverId || !uri || !name) {
-    return res.status(400).json({ error: 'serverId, uri, and name are required.' });
-  }
   try {
+    rejectUnknownKeys(req.body, ['serverId', 'uri', 'name', 'description', 'metadata'], 'MCP resource request');
+    const serverId = cleanString(req.body.serverId, { max: 80, field: 'serverId', required: true });
+    const uri = cleanString(req.body.uri, { max: 1000, field: 'uri', required: true });
+    const name = cleanString(req.body.name, { max: 120, field: 'name', required: true });
+    const description = cleanString(req.body.description ?? '', { max: 500, field: 'description' }) || null;
     // Verify the server belongs to this org before associating a resource with it
     const serverCheck = await MCPRegistry.get(req.user.orgId, serverId);
     if (!serverCheck) {
@@ -231,7 +233,7 @@ router.post('/mcp-resources', async (req, res) => {
        ON CONFLICT (org_id, uri)
        DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, metadata = EXCLUDED.metadata
        RETURNING *`,
-      [serverId, req.user.orgId, uri, name, description || null, JSON.stringify(metadata || {})]
+      [serverId, req.user.orgId, uri, name, description, JSON.stringify(req.body.metadata || {})]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -272,18 +274,19 @@ router.get('/mcp-resources/permissions', async (req, res) => {
 });
 
 router.post('/mcp-resources/permissions', async (req, res) => {
-  const { resourceUri, userId, roleName, permission } = req.body;
-  if (!resourceUri || !permission) {
-    return res.status(400).json({ error: 'resourceUri and permission are required.' });
-  }
-  if ((userId == null) === (roleName == null)) {
-    return res.status(400).json({ error: 'Provide exactly one of userId or roleName.' });
-  }
   try {
+    rejectUnknownKeys(req.body, ['resourceUri', 'userId', 'roleName', 'permission'], 'MCP permission request');
+    const resourceUri = cleanString(req.body.resourceUri, { max: 1000, field: 'resourceUri', required: true });
+    const roleName = req.body.roleName == null ? null : cleanString(req.body.roleName, { max: 80, field: 'roleName' });
+    const permission = cleanString(req.body.permission, { max: 20, field: 'permission', required: true });
+    const userId = req.body.userId || null;
+    if ((userId == null) === (roleName == null)) {
+      return res.status(400).json({ error: 'Provide exactly one of userId or roleName.' });
+    }
     await grantResourcePermission(
       req.user.orgId,
       resourceUri,
-      { userId: userId || null, roleName: roleName || null },
+      { userId, roleName },
       permission,
       req.user.id
     );

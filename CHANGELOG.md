@@ -18,6 +18,23 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-26 — Guardrail Hardening
+
+### Built
+- **SQL review-before-execute:** Natural-language SQL now generates SQL for admin review instead of executing in the same request. Execution requires a second explicit action through the SQL endpoint.
+- **SQL execution guardrails:** SQL execution now blocks multiple statements, applies a 10-second statement timeout, limits read query result rows, and requires the exact confirmation phrase `EXECUTE WRITE` for write/non-read statements.
+- **SQL audit table:** Added `sql_audit_logs` for durable audit records of SQL attempts, including org/user, source, SQL text, write flags, status, duration, row count, and errors.
+- **MCP resource enforcement:** `MCPRegistry.send()` now enforces `resource_permissions` for `resources/read` and filters `resources/list` when user context is supplied.
+- **Shared input guards:** Added `server/platform/inputGuards.js` and applied it to SQL, MCP admin routes, and document extractor metadata/instructions.
+
+### Fixed / discovered
+- Prior documentation implied central guardrails that did not fully exist. SQL, MCP resource access, and selected high-risk text fields now have concrete shared enforcement points.
+
+### Open / next
+- Continue expanding tool output schemas incrementally for high-value MCP tools rather than attempting a broad schema migration in one pass.
+
+---
+
 ## 2026-05-26 — Universal Agent Trust Contract
 
 ### Built

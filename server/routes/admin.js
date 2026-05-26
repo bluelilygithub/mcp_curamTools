@@ -1113,7 +1113,10 @@ router.get('/server-logs/export', async (req, res) => {
 // ── SQL Console ───────────────────────────────────────────────────────────
 
 const { logUsage } = require('../services/UsageLogger');
+const { cleanString, rejectUnknownKeys, cleanBoolean } = require('../platform/inputGuards');
 const AUD_PER_USD_SQL = 1.55;
+const SQL_ROW_LIMIT = 500;
+const SQL_TIMEOUT_MS = 10_000;
 
 /**
  * Resolves the best model for the org.
@@ -1151,23 +1154,105 @@ async function getDefaultModel(orgId, modelId = null) {
 }
 
 const WRITE_KEYWORDS = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE'];
+const READ_KEYWORDS = ['SELECT', 'WITH', 'SHOW', 'EXPLAIN'];
+const WRITE_CONFIRMATION = 'EXECUTE WRITE';
 
 function firstSqlKeyword(sql) {
   return sql.trim().replace(/\/\*[\s\S]*?\*\//g, '').replace(/--[^\n]*/g, '').trim().split(/\s+/)[0].toUpperCase();
 }
 
-async function execSql(sql, allowWrite, userEmail) {
+function stripTrailingSemicolon(sql) {
+  return sql.trim().replace(/;\s*$/, '');
+}
+
+function hasMultipleStatements(sql) {
+  return /;\s*\S/.test(sql.trim());
+}
+
+function isWriteSql(sql) {
+  return WRITE_KEYWORDS.includes(firstSqlKeyword(sql)) || !READ_KEYWORDS.includes(firstSqlKeyword(sql));
+}
+
+function addReadLimit(sql) {
   const kw = firstSqlKeyword(sql);
-  if (WRITE_KEYWORDS.includes(kw) && !allowWrite) {
-    throw Object.assign(new Error(`Write statements are blocked. Enable "Allow writes" to run ${kw}.`), { status: 400 });
+  if (!['SELECT', 'WITH'].includes(kw)) return stripTrailingSemicolon(sql);
+  return `SELECT * FROM (${stripTrailingSemicolon(sql)}) AS guarded_query LIMIT ${SQL_ROW_LIMIT}`;
+}
+
+async function logSqlAudit({ req, sql, source, allowWrite, writeConfirmed, status, command = null, rowCount = null, duration = null, error = null, generatedFromNlp = false }) {
+  await pool.query(
+    `INSERT INTO sql_audit_logs
+      (org_id, user_id, source, sql_text, command, allow_write, write_confirmed, status, row_count, duration_ms, error_message, generated_from_nlp)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [
+      req.user.orgId,
+      req.user.id,
+      source,
+      sql,
+      command,
+      allowWrite,
+      writeConfirmed,
+      status,
+      rowCount,
+      duration,
+      error,
+      generatedFromNlp,
+    ]
+  ).catch((err) => console.error('[SQL Audit]', err.message));
+}
+
+async function execSql(sql, { allowWrite, writeConfirmation, source, generatedFromNlp, req }) {
+  const kw = firstSqlKeyword(sql);
+  const writeSql = isWriteSql(sql);
+  const writeConfirmed = String(writeConfirmation ?? '').trim() === WRITE_CONFIRMATION;
+  const auditBase = { req, sql, source, allowWrite, writeConfirmed, generatedFromNlp };
+
+  try {
+    if (hasMultipleStatements(sql)) {
+      throw Object.assign(new Error('Multiple SQL statements are blocked. Run one statement at a time.'), { status: 400 });
+    }
+    if (writeSql && !allowWrite) {
+      throw Object.assign(new Error(`Write or non-read statements are blocked. Enable writes to run ${kw}.`), { status: 400 });
+    }
+    if (writeSql && !writeConfirmed) {
+      throw Object.assign(new Error(`Type "${WRITE_CONFIRMATION}" to confirm write execution.`), { status: 400 });
+    }
+
+    const executableSql = writeSql ? stripTrailingSemicolon(sql) : addReadLimit(sql);
+    const start = Date.now();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL statement_timeout = ${SQL_TIMEOUT_MS}`);
+      const result = await client.query(executableSql);
+      await client.query('COMMIT');
+      const duration = Date.now() - start;
+      const rows = result.rows ?? [];
+      const columns = rows.length > 0 ? Object.keys(rows[0]) : (result.fields?.map(f => f.name) ?? []);
+      console.log(`[SQL Console] ${req.user.email} ran: ${sql.slice(0, 120).replace(/\n/g, ' ')} — ${rows.length} rows in ${duration}ms`);
+      await logSqlAudit({ ...auditBase, status: 'success', command: result.command ?? kw, rowCount: result.rowCount ?? rows.length, duration });
+      return {
+        command: result.command ?? kw,
+        rowCount: result.rowCount ?? rows.length,
+        columns,
+        rows,
+        duration,
+        guarded: {
+          rowLimit: writeSql ? null : SQL_ROW_LIMIT,
+          timeoutMs: SQL_TIMEOUT_MS,
+          writeConfirmed,
+        },
+      };
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    await logSqlAudit({ ...auditBase, status: 'error', command: kw, error: err.message });
+    throw err;
   }
-  const start = Date.now();
-  const result = await pool.query(sql);
-  const duration = Date.now() - start;
-  const rows = result.rows ?? [];
-  const columns = rows.length > 0 ? Object.keys(rows[0]) : (result.fields?.map(f => f.name) ?? []);
-  console.log(`[SQL Console] ${userEmail} ran: ${sql.slice(0, 120).replace(/\n/g, ' ')} — ${rows.length} rows in ${duration}ms`);
-  return { command: result.command ?? kw, rowCount: result.rowCount ?? rows.length, columns, rows, duration };
 }
 
 async function getDbSchema() {
@@ -1201,10 +1286,16 @@ async function getDbSchema() {
 }
 
 router.post('/sql', async (req, res) => {
-  const { sql, allowWrite = false } = req.body;
-  if (!sql?.trim()) return res.status(400).json({ error: 'No SQL provided.' });
   try {
-    const data = await execSql(sql, allowWrite, req.user.email);
+    rejectUnknownKeys(req.body, ['sql', 'allowWrite', 'writeConfirmation', 'source', 'generatedFromNlp'], 'SQL request');
+    const sql = cleanString(req.body.sql, { max: 20_000, field: 'sql', required: true });
+    const data = await execSql(sql, {
+      allowWrite: cleanBoolean(req.body.allowWrite),
+      writeConfirmation: req.body.writeConfirmation,
+      source: cleanString(req.body.source ?? 'manual', { max: 40, field: 'source' }) || 'manual',
+      generatedFromNlp: cleanBoolean(req.body.generatedFromNlp),
+      req,
+    });
     res.json(data);
   } catch (err) {
     console.error(`[SQL Console] Error for ${req.user.email}:`, err.message);
@@ -1215,10 +1306,11 @@ router.post('/sql', async (req, res) => {
 router.post('/sql/nlp', async (req, res) => {
   const { getProvider } = require('../platform/AgentOrchestrator');
   const { getCustomProviders } = require('../platform/AgentConfigService');
-  const { question, allowWrite = false, modelId = null } = req.body;
-  if (!question?.trim()) return res.status(400).json({ error: 'No question provided.' });
 
   try {
+    rejectUnknownKeys(req.body, ['question', 'modelId'], 'SQL NLP request');
+    const question = cleanString(req.body.question, { max: 2000, field: 'question', required: true, scan: true });
+    const modelId = cleanString(req.body.modelId ?? '', { max: 200, field: 'modelId' }) || null;
     const { buildSystemPrompt } = require('../agents/sqlNlp/prompt');
 
     const [schema, modelDef, customProviders, sqlNlpConfig] = await Promise.all([
@@ -1259,37 +1351,22 @@ router.post('/sql/nlp', async (req, res) => {
 
     console.log(`[SQL Console NLP] ${req.user.email} (${modelDef.id}): "${question.slice(0, 80)}" → ${generatedSql.slice(0, 120)} [${tokensUsed.input}in/${tokensUsed.output}out, A$${costAud.toFixed(4)}]`);
 
-    const data = await execSql(generatedSql, allowWrite, req.user.email);
-
-    // Generate a plain-English answer for read-aloud using the same model — wrapped in
-    // try/catch so a provider error here never kills the SQL results already retrieved.
-    let answer = '';
-    try {
-      const resultSummary = data.rows.length === 0
-        ? 'The query returned no results.'
-        : JSON.stringify(data.rows.slice(0, 20));
-      const answerResponse = await provider.chat({
-        model: modelDef.id,
-        max_tokens: 256,
-        system: null,
-        messages: [{
-          role: 'user',
-          content: `Question: ${question}\n\nSQL results: ${resultSummary}\n\nAnswer the question in 1–2 plain English sentences based on the results. No markdown, no SQL.`,
-        }],
-      });
-      answer = answerResponse.content[0]?.text?.trim() ?? '';
-    } catch (answerErr) {
-      console.warn(`[SQL Console NLP] Answer generation failed (${modelDef.id}):`, answerErr.message);
-    }
-
     proposeLessonFromRun({
       agentId:        'sql-console-nlp',
       organisationId: req.user.orgId,
       runId:          null,
-      summary:        `Question: ${question}\nGenerated SQL: ${generatedSql}\nRows returned: ${data.rows?.length ?? 0}${answer ? `\nAnswer: ${answer}` : ''}`,
+      summary:        `Question: ${question}\nGenerated SQL for human review: ${generatedSql}`,
     }).catch((e) => console.warn('[SQL Console NLP] lesson proposal skipped:', e.message));
 
-    res.json({ ...data, generatedSql, modelId: modelDef.id, tokensUsed, costAud, answer });
+    res.json({
+      generatedSql,
+      modelId: modelDef.id,
+      tokensUsed,
+      costAud,
+      requiresExecutionReview: true,
+      command: firstSqlKeyword(generatedSql),
+      writeLike: isWriteSql(generatedSql),
+    });
   } catch (err) {
     console.error(`[SQL Console NLP] Error for ${req.user.email}:`, err.message);
     res.status(err.status ?? 500).json({ error: err.message });

@@ -35,6 +35,7 @@ const { loadLessonsForAgent, proposeLessonFromRun } = require('../services/Lesso
 const { computeCostAud, getDailyOrgSpendAud, check: checkBudget, BudgetExceededError } = require('../services/CostGuardService');
 const { requireRole }         = require('../middleware/requireRole');
 const AgentConfigService      = require('../platform/AgentConfigService');
+const { cleanString }         = require('../platform/inputGuards');
 const StorageService          = require('../services/StorageService');
 
 const router = express.Router();
@@ -198,9 +199,21 @@ router.post(
       ]);
 
     // ── Sanitise and cap input fields at the platform boundary ────────────
-    const batchLabel   = (req.body.label        || '').trim().slice(0, MAX_LABEL_LEN)        || null;
-    const purpose      = (req.body.purpose       || '').trim().slice(0, MAX_PURPOSE_LEN)      || null;
-    const instructions = (req.body.instructions  || '').trim().slice(0, MAX_INSTRUCTIONS_LEN) || null;
+    const batchLabel = cleanString(req.body.label, {
+      max: MAX_LABEL_LEN,
+      field: 'label',
+      scan: true,
+    }) || null;
+    const purpose = cleanString(req.body.purpose, {
+      max: MAX_PURPOSE_LEN,
+      field: 'purpose',
+      scan: true,
+    }) || null;
+    const instructions = cleanString(req.body.instructions, {
+      max: MAX_INSTRUCTIONS_LEN,
+      field: 'instructions',
+      scan: true,
+    }) || null;
     const runtimePromptContext = await loadLessonsForAgent('doc-extractor', orgId)
       .catch((err) => {
         console.warn('[doc-extractor] lessons load skipped:', err.message);

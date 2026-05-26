@@ -1,7 +1,7 @@
 /**
  * AdminSqlPage — SQL Console with NLP mode.
  * SQL mode: direct query execution.
- * NLP mode: natural language → Claude generates SQL → executes it.
+ * NLP mode: natural language → Claude generates SQL for explicit review.
  */
 import { useState, useRef, useEffect } from 'react';
 import api from '../../api/client';
@@ -115,6 +115,7 @@ export default function AdminSqlPage() {
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState('');
   const [allowWrite, setAllowWrite] = useState(false);
+  const [writeConfirmation, setWriteConfirmation] = useState('');
   const [models, setModels]         = useState([]);
   const [selectedModel, setSelectedModel] = useState('');
   const textareaRef = useRef(null);
@@ -156,7 +157,12 @@ export default function AdminSqlPage() {
     setLoading(true);
     reset();
     try {
-      const data = await api.post('/admin/sql', { sql: query, allowWrite });
+      const data = await api.post('/admin/sql', {
+        sql: query,
+        allowWrite,
+        writeConfirmation,
+        source: 'manual',
+      });
       setResults(data);
     } catch (e) {
       setError(e.message);
@@ -171,14 +177,42 @@ export default function AdminSqlPage() {
     setLoading(true);
     reset();
     try {
-      const data = await api.post('/admin/sql/nlp', { question: q, allowWrite, modelId: selectedModel || null });
+      const data = await api.post('/admin/sql/nlp', { question: q, modelId: selectedModel || null });
       if (data.cannotAnswer) {
         setNlpCannotAnswer(data.reason ?? 'This question cannot be answered from the platform database.');
         return;
       }
       setGeneratedSql(data.generatedSql ?? '');
-      setNlpAnswer(data.answer ?? '');
-      if (data.modelId) setNlpMeta({ modelId: data.modelId, tokensUsed: data.tokensUsed, costAud: data.costAud });
+      setNlpAnswer('');
+      if (data.modelId) {
+        setNlpMeta({
+          modelId: data.modelId,
+          tokensUsed: data.tokensUsed,
+          costAud: data.costAud,
+          command: data.command,
+          writeLike: data.writeLike,
+        });
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function executeGeneratedSql() {
+    const query = generatedSql.trim();
+    if (!query) return;
+    setLoading(true);
+    setError('');
+    try {
+      const data = await api.post('/admin/sql', {
+        sql: query,
+        allowWrite,
+        writeConfirmation,
+        source: 'nlp_reviewed',
+        generatedFromNlp: true,
+      });
       setResults(data);
     } catch (e) {
       setError(e.message);
@@ -256,10 +290,23 @@ export default function AdminSqlPage() {
       </div>
 
       {allowWrite && (
-        <InlineBanner
-          type="error"
-          message="Write mode enabled — INSERT, UPDATE, and DELETE statements will execute against the live database."
-        />
+        <div className="space-y-2">
+          <InlineBanner
+            type="error"
+            message='Write mode enabled. Write/non-read SQL still requires typing "EXECUTE WRITE" before it will run.'
+          />
+          <input
+            value={writeConfirmation}
+            onChange={(e) => setWriteConfirmation(e.target.value)}
+            placeholder="Type EXECUTE WRITE to confirm writes"
+            className="w-full px-3 py-2 rounded-lg border text-sm font-mono outline-none"
+            style={{
+              background: 'var(--color-bg)',
+              color: 'var(--color-text)',
+              borderColor: 'var(--color-border)',
+            }}
+          />
+        </div>
       )}
 
       {/* SQL mode editor */}
@@ -348,7 +395,7 @@ export default function AdminSqlPage() {
                 </select>
               )}
               <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
-                Ctrl+Enter to run
+                Ctrl+Enter to generate SQL for review
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -360,7 +407,7 @@ export default function AdminSqlPage() {
                 Clear
               </button>
               <Button variant="primary" onClick={runNlp} disabled={loading || !question.trim()}>
-                {loading ? 'Thinking…' : 'Ask'}
+                {loading ? 'Thinking…' : 'Generate SQL'}
               </Button>
             </div>
           </div>
@@ -408,14 +455,24 @@ export default function AdminSqlPage() {
                   A${nlpMeta.costAud.toFixed(4)}
                 </span>
               )}
+              {nlpMeta?.command && (
+                <span className="text-xs font-mono px-2 py-0.5 rounded" style={{ background: 'var(--color-border)', color: nlpMeta.writeLike ? '#dc2626' : 'var(--color-text)' }}>
+                  {nlpMeta.command}
+                </span>
+              )}
             </div>
-            <button
-              onClick={() => { setSql(generatedSql); switchMode('sql'); }}
-              className="text-xs px-3 py-1 rounded-lg"
-              style={{ color: 'var(--color-primary)', background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}
-            >
-              Edit in SQL mode
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setSql(generatedSql); switchMode('sql'); }}
+                className="text-xs px-3 py-1 rounded-lg"
+                style={{ color: 'var(--color-primary)', background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}
+              >
+                Edit in SQL mode
+              </button>
+              <Button variant="primary" onClick={executeGeneratedSql} disabled={loading || !generatedSql.trim()}>
+                {loading ? 'Running…' : 'Execute reviewed SQL'}
+              </Button>
+            </div>
           </div>
           <pre
             className="px-4 py-3 text-xs font-mono overflow-x-auto"
@@ -434,7 +491,7 @@ export default function AdminSqlPage() {
         >
           {mode === 'sql'
             ? <>Press <strong>Run</strong> or Ctrl+Enter to execute your query.</>
-            : <>Ask a question about your data and Claude will generate and run the SQL.</>}
+            : <>Ask a question about your data. Claude will generate SQL for review before anything executes.</>}
         </div>
       )}
     </div>

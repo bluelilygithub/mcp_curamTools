@@ -873,8 +873,9 @@ MCPRegistry.disconnectAll()
 // Shuts down all connections. Called on SIGTERM/SIGINT in index.js.
 
 // JSON-RPC dispatch
-MCPRegistry.send(orgId, serverId, method, params)
+MCPRegistry.send(orgId, serverId, method, params, options)
 // Sends a JSON-RPC request. Enforces org ownership at send time (not just at connect time).
+// options.userId is required for resources/read; resources/list is filtered by this user's resource permissions when supplied.
 // Returns Promise resolving with server's result. 30s timeout.
 
 // Events (EventEmitter)
@@ -890,7 +891,7 @@ MCPRegistry.on('notification',  ({ serverId, method, params }) => {})
 
 **Transport: Stdio** — Spawns subprocess, sends MCP `initialize` handshake on connect, exchanges newline-delimited JSON-RPC via stdin/stdout. `config.command` is required.
 
-**Security assertion:** `org_id` is mandatory and enforced on every DB operation and on every `send()` call. A server registered to org A can never be reached by org B. The registry never trusts `serverId` alone — it always validates the `(org_id, serverId)` pair against the DB.
+**Security assertion:** `org_id` is mandatory and enforced on every DB operation and on every `send()` call. A server registered to org A can never be reached by org B. The registry never trusts `serverId` alone — it always validates the `(org_id, serverId)` pair against the DB. Resource reads are permission-checked at runtime through `PermissionService.canAccessResource`; list responses are filtered when a user context is supplied.
 
 **DB table:** `mcp_servers` — see table schema below.
 
@@ -1263,7 +1264,7 @@ rl.on('line', async (line) => {
 **Frontend:** `client/src/pages/admin/AdminSqlPage.jsx` → `/admin/sql`
 **Auth:** `requireAuth` + `requireRole(['org_admin'])`
 
-**What it does:** Two-mode query tool for the platform PostgreSQL database. SQL mode executes raw queries directly. NLP mode accepts a natural language question, generates SQL via Claude, then executes it.
+**What it does:** Two-mode query tool for the platform PostgreSQL database. SQL mode executes reviewed SQL directly. NLP mode accepts a natural language question and generates SQL via Claude for explicit human review before a second execute action.
 
 ---
 
@@ -1271,17 +1272,17 @@ rl.on('line', async (line) => {
 
 **Request body:**
 ```json
-{ "sql": "SELECT ...", "allowWrite": false }
+{ "sql": "SELECT ...", "allowWrite": false, "writeConfirmation": "", "source": "manual" }
 ```
 
 **Response shape:**
 ```json
-{ "command": "SELECT", "rowCount": 12, "columns": ["id", "email"], "rows": [...], "duration": 43 }
+{ "command": "SELECT", "rowCount": 12, "columns": ["id", "email"], "rows": [...], "duration": 43, "guarded": { "rowLimit": 500, "timeoutMs": 10000 } }
 ```
 
-**Write guard:** By default, statements beginning with `INSERT`, `UPDATE`, `DELETE`, `DROP`, `TRUNCATE`, `ALTER`, `CREATE`, `GRANT`, or `REVOKE` are rejected with a 400 error. Pass `"allowWrite": true` to bypass. The frontend toggle shows a red warning banner when write mode is active. The same guard applies in NLP mode.
+**Write guard:** By default, anything outside `SELECT`, `WITH`, `SHOW`, or `EXPLAIN` is rejected. Write/non-read statements require `"allowWrite": true` and `writeConfirmation: "EXECUTE WRITE"`. Multiple SQL statements in one request are blocked. Read queries are wrapped with a 500-row limit where possible and run with a 10-second `statement_timeout`.
 
-**Audit log:** Every query is logged to server console: `[SQL Console] user@example.com ran: SELECT ... — N rows in Xms`.
+**Audit log:** Every SQL execution attempt is written to `sql_audit_logs` with org/user, source, SQL text, command, write flags, success/error status, row count, duration, and error message. Successful executions are also logged to server console.
 
 ---
 
@@ -1289,25 +1290,27 @@ rl.on('line', async (line) => {
 
 **Request body:**
 ```json
-{ "question": "Show me the last 10 agent runs", "allowWrite": false }
+{ "question": "Show me the last 10 agent runs", "modelId": "claude-sonnet-4-6" }
 ```
 
 **Response shape:**
 ```json
 {
-  "command": "SELECT", "rowCount": 10, "columns": [...], "rows": [...], "duration": 43,
   "generatedSql": "SELECT ...",
   "modelId": "claude-sonnet-4-6",
   "tokensUsed": { "input": 1840, "output": 64 },
-  "costAud": 0.0031
+  "costAud": 0.0031,
+  "requiresExecutionReview": true,
+  "command": "SELECT",
+  "writeLike": false
 }
 ```
 
 **How it works:**
 1. Queries `information_schema.columns` + `information_schema.tables` to build a live schema string (all `public` base tables, columns with types/nullability/defaults)
 2. Calls Claude with the schema + question; instructs it to return raw SQL only (no markdown, no fences)
-3. Executes the generated SQL via the same `execSql` helper as SQL mode (write guard applies)
-4. Returns results plus `generatedSql`, `modelId`, `tokensUsed`, `costAud`
+3. Returns `generatedSql`, `modelId`, `tokensUsed`, and `costAud` without executing the SQL
+4. The admin must execute the reviewed SQL through `POST /api/admin/sql`, where the same row limit, timeout, write confirmation, and audit logging apply
 
 **Model selection — `getDefaultModel(orgId)`:** Resolves the requested override first, then the organisation default via `AgentConfigService.getOrgDefaultModel(orgId)`, then the first enabled `advanced` tier model, then the first enabled model. It does **not** fall back to a hardcoded model ID; if no enabled/default model exists, the API returns a clear configuration error. This means changing the active/default model in Admin → Models affects NLP query generation without a code change.
 

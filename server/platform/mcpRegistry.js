@@ -10,8 +10,7 @@
  *   stdio — Local subprocess communicating via stdin/stdout
  *
  * Stage 1 delivers: DB-backed registry + connection lifecycle.
- * Stage 2 (resource-level permissions) will query this registry to enforce
- * resource URI access rules without requiring changes to this layer.
+ * Resource reads are checked against resource_permissions at runtime.
  */
 
 const { pool } = require('../db');
@@ -20,6 +19,7 @@ const http = require('http');
 const { spawn } = require('child_process');
 const { EventEmitter } = require('events');
 const logger = require('../utils/logger');
+const { canAccessResource } = require('../services/PermissionService');
 
 class MCPRegistryClass extends EventEmitter {
   constructor() {
@@ -174,7 +174,7 @@ class MCPRegistryClass extends EventEmitter {
    * Returns a Promise that resolves with the server's response.
    * org_id is enforced — the server must belong to the calling org.
    */
-  async send(orgId, serverId, method, params = {}) {
+  async send(orgId, serverId, method, params = {}, options = {}) {
     if (!orgId) throw new Error('org_id is required');
 
     const conn = this._connections.get(serverId);
@@ -185,6 +185,8 @@ class MCPRegistryClass extends EventEmitter {
     // Verify ownership before every send
     const server = await this.get(orgId, serverId);
     if (!server) throw new Error(`MCP server ${serverId} not found for this organisation`);
+
+    await this._assertResourcePermission({ orgId, method, params, userId: options.userId });
 
     const scopedParams = method === 'tools/call' && server.transport_type === 'stdio'
       ? {
@@ -199,7 +201,7 @@ class MCPRegistryClass extends EventEmitter {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const message = { jsonrpc: '2.0', id, method, params: scopedParams };
 
-    return new Promise((resolve, reject) => {
+    const result = await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this._pendingRpc.delete(id);
         reject(new Error(`RPC timeout: ${method}`));
@@ -208,6 +210,8 @@ class MCPRegistryClass extends EventEmitter {
       this._pendingRpc.set(id, { resolve, reject, timeout });
       conn.send(message);
     });
+
+    return this._filterResourceList({ orgId, method, result, userId: options.userId });
   }
 
   // ── Transport implementations ─────────────────────────────────────────────
@@ -472,6 +476,34 @@ class MCPRegistryClass extends EventEmitter {
 
   _connectionStatus(serverId) {
     return this._connections.get(serverId)?.status || 'disconnected';
+  }
+
+  async _assertResourcePermission({ orgId, method, params, userId }) {
+    if (method !== 'resources/read') return;
+
+    const resourceUri = params?.uri;
+    if (!resourceUri) throw new Error('resources/read requires a resource uri.');
+    if (!userId) throw new Error('User context is required to read MCP resources.');
+
+    const allowed = await canAccessResource(userId, resourceUri, orgId);
+    if (!allowed) {
+      throw new Error(`Access denied for MCP resource: ${resourceUri}`);
+    }
+  }
+
+  async _filterResourceList({ orgId, method, result, userId }) {
+    if (method !== 'resources/list' || !userId || !Array.isArray(result?.resources)) {
+      return result;
+    }
+
+    const filtered = [];
+    for (const resource of result.resources) {
+      const uri = resource?.uri;
+      if (uri && await canAccessResource(userId, uri, orgId)) {
+        filtered.push(resource);
+      }
+    }
+    return { ...result, resources: filtered };
   }
 
   /** Disconnect all servers — called on graceful server shutdown. */
