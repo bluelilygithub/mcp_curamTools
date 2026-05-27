@@ -18,6 +18,19 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-27 — Kimi K2 provider added
+
+### Built
+- **Kimi (Moonshot) provider registered** (`server/platform/providers/kimi.js`): OpenAI-compatible adapter pointing to `api.moonshot.ai`. Env var: `KIMI_API_KEY`.
+- **`providerRegistry.js`:** `kimi` entry added with `kimi-` and `moonshot-` model prefixes.
+- **`AgentConfigService.js`:** `isKimi` flag added to `inferModelCapabilities` — Kimi K2 correctly inferred as vision, tool_use, long_context, json_reliable capable. `kimi-k2.6` added to `MODEL_DEFAULTS` (advanced tier, $0.16/$0.95 per 1M, 256K context seed — adjust via admin Models UI).
+- **Cost guard:** No changes needed — `CostGuardService` already prioritises admin-configured `inputPricePer1M`/`outputPricePer1M` over hardcoded rates. Kimi pricing flows through automatically once set in admin UI.
+
+### Why this matters
+Kimi K2 is natively multimodal (vision + text), supports agent/tool tasks, and costs ~18× less than Claude Sonnet for input tokens. Suitable as org default and PDF extraction model. Model details (pricing, context window) are managed via Admin › Models — no code change needed when Moonshot updates pricing.
+
+---
+
 ## 2026-05-27 — Doc Extractor: store_redacted implemented
 
 ### Built

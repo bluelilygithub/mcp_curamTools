@@ -88,6 +88,9 @@ The `PORT` variable is injected automatically by Railway — do not set it in Ra
 | `APP_URL` | `https://mcpcuramtools-production.up.railway.app` |
 | `DATABASE_URL` | Railway Postgres connection string (auto-injected if using Railway Postgres) |
 | `ANTHROPIC_API_KEY` | Your Anthropic key |
+| `GEMINI_API_KEY` | Google Gemini key (optional) |
+| `DEEPSEEK_API_KEY` | DeepSeek key (optional) |
+| `KIMI_API_KEY` | Kimi / Moonshot key (optional) |
 | `MAIL_CHANNEL_API_KEY` | MailChannels key |
 | `SEED_ADMIN_EMAIL` | Initial admin email |
 | `SEED_ADMIN_PASSWORD` | Initial admin password |
