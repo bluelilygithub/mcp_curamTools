@@ -340,7 +340,7 @@ const MODEL_DEFAULTS = normalizeModelList([
     id: 'kimi-k2.6', name: 'Kimi K2', tier: 'advanced', enabled: true,
     provider: 'kimi', emoji: '🌙', label: 'Multimodal', tagline: 'Vision + long context',
     desc: 'Best for PDF extraction, visual understanding, and long-document tasks.',
-    inputPricePer1M: 0.16, outputPricePer1M: 0.95, contextWindow: 262144,
+    inputPricePer1M: 0.16, outputPricePer1M: 0.95, contextWindow: 1000000,
   },
 ]);
 
