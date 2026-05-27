@@ -49,7 +49,7 @@ const TIMEZONES = [
 // ── Font lists ─────────────────────────────────────────────────────────────
 
 const BODY_FONTS    = ['Inter', 'DM Sans', 'Open Sans', 'Lato', 'Nunito', 'Poppins', 'Raleway', 'Montserrat', 'Oswald'];
-const HEADING_FONTS = ['Playfair Display', 'Lora', 'Merriweather', 'PT Serif', 'Crimson Text'];
+const HEADING_FONTS = BODY_FONTS;
 const MONO_FONTS    = ['DM Mono', 'JetBrains Mono', 'Fira Code'];
 
 const THEME_LABELS = {

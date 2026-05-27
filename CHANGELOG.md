@@ -18,6 +18,16 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-27 — Appearance font options aligned
+
+### Fixed
+- **Settings > Appearance** (`client/src/pages/SettingsPage.jsx`): heading font dropdown now uses the same sans-serif options as the body font dropdown.
+
+### Why this matters
+The appearance controls now support a consistent sans-serif visual style for both body text and headings.
+
+---
+
 ## 2026-05-27 — Breadcrumbs and model settings access
 
 ### Built / Fixed
