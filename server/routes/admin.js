@@ -782,22 +782,6 @@ router.put('/agents/:slug', async (req, res) => {
       patch.allowed_roles = allowedRoles.length > 0 ? allowedRoles : null;
     }
 
-    if (Object.prototype.hasOwnProperty.call(patch, 'tiered_validation_enabled')) {
-      patch.tiered_validation_enabled = patch.tiered_validation_enabled === true;
-    }
-    if (Object.prototype.hasOwnProperty.call(patch, 'tiered_validation_threshold_override')) {
-      const raw = patch.tiered_validation_threshold_override;
-      if (raw === null || raw === undefined || raw === '') {
-        patch.tiered_validation_threshold_override = null;
-      } else {
-        const n = Number(raw);
-        if (!Number.isFinite(n) || n < 0 || n > 1) {
-          return res.status(400).json({ error: 'tiered_validation_threshold_override must be between 0 and 1.' });
-        }
-        patch.tiered_validation_threshold_override = n;
-      }
-    }
-
     const updated = await AgentConfigService.updateAdminConfig(
       req.params.slug,
       patch,

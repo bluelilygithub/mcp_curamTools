@@ -38,7 +38,6 @@ const AgentConfigService      = require('../platform/AgentConfigService');
 const { cleanString }         = require('../platform/inputGuards');
 const StorageService          = require('../services/StorageService');
 const FileIntakeService       = require('../services/FileIntakeService');
-const ExtractionValidationService = require('../services/ExtractionValidationService');
 
 const router = express.Router();
 
@@ -284,32 +283,6 @@ router.post(
           scan:      clearedFile.scan,
         };
 
-        const tieredValidation = await ExtractionValidationService.runTieredValidation({
-          orgId,
-          slug: 'doc-extractor',
-          adminConfig,
-          primaryModel: model,
-          customProviders,
-          extraction: {
-            document_type: result.document_type ?? null,
-            fields: result.fields ?? [],
-            quality_advisory: result.quality_advisory ?? null,
-            file: result.file,
-          },
-          emit: (message) => console.log(`[doc-extractor] ${message}`),
-        });
-        result.tiered_validation = tieredValidation;
-        if (ExtractionValidationService.needsHumanReview(tieredValidation)) {
-          result.quality_advisory = {
-            ...(result.quality_advisory ?? {}),
-            flag: true,
-            reason: [
-              result.quality_advisory?.reason,
-              `Tiered validation requires review (${tieredValidation.final_decision}).`,
-            ].filter(Boolean).join(' '),
-          };
-        }
-
         // ── S3 storage — fire-and-forget, non-fatal ───────────────────────
         // store_original:  upload raw file bytes before any processing.
         // store_redacted:  upload privacy-stripped extraction result as JSON.
@@ -365,17 +338,12 @@ router.post(
           }
         }
 
-        const extractionTokens = {
+        const costAud = computeCostAud({
           input:      result.tokensUsed?.input_tokens                ?? 0,
           output:     result.tokensUsed?.output_tokens               ?? 0,
           cacheRead:  result.tokensUsed?.cache_read_input_tokens     ?? 0,
           cacheWrite: result.tokensUsed?.cache_creation_input_tokens ?? 0,
-        };
-        const costAud = computeCostAud(
-          ExtractionValidationService.sumTokens(extractionTokens, tieredValidation.tokensUsed),
-          model,
-          model === adminConfig.model ? adminConfig.model_pricing : null
-        );
+        }, model, model === adminConfig.model ? adminConfig.model_pricing : null);
         batchCostAud += costAud;
 
         // Check per-file task budget and daily org budget
