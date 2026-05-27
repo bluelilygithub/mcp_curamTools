@@ -89,6 +89,7 @@ const { getProvider }       = require('../../platform/AgentOrchestrator');
 const AgentConfigService    = require('../../platform/AgentConfigService');
 const StorageService        = require('../../services/StorageService');
 const FileIntakeService     = require('../../services/FileIntakeService');
+const ExtractionValidationService = require('../../services/ExtractionValidationService');
 const { TransactionLogger,
         declareAgentFields } = require('../../platform/TransactionLogger');
 const { scanInjection }      = require('../../utils/sanitize');
@@ -928,7 +929,7 @@ async function runSpecValidator(context) {
   const rejectedCount    = 0;  // fresh run — no rejections yet
   const lowConfCount     = filteredProb.filter((f) => f.confidence < LOW_CONFIDENCE).length;
 
-  const totalTokens = sumTokens(extractionTokens, synthesisTokens);
+  let totalTokens = sumTokens(extractionTokens, synthesisTokens);
 
   trace.push({
     step:                'synthesis',
@@ -960,6 +961,38 @@ async function runSpecValidator(context) {
     `${failCount} FAIL, ${warnCount} WARNING, ${passCount} PASS. ` +
     `${filteredProb.length} probabilistic finding${filteredProb.length !== 1 ? 's' : ''} identified. ` +
     `${pendingCount} item${pendingCount !== 1 ? 's' : ''} require human review.`;
+
+  const tieredValidation = await ExtractionValidationService.runTieredValidation({
+    orgId,
+    slug: agentSlug,
+    adminConfig,
+    primaryModel: synthesisModel,
+    customProviders,
+    extraction: {
+      summary,
+      document_summary: extractedData.document_summary ?? '',
+      pipe_segments: extractedData.pipe_segments ?? [],
+      pressure_system: extractedData.pressure_system ?? null,
+      calc_results: calcOutput,
+      deterministic_findings: filteredDet,
+      probabilistic_findings: filteredProb,
+      all_findings: allFindings,
+      pending_review_count: pendingCount,
+      low_confidence_count: lowConfCount,
+      file: {
+        file_name: fileName,
+        mime_type: mimeType,
+        file_size: clearedFile.size,
+        file_hash: fileHash,
+        file_scan: clearedFile.scan,
+      },
+    },
+    emit,
+  });
+  totalTokens = ExtractionValidationService.sumTokens(totalTokens, tieredValidation.tokensUsed);
+  const validationBoundsFailed = ExtractionValidationService.needsHumanReview(tieredValidation)
+    ? [`Tiered validation requires review: ${tieredValidation.final_decision}`]
+    : [];
 
   // ── S3 auto-save (fire-and-forget, non-fatal) ──────────────────────────────
   let s3Info = null;
@@ -1021,8 +1054,10 @@ async function runSpecValidator(context) {
         synthesis_model:         synthesisModel,
         trace,
         sanitisation,
+        tiered_validation:       tieredValidation,
         s3: s3Info,
       },
+      ...(validationBoundsFailed.length > 0 && { boundsFailed: validationBoundsFailed }),
     },
     tokensUsed: totalTokens,
   };

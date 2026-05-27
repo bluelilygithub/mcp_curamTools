@@ -28,6 +28,7 @@ const { getProvider }       = require('../../platform/AgentOrchestrator');
 const AgentConfigService    = require('../../platform/AgentConfigService');
 const StorageService        = require('../../services/StorageService');
 const FileIntakeService     = require('../../services/FileIntakeService');
+const ExtractionValidationService = require('../../services/ExtractionValidationService');
 const { TransactionLogger,
         declareAgentFields } = require('../../platform/TransactionLogger');
 const { scanInjection }     = require('../../utils/sanitize');
@@ -563,6 +564,38 @@ async function runDocumentAnalyzer(context) {
   const summary = analysisParsed.summary ??
     `Document analysed: ${detFindings.length} deterministic and ${filteredProb.length} probabilistic findings. ${lowConfCount} low-confidence items require Engineering Lead validation.`;
 
+  const tieredValidation = await ExtractionValidationService.runTieredValidation({
+    orgId,
+    slug: TOOL_SLUG,
+    adminConfig,
+    primaryModel: synthesisModel,
+    customProviders,
+    extraction: {
+      summary,
+      document_type: documentType,
+      parties,
+      deterministic_findings: detFindings,
+      probabilistic_findings: filteredProb,
+      all_findings: allFindings,
+      low_confidence_count: lowConfCount,
+      file: {
+        file_name: fileName,
+        mime_type: mimeType,
+        file_size: clearedFile.size,
+        file_hash: fileHash,
+        file_scan: clearedFile.scan,
+      },
+    },
+    emit,
+  });
+  tokensUsed = ExtractionValidationService.sumTokens(
+    ExtractionValidationService.normalizeTokens(tokensUsed),
+    tieredValidation.tokensUsed
+  );
+  const validationBoundsFailed = ExtractionValidationService.needsHumanReview(tieredValidation)
+    ? [`Tiered validation requires review: ${tieredValidation.final_decision}`]
+    : [];
+
   // ── Auto-save to S3 ──────────────────────────────────────────────────────
   let s3Info = null;
   try {
@@ -621,9 +654,11 @@ async function runDocumentAnalyzer(context) {
         synthesis_model:        synthesisModel,
         trace,
         sanitisation,
+        tiered_validation:      tieredValidation,
         s3:                     s3Info,
         custom_response:        analysisParsed.custom_response ?? null,
       },
+      ...(validationBoundsFailed.length > 0 && { boundsFailed: validationBoundsFailed }),
     },
     tokensUsed,
   };

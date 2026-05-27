@@ -38,6 +38,7 @@ const { getProvider }       = require('../../../platform/AgentOrchestrator');
 const AgentConfigService    = require('../../../platform/AgentConfigService');
 const StorageService        = require('../../../services/StorageService');
 const FileIntakeService     = require('../../../services/FileIntakeService');
+const ExtractionValidationService = require('../../../services/ExtractionValidationService');
 const { TransactionLogger,
         declareAgentFields } = require('../../../platform/TransactionLogger');
 const { scanInjection, sanitiseText } = require('../../../utils/sanitize');
@@ -585,6 +586,32 @@ async function runTenderResponse(context) {
     trace,
   };
 
+  const tieredValidation = await ExtractionValidationService.runTieredValidation({
+    orgId,
+    slug: TOOL_SLUG_DEMO,
+    adminConfig,
+    primaryModel: synthesisModel,
+    customProviders,
+    extraction: {
+      ...resultData,
+      requirements: requirementData.map((r) => ({
+        requirement_id: r.requirement_id,
+        title: r.title,
+        match_status: r.match_status,
+        blocker: r.blocker,
+        status: r.status,
+        draft_response: r.draft_response,
+        confidence: r.confidence,
+      })),
+    },
+    emit,
+  });
+  resultData.tiered_validation = tieredValidation;
+  tokensUsed = ExtractionValidationService.sumTokens(tokensUsed, tieredValidation.tokensUsed);
+  const validationBoundsFailed = ExtractionValidationService.needsHumanReview(tieredValidation)
+    ? [`Tiered validation requires review: ${tieredValidation.final_decision}`]
+    : [];
+
   await logger.complete({
     outcome:  `${requirements.length} requirements · ${summary.strong ?? 0} strong · ${blockerCount} blocker${blockerCount !== 1 ? 's' : ''} · ${draftsGenerated} draft${draftsGenerated !== 1 ? 's' : ''} generated`,
     metadata: {
@@ -606,7 +633,10 @@ async function runTenderResponse(context) {
   });
 
   return {
-    result:        { data: resultData },
+    result:        {
+      data: resultData,
+      ...(validationBoundsFailed.length > 0 && { boundsFailed: validationBoundsFailed }),
+    },
     tokensUsed,
     promptVersion: getPromptVersion(TOOL_SLUG_DEMO),
   };
