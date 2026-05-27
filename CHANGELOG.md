@@ -18,6 +18,17 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-28 — Document extractor config fallback
+
+### Fixed
+- **`GET /api/doc-extractor/config`** now falls back to the recommended vision-capable model if the organisation default model is incompatible with `doc-extractor`'s hard vision requirement.
+- **`POST /api/doc-extractor/extract`** now returns a clear JSON `503` when no usable vision model exists instead of letting config resolution throw through the route.
+
+### Why this matters
+The page config endpoint should not fail just because the organisation-wide default model is text-only. Document Extractor can safely use its recommended vision model while the rest of the platform keeps the global default.
+
+---
+
 ## 2026-05-28 — Shared file intake guardrail
 
 ### Built

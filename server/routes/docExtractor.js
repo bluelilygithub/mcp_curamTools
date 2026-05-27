@@ -60,8 +60,25 @@ const MAX_PURPOSE_LEN      = 100;
 const MAX_INSTRUCTIONS_LEN = 2000;
 
 async function getResolvedDocExtractorConfig(orgId) {
-  const adminConfig = await AgentConfigService.getResolvedAdminConfig('doc-extractor', orgId, { useRecommended: true });
   const allModels = await AgentConfigService.getOrgModels(orgId);
+  let adminConfig;
+
+  try {
+    adminConfig = await AgentConfigService.getResolvedAdminConfig('doc-extractor', orgId, { useRecommended: true });
+  } catch (err) {
+    const recommended = AgentConfigService.getRecommendedModel('doc-extractor', allModels);
+    if (!recommended?.id) throw err;
+
+    const baseConfig = await AgentConfigService.getAdminConfig('doc-extractor', orgId);
+    adminConfig = {
+      ...baseConfig,
+      model: recommended.id,
+      model_source: 'recommended',
+      capability_warnings: [err.message],
+    };
+    console.warn('[doc-extractor] Falling back to recommended vision-capable model:', err.message);
+  }
+
   const found = allModels.find((m) => m.id === adminConfig.model);
   return {
     adminConfig,
@@ -133,7 +150,16 @@ router.post(
     const { orgId, id: userId } = req.user;
 
     // ── Admin config ───────────────────────────────────────────────────────
-    const { adminConfig } = await getResolvedDocExtractorConfig(orgId);
+    let adminConfig;
+    try {
+      ({ adminConfig } = await getResolvedDocExtractorConfig(orgId));
+    } catch (err) {
+      console.error('[doc-extractor] Failed to resolve config:', err.message);
+      return res.status(503).json({
+        error: 'Document Extractor has no usable vision-capable model configured.',
+        detail: err.message,
+      });
+    }
 
     if (!adminConfig.enabled) {
       return res.status(403).json({ error: 'Document Extractor is currently disabled by an administrator.' });
