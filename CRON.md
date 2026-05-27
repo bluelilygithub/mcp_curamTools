@@ -16,6 +16,7 @@ All cron jobs registered via `AgentScheduler.register` in `server/routes/agents.
 |---|---|---|---|---|
 | Google Ads Monitor | `google-ads-monitor` | `0 6,18 * * *` | 4pm & 4am (AEDT) / 4pm & 4am (AEST) | Twice daily. Runs for all active customers via multi-customer array return. |
 | AI Visibility Monitor | `ai-visibility-monitor` | `0 7 * * 1` | 5pm Monday (AEDT) / 5pm Monday (AEST) | Weekly. 26 geo-targeted web searches via Anthropic native `web_search` tool. |
+| Nightly Cost Alert | `nightly-cost-alert` | `0 22 * * *` | 8am AEST | Daily. Checks accumulated spend vs `max_daily_org_budget_aud`. Emails org admins at 80% (warning) and 100% (critical). Silent if no ceiling is configured. |
 
 ---
 

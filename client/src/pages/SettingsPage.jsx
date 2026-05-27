@@ -306,13 +306,87 @@ function AppearanceTab() {
   );
 }
 
+// ── Budget tab ─────────────────────────────────────────────────────────────
+
+function BudgetTab() {
+  const [budget, setBudget] = useState('');
+  const [loadingBudget, setLoadingBudget] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [banner, setBanner] = useState(null);
+
+  useEffect(() => {
+    api.get('/admin/budget')
+      .then((data) => {
+        setBudget(data.max_daily_org_budget_aud != null ? String(data.max_daily_org_budget_aud) : '');
+      })
+      .catch(() => {})
+      .finally(() => setLoadingBudget(false));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    setBanner(null);
+    try {
+      const trimmed = budget.trim();
+      const val = trimmed === '' ? null : parseFloat(trimmed);
+      if (val !== null && (!Number.isFinite(val) || val <= 0)) {
+        setBanner({ type: 'error', message: 'Enter a positive number, or leave blank for no limit.' });
+        return;
+      }
+      await api.put('/admin/budget', { max_daily_org_budget_aud: val });
+      setBanner({
+        type: 'success',
+        message: val == null ? 'Daily budget limit cleared — no ceiling applied.' : `Daily ceiling set to $${val.toFixed(2)} AUD.`,
+      });
+    } catch {
+      setBanner({ type: 'error', message: 'Failed to save. Try again.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loadingBudget) return <p className="text-sm" style={{ color: 'var(--color-muted)' }}>Loading…</p>;
+
+  return (
+    <div className="space-y-4">
+      <Section title="Daily Cost Ceiling">
+        {banner && <InlineBanner type={banner.type} message={banner.message} onClose={() => setBanner(null)} />}
+        <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
+          Hard stop for total daily spend across all agents. Leave blank for no ceiling. Email alerts fire at 80% and 100% of this limit.
+        </p>
+        <div>
+          <label className={LABEL} style={LABEL_STYLE}>Daily budget ceiling (AUD)</label>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+              placeholder="No limit"
+              className={`${FIELD} max-w-xs`}
+              style={FIELD_STYLE}
+            />
+            <Button onClick={save} loading={saving} disabled={saving}>Save</Button>
+          </div>
+          {budget.trim() !== '' && Number.isFinite(parseFloat(budget)) && (
+            <p className="text-xs mt-1.5" style={{ color: 'var(--color-muted)' }}>
+              Alert at 80%: ${(parseFloat(budget) * 0.8).toFixed(2)} AUD &nbsp;·&nbsp; Hard stop at: ${parseFloat(budget).toFixed(2)} AUD
+            </p>
+          )}
+        </div>
+      </Section>
+    </div>
+  );
+}
+
 // ── Page shell ─────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
   const isAdmin = user?.roles?.some((r) => r.name === 'org_admin');
 
-  const tabs = isAdmin ? ['Profile', 'Appearance', 'Models'] : ['Profile', 'Appearance'];
+  const tabs = isAdmin ? ['Profile', 'Appearance', 'Models', 'Budget'] : ['Profile', 'Appearance'];
   const [activeTab, setActiveTab] = useState(tabs[0]);
 
   // Reset tab if current tab is no longer available (e.g. user loses admin role)
@@ -348,6 +422,7 @@ export default function SettingsPage() {
       {activeTab === 'Profile'    && <ProfileTab />}
       {activeTab === 'Appearance' && <AppearanceTab />}
       {activeTab === 'Models'     && <ModelsTab />}
+      {activeTab === 'Budget'     && <BudgetTab />}
     </div>
   );
 }

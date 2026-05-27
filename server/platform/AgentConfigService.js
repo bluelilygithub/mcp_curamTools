@@ -68,6 +68,7 @@ const AGENT_DEFAULTS = {
       { name: 'Autobond',     url: 'autobond.com.au' },
     ],
   },
+  'nightly-cost-alert': {},
   // ── Demo suite agents ─────────────────────────────────────────────────────
   'demo-document-analyzer': {},  // no operator-configurable settings; all config via adminConfig
   'spec-validator':          {},
@@ -217,6 +218,14 @@ const ADMIN_DEFAULTS = {
     max_task_budget_aud: 2.00,
     fallback_model:      null,
   },
+  'nightly-cost-alert': {
+    enabled:             true,
+    model:               null,   // no LLM call — uses org default if scheduler resolves config
+    max_tokens:          null,
+    max_iterations:      null,
+    max_task_budget_aud: 0.01,   // near-zero — no model inference
+    fallback_model:      null,
+  },
   'demo-tender-response': {
     enabled:             true,
     model:               null,   // must be vision-capable (Stage 1 RFT extraction)
@@ -340,7 +349,7 @@ const MODEL_DEFAULTS = normalizeModelList([
     id: 'kimi-k2.6', name: 'Kimi K2', tier: 'advanced', enabled: true,
     provider: 'kimi', emoji: '🌙', label: 'Multimodal', tagline: 'Vision + long context',
     desc: 'Best for PDF extraction, visual understanding, and long-document tasks.',
-    inputPricePer1M: 0.16, outputPricePer1M: 0.95, contextWindow: 1000000,
+    inputPricePer1M: 0.16, outputPricePer1M: 0.95, contextWindow: 262144,
   },
 ]);
 

@@ -18,6 +18,21 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-27 — Budget ceiling UI + nightly cost alert
+
+### Built
+- **GET/PUT `/api/admin/budget`** (`server/routes/admin.js`): exposes `max_daily_org_budget_aud` via API. PUT validates positive number or null (clear). Delegates to `AgentConfigService.getOrgBudgetSettings` / `updateOrgBudgetSettings`.
+- **Budget tab** (`client/src/pages/SettingsPage.jsx`): new admin-only tab in Settings. Number input for daily AUD ceiling; live preview shows 80% warn threshold and hard-stop amount. Saves/clears via PUT `/api/admin/budget`.
+- **`server/agents/nightlyCostAlert/`** — nightly cron agent (no LLM call): queries daily spend via `CostGuardService.getDailyOrgSpendAud`, compares to org budget ceiling, emails all org admins when spend ≥ 80% (warning) or ≥ 100% (critical). Silent if no ceiling configured.
+- **Manifest entry** (`server/agents/manifest.js`): `schedule: '0 22 * * *'` (22:00 UTC = 8am AEST).
+- **CRON.md** updated with new job entry.
+- **AGENT_DEFAULTS + ADMIN_DEFAULTS** entries added for `nightly-cost-alert`.
+
+### Why this matters
+Previously admins had to manually check `/admin/usage` to catch budget pressure. Now the platform proactively emails when spend approaches or hits the ceiling. The ceiling itself was previously only configurable via DB/API; it now has a first-class UI.
+
+---
+
 ## 2026-05-27 — Kimi K2 provider added
 
 ### Built

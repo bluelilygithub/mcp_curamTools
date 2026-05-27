@@ -1114,6 +1114,37 @@ router.put('/settings', async (req, res) => {
   }
 });
 
+// ── Budget settings ───────────────────────────────────────────────────────
+
+router.get('/budget', async (req, res) => {
+  try {
+    const settings = await AgentConfigService.getOrgBudgetSettings(req.user.orgId);
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load budget settings.' });
+  }
+});
+
+router.put('/budget', async (req, res) => {
+  try {
+    const raw = req.body.max_daily_org_budget_aud;
+    const patch = {};
+    if (raw === null || raw === '' || raw === undefined) {
+      patch.max_daily_org_budget_aud = null;
+    } else {
+      const val = parseFloat(raw);
+      if (!Number.isFinite(val) || val <= 0) {
+        return res.status(400).json({ error: 'Budget must be a positive number, or leave blank to clear.' });
+      }
+      patch.max_daily_org_budget_aud = val;
+    }
+    const updated = await AgentConfigService.updateOrgBudgetSettings(req.user.orgId, patch, req.user.id);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update budget settings.' });
+  }
+});
+
 // ── Org default model ─────────────────────────────────────────────────────
 
 router.get('/default-model', async (req, res) => {

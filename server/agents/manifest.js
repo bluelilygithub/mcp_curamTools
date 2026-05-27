@@ -168,6 +168,14 @@ module.exports = [
     // schedule deferred — add after manual QA
   },
 
+  {
+    slug:       'nightly-cost-alert',
+    module:     'nightlyCostAlert',
+    export:     'runNightlyCostAlert',
+    permission: 'org_admin',
+    schedule:   '0 22 * * *',            // 22:00 UTC daily (08:00 AEST next day)
+  },
+
   // ── Demo Suite ─────────────────────────────────────────────────────────────
   {
     slug:       'demo-document-analyzer',
