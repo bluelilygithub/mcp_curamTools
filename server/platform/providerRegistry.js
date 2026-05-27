@@ -57,6 +57,12 @@ const PROVIDERS = {
     modelPrefixes: ['llama-', 'meta-llama', 'mixtral-8x', 'gemma-'],
     adapter:       'groq',
   },
+  kimi: {
+    label:         'Kimi (Moonshot)',
+    envVar:        'KIMI_API_KEY',
+    modelPrefixes: ['kimi-', 'moonshot-'],
+    adapter:       'kimi',
+  },
 };
 
 /**

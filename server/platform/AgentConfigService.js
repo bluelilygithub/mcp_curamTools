@@ -288,12 +288,13 @@ function inferModelCapabilities(model = {}) {
   const isGemini = provider === 'gemini' || id.startsWith('gemini-');
   const isDeepSeek = provider === 'deepseek' || id.startsWith('deepseek-');
   const isModernOpenAI = provider === 'openai' || /^(gpt-4|gpt-5|o[134]|chatgpt)/.test(id);
+  const isKimi = provider === 'kimi' || id.startsWith('kimi-') || id.startsWith('moonshot-');
 
   return {
-    tool_use:      isClaude || isGemini || isModernOpenAI || isDeepSeek,
-    vision:        isClaude || isGemini || /gpt-4o|gpt-5|vision|image/.test(id),
-    long_context:  contextWindow >= 100000 || isClaude || isGemini,
-    json_reliable: isClaude || isGemini || isModernOpenAI || isDeepSeek,
+    tool_use:      isClaude || isGemini || isModernOpenAI || isDeepSeek || isKimi,
+    vision:        isClaude || isGemini || isKimi || /gpt-4o|gpt-5|vision|image/.test(id),
+    long_context:  contextWindow >= 100000 || isClaude || isGemini || isKimi,
+    json_reliable: isClaude || isGemini || isModernOpenAI || isDeepSeek || isKimi,
   };
 }
 
@@ -334,6 +335,12 @@ const MODEL_DEFAULTS = normalizeModelList([
     provider: 'anthropic', emoji: '🔬', label: 'Premium', tagline: 'Most capable',
     desc: 'Best for complex reasoning and advanced multi-step agent tasks.',
     inputPricePer1M: 15.00, outputPricePer1M: 75.00, contextWindow: 200000,
+  },
+  {
+    id: 'kimi-k2.6', name: 'Kimi K2', tier: 'advanced', enabled: true,
+    provider: 'kimi', emoji: '🌙', label: 'Multimodal', tagline: 'Vision + long context',
+    desc: 'Best for PDF extraction, visual understanding, and long-document tasks.',
+    inputPricePer1M: 0.16, outputPricePer1M: 0.95, contextWindow: 262144,
   },
 ]);
 
