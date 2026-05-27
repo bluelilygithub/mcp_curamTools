@@ -20,6 +20,9 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ## 2026-05-28 — Tiered extraction validation pipeline
 
+### Fixed
+- Validation model errors and slow provider calls now fail closed into `needs_review_validation_error` audit records instead of throwing through document extraction routes. `EXTRACTION_VALIDATION_TIMEOUT_MS` can tune the validation timeout; default is 20 seconds.
+
 ### Built
 - **`ExtractionValidationService`** (`server/services/ExtractionValidationService.js`): validates structured extraction output, logs confidence/issue types/routing, escalates to the globally configured stronger model when below threshold, and marks human review only after escalation also fails.
 - **Global settings** (`/api/settings/tiered-validation`): org admins can set the platform default confidence threshold and escalation model. Agent settings only toggle validation and optionally override the threshold.

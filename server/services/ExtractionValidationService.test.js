@@ -161,3 +161,33 @@ test('threshold override falls back only when missing or blank', async () => {
     AgentConfigService.getTieredValidationSettings = original;
   }
 });
+
+test('validation model errors are logged as review instead of thrown', async () => {
+  const calls = [];
+  const result = await ExtractionValidationService.runTieredValidation({
+    orgId: 1,
+    slug: 'doc-extractor',
+    adminConfig: {},
+    primaryModel: 'cheap-model',
+    extraction: { fields: [] },
+    validationConfig: {
+      enabled: true,
+      confidence_threshold: 0.85,
+      escalation_model: 'strong-model',
+      threshold_source: 'global',
+    },
+    providerFactory(model) {
+      calls.push(model);
+      return {
+        async chat() {
+          throw new Error('provider unavailable');
+        },
+      };
+    },
+  });
+
+  assert.equal(result.task_performed, true);
+  assert.equal(result.final_decision, 'needs_review_validation_error');
+  assert.equal(result.error.phase, 'first_pass');
+  assert.deepEqual(calls, ['cheap-model']);
+});

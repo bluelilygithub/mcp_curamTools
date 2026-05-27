@@ -5,6 +5,7 @@ const { getProvider } = require('../platform/AgentOrchestrator');
 
 const DEFAULT_MAX_VALIDATION_CHARS = 12000;
 const VALIDATION_MAX_TOKENS = 1200;
+const DEFAULT_VALIDATION_TIMEOUT_MS = 20000;
 
 const ISSUE_TYPES = [
   'missing_fields',
@@ -40,6 +41,21 @@ function sumTokens(a = {}, b = {}) {
     cacheRead:  (a.cacheRead  ?? 0) + (b.cacheRead  ?? 0),
     cacheWrite: (a.cacheWrite ?? 0) + (b.cacheWrite ?? 0),
   };
+}
+
+function getValidationTimeoutMs() {
+  const raw = Number(process.env.EXTRACTION_VALIDATION_TIMEOUT_MS);
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_VALIDATION_TIMEOUT_MS;
+  return Math.max(1000, Math.min(60000, raw));
+}
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    if (typeof timer.unref === 'function') timer.unref();
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 function redactForValidation(value, depth = 0) {
@@ -169,6 +185,7 @@ async function runTieredValidation({
   validationConfig = null,
 }) {
   const config = validationConfig ?? await resolveConfig({ orgId, adminConfig });
+  const timeoutMs = getValidationTimeoutMs();
   const base = {
     enabled: config.enabled,
     task_performed: false,
@@ -178,6 +195,7 @@ async function runTieredValidation({
     escalation_model: config.escalation_model,
     first_pass: null,
     escalation_pass: null,
+    error: null,
     tokensUsed: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
   };
 
@@ -187,15 +205,30 @@ async function runTieredValidation({
   }
 
   if (typeof emit === 'function') emit('Running extraction validation…');
-  const firstPass = await callValidationModel({
-    model: primaryModel,
-    customProviders,
-    slug,
-    phase: 'first_pass',
-    threshold: config.confidence_threshold,
-    extraction,
-    providerFactory,
-  });
+  let firstPass;
+  try {
+    firstPass = await withTimeout(callValidationModel({
+      model: primaryModel,
+      customProviders,
+      slug,
+      phase: 'first_pass',
+      threshold: config.confidence_threshold,
+      extraction,
+      providerFactory,
+    }), timeoutMs, 'First pass extraction validation');
+  } catch (err) {
+    if (typeof emit === 'function') emit(`Extraction validation failed: ${err.message}`);
+    return {
+      ...base,
+      task_performed: true,
+      final_decision: 'needs_review_validation_error',
+      error: {
+        phase: 'first_pass',
+        message: err.message,
+        performed_at: new Date().toISOString(),
+      },
+    };
+  }
 
   let tokensUsed = sumTokens(base.tokensUsed, firstPass.tokensUsed);
   const result = { ...base, task_performed: true, first_pass: firstPass, tokensUsed };
@@ -212,16 +245,31 @@ async function runTieredValidation({
   }
 
   if (typeof emit === 'function') emit(`Extraction validation escalating to ${escalationModel}…`, firstPass.tokensUsed);
-  const escalationPass = await callValidationModel({
-    model: escalationModel,
-    customProviders,
-    slug,
-    phase: 'escalation_pass',
-    threshold: config.confidence_threshold,
-    extraction,
-    firstPass,
-    providerFactory,
-  });
+  let escalationPass;
+  try {
+    escalationPass = await withTimeout(callValidationModel({
+      model: escalationModel,
+      customProviders,
+      slug,
+      phase: 'escalation_pass',
+      threshold: config.confidence_threshold,
+      extraction,
+      firstPass,
+      providerFactory,
+    }), timeoutMs, 'Escalated extraction validation');
+  } catch (err) {
+    if (typeof emit === 'function') emit(`Escalated extraction validation failed: ${err.message}`, firstPass.tokensUsed);
+    return {
+      ...result,
+      final_decision: 'needs_review_validation_error',
+      error: {
+        phase: 'escalation_pass',
+        message: err.message,
+        performed_at: new Date().toISOString(),
+      },
+      tokensUsed,
+    };
+  }
   tokensUsed = sumTokens(tokensUsed, escalationPass.tokensUsed);
 
   const finalDecision = escalationPass.confidence >= config.confidence_threshold
