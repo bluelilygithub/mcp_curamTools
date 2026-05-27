@@ -18,6 +18,19 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-28 — Shared file intake guardrail
+
+### Built
+- **`FileIntakeService`** (`server/services/FileIntakeService.js`): central validation-only file intake primitive for uploaded/base64 files. It enforces trusted org/user scope, size caps, magic-byte MIME checks, filename sanitisation with prompt-injection rejection, SHA-256 fingerprints, org-scoped storage keys, and optional ClamAV scanning via `clamav.js`.
+- **File intake tests** (`server/services/FileIntakeService.test.js`): added focused `node:test` coverage for MIME mismatch, disallowed types, oversized files, prompt-injection filenames, ClamAV rejection, base64 intake, org scope, and storage keys.
+- **Doc and demo migrations:** `docExtractor`, `demo-document-analyzer`, `spec-validator`, and `demo-tender-response` now clear file bytes through `FileIntakeService` before parsing/model calls. S3 writes now use org-scoped keys from the cleared file object.
+- **Project rule + PR check:** `CLAUDE.md` now requires future file-handling routes/agents to use `FileIntakeService`; `npm run check:file-intake` flags agent files that accept base64/request file data without importing the service.
+
+### Why this matters
+File validation was split across multiple agents and routes. New file-capable agents now have one boundary for file safety, audit metadata, and org scoping without moving S3 upload or signed URL ownership out of the controllers.
+
+---
+
 ## 2026-05-27 — Appearance font options aligned
 
 ### Fixed

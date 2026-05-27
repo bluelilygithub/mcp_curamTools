@@ -16,7 +16,6 @@
  * Output: result.data with all findings starting status: 'pending_review'.
  */
 
-const crypto     = require('crypto');
 const os         = require('os');
 const path       = require('path');
 const fs         = require('fs');
@@ -28,6 +27,7 @@ const execFileAsync = promisify(execFile);
 const { getProvider }       = require('../../platform/AgentOrchestrator');
 const AgentConfigService    = require('../../platform/AgentConfigService');
 const StorageService        = require('../../services/StorageService');
+const FileIntakeService     = require('../../services/FileIntakeService');
 const { TransactionLogger,
         declareAgentFields } = require('../../platform/TransactionLogger');
 const { scanInjection }     = require('../../utils/sanitize');
@@ -265,13 +265,26 @@ function robustParseJson(text) {
 
 // ── Main runFn ───────────────────────────────────────────────────────────────
 async function runDocumentAnalyzer(context) {
-  const { orgId, adminConfig, emit } = context;
-  const { fileData, mimeType, fileName = 'document', customPrompt } = context.req?.body ?? {};
+  const { orgId, userId, adminConfig, emit } = context;
+  const { fileData, mimeType: rawMimeType, fileName: rawFileName = 'document', customPrompt } = context.req?.body ?? {};
 
-  if (!fileData || !mimeType) throw new Error('Missing fileData or mimeType in request body.');
+  if (!fileData || !rawMimeType) throw new Error('Missing fileData or mimeType in request body.');
 
-  const fileBuf  = Buffer.from(fileData, 'base64');
-  const fileHash = crypto.createHash('sha256').update(fileBuf).digest('hex');
+  const clearedFile = await FileIntakeService.fromBase64({
+    fileData,
+    mimeType: rawMimeType,
+    fileName: rawFileName,
+    orgId,
+    userId,
+    source: TOOL_SLUG,
+    allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+    maxBytes: adminConfig.max_file_bytes ?? (10 * 1024 * 1024),
+  });
+  const fileBuf  = clearedFile.buffer;
+  const fileHash = clearedFile.sha256;
+  const fileName = clearedFile.fileName;
+  const mimeType = clearedFile.mimeType;
+  const clearedBase64 = clearedFile.toBase64();
   const ts       = () => new Date().toISOString();
   const trace    = [];
 
@@ -316,7 +329,7 @@ async function runDocumentAnalyzer(context) {
       source: { type: 'base64', media_type: 'image/png', data: buf.toString('base64') },
     }));
   } else {
-    imageParts = [{ type: 'image', source: { type: 'base64', media_type: mimeType, data: fileData } }];
+    imageParts = [{ type: 'image', source: { type: 'base64', media_type: mimeType, data: clearedBase64 } }];
   }
 
   // ── Model resolution ─────────────────────────────────────────────────────
@@ -557,8 +570,7 @@ async function runDocumentAnalyzer(context) {
     const region = process.env.AWS_S3_REGION ?? 'ap-southeast-2';
     const hasKey = !!(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
     if (bucket && hasKey) {
-      const orgName = context.req?.user?.orgName ?? 'Default Organisation';
-      const key = `${orgName}/${fileName}`;
+      const key = FileIntakeService.buildOrgScopedKey(clearedFile);
       await StorageService.put({ bucket, region, key, body: fileBuf, contentType: mimeType });
       const { url, expiresAt } = await StorageService.getSignedDownloadUrl({
         bucket, region, key, expiresIn: 7 * 24 * 3600,
@@ -596,7 +608,9 @@ async function runDocumentAnalyzer(context) {
         file_name:              fileName,
         file_hash:              fileHash,
         mime_type:              mimeType,
-        file_data:              fileData,
+        file_size:              clearedFile.size,
+        file_scan:              clearedFile.scan,
+        file_data:              clearedBase64,
         parties,
         deterministic_findings: detFindings,
         probabilistic_findings: filteredProb,

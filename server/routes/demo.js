@@ -18,6 +18,7 @@ const { requireAuth } = require('../middleware/requireAuth');
 const { requireRole } = require('../middleware/requireRole');
 const { DEMO_CATALOG } = require('../demo/demoCatalog');
 const StorageService = require('../services/StorageService');
+const FileIntakeService = require('../services/FileIntakeService');
 const { proposeLessonFromRun } = require('../services/LessonRepositoryService');
 const { evaluateSpecCertificateGate } = require('../platform/reviewGate');
 
@@ -400,7 +401,6 @@ router.post('/runs/:runId/save-to-s3', async (req, res) => {
     const fileData  = data.file_data;
     const fileName  = data.file_name;
     const mimeType  = data.mime_type ?? 'application/octet-stream';
-    const orgName   = req.user.orgName ?? 'Default Organisation';
 
     if (!fileData || !fileName) {
       return res.status(400).json({ error: 'No file data available for this run.' });
@@ -413,13 +413,19 @@ router.post('/runs/:runId/save-to-s3', async (req, res) => {
       return res.status(500).json({ error: 'AWS S3 bucket not configured.' });
     }
 
-    // S3 key: {orgName}/{fileName}
-    // S3 doesn't have real folders — the prefix acts as a folder implicitly.
-    const key = `${orgName}/${fileName}`;
+    const clearedFile = await FileIntakeService.fromBase64({
+      fileData,
+      mimeType,
+      fileName,
+      orgId: req.user.orgId,
+      userId: req.user.id,
+      source: 'demo-save-to-s3',
+      maxBytes: 10 * 1024 * 1024,
+    });
+    const key = FileIntakeService.buildOrgScopedKey(clearedFile);
+    const fileBuf = clearedFile.buffer;
 
-    const fileBuf = Buffer.from(fileData, 'base64');
-
-    await StorageService.put({ bucket, region, key, body: fileBuf, contentType: mimeType });
+    await StorageService.put({ bucket, region, key, body: fileBuf, contentType: clearedFile.mimeType });
 
     // Generate a pre-signed download URL (expires in 7 days)
     const { url, expiresAt } = await StorageService.getSignedDownloadUrl({

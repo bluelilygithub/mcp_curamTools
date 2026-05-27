@@ -29,7 +29,6 @@
  * session-scoped upload (see routes/demo.js).
  */
 
-const crypto  = require('crypto');
 const os      = require('os');
 const path    = require('path');
 const fs      = require('fs');
@@ -38,9 +37,10 @@ const { spawn } = require('child_process');
 const { getProvider }       = require('../../../platform/AgentOrchestrator');
 const AgentConfigService    = require('../../../platform/AgentConfigService');
 const StorageService        = require('../../../services/StorageService');
+const FileIntakeService     = require('../../../services/FileIntakeService');
 const { TransactionLogger,
         declareAgentFields } = require('../../../platform/TransactionLogger');
-const { scanInjection, sanitiseFileName, sanitiseText } = require('../../../utils/sanitize');
+const { scanInjection, sanitiseText } = require('../../../utils/sanitize');
 
 const {
   EXTRACTION_SYSTEM_PROMPT,
@@ -252,19 +252,16 @@ async function downloadEvidencePack(sessionOverrides = {}) {
 // ── Main runFn ─────────────────────────────────────────────────────────────────
 
 async function runTenderResponse(context) {
-  const { orgId, adminConfig, emit } = context;
+  const { orgId, userId, adminConfig, emit } = context;
   const {
     fileData,
-    mimeType,
+    mimeType: rawMimeType,
     fileName: rawFileName = 'RFT.pdf',
     sessionOverrides = {},
     uploadTitle: rawUploadTitle,
   } = context.req?.body ?? {};
 
-  if (!fileData || !mimeType) throw new Error('Missing fileData or mimeType in request body.');
-  if (mimeType !== 'application/pdf') throw new Error('Tender Response Generator accepts PDF files only.');
-
-  const fileName = sanitiseFileName(String(rawFileName || 'RFT.pdf')) || 'RFT.pdf';
+  if (!fileData || !rawMimeType) throw new Error('Missing fileData or mimeType in request body.');
 
   let uploadTitleStored = null;
   if (typeof rawUploadTitle === 'string' && rawUploadTitle.trim()) {
@@ -276,8 +273,20 @@ async function runTenderResponse(context) {
     uploadTitleStored = t || null;
   }
 
-  const fileBuf  = Buffer.from(fileData, 'base64');
-  const fileHash = crypto.createHash('sha256').update(fileBuf).digest('hex');
+  const clearedFile = await FileIntakeService.fromBase64({
+    fileData,
+    mimeType: rawMimeType,
+    fileName: rawFileName,
+    orgId,
+    userId,
+    source: TOOL_SLUG_DEMO,
+    allowedMimeTypes: ['application/pdf'],
+    maxBytes: adminConfig.max_file_bytes ?? (10 * 1024 * 1024),
+  });
+  const fileBuf  = clearedFile.buffer;
+  const fileHash = clearedFile.sha256;
+  const fileName = clearedFile.fileName;
+  const mimeType = clearedFile.mimeType;
   const ts       = () => new Date().toISOString();
   const trace    = [];
 
@@ -554,6 +563,10 @@ async function runTenderResponse(context) {
 
   const resultData = {
     file_name:            fileName,
+    file_hash:            fileHash,
+    mime_type:            mimeType,
+    file_size:            clearedFile.size,
+    file_scan:            clearedFile.scan,
     upload_title:         uploadTitleStored,
     requirements:         requirementData,
     pending_review_count: pendingCount,

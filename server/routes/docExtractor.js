@@ -37,6 +37,7 @@ const { requireRole }         = require('../middleware/requireRole');
 const AgentConfigService      = require('../platform/AgentConfigService');
 const { cleanString }         = require('../platform/inputGuards');
 const StorageService          = require('../services/StorageService');
+const FileIntakeService       = require('../services/FileIntakeService');
 
 const router = express.Router();
 
@@ -151,18 +152,20 @@ router.post(
       });
     }
 
-    // ── Validate all files before processing any ───────────────────────────
-    for (const f of req.files) {
-      if (!allowedMimes.has(f.mimetype)) {
-        return res.status(400).json({
-          error: `File "${f.originalname}": type "${f.mimetype}" is not allowed. Permitted: ${[...allowedMimes].join(', ')}.`,
-        });
-      }
-      if (f.size > maxBytes) {
-        return res.status(400).json({
-          error: `File "${f.originalname}" is ${(f.size / 1024 / 1024).toFixed(1)} MB — exceeds the ${(maxBytes / 1024 / 1024).toFixed(0)} MB limit.`,
-        });
-      }
+    // ── Validate and clear all files before processing any ─────────────────
+    let clearedFiles;
+    try {
+      clearedFiles = await Promise.all(req.files.map((file) => FileIntakeService.fromMulterFile({
+        file,
+        orgId,
+        userId,
+        source: 'doc-extractor',
+        allowedMimeTypes: [...allowedMimes],
+        maxBytes,
+      })));
+    } catch (err) {
+      const status = err.status || 400;
+      return res.status(status).json({ error: err.message, code: err.code ?? 'file_intake_error' });
     }
 
     // ── Model resolution ───────────────────────────────────────────────────
@@ -224,12 +227,15 @@ router.post(
     const results = [];
     let batchCostAud = 0;
 
-    for (let fi = 0; fi < req.files.length; fi++) {
-      const { originalname, mimetype, buffer } = req.files[fi];
+    for (let fi = 0; fi < clearedFiles.length; fi++) {
+      const clearedFile = clearedFiles[fi];
+      const originalname = clearedFile.fileName;
+      const mimetype = clearedFile.mimeType;
+      const buffer = clearedFile.buffer;
 
       // Label: single file → label as-is; multi-file → label, label-1, label-2, …
       const label = batchLabel
-        ? (req.files.length === 1 ? batchLabel : fi === 0 ? batchLabel : `${batchLabel}-${fi}`)
+        ? (clearedFiles.length === 1 ? batchLabel : fi === 0 ? batchLabel : `${batchLabel}-${fi}`)
         : null;
 
       // Insert pending run — row exists even if extraction crashes
@@ -269,6 +275,13 @@ router.post(
           const excludedSet = new Set(excludedFields);
           result.fields = result.fields.filter((f) => !excludedSet.has(f.name));
         }
+        result.file = {
+          filename:  originalname,
+          mime_type: mimetype,
+          size:      clearedFile.size,
+          sha256:    clearedFile.sha256,
+          scan:      clearedFile.scan,
+        };
 
         // ── S3 storage — fire-and-forget, non-fatal ───────────────────────
         // store_original:  upload raw file bytes before any processing.
@@ -281,10 +294,8 @@ router.post(
         const storageRegion = storageSettings.aws_region ?? process.env.AWS_S3_REGION ?? 'ap-southeast-2';
 
         if (storageSettings.enabled && storageBucket && process.env.AWS_ACCESS_KEY_ID) {
-          const safe = originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-
           if (storageSettings.default_behaviour === 'store_original') {
-            const key = `org/${orgId}/${Date.now()}-${safe}`;
+            const key = FileIntakeService.buildOrgScopedKey(clearedFile);
             StorageService.put({
               bucket:      storageBucket,
               region:      storageRegion,
@@ -302,10 +313,11 @@ router.post(
           } else if (storageSettings.default_behaviour === 'store_redacted') {
             // Upload privacy-stripped extraction result (fields already excluded above).
             // Original document is not stored — only the structured output after PII removal.
-            const key  = `org/${orgId}/${Date.now()}-${safe}.extracted.json`;
+            const key  = FileIntakeService.buildOrgScopedKey(clearedFile, { suffix: '.extracted.json' });
             const body = Buffer.from(JSON.stringify({
               filename:         originalname,
               extracted_at:     new Date().toISOString(),
+              sha256:           clearedFile.sha256,
               document_type:    result.document_type   ?? null,
               fields:           result.fields,           // privacy-stripped
               quality_advisory: result.quality_advisory ?? null,

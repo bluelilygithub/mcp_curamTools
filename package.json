@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "node scripts/smoke/golden-path.mjs",
-    "smoke:golden-path": "node scripts/smoke/golden-path.mjs"
+    "smoke:golden-path": "node scripts/smoke/golden-path.mjs",
+    "check:file-intake": "node scripts/check-file-intake.mjs"
   },
   "repository": {
     "type": "git",

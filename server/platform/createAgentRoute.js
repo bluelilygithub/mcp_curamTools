@@ -208,6 +208,7 @@ function createBudgetAwareEmitter({ emit, adminConfig, budgetContext, taskCostTr
 }
 
 function buildRunContext({
+  slug,
   orgId,
   userId,
   agentConfig,
@@ -221,6 +222,7 @@ function buildRunContext({
   emit,
 }) {
   return {
+    slug,
     orgId,
     userId,
     config: agentConfig,
@@ -545,6 +547,7 @@ function createAgentRoute({ slug, runFn, requiredPermission, rateLimit = 5, trus
         }
 
         const { result, trace, tokensUsed, promptVersion } = await runFn(buildRunContext({
+          slug,
           orgId,
           userId,
           agentConfig,
