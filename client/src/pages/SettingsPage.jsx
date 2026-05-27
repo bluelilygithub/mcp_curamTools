@@ -4,6 +4,7 @@
  * Appearance: theme, body font, heading font, mono font.
  */
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../api/client';
 import useSettingsStore from '../stores/settingsStore';
 import useAuthStore from '../stores/authStore';
@@ -65,6 +66,16 @@ const FIELD = 'w-full px-3 py-2.5 rounded-xl border text-sm outline-none';
 const FIELD_STYLE = { background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' };
 const LABEL = 'block text-xs font-semibold uppercase tracking-wider mb-1.5';
 const LABEL_STYLE = { color: 'var(--color-muted)' };
+const TAB_PARAM = {
+  Profile: 'profile',
+  Appearance: 'appearance',
+  Models: 'models',
+  Budget: 'budget',
+};
+
+function tabFromParam(value) {
+  return Object.entries(TAB_PARAM).find(([, param]) => param === value)?.[0] ?? null;
+}
 
 function Section({ title, children }) {
   return (
@@ -384,15 +395,19 @@ function BudgetTab() {
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = user?.roles?.some((r) => r.name === 'org_admin');
 
   const tabs = isAdmin ? ['Profile', 'Appearance', 'Models', 'Budget'] : ['Profile', 'Appearance'];
-  const [activeTab, setActiveTab] = useState(tabs[0]);
+  const requestedTab = tabFromParam(searchParams.get('tab'));
+  const activeTab = tabs.includes(requestedTab) ? requestedTab : tabs[0];
 
-  // Reset tab if current tab is no longer available (e.g. user loses admin role)
-  useEffect(() => {
-    if (!tabs.includes(activeTab)) setActiveTab(tabs[0]);
-  }, [isAdmin]);
+  function selectTab(tab) {
+    const next = new URLSearchParams(searchParams);
+    if (tab === 'Profile') next.delete('tab');
+    else next.set('tab', TAB_PARAM[tab]);
+    setSearchParams(next, { replace: true });
+  }
 
   return (
     <div className="p-6 max-w-2xl mx-auto">
@@ -406,7 +421,7 @@ export default function SettingsPage() {
         {tabs.map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => selectTab(tab)}
             className="px-4 py-2 text-sm font-medium transition-all"
             style={{
               color:       activeTab === tab ? 'var(--color-primary)' : 'var(--color-muted)',

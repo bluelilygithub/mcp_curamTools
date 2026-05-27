@@ -17,7 +17,7 @@ const ADMIN_GROUPS = [
     description: 'Configure model providers, agents, prompts, and MCP capabilities.',
     items: [
       { title: 'Providers', path: '/admin/providers', icon: 'globe', summary: 'Provider keys, model availability, and routing configuration.' },
-      { title: 'Models', path: '/admin/models', icon: 'layers', summary: 'Model catalogue, capabilities, and pricing assumptions.' },
+      { title: 'Model Defaults', path: '/settings?tab=models', icon: 'layers', summary: 'Set default, fallback, PDF extraction, lesson models, catalogue, capabilities, and pricing.' },
       { title: 'Agents', path: '/admin/agents', icon: 'bot', summary: 'Agent settings, model choices, budgets, and access.' },
       { title: 'MCP Servers', path: '/admin/mcp-servers', icon: 'server', summary: 'Manage connected MCP servers.' },
       { title: 'MCP Resources', path: '/admin/mcp-resources', icon: 'layers', summary: 'Inspect registered resources exposed through MCP.' },

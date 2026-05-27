@@ -18,6 +18,18 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-27 — Breadcrumbs and model settings access
+
+### Built / Fixed
+- **Breadcrumb navigation** (`client/src/components/layout/Breadcrumbs.jsx`): added global breadcrumbs for tool, admin, monitoring, settings, and demo subpages.
+- **Settings deep links** (`client/src/pages/SettingsPage.jsx`): `/settings?tab=models` and other settings tabs now open directly from links.
+- **Admin model access** (`client/src/pages/admin/AdminHubPage.jsx`): the Admin hub model card now opens Settings > Models, where default, fallback, PDF extraction, and lesson model controls all live.
+
+### Why this matters
+The simplified sidebar reduced clutter but made some second-level destinations harder to orient around. Breadcrumbs and direct tab links restore clear navigation without reintroducing the long sidebar.
+
+---
+
 ## 2026-05-27 — Navigation and dashboard IA refresh
 
 ### Built

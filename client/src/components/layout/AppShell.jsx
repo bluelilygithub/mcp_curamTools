@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import TopNav from './TopNav';
 import Sidebar from './Sidebar';
+import Breadcrumbs from './Breadcrumbs';
 import useToolStore from '../../stores/toolStore';
 import useAuthStore from '../../stores/authStore';
 
@@ -49,6 +50,7 @@ export default function AppShell() {
           className="flex-1 overflow-y-auto"
           style={{ background: 'var(--color-bg)' }}
         >
+          <Breadcrumbs />
           <Outlet />
         </main>
       </div>
