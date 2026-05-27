@@ -18,6 +18,20 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-27 — Navigation and dashboard IA refresh
+
+### Built
+- **Simplified sidebar** (`client/src/components/layout/Sidebar.jsx`): replaced the exhaustive tool/admin menu with primary destinations: Home, Tools, Monitoring, Admin, and Settings.
+- **Tool Library** (`client/src/pages/ToolLibraryPage.jsx`): added a searchable, grouped catalogue for available tools so the dashboard and sidebar no longer need to carry every launcher.
+- **Admin Hub** (`client/src/pages/admin/AdminHubPage.jsx`): grouped admin destinations by job-to-be-done across access, AI configuration, knowledge, monitoring, and privacy/system controls.
+- **Home dashboard refresh** (`client/src/pages/DashboardPage.jsx`): replaced the flat launcher grid with next actions, common workflows, and grouped tool areas.
+- **Top nav search** (`client/src/components/layout/TopNav.jsx`): search now opens the Tool Library with the query applied instead of acting as a non-functional visual control.
+
+### Why this matters
+The admin experience had become crowded as tools and system controls accumulated in one sidebar. The new structure keeps frequent navigation calm while preserving access to detailed pages through dedicated hubs.
+
+---
+
 ## 2026-05-27 — Budget ceiling UI + nightly cost alert
 
 ### Built

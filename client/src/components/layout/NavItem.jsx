@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useIcon } from '../../providers/IconProvider';
 
 /**
@@ -7,20 +7,25 @@ import { useIcon } from '../../providers/IconProvider';
  * Icon colour inherits from parent via color: inherit.
  * mx-2 inset keeps tint away from sidebar edges.
  */
-export default function NavItem({ to, icon, label, collapsed, onClick }) {
+export default function NavItem({ to, icon, label, collapsed, onClick, activeWhen }) {
   const getIcon = useIcon();
+  const location = useLocation();
+  const forcedActive = activeWhen ? activeWhen(location.pathname) : undefined;
 
   return (
     <NavLink
       to={to}
       onClick={onClick}
       className="flex items-center gap-2.5 px-3 py-2 mx-2 rounded-lg transition-all text-sm"
-      style={({ isActive }) => ({
-        background: isActive ? 'rgba(var(--color-primary-rgb), 0.1)' : 'transparent',
-        color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
-        fontWeight: isActive ? 600 : 400,
-        textDecoration: 'none',
-      })}
+      style={({ isActive }) => {
+        const active = forcedActive ?? isActive;
+        return {
+          background: active ? 'rgba(var(--color-primary-rgb), 0.1)' : 'transparent',
+          color: active ? 'var(--color-primary)' : 'var(--color-text)',
+          fontWeight: active ? 600 : 400,
+          textDecoration: 'none',
+        };
+      }}
     >
       <span className="shrink-0" style={{ color: 'inherit' }}>
         {getIcon(icon, { size: 15 })}

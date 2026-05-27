@@ -4,16 +4,23 @@
  * CSS vars only — no hardcoded Tailwind colour classes.
  */
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useIcon } from '../../providers/IconProvider';
 import useAuthStore from '../../stores/authStore';
 
 export default function TopNav({ onMenuClick }) {
   const getIcon = useIcon();
+  const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const [searchValue, setSearchValue] = useState('');
 
   const primaryRole = user?.roles?.find((r) => r.scope_type === 'global')?.name;
   const isAdmin = primaryRole === 'org_admin';
+  const handleSearch = (event) => {
+    event.preventDefault();
+    const term = searchValue.trim();
+    navigate(term ? `/tools?search=${encodeURIComponent(term)}` : '/tools');
+  };
 
   return (
     <header
@@ -43,7 +50,8 @@ export default function TopNav({ onMenuClick }) {
 
       {/* Search — centred */}
       <div className="flex-1 flex justify-center">
-        <div
+        <form
+          onSubmit={handleSearch}
           className="relative hidden md:flex items-center w-full max-w-xs"
         >
           <span
@@ -53,8 +61,8 @@ export default function TopNav({ onMenuClick }) {
             {getIcon('search', { size: 14 })}
           </span>
           <input
-            type="text"
-            placeholder="Search…"
+            type="search"
+            placeholder="Search tools..."
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
             className="w-full pl-8 pr-3 py-1.5 rounded-xl text-sm outline-none"
@@ -64,7 +72,7 @@ export default function TopNav({ onMenuClick }) {
               color: 'var(--color-text)',
             }}
           />
-        </div>
+        </form>
       </div>
 
       {/* Right section */}

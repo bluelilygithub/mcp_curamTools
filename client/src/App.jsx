@@ -13,7 +13,9 @@ import DecisionLogPage from './pages/demo/DecisionLogPage';
 import TransactionLogPage from './pages/logs/TransactionLogPage';
 import AgentEventLogPage from './pages/logs/AgentEventLogPage';
 import DashboardPage from './pages/DashboardPage';
+import ToolLibraryPage from './pages/ToolLibraryPage';
 import SettingsPage from './pages/SettingsPage';
+import AdminHubPage from './pages/admin/AdminHubPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
 import AdminOrganizationsPage from './pages/admin/AdminOrganizationsPage';
 import AdminModelsPage from './pages/admin/AdminModelsPage';
@@ -71,6 +73,7 @@ export default function App() {
               <Route element={<OrgShell />}>
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/tools" element={<ToolLibraryPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/tools/google-ads-monitor"    element={<GoogleAdsMonitorPage />} />
                 <Route path="/tools/diamondplate-data"     element={<DiamondPlateDataPage />} />
@@ -85,6 +88,7 @@ export default function App() {
 
                 {/* Admin-only */}
                 <Route element={<RequireRole allowedRoles={['org_admin']} />}>
+                  <Route path="/admin" element={<AdminHubPage />} />
                   <Route path="/admin/organizations" element={<AdminOrganizationsPage />} />
                   <Route path="/admin/users" element={<AdminUsersPage />} />
                   <Route path="/admin/models" element={<AdminModelsPage />} />
