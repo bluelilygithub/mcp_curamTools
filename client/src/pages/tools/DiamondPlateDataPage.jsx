@@ -916,6 +916,7 @@ export default function DiamondPlateDataPage() {
           />
         </div>
       )}
+      <ProcessingModal isOpen={running} />
     </div>
   );
 }

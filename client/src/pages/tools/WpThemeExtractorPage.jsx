@@ -8,6 +8,7 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../../api/client';
 import InlineBanner from '../../components/ui/InlineBanner';
 import { fmtDate } from '../../utils/date';
+import ProcessingModal from '../../components/shared/ProcessingModal';
 
 const AGENT_SLUG = 'wp-theme-extractor';
 
@@ -684,6 +685,7 @@ export default function WpThemeExtractorPage() {
           />
         </div>
       )}
+      <ProcessingModal isOpen={running} />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../../api/client';
 import EmptyState from '../../components/ui/EmptyState';
 import { useIcon } from '../../providers/IconProvider';
+import ProcessingModal from '../../components/shared/ProcessingModal';
 
 const PRIORITY_ORDER = ['high', 'medium', 'low'];
 
@@ -502,6 +503,7 @@ export default function HighIntentAdvisorPage() {
           <HistoryTab history={history} />
         )}
       </div>
+      <ProcessingModal isOpen={running} />
     </div>
   );
 }

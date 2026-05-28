@@ -10,6 +10,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../../api/client';
 import useAuthStore from '../../stores/authStore';
 import { fmtDate } from '../../utils/date';
+import ProcessingModal from '../../components/shared/ProcessingModal';
 
 const PAGE_SIZE = 20;
 
@@ -673,6 +674,7 @@ export default function DocExtractorPage() {
           </div>
         )}
       </div>
+      <ProcessingModal isOpen={uploading} />
     </div>
   );
 }

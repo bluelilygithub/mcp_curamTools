@@ -16,6 +16,7 @@ import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
 import InlineBanner from '../../components/ui/InlineBanner';
 import { fmtDate } from '../../utils/date';
 import { exportPdf, exportText } from '../../utils/exportService';
+import ProcessingModal from '../../components/shared/ProcessingModal';
 
 const AGENT_SLUG = 'not-interested-report';
 
@@ -500,7 +501,7 @@ export default function NotInterestedReportPage() {
           />
         </div>
       )}
-
+      <ProcessingModal isOpen={running} />
     </div>
   );
 }

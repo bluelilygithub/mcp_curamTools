@@ -19,6 +19,7 @@ import DaypartIntelligenceCard from './GoogleAdsMonitor/DaypartIntelligenceCard'
 import AiVisibilityTab from './GoogleAdsMonitor/AiVisibilityTab';
 import BoundsWarningPanel from '../../components/ui/BoundsWarningPanel';
 import DataGapsPanel from '../../components/ui/DataGapsPanel';
+import ProcessingModal from '../../components/shared/ProcessingModal';
 
 const AGENT_SLUG = 'google-ads-monitor';
 
@@ -1036,6 +1037,7 @@ export default function GoogleAdsMonitorPage() {
           onSend={handleEmail}
         />
       )}
+      <ProcessingModal isOpen={running} />
     </div>
   );
 }
