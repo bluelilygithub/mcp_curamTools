@@ -780,6 +780,15 @@ async function initSchema() {
     // Seed admin user from env
     await seedAdminUser();
 
+    // Data patch: doc-extractor max_tokens stored at old default of 4096 — bump to 16384.
+    // Dense engineering documents with 100+ fields truncate JSON at 4096 output tokens.
+    await client.query(`
+      UPDATE system_settings
+         SET value = jsonb_set(value, '{max_tokens}', '16384'::jsonb)
+       WHERE key = 'agent_doc_extractor'
+         AND (value->>'max_tokens')::int <= 4096
+    `);
+
     console.log('[db] Schema initialised');
   } catch (err) {
     await client.query('ROLLBACK');

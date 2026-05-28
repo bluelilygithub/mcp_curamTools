@@ -18,6 +18,14 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-28 — Doc extractor max_tokens bump (dense document fix)
+
+### Fixed
+- **DB data patch in `initSchema`**: stored `agent_doc_extractor` configs with `max_tokens ≤ 4096` are bumped to 16384. The old default (4096) was persisted in the DB and overrode the new ADMIN_DEFAULTS value, causing JSON truncation on dense engineering documents with 100+ fields.
+- **`ADMIN_DEFAULTS['doc-extractor'].max_tokens`** raised from 8192 to 16384 for new installs.
+
+---
+
 ## 2026-05-28 — Document extractor config fallback
 
 ### Fixed
