@@ -16,6 +16,7 @@ import VelocityDashboard from './DiamondPlate/VelocityDashboard';
 import GeoHeatmapTab from './DiamondPlate/GeoHeatmapTab';
 import { fmtDate } from '../../utils/date';
 import { exportPdf, exportText } from '../../utils/exportService';
+import ProcessingModal from '../../components/shared/ProcessingModal';
 
 const AGENT_SLUG              = 'diamondplate-data';
 const VELOCITY_AGENT_SLUG     = 'lead-velocity';
