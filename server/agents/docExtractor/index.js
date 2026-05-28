@@ -136,11 +136,20 @@ function findJsonObjectSlice(text) {
 }
 
 function parseExtractionJson(text) {
+  const slice = findJsonObjectSlice(text);
   try {
-    return JSON.parse(findJsonObjectSlice(text));
-  } catch (err) {
-    const preview = String(text ?? '').slice(0, 500);
-    throw new Error(`Model returned invalid JSON (${err.message}): ${preview}`);
+    return JSON.parse(slice);
+  } catch {
+    // Model output contains unescaped newlines, literal quotes, or other control
+    // characters in string values (common in legal/contract documents). jsonrepair
+    // fixes the most frequent structural issues without altering field values.
+    try {
+      const { jsonrepair } = require('jsonrepair');
+      return JSON.parse(jsonrepair(slice));
+    } catch (err) {
+      const preview = String(text ?? '').slice(0, 500);
+      throw new Error(`Model returned invalid JSON (${err.message}): ${preview}`);
+    }
   }
 }
 
