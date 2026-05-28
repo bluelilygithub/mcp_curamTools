@@ -26,6 +26,23 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-28 — Tiered extraction validation pipeline
+
+### Fixed
+- Validation model errors and slow provider calls now fail closed into `needs_review_validation_error` audit records instead of throwing through document extraction routes. `EXTRACTION_VALIDATION_TIMEOUT_MS` can tune the validation timeout; default is 20 seconds.
+
+### Built
+- **`ExtractionValidationService`** (`server/services/ExtractionValidationService.js`): validates structured extraction output, logs confidence/issue types/routing, escalates to the globally configured stronger model when below threshold, and marks human review only after escalation also fails.
+- **Global settings** (`/api/settings/tiered-validation`): org admins can set the platform default confidence threshold and escalation model. Agent settings only toggle validation and optionally override the threshold.
+- **Agent migrations:** `docExtractor`, `demo-document-analyzer`, `spec-validator`, and `demo-tender-response` now attach `tiered_validation` audit data to run results. Engineering-grade spec/tender agents default to enabled; standard document/demo paths default off.
+- **Admin UI:** Settings > Models now includes tiered validation defaults; Admin > Agents shows per-agent validation toggles/threshold overrides for file-capable agents.
+- **PR check:** `npm run check:file-intake` now also flags file agents that clear bytes but do not log tiered extraction validation.
+
+### Why this matters
+The platform now has an auditable cost-control path for file agents: cheap extraction is accepted when confidence is high, escalated automatically when confidence is lower, and routed to human review only when both model passes fail to clear the configured confidence bar.
+
+---
+
 ## 2026-05-28 — Document extractor config fallback
 
 ### Fixed

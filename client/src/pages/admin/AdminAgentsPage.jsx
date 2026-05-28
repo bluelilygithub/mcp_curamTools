@@ -79,6 +79,14 @@ const SYSTEM_ROLE_OPTIONS = [
   { name: 'ads_operator', label: 'Ads Operator' },
 ];
 
+const TIERED_VALIDATION_AGENT_SLUGS = new Set([
+  'doc-extractor',
+  'demo-document-analyzer',
+  'spec-validator',
+  'demo-spec-validator',
+  'demo-tender-response',
+]);
+
 // ── Doc Extractor — file upload settings ─────────────────────────────────────
 
 const ALL_MIME_TYPES = [
@@ -208,6 +216,65 @@ function DocExtractorSettingsSection({ config, onChange }) {
         </select>
         <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
           Higher DPI improves accuracy on handwritten forms and low-quality scans.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function TieredValidationSection({ config, onChange }) {
+  const enabled = config.tiered_validation_enabled === true;
+  const override = config.tiered_validation_threshold_override;
+  const hasOverride = override !== null && override !== undefined && override !== '';
+
+  function setOverride(value) {
+    if (value === '') {
+      onChange({ ...config, tiered_validation_threshold_override: null });
+      return;
+    }
+    const n = Math.max(0, Math.min(1, parseFloat(value) || 0));
+    onChange({ ...config, tiered_validation_threshold_override: n });
+  }
+
+  return (
+    <div className="space-y-4 pt-4" style={{ borderTop: '1px solid var(--color-border)' }}>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Tiered Extraction Validation</h3>
+          <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+            Validates extraction quality, escalates to the globally configured stronger model when confidence is low, and logs every routing decision.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange({ ...config, tiered_validation_enabled: !enabled })}
+          className="relative inline-flex h-5 w-9 rounded-full transition-all flex-shrink-0"
+          style={{ background: enabled ? 'var(--color-primary)' : '#94a3b8' }}
+        >
+          <span
+            className="absolute top-0.5 left-0.5 h-4 w-4 rounded-full transition-all"
+            style={{ background: '#fff', transform: enabled ? 'translateX(16px)' : 'translateX(0)' }}
+          />
+        </button>
+      </div>
+
+      <div style={{ maxWidth: 320 }}>
+        <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
+          Confidence threshold override
+        </label>
+        <input
+          type="number"
+          min="0"
+          max="1"
+          step="0.01"
+          value={hasOverride ? override : ''}
+          onChange={(e) => setOverride(e.target.value)}
+          placeholder="Inherit global default"
+          className={inputCls}
+          style={inputStyle}
+        />
+        <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+          Leave blank to inherit the global threshold from Settings › Models.
         </p>
       </div>
     </div>
@@ -527,6 +594,10 @@ function AgentCard({ agent, models, roleOptions, onSave, isOpen, onToggle }) {
       </div>
 
       <IntelligenceProfileSection slug={agent.slug} profile={profile} onChange={setProfile} />
+
+      {TIERED_VALIDATION_AGENT_SLUGS.has(agent.slug) && (
+        <TieredValidationSection config={config} onChange={setConfig} />
+      )}
 
       {agent.slug === 'doc-extractor' && (
         <DocExtractorSettingsSection config={config} onChange={setConfig} />

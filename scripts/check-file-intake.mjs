@@ -27,20 +27,33 @@ async function walk(dir) {
 }
 
 const files = await walk(agentRoot);
-const offenders = [];
+const intakeOffenders = [];
+const validationOffenders = [];
 
 for (const file of files) {
   const text = await fs.readFile(file, 'utf8');
   const acceptsFileBytes = FILE_INPUT_PATTERNS.some((pattern) => pattern.test(text));
   const usesFileIntake = /FileIntakeService/.test(text);
+  const usesExtractionValidation = /ExtractionValidationService/.test(text);
   if (acceptsFileBytes && !usesFileIntake) {
-    offenders.push(path.relative(repoRoot, file));
+    intakeOffenders.push(path.relative(repoRoot, file));
+  }
+  if (acceptsFileBytes && usesFileIntake && !usesExtractionValidation) {
+    validationOffenders.push(path.relative(repoRoot, file));
   }
 }
 
-if (offenders.length > 0) {
+if (intakeOffenders.length > 0) {
   console.error('Agents that accept file bytes must use server/services/FileIntakeService.js:');
-  for (const offender of offenders) console.error(`- ${offender}`);
+  for (const offender of intakeOffenders) console.error(`- ${offender}`);
+}
+
+if (validationOffenders.length > 0) {
+  console.error('Agents that clear file bytes must log tiered validation via server/services/ExtractionValidationService.js:');
+  for (const offender of validationOffenders) console.error(`- ${offender}`);
+}
+
+if (intakeOffenders.length > 0 || validationOffenders.length > 0) {
   process.exit(1);
 }
 

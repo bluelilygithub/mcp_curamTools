@@ -87,6 +87,7 @@ export default function ModelsTab() {
   const [fallbackModel,       setFallbackModel]       = useState(null);
   const [pdfExtractionModel,  setPdfExtractionModel]  = useState(null);
   const [lessonModel,         setLessonModel]         = useState(null);
+  const [tieredValidation,    setTieredValidation]    = useState({ confidence_threshold: 0.85, escalation_model: null });
   const [savingDefaults,      setSavingDefaults]      = useState(false);
   const [testResults,         setTestResults]         = useState({});
 
@@ -98,13 +99,18 @@ export default function ModelsTab() {
       api.get('/settings/default-model'),
       api.get('/settings/fallback-model'),
       api.get('/settings/lesson-model'),
+      api.get('/settings/tiered-validation'),
       api.get('/admin/agents/spec-validator').catch(() => null),
-    ]).then(([modelData, statusData, defaultData, fallbackData, lessonData, svConfig]) => {
+    ]).then(([modelData, statusData, defaultData, fallbackData, lessonData, validationData, svConfig]) => {
       setModels(modelData);
       setApiKeyOk(statusData);
       setDefaultModel(defaultData.model_id ?? null);
       setFallbackModel(fallbackData.model_id ?? null);
       setLessonModel(lessonData.model_id ?? null);
+      setTieredValidation({
+        confidence_threshold: validationData.confidence_threshold ?? 0.85,
+        escalation_model: validationData.escalation_model ?? null,
+      });
       setPdfExtractionModel(svConfig?.model ?? null);
     }).catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -121,6 +127,7 @@ export default function ModelsTab() {
         api.put('/admin/agents/demo-document-analyzer', { model: pdfExtractionModel || null }),
         api.put('/admin/agents/demo-tender-response',   { model: pdfExtractionModel || null }),
         api.put('/settings/lesson-model', { model_id: lessonModel || null }),
+        api.put('/settings/tiered-validation', tieredValidation),
       ]);
       setSuccess('Models saved.');
     } catch (e) {
@@ -243,6 +250,8 @@ export default function ModelsTab() {
   const fallbackModelObj = models.find((m) => m.id === fallbackModel);
   const pdfExtractionModelObj = models.find((m) => m.id === pdfExtractionModel);
   const lessonModelObj = models.find((m) => m.id === lessonModel);
+  const validationModelObj = models.find((m) => m.id === tieredValidation.escalation_model);
+  const validationModelIsInactive = tieredValidation.escalation_model && !activeModels.some((m) => m.id === tieredValidation.escalation_model);
 
   const fi = {
     width: '100%', padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
@@ -375,6 +384,57 @@ export default function ModelsTab() {
             <Button variant="primary" onClick={saveDefaults} disabled={savingDefaults}>
               {savingDefaults ? 'Saving…' : 'Save defaults'}
             </Button>
+          </div>
+        </Section>
+      )}
+
+      {!loading && (
+        <Section title="Tiered Extraction Validation">
+          <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+            File-capable agents can validate cheap extraction output automatically. Agents opt in individually; this global model and threshold define the shared escalation baseline.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={LABEL} style={LABEL_STYLE}>Escalation model</label>
+              <select
+                value={tieredValidation.escalation_model ?? ''}
+                onChange={(e) => setTieredValidation((c) => ({ ...c, escalation_model: e.target.value || null }))}
+                className={FIELD}
+                style={{
+                  ...FIELD_STYLE,
+                  borderColor: validationModelIsInactive ? '#fca5a5' : 'var(--color-border)',
+                }}
+              >
+                <option value="">— No escalation model —</option>
+                {validationModelIsInactive && validationModelObj && (
+                  <option value={validationModelObj.id} disabled style={{ color: '#991b1b' }}>
+                    ⚠ {validationModelObj.name} (inactive)
+                  </option>
+                )}
+                {activeModels.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name} — {m.id}</option>
+                ))}
+              </select>
+              {validationModelIsInactive && (
+                <p className="text-xs mt-1" style={{ color: '#991b1b' }}>⚠ Escalation model is inactive</p>
+              )}
+            </div>
+            <div>
+              <label className={LABEL} style={LABEL_STYLE}>Default confidence threshold</label>
+              <input
+                type="number"
+                min="0"
+                max="1"
+                step="0.01"
+                value={tieredValidation.confidence_threshold}
+                onChange={(e) => setTieredValidation((c) => ({ ...c, confidence_threshold: parseFloat(e.target.value) || 0 }))}
+                className={FIELD}
+                style={FIELD_STYLE}
+              />
+              <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+                Agents inherit this unless they set an override in Admin › Agents.
+              </p>
+            </div>
           </div>
         </Section>
       )}

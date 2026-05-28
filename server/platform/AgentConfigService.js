@@ -122,6 +122,8 @@ const ADMIN_DEFAULTS = {
     // PDF processing
     max_pdf_pages:        10,               // pages processed per PDF (cost control)
     pdf_dpi:              150,              // rasterisation quality: 100 | 150 | 200
+    tiered_validation_enabled: false,
+    tiered_validation_threshold_override: null,
   },
   'ai-visibility-monitor': {
     enabled:             true,
@@ -203,6 +205,8 @@ const ADMIN_DEFAULTS = {
     max_tokens:          16384,  // extracted_text capped to 4k chars; findings + summary need headroom for long contracts
     max_task_budget_aud: 1.00,   // single vision call; low ceiling appropriate for demo
     fallback_model:      null,
+    tiered_validation_enabled: false,
+    tiered_validation_threshold_override: null,
   },
   'spec-validator': {
     enabled:             true,
@@ -210,6 +214,8 @@ const ADMIN_DEFAULTS = {
     max_tokens:          8192,   // extraction + synthesis JSON can be large
     max_task_budget_aud: 2.00,
     fallback_model:      null,
+    tiered_validation_enabled: true,
+    tiered_validation_threshold_override: 0.9,
   },
   'demo-spec-validator': {
     enabled:             true,
@@ -217,6 +223,8 @@ const ADMIN_DEFAULTS = {
     max_tokens:          8192,
     max_task_budget_aud: 2.00,
     fallback_model:      null,
+    tiered_validation_enabled: true,
+    tiered_validation_threshold_override: 0.9,
   },
   'nightly-cost-alert': {
     enabled:             true,
@@ -232,6 +240,8 @@ const ADMIN_DEFAULTS = {
     max_tokens:          16384,  // Stage 3 drafts 10+ requirements — needs headroom
     max_task_budget_aud: 3.00,   // three model calls: vision extraction + compliance + synthesis
     fallback_model:      null,
+    tiered_validation_enabled: true,
+    tiered_validation_threshold_override: 0.88,
   },
   _platform: {
     enabled: true,
@@ -965,6 +975,11 @@ const PLATFORM_BUDGET_DEFAULTS = {
   max_daily_org_budget_aud: null, // null = unlimited
 };
 
+const TIERED_VALIDATION_DEFAULTS = {
+  confidence_threshold: 0.85,
+  escalation_model: null,
+};
+
 /**
  * Returns org-level budget settings. Stored in system_settings under 'platform_budget'.
  * Separate from agent admin config — this is an org-wide guardrail, not per-agent.
@@ -992,6 +1007,45 @@ async function updateOrgBudgetSettings(orgId, patch, updatedBy) {
   await pool.query(
     `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
      VALUES ($1, 'platform_budget', $2, $3, NOW())
+     ON CONFLICT (org_id, key)
+     DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+    [orgId, JSON.stringify(merged), updatedBy]
+  );
+  return merged;
+}
+
+// ── Org-level tiered extraction validation settings ─────────────────────────
+
+async function getTieredValidationSettings(orgId) {
+  try {
+    const res = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'tiered_validation_settings' LIMIT 1`,
+      [orgId]
+    );
+    if (res.rows.length === 0) return { ...TIERED_VALIDATION_DEFAULTS };
+    return { ...TIERED_VALIDATION_DEFAULTS, ...(res.rows[0].value || {}) };
+  } catch (err) {
+    console.error('[AgentConfigService] getTieredValidationSettings error:', err.message);
+    return { ...TIERED_VALIDATION_DEFAULTS };
+  }
+}
+
+async function updateTieredValidationSettings(orgId, patch, updatedBy) {
+  const current = await getTieredValidationSettings(orgId);
+  const nextThreshold = patch.confidence_threshold;
+  const merged = {
+    ...current,
+    ...patch,
+    confidence_threshold: nextThreshold == null
+      ? current.confidence_threshold
+      : Math.max(0, Math.min(1, Number(nextThreshold))),
+    escalation_model: patch.escalation_model === undefined
+      ? current.escalation_model
+      : (patch.escalation_model || null),
+  };
+  await pool.query(
+    `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+     VALUES ($1, 'tiered_validation_settings', $2, $3, NOW())
      ON CONFLICT (org_id, key)
      DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
     [orgId, JSON.stringify(merged), updatedBy]
@@ -1269,6 +1323,8 @@ module.exports = {
   updateOrgFallbackModel,
   getOrgLessonModel,
   updateOrgLessonModel,
+  getTieredValidationSettings,
+  updateTieredValidationSettings,
   getCompanyProfile,
   updateCompanyProfile,
   getAgentConfig,
@@ -1296,6 +1352,7 @@ module.exports = {
   MODEL_DEFAULTS,
   AGENT_DEFAULTS,
   ADMIN_DEFAULTS,
+  TIERED_VALIDATION_DEFAULTS,
   AGENT_MODEL_REQUIREMENTS,
   getRecommendedModel,
   normalizeModelList,

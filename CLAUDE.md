@@ -35,6 +35,8 @@ The following rules are project guardrails for all AI agents working in this rep
 
 **File intake** — any route or agent that accepts uploaded/base64 file bytes must clear them through `server/services/FileIntakeService.js` before parsing, model calls, DB persistence, or S3 upload. Do not read request buffers directly in agents. The service owns magic-byte MIME validation, size caps, filename sanitisation, org scope, SHA-256 fingerprinting, and optional ClamAV scanning.
 
+**Tiered extraction validation** — any file/document agent that extracts or interprets uploaded content must log a tiered validation decision via `server/services/ExtractionValidationService.js`. The agent setting only toggles whether validation runs and may override the threshold; the escalation model and default confidence threshold are global admin settings. Human review is only a final safety net after escalation fails to meet threshold.
+
 **agent_runs** — written only via `persistRun`. No direct INSERT from agent or route code.
 
 **agent_configs** — read and written only via `AgentConfigService`. No direct table queries from agent or route code.

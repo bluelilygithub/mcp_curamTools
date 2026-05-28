@@ -6,6 +6,7 @@
  *   Models        GET/PUT /api/settings/models
  *   Default model GET/PUT /api/settings/default-model
  *   Fallback model GET/PUT /api/settings/fallback-model
+ *   Tiered validation GET/PUT /api/settings/tiered-validation
  *   Model test    POST    /api/settings/models/:modelId/test
  *   Model status  GET     /api/settings/model-status
  */
@@ -149,6 +150,37 @@ router.put('/lesson-model', async (req, res) => {
     res.json({ model_id: modelId });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update lesson model.' });
+  }
+});
+
+// ── Tiered extraction validation ─────────────────────────────────────────────
+
+router.get('/tiered-validation', async (req, res) => {
+  try {
+    const settings = await AgentConfigService.getTieredValidationSettings(req.user.orgId);
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load tiered validation settings.' });
+  }
+});
+
+router.put('/tiered-validation', async (req, res) => {
+  try {
+    const threshold = req.body.confidence_threshold;
+    const patch = {
+      escalation_model: req.body.escalation_model || null,
+    };
+    if (threshold !== undefined) {
+      const n = Number(threshold);
+      if (!Number.isFinite(n) || n < 0 || n > 1) {
+        return res.status(400).json({ error: 'confidence_threshold must be between 0 and 1.' });
+      }
+      patch.confidence_threshold = n;
+    }
+    const settings = await AgentConfigService.updateTieredValidationSettings(req.user.orgId, patch, req.user.id);
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update tiered validation settings.' });
   }
 });
 
