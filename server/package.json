@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "test:file-intake": "node --test services/FileIntakeService.test.js"
+    "test:file-intake": "node --test services/FileIntakeService.test.js",
+    "test:doc-extractor": "node --test agents/docExtractor/index.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

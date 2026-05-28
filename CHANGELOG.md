@@ -23,6 +23,7 @@ If a session changes both platform and one agent, **one root entry** is enough u
 ### Fixed
 - **`GET /api/doc-extractor/config`** now falls back to the recommended vision-capable model if the organisation default model is incompatible with `doc-extractor`'s hard vision requirement.
 - **`POST /api/doc-extractor/extract`** now returns a clear JSON `503` when no usable vision model exists instead of letting config resolution throw through the route.
+- **Doc Extractor JSON parsing** now accepts fenced JSON responses and reports incomplete/truncated JSON explicitly. The default output token budget increased to 8192 for dense multi-field documents.
 
 ### Why this matters
 The page config endpoint should not fail just because the organisation-wide default model is text-only. Document Extractor can safely use its recommended vision model while the rest of the platform keeps the global default.

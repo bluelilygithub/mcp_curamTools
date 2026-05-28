@@ -112,7 +112,7 @@ const ADMIN_DEFAULTS = {
   'doc-extractor': {
     enabled:             true,
     model:               null,
-    max_tokens:          4096, // 2048 was too low for complex multi-field documents
+    max_tokens:          8192, // complex multi-field documents can otherwise truncate JSON
     max_task_budget_aud: 0.50, // single image, single call — low ceiling
     fallback_model:      null,
     // File upload constraints — configurable per-org
