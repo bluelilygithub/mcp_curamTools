@@ -72,6 +72,7 @@ router.get('/search', async (req, res) => {
       order,
       maxResults: '20',
       safeSearch: 'moderate',
+      videoEmbeddable: 'true',
       key,
     });
     if (duration && duration !== 'any') searchParams.set('videoDuration', duration);

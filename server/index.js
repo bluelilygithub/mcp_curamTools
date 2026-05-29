@@ -20,6 +20,7 @@ app.use(helmet({
       imgSrc:     ["'self'", 'data:', 'blob:', 'https://fal.media', 'https://cdn.fal.run', 'https://storage.fal.run', 'https://*.tile.openstreetmap.org', 'https://*.basemaps.cartocdn.com', 'https://i.ytimg.com'],
       mediaSrc:   ["'self'", 'blob:', 'https://fal.media', 'https://cdn.fal.run', 'https://storage.fal.run'],
       frameSrc:   ['https://www.youtube-nocookie.com', 'https://www.youtube.com'],
+      childSrc:   ['https://www.youtube-nocookie.com', 'https://www.youtube.com'],
     },
   },
 }));
