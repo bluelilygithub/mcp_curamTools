@@ -84,6 +84,9 @@ import {
   List,
   MessageCircle,
   FileCheck,
+  Youtube,
+  FileSearch,
+  Layout,
 } from 'lucide-react';
 
 const semanticMap = {
@@ -194,6 +197,10 @@ const semanticMap = {
 
   // Lists
   list: List,
+
+  youtube: Youtube,
+  'file-search': FileSearch,
+  layout: Layout,
 
   // Communication
   'message-circle': MessageCircle,

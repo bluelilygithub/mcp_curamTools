@@ -772,6 +772,45 @@ async function initSchema() {
       )
     `);
 
+    // ── YouTube Search ─────────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS youtube_search_history (
+        id           SERIAL      PRIMARY KEY,
+        user_id      INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        org_id       INTEGER     NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        query        TEXT        NOT NULL,
+        filters      JSONB       NOT NULL DEFAULT '{}',
+        result_count INTEGER     NOT NULL DEFAULT 0,
+        created_at   TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_yt_search_history_user
+        ON youtube_search_history(user_id, created_at DESC)
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS youtube_favourites (
+        id           SERIAL      PRIMARY KEY,
+        user_id      INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        org_id       INTEGER     NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        video_id     TEXT        NOT NULL,
+        title        TEXT        NOT NULL,
+        channel      TEXT,
+        thumbnail    TEXT,
+        duration     TEXT,
+        view_count   TEXT,
+        published_at TIMESTAMPTZ,
+        created_at   TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_yt_favourites_user_video
+        ON youtube_favourites(user_id, video_id)
+    `);
+
     await client.query('COMMIT');
 
     // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)

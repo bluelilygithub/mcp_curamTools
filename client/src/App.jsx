@@ -25,6 +25,7 @@ const AdsSetupArchitectPage         = lazy(() => import('./pages/profitabilitySu
 const CampaignDashboardPage         = lazy(() => import('./pages/tools/CampaignDashboardPage'));
 const WpThemeExtractorPage          = lazy(() => import('./pages/tools/WpThemeExtractorPage'));
 const SpecValidatorPage             = lazy(() => import('./pages/tools/SpecValidatorPage'));
+const YouTubeSearchPage             = lazy(() => import('./pages/tools/YouTubeSearchPage'));
 
 const AdminHubPage                  = lazy(() => import('./pages/admin/AdminHubPage'));
 const AdminUsersPage                = lazy(() => import('./pages/admin/AdminUsersPage'));
@@ -102,6 +103,7 @@ export default function App() {
                     <Route path="/tools/campaign-dashboard"      element={<CampaignDashboardPage />} />
                     <Route path="/tools/wp-theme-extractor"      element={<WpThemeExtractorPage />} />
                     <Route path="/tools/spec-validator"          element={<SpecValidatorPage />} />
+                    <Route path="/tools/youtube"                 element={<YouTubeSearchPage />} />
 
                     {/* Admin-only */}
                     <Route element={<RequireRole allowedRoles={['org_admin']} />}>

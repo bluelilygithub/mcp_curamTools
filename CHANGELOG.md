@@ -18,6 +18,17 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-30 — YouTube Search feature
+
+### Built
+- **`server/routes/youtube.js`** — YouTube Data API v3 integration. Routes: `GET /search` (query + filters, persists to history), `GET/DELETE /history`, `GET/POST/DELETE /favourites`. Uses `https.request` throughout (Railway-safe). Env: `YOUTUBE_API_KEY`.
+- **`server/db.js`** — Two new tables: `youtube_search_history` (user/org/query/filters/result_count) and `youtube_favourites` (user/org/video metadata, unique per user+video).
+- **`server/index.js`** — Mounted `/api/youtube` route; added `i.ytimg.com` to CSP `imgSrc` and YouTube domains to CSP `frameSrc` for embed player.
+- **`client/src/pages/tools/YouTubeSearchPage.jsx`** — Full-featured page: search form with order/duration/date filters, responsive video card grid, favourites list, search history with re-run, YouTube embed modal (youtube-nocookie.com), heart save/unsave per card and per modal.
+- **`client/src/components/layout/TopNav.jsx`** — YouTube icon button in top bar (red when active, links to `/tools/youtube`).
+- **`client/src/providers/IconProvider.jsx`** — Added `Youtube`, `FileSearch`, `Layout` from lucide-react.
+- **`client/src/App.jsx`** — Added lazy import + route for `/tools/youtube`.
+
 ## 2026-05-29 — Modern dashboard with activity feed and charts
 
 ### Built

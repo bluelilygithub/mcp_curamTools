@@ -17,8 +17,9 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", 'fonts.googleapis.com', 'fonts.gstatic.com'],
       fontSrc: ["'self'", 'fonts.gstatic.com'],
       connectSrc: ["'self'"],
-      imgSrc:     ["'self'", 'data:', 'blob:', 'https://fal.media', 'https://cdn.fal.run', 'https://storage.fal.run', 'https://*.tile.openstreetmap.org', 'https://*.basemaps.cartocdn.com'],
+      imgSrc:     ["'self'", 'data:', 'blob:', 'https://fal.media', 'https://cdn.fal.run', 'https://storage.fal.run', 'https://*.tile.openstreetmap.org', 'https://*.basemaps.cartocdn.com', 'https://i.ytimg.com'],
       mediaSrc:   ["'self'", 'blob:', 'https://fal.media', 'https://cdn.fal.run', 'https://storage.fal.run'],
+      frameSrc:   ['https://www.youtube-nocookie.com', 'https://www.youtube.com'],
     },
   },
 }));
@@ -65,6 +66,7 @@ app.use('/api/export',        require('./routes/export'));
 app.use('/api/demo',          require('./routes/demo'));
 app.use('/api/settings',      require('./routes/settings'));
 app.use('/api/logs',          require('./routes/logs'));
+app.use('/api/youtube',       require('./routes/youtube'));
 
 
 // ── Static files (production) ──────────────────────────────────────────────

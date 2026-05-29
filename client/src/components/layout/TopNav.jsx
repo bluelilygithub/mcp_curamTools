@@ -4,15 +4,17 @@
  * CSS vars only — no hardcoded Tailwind colour classes.
  */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useIcon } from '../../providers/IconProvider';
 import useAuthStore from '../../stores/authStore';
 
 export default function TopNav({ onMenuClick }) {
   const getIcon = useIcon();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useAuthStore();
   const [searchValue, setSearchValue] = useState('');
+  const isYouTube = location.pathname === '/tools/youtube';
 
   const primaryRole = user?.roles?.find((r) => r.scope_type === 'global')?.name;
   const isAdmin = primaryRole === 'org_admin';
@@ -102,6 +104,21 @@ export default function TopNav({ onMenuClick }) {
             {isAdmin ? 'Admin' : 'Member'}
           </span>
         )}
+
+        {/* YouTube */}
+        <button
+          onClick={() => navigate('/tools/youtube')}
+          className="flex items-center justify-center w-8 h-8 rounded-lg hover:opacity-70 transition-all"
+          aria-label="YouTube Search"
+          title="YouTube Search"
+          style={{
+            color: isYouTube ? '#ef4444' : 'var(--color-muted)',
+            background: isYouTube ? '#fee2e2' : 'transparent',
+            borderRadius: '0.5rem',
+          }}
+        >
+          {getIcon('youtube', { size: 16 })}
+        </button>
 
         {/* Logout */}
         <button
