@@ -726,7 +726,13 @@ export default function TenderResponseGenerator() {
     setProgressTail('');
 
     const arrayBuf = await file.arrayBuffer();
-    const base64   = btoa(String.fromCharCode(...new Uint8Array(arrayBuf)));
+    const uint8    = new Uint8Array(arrayBuf);
+    let binary = '';
+    const CHUNK = 8192;
+    for (let i = 0; i < uint8.length; i += CHUNK) {
+      binary += String.fromCharCode(...uint8.subarray(i, i + CHUNK));
+    }
+    const base64 = btoa(binary);
 
     streamRun(
       'demo-tender-response',
