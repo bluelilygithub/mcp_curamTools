@@ -41,6 +41,21 @@ const STATUS = {
   running:      { color: '#6366f1', label: 'Running', pulse: true },
 };
 
+// Demo pages that support ?runId= deep links
+const RUNID_DEEP_LINK_SLUGS = new Set([
+  'demo-tender-response',
+  'demo-document-analyzer',
+  'demo-spec-validator',
+]);
+
+function runLink(slug, runId, tools) {
+  const tool = tools.find(t => t.id === slug);
+  const base = tool?.path ?? null;
+  if (!base) return null;
+  if (runId && RUNID_DEEP_LINK_SLUGS.has(slug)) return `${base}?runId=${runId}`;
+  return base;
+}
+
 function slugToDisplayName(slug, tools) {
   const t = tools.find(t => t.id === slug);
   if (t) return t.name;
@@ -113,12 +128,11 @@ function StatCard({ label, value, suffix, icon, delay, loading, format }) {
 }
 
 function ActivityRow({ run, tools, index }) {
-  const st = STATUS[run.status] ?? STATUS.error;
-  return (
-    <div
-      className="du-fade-up flex items-start gap-3 py-3"
-      style={{ borderBottom: '1px solid var(--color-border)', animationDelay: `${index * 55}ms` }}
-    >
+  const st   = STATUS[run.status] ?? STATUS.error;
+  const href = runLink(run.agent_slug, run.id, tools);
+
+  const inner = (
+    <>
       <span
         style={{
           width: 8, height: 8, borderRadius: '50%',
@@ -149,6 +163,26 @@ function ActivityRow({ run, tools, index }) {
           {st.label}
         </span>
       </div>
+    </>
+  );
+
+  const sharedStyle = { borderBottom: '1px solid var(--color-border)', animationDelay: `${index * 55}ms` };
+
+  if (href) {
+    return (
+      <Link
+        to={href}
+        className="du-fade-up flex items-start gap-3 py-3 du-card-hover"
+        style={{ ...sharedStyle, textDecoration: 'none' }}
+      >
+        {inner}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="du-fade-up flex items-start gap-3 py-3" style={sharedStyle}>
+      {inner}
     </div>
   );
 }
