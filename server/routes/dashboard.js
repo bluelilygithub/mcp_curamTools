@@ -112,7 +112,7 @@ function calcMgmtFee(yearMonth, rangeStart, rangeEnd) {
 router.get('/recent-activity', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, agent_slug, status, run_at,
+      `SELECT id, slug AS agent_slug, status, run_at,
               COALESCE(result->>'summary', result->>'message', '') AS summary_text
        FROM agent_runs
        WHERE org_id = $1
