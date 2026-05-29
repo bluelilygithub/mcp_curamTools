@@ -18,6 +18,20 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-29 — Modern dashboard with activity feed and charts
+
+### Built
+- **`GET /api/dashboard/recent-activity`** — new endpoint in `dashboard.js`; returns last 15 agent runs for the org (slug, status, run_at, summary preview via `result->>'summary'`). Uses existing `pool` added to the route file.
+- **`DashboardPage.jsx` rewrite** — modern layout with:
+  - Animated stat cards (count-up on mount, CSS `duFadeUp` keyframe stagger)
+  - Live activity feed from `/dashboard/recent-activity` with status colour dots and time-ago labels
+  - ROI chart (spend vs revenue, 90 days) using existing `LineChart` component
+  - Quick-launch shortcut grid (filtered to permitted tools)
+  - Animated tool card grid (hover lift, staggered entrance)
+  - Skeleton loading states for all async sections
+
+---
+
 ## 2026-05-28 — Doc extractor max_tokens bump (dense document fix)
 
 ### Fixed

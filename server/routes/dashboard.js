@@ -3,6 +3,9 @@
 /**
  * dashboard.js — Aggregated data routes for management dashboards.
  *
+ * GET /api/dashboard/recent-activity
+ *   Last 15 agent runs for the org — slug, status, run_at, summary preview.
+ *
  * GET /api/dashboard/campaign-performance
  *   Fetches campaign performance, daily trend, search terms, budget pacing,
  *   and impression share in one parallel request for the chart dashboard.
@@ -11,7 +14,7 @@
  *   Fetches Google Ads daily spend + WordPress final_value revenue in parallel,
  *   aggregates by month, and returns ROAS vs industry benchmark vs target.
  *
- *   Query params (both endpoints):
+ *   Query params (campaign-performance, roi-analysis):
  *     days      — lookback days (default 90)
  *     startDate — YYYY-MM-DD (overrides days)
  *     endDate   — YYYY-MM-DD (overrides days)
@@ -21,6 +24,7 @@ const express      = require('express');
 const { requireAuth }       = require('../middleware/requireAuth');
 const { googleAdsService }  = require('../services/GoogleAdsService');
 const MCPRegistry           = require('../platform/mcpRegistry');
+const { pool }              = require('../db');
 
 const router = express.Router();
 
@@ -102,6 +106,26 @@ function calcMgmtFee(yearMonth, rangeStart, rangeEnd) {
   const total   = Math.round((mLast - mFirst) / 86400000) + 1;
   return (covered / total) * MGMT_FEE_PER_MONTH;
 }
+
+// ── GET /recent-activity ──────────────────────────────────────────────────────
+
+router.get('/recent-activity', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, agent_slug, status, run_at,
+              COALESCE(result->>'summary', result->>'message', '') AS summary_text
+       FROM agent_runs
+       WHERE org_id = $1
+       ORDER BY run_at DESC
+       LIMIT 15`,
+      [req.user.orgId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[dashboard/recent-activity]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── GET /campaign-performance ─────────────────────────────────────────────────
 
