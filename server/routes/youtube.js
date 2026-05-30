@@ -23,6 +23,7 @@ const AgentConfigService = require('../platform/AgentConfigService');
 const { getProvider }    = require('../platform/AgentOrchestrator');
 const CostGuardService   = require('../services/CostGuardService');
 const { logUsage }       = require('../services/UsageLogger');
+const { persistRun }     = require('../platform/persistRun');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -159,6 +160,9 @@ router.get('/search', async (req, res) => {
         `INSERT INTO youtube_search_history (user_id, org_id, query, filters, result_count) VALUES ($1,$2,$3,$4,$5)`,
         [req.user.id, req.user.orgId, q.trim(), JSON.stringify({ order, duration, publishedAfter: publishedAfter || null }), 0]
       );
+      persistRun({ slug: 'youtube-search', orgId: req.user.orgId, status: 'complete',
+        result: { summary: `Searched for "${q.trim()}" — 0 results` } })
+        .catch((e) => console.error('[youtube/search persistRun]', e.message));
       return res.json({ videos: [], totalResults: 0 });
     }
 
@@ -194,6 +198,10 @@ router.get('/search', async (req, res) => {
       `INSERT INTO youtube_search_history (user_id, org_id, query, filters, result_count) VALUES ($1,$2,$3,$4,$5)`,
       [req.user.id, req.user.orgId, q.trim(), JSON.stringify({ order, duration, publishedAfter: publishedAfter || null }), videos.length]
     );
+
+    persistRun({ slug: 'youtube-search', orgId: req.user.orgId, status: 'complete',
+      result: { summary: `Searched for "${q.trim()}" — ${videos.length} result${videos.length !== 1 ? 's' : ''}`, query: q.trim(), resultCount: videos.length } })
+      .catch((e) => console.error('[youtube/search persistRun]', e.message));
 
     res.json({ videos, totalResults: searchData.pageInfo?.totalResults ?? videos.length });
   } catch (err) {
