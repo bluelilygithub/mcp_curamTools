@@ -4,6 +4,7 @@
  * YouTube search, history, and favourites.
  *
  * Routes:
+ *   POST   /parse-query         — NLP parse of natural language input → structured search params
  *   GET    /search              — Search YouTube videos (saves to history)
  *   GET    /history             — User's recent searches (last 30)
  *   DELETE /history/:id         — Remove a history entry
@@ -11,16 +12,72 @@
  *   POST   /favourites          — Save a video
  *   DELETE /favourites/:videoId — Remove a saved video
  *
- * Env: YOUTUBE_API_KEY
+ * Env: YOUTUBE_API_KEY, ANTHROPIC_API_KEY
  */
 
-const https   = require('https');
-const express = require('express');
-const { pool } = require('../db');
+const https     = require('https');
+const express   = require('express');
+const Anthropic = require('@anthropic-ai/sdk');
+const { pool }  = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
 
 const router = express.Router();
 router.use(requireAuth);
+
+// ── NLP parse ─────────────────────────────────────────────────────────────────
+
+const PARSE_SYSTEM = `You parse natural language YouTube search requests into structured search parameters.
+
+Return ONLY valid JSON — no markdown, no explanation:
+{
+  "q":            "the clean search query string",
+  "order":        "relevance" | "date" | "viewCount" | "rating",
+  "duration":     "any" | "short" | "medium" | "long",
+  "publishedKey": "" | "hour" | "today" | "week" | "month" | "year",
+  "reasoning":    "one short sentence explaining what you extracted"
+}
+
+Rules:
+- "short" = under 4 minutes, "medium" = 4–20 min, "long" = over 20 min
+- publishedKey: "" = any time, "hour" = past hour, "today" = past day, "week" = past 7 days, "month" = past 30 days, "year" = past year
+- Strip duration/time/sort intent words from q — q should be just the topic
+- If no filter intent, return defaults: order=relevance, duration=any, publishedKey=""
+- q must not be empty`;
+
+let _anthropic;
+function getAnthropic() {
+  if (!_anthropic) _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return _anthropic;
+}
+
+router.post('/parse-query', async (req, res) => {
+  const { input } = req.body;
+  if (!input?.trim()) return res.status(400).json({ error: 'input required' });
+
+  try {
+    const msg = await getAnthropic().messages.create({
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      system:     PARSE_SYSTEM,
+      messages:   [{ role: 'user', content: input.trim() }],
+    });
+
+    const raw     = msg.content[0]?.text ?? '';
+    const jsonStr = raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1);
+    const parsed  = JSON.parse(jsonStr);
+
+    res.json({
+      q:            String(parsed.q || input.trim()),
+      order:        ['relevance', 'date', 'viewCount', 'rating'].includes(parsed.order) ? parsed.order : 'relevance',
+      duration:     ['any', 'short', 'medium', 'long'].includes(parsed.duration) ? parsed.duration : 'any',
+      publishedKey: ['', 'hour', 'today', 'week', 'month', 'year'].includes(parsed.publishedKey) ? parsed.publishedKey : '',
+      reasoning:    String(parsed.reasoning || ''),
+    });
+  } catch (err) {
+    console.error('[youtube/parse-query]', err.message);
+    res.json({ q: input.trim(), order: 'relevance', duration: 'any', publishedKey: '', reasoning: '' });
+  }
+});
 
 function getKey() {
   const k = process.env.YOUTUBE_API_KEY;

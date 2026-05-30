@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api/client';
+import { useSpeechInput } from '../../hooks/useSpeechInput';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,12 @@ function timeAgo(iso) {
   return `${Math.floor(d / 365)}y ago`;
 }
 
+function looksLikeNLP(text) {
+  if (text.trim().split(/\s+/).length > 3) return true;
+  const keywords = /\b(short|medium|long|video|tutorial|today|week|month|year|hour|recent|latest|popular|views|rating|new|old)\b/i;
+  return keywords.test(text);
+}
+
 const PUBLISHED_AFTER_OPTIONS = [
   { label: 'Any time',    key: '',        getIso: null },
   { label: 'Past hour',   key: 'hour',    getIso: () => new Date(Date.now() - 3_600_000).toISOString() },
@@ -55,6 +62,10 @@ const ORDER_OPTIONS = [
   { label: 'View count', value: 'viewCount' },
   { label: 'Rating', value: 'rating' },
 ];
+
+const PUBLISHED_LABEL = Object.fromEntries(PUBLISHED_AFTER_OPTIONS.map((o) => [o.key, o.label]));
+const DURATION_LABEL  = Object.fromEntries(DURATION_OPTIONS.map((o) => [o.value, o.label]));
+const ORDER_LABEL     = Object.fromEntries(ORDER_OPTIONS.map((o) => [o.value, o.label]));
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -317,6 +328,8 @@ export default function YouTubeSearchPage() {
   const [order, setOrder] = useState('relevance');
   const [duration, setDuration] = useState('any');
   const [publishedKey, setPublishedKey] = useState('');
+  const [parsing, setParsing] = useState(false);
+  const [interpreted, setInterpreted] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [videos, setVideos] = useState([]);
@@ -331,6 +344,23 @@ export default function YouTubeSearchPage() {
 
   // Modal
   const [activeVideo, setActiveVideo] = useState(null);
+
+  // Mic — interim preview ref so onPartial closure is stale-safe
+  const interimRef = useRef('');
+  const [interimText, setInterimText] = useState('');
+
+  const { listening, supported: micSupported, start: startMic, stop: stopMic } = useSpeechInput({
+    onResult: (transcript) => {
+      interimRef.current = '';
+      setInterimText('');
+      setQuery(transcript);
+      runSearch(transcript);
+    },
+    onPartial: (interim) => {
+      interimRef.current = interim;
+      setInterimText(interim);
+    },
+  });
 
   // Load favs + history on mount
   useEffect(() => {
@@ -353,18 +383,45 @@ export default function YouTubeSearchPage() {
       .catch(() => {});
   }
 
-  async function handleSearch(e) {
-    e?.preventDefault();
-    if (!query.trim()) return;
+  async function runSearch(rawInput, overrideParams = null) {
+    const input = (rawInput ?? query).trim();
+    if (!input) return;
+
     setLoading(true);
     setError('');
     setVideos([]);
+    setInterpreted(null);
+
+    let searchQ        = input;
+    let searchOrder    = order;
+    let searchDuration = duration;
+    let searchPubKey   = publishedKey;
+
+    if (overrideParams) {
+      ({ q: searchQ, order: searchOrder, duration: searchDuration, publishedKey: searchPubKey } = overrideParams);
+    } else if (looksLikeNLP(input)) {
+      setParsing(true);
+      try {
+        const parsed = await api.post('/youtube/parse-query', { input });
+        if (!parsed.error) {
+          searchQ        = parsed.q;
+          searchOrder    = parsed.order;
+          searchDuration = parsed.duration;
+          searchPubKey   = parsed.publishedKey;
+          setQuery(parsed.q);
+          setOrder(parsed.order);
+          setDuration(parsed.duration);
+          setPublishedKey(parsed.publishedKey);
+          setInterpreted(parsed);
+        }
+      } catch { /* fall through with raw input */ }
+      setParsing(false);
+    }
 
     try {
-      const pub = PUBLISHED_AFTER_OPTIONS.find((o) => o.key === publishedKey);
+      const pub = PUBLISHED_AFTER_OPTIONS.find((o) => o.key === searchPubKey);
       const publishedAfter = pub?.getIso ? pub.getIso() : '';
-
-      const params = new URLSearchParams({ q: query.trim(), order, duration });
+      const params = new URLSearchParams({ q: searchQ, order: searchOrder, duration: searchDuration });
       if (publishedAfter) params.set('publishedAfter', publishedAfter);
 
       const data = await api.get(`/youtube/search?${params}`);
@@ -377,6 +434,11 @@ export default function YouTubeSearchPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSearch(e) {
+    e?.preventDefault();
+    await runSearch(query);
   }
 
   const toggleFav = useCallback(async (video) => {
@@ -411,30 +473,17 @@ export default function YouTubeSearchPage() {
 
   async function replaySearch(row) {
     const filters = row.filters || {};
-    const q = row.query;
-    const ord = filters.order || 'relevance';
+    const q   = row.query;
+    const ord = filters.order    || 'relevance';
     const dur = filters.duration || 'any';
 
     setQuery(q);
     setOrder(ord);
     setDuration(dur);
     setPublishedKey('');
-    setTab('search');
-    setLoading(true);
-    setError('');
-    setVideos([]);
+    setInterpreted(null);
 
-    try {
-      const params = new URLSearchParams({ q, order: ord, duration: dur });
-      const data = await api.get(`/youtube/search?${params}`);
-      setVideos(data.videos ?? []);
-      setTotalResults(data.totalResults ?? 0);
-      loadHistory();
-    } catch (err) {
-      setError(err.message || 'Search failed');
-    } finally {
-      setLoading(false);
-    }
+    await runSearch(q, { q, order: ord, duration: dur, publishedKey: '' });
   }
 
   const tabBtn = (key, label, badge) => (
@@ -477,25 +526,43 @@ export default function YouTubeSearchPage() {
       </div>
 
       {/* Search form */}
-      <form onSubmit={handleSearch} style={{ marginBottom: '1.25rem' }}>
+      <form onSubmit={handleSearch} style={{ marginBottom: '1rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
           {/* Topic input */}
-          <div style={{ flex: '1 1 240px', minWidth: 200 }}>
+          <div style={{ flex: '1 1 240px', minWidth: 200, position: 'relative' }}>
             <input
               type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search topic…"
+              value={listening ? (interimText || query) : query}
+              onChange={(e) => { setQuery(e.target.value); setInterpreted(null); }}
+              placeholder={listening ? 'Listening…' : 'Search or describe what you want…'}
+              readOnly={listening}
               style={{
-                width: '100%', padding: '0.5rem 0.75rem',
-                borderRadius: '0.5rem', border: '2px solid var(--color-border)',
+                width: '100%', padding: `0.5rem ${micSupported ? '2.5rem' : '0.75rem'} 0.5rem 0.75rem`,
+                borderRadius: '0.5rem', border: `2px solid ${listening ? '#ef4444' : 'var(--color-border)'}`,
                 background: 'var(--color-bg)', color: 'var(--color-text)',
                 fontSize: '0.875rem', fontFamily: 'inherit', outline: 'none',
                 boxSizing: 'border-box',
               }}
-              onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-              onBlur={(e) => (e.target.style.borderColor = 'var(--color-border)')}
+              onFocus={(e) => { if (!listening) e.target.style.borderColor = 'var(--color-primary)'; }}
+              onBlur={(e)  => { if (!listening) e.target.style.borderColor = 'var(--color-border)'; }}
             />
+            {micSupported && (
+              <button
+                type="button"
+                onClick={() => listening ? stopMic() : startMic()}
+                title={listening ? 'Stop recording' : 'Search by voice'}
+                style={{
+                  position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+                  color: listening ? '#ef4444' : 'var(--color-muted)',
+                  animation: listening ? 'pulse 1s infinite' : 'none',
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill={listening ? '#ef4444' : 'currentColor'}>
+                  <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2zm-7 9a7 7 0 0 0 14 0h2a9 9 0 0 1-8 8.94V23h-2v-2.06A9 9 0 0 1 3 12h2z"/>
+                </svg>
+              </button>
+            )}
           </div>
 
           {/* Filters */}
@@ -515,19 +582,39 @@ export default function YouTubeSearchPage() {
 
           <button
             type="submit"
-            disabled={loading || !query.trim()}
+            disabled={parsing || loading || !query.trim()}
             style={{
               ...btnBase,
               padding: '0.5rem 1.25rem',
-              background: loading || !query.trim() ? 'var(--color-border)' : '#ef4444',
+              background: parsing || loading || !query.trim() ? 'var(--color-border)' : '#ef4444',
               color: '#fff',
-              cursor: loading || !query.trim() ? 'not-allowed' : 'pointer',
+              cursor: parsing || loading || !query.trim() ? 'not-allowed' : 'pointer',
             }}
           >
-            {loading ? 'Searching…' : 'Search'}
+            {parsing ? 'Thinking…' : loading ? 'Searching…' : 'Search'}
           </button>
         </div>
       </form>
+
+      {/* Interpreted strip */}
+      {interpreted && !parsing && !loading && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
+          marginBottom: '1rem', padding: '0.5rem 0.75rem',
+          borderRadius: '0.5rem', background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)', fontSize: '0.75rem',
+        }}>
+          <span style={{ color: '#ef4444', fontWeight: 700, flexShrink: 0 }}>✦ AI</span>
+          <span style={{ color: 'var(--color-muted)' }}>
+            Searched for <strong style={{ color: 'var(--color-text)' }}>"{interpreted.q}"</strong>
+            {interpreted.order !== 'relevance' && <> · sorted by <strong style={{ color: 'var(--color-text)' }}>{ORDER_LABEL[interpreted.order]}</strong></>}
+            {interpreted.duration !== 'any' && <> · <strong style={{ color: 'var(--color-text)' }}>{DURATION_LABEL[interpreted.duration]}</strong></>}
+            {interpreted.publishedKey && <> · <strong style={{ color: 'var(--color-text)' }}>{PUBLISHED_LABEL[interpreted.publishedKey]}</strong></>}
+            {interpreted.reasoning && <> — <em>{interpreted.reasoning}</em></>}
+          </span>
+          <button onClick={() => setInterpreted(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted)', marginLeft: 'auto', flexShrink: 0 }}>✕</button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1rem' }}>
@@ -546,7 +633,13 @@ export default function YouTubeSearchPage() {
       {/* ── Search Results ────────────────────────────────────────────────── */}
       {tab === 'search' && (
         <div>
-          {videos.length === 0 && !loading && (
+          {(parsing || loading) && (
+            <div style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--color-muted)', fontSize: '0.9rem' }}>
+              {parsing ? 'Understanding your request…' : 'Searching YouTube…'}
+            </div>
+          )}
+
+          {videos.length === 0 && !loading && !parsing && (
             <div style={{
               textAlign: 'center', padding: '4rem 2rem',
               background: 'var(--color-surface)', border: '1px solid var(--color-border)',
@@ -556,12 +649,12 @@ export default function YouTubeSearchPage() {
                 <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"/>
               </svg>
               <p style={{ color: 'var(--color-muted)', fontSize: '0.9rem' }}>
-                Enter a topic above to search YouTube videos.
+                Enter a topic above or describe what you want to find.
               </p>
             </div>
           )}
 
-          {videos.length > 0 && (
+          {videos.length > 0 && !parsing && !loading && (
             <>
               <p style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: '0.75rem' }}>
                 Showing {videos.length} of ~{totalResults.toLocaleString()} results
@@ -708,6 +801,13 @@ export default function YouTubeSearchPage() {
           onToggleFav={(v) => { toggleFav(v); }}
         />
       )}
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      `}</style>
     </div>
   );
 }
