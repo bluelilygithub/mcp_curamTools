@@ -1,21 +1,56 @@
 /**
  * Anomaly Investigator — open-ended hypothesis-driven investigation page.
  *
- * Input: freeform anomaly description + optional date range.
- * Output: Investigation Log / Dead Ends / Open Threads — no conclusion section.
- * The agent writes the log; the human draws the conclusion.
+ * Features:
+ *   - Mic input (MicButton + useSpeechInput)
+ *   - ProcessingModal while running
+ *   - Conversation tab tied to investigation log
+ *   - Cost + token display in result
+ *   - Audio completion alert
+ *   - Budget cap enforced server-side (ADMIN_DEFAULTS max_task_budget_aud: 2.50 AUD)
+ *   - Model resolves from org default (getResolvedAdminConfig, model: null in ADMIN_DEFAULTS)
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../../api/client';
 import MarkdownRenderer from '../../components/ui/MarkdownRenderer';
 import InlineBanner from '../../components/ui/InlineBanner';
 import BoundsWarningPanel from '../../components/ui/BoundsWarningPanel';
+import MicButton from '../../components/ui/MicButton';
+import ProcessingModal from '../../components/shared/ProcessingModal';
+import ConversationView from './GoogleAdsMonitor/ConversationView';
 import { fmtDate } from '../../utils/date';
 import { exportText, exportPdf } from '../../utils/exportService';
 
 const AGENT_SLUG = 'anomaly-investigator';
 
 function isoDate(d) { return d.toISOString().slice(0, 10); }
+
+const fmtCost   = (n) => n != null ? `A$${Number(n).toFixed(4)}` : null;
+const fmtTokens = (n) => n != null ? Number(n).toLocaleString() : null;
+
+function playCompletionAlert() {
+  try {
+    const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+
+    // Two-tone chime: 880 Hz then 1100 Hz
+    [880, 1100].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      osc.connect(gain);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const t = ctx.currentTime + i * 0.22;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.25, t + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+      osc.start(t);
+      osc.stop(t + 0.45);
+    });
+  } catch {
+    // Browser may block AudioContext without user gesture — silently ignore
+  }
+}
 
 const inputStyle = {
   padding: '0.4rem 0.6rem',
@@ -35,7 +70,14 @@ const btnPrimary = (disabled) => ({
   color: '#fff', cursor: disabled ? 'not-allowed' : 'pointer',
 });
 
-// ── Progress stream display ───────────────────────────────────────────────────
+const btnGhost = {
+  padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 500,
+  fontFamily: 'inherit', borderRadius: '0.5rem', cursor: 'pointer',
+  border: '1px solid var(--color-border)',
+  background: 'transparent', color: 'var(--color-muted)',
+};
+
+// ── Progress display ──────────────────────────────────────────────────────────
 
 function InvestigationProgress({ lines }) {
   return (
@@ -67,6 +109,27 @@ function InvestigationProgress({ lines }) {
   );
 }
 
+// ── Result metadata bar ───────────────────────────────────────────────────────
+
+function ResultMeta({ result }) {
+  if (!result) return null;
+  const parts = [];
+  const tokens = result.tokensUsed;
+  if (tokens?.input  != null) parts.push(`↑ ${fmtTokens(tokens.input)} in`);
+  if (tokens?.output != null) parts.push(`↓ ${fmtTokens(tokens.output)} out`);
+  if (tokens?.cacheRead  != null && tokens.cacheRead  > 0) parts.push(`⚡ ${fmtTokens(tokens.cacheRead)} cached`);
+  const cost = fmtCost(result.costAud);
+  if (cost) parts.push(cost);
+  if (result.model) parts.push(result.model);
+
+  if (!parts.length) return null;
+  return (
+    <p className="text-xs mt-3" style={{ color: 'var(--color-muted)', fontFamily: 'monospace' }}>
+      {parts.join('  ·  ')}
+    </p>
+  );
+}
+
 // ── History ───────────────────────────────────────────────────────────────────
 
 function RunHistory({ onLoad }) {
@@ -87,51 +150,42 @@ function RunHistory({ onLoad }) {
 
   return (
     <div className="space-y-2">
-      {rows.map((r) => (
-        <div
-          key={r.id}
-          className="rounded-xl border p-3 flex items-start justify-between gap-3"
-          style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
-        >
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
-              {r.result?.anomalyDescription ?? 'Investigation'}
-            </p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
-              {fmtDate(r.run_at)}
-              {r.result?.startDate && r.result?.endDate
-                ? ` · ${fmtDate(r.result.startDate)} – ${fmtDate(r.result.endDate)}`
-                : ''}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span
-              className="text-xs font-semibold rounded px-2 py-0.5"
-              style={{
-                background: r.status === 'complete' ? '#dcfce7' : r.status === 'needs_review' ? '#fef9c3' : '#fee2e2',
-                color:      r.status === 'complete' ? '#15803d' : r.status === 'needs_review' ? '#854d0e' : '#b91c1c',
-              }}
-            >
-              {r.status}
-            </span>
-            {(r.status === 'complete' || r.status === 'needs_review') && r.result && (
-              <button
-                onClick={() => onLoad(r.result)}
-                className="text-xs rounded px-2.5 py-1 font-medium"
+      {rows.map((r) => {
+        const cost = fmtCost(r.result?.costAud);
+        return (
+          <div
+            key={r.id}
+            className="rounded-xl border p-3 flex items-start justify-between gap-3"
+            style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
+                {r.result?.anomalyDescription ?? 'Investigation'}
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
+                {fmtDate(r.run_at)}
+                {cost ? `  ·  ${cost}` : ''}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span
+                className="text-xs font-semibold rounded px-2 py-0.5"
                 style={{
-                  background: 'none',
-                  border: '1px solid var(--color-border)',
-                  color: 'var(--color-muted)',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
+                  background: r.status === 'complete' ? '#dcfce7' : r.status === 'needs_review' ? '#fef9c3' : '#fee2e2',
+                  color:      r.status === 'complete' ? '#15803d' : r.status === 'needs_review' ? '#854d0e' : '#b91c1c',
                 }}
               >
-                Load
-              </button>
-            )}
+                {r.status}
+              </span>
+              {(r.status === 'complete' || r.status === 'needs_review') && r.result && (
+                <button onClick={() => onLoad(r.result)} style={{ ...btnGhost, fontFamily: 'inherit' }}>
+                  Load
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -139,18 +193,22 @@ function RunHistory({ onLoad }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AnomalyInvestigatorPage() {
-  const today = isoDate(new Date());
-  const thirtyDaysAgo = isoDate(new Date(Date.now() - 30 * 86_400_000));
+  const today        = isoDate(new Date());
+  const thirtyAgo    = isoDate(new Date(Date.now() - 30 * 86_400_000));
 
   const [anomalyDescription, setAnomalyDescription] = useState('');
+  const [partialTranscript,  setPartialTranscript]  = useState('');
   const [useRange,           setUseRange]           = useState(false);
-  const [startDate,          setStartDate]          = useState(thirtyDaysAgo);
+  const [startDate,          setStartDate]          = useState(thirtyAgo);
   const [endDate,            setEndDate]            = useState(today);
   const [running,            setRunning]            = useState(false);
   const [progress,           setProgress]           = useState([]);
   const [error,              setError]              = useState('');
   const [result,             setResult]             = useState(null);
   const [activeTab,          setActiveTab]          = useState('investigate');
+  const [conversationSeed,   setConversationSeed]   = useState('');
+
+  const abortRef = useRef(null);
 
   // Warn before leaving mid-run
   useEffect(() => {
@@ -158,6 +216,11 @@ export default function AnomalyInvestigatorPage() {
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [running]);
+
+  function handleCancel() {
+    if (abortRef.current) abortRef.current.abort();
+    setRunning(false);
+  }
 
   async function handleRun() {
     if (!anomalyDescription.trim()) {
@@ -173,15 +236,27 @@ export default function AnomalyInvestigatorPage() {
     setProgress([]);
     setError('');
     setResult(null);
+    abortRef.current = new AbortController();
 
     const body = { anomalyDescription: anomalyDescription.trim() };
-    if (useRange) {
-      body.startDate = startDate;
-      body.endDate   = endDate;
-    }
+    if (useRange) { body.startDate = startDate; body.endDate = endDate; }
 
     try {
-      const res     = await api.stream(`/agents/${AGENT_SLUG}/run`, body);
+      const res = await fetch(`/api/agents/${AGENT_SLUG}/run`, {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${(await import('../../stores/authStore')).default.getState().token}`,
+        },
+        body:   JSON.stringify(body),
+        signal: abortRef.current.signal,
+      });
+
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || `HTTP ${res.status}`);
+      }
+
       const reader  = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -209,20 +284,19 @@ export default function AnomalyInvestigatorPage() {
             } else if (msg.type === 'result') {
               resultReceived = true;
               setResult(msg.data);
+              playCompletionAlert();
             } else if (msg.type === 'error') {
               setError(msg.error);
             }
           } catch {
-            // ignore malformed SSE lines
+            // ignore malformed lines
           }
         }
       }
 
-      if (!resultReceived) {
-        setError('Investigation ended without a result — check server logs.');
-      }
+      if (!resultReceived) setError('Investigation ended without a result — check server logs.');
     } catch (err) {
-      setError(err.message);
+      if (err.name !== 'AbortError') setError(err.message);
     } finally {
       setRunning(false);
     }
@@ -255,17 +329,18 @@ export default function AnomalyInvestigatorPage() {
           Anomaly Investigator
         </h1>
         <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>
-          Hypothesis-driven investigation across Google Ads, GA4, and CRM. No conclusions — the agent writes the log, you draw the verdict.
+          Hypothesis-driven investigation across Ads, GA4, and CRM. Agent writes the log — you draw the verdict.
         </p>
       </div>
 
       {/* Tabs */}
       <div className="flex items-center gap-1 mb-4">
-        {tabBtn('investigate', 'Investigate')}
-        {tabBtn('history',     'History')}
+        {tabBtn('investigate',  'Investigate')}
+        {tabBtn('conversation', 'Conversation')}
+        {tabBtn('history',      'History')}
       </div>
 
-      {/* ── Investigate tab ─────────────────────────────────────────────────── */}
+      {/* ── Investigate ─────────────────────────────────────────────────────── */}
       {activeTab === 'investigate' && (
         <div>
           {/* Input panel */}
@@ -276,20 +351,34 @@ export default function AnomalyInvestigatorPage() {
             <label className="block text-sm font-medium mb-2" style={{ color: 'var(--color-text)' }}>
               Describe the anomaly
             </label>
-            <textarea
-              value={anomalyDescription}
-              onChange={(e) => setAnomalyDescription(e.target.value)}
-              placeholder="e.g. CTR dropped ~30% over the last 7 days across all campaigns. Conversions held flat but cost per click rose. Started around May 25."
-              rows={4}
-              style={{
-                ...inputStyle,
-                width: '100%',
-                resize: 'vertical',
-                lineHeight: 1.6,
-                padding: '0.6rem 0.75rem',
-              }}
-              disabled={running}
-            />
+
+            {/* Textarea + mic button */}
+            <div style={{ position: 'relative' }}>
+              <textarea
+                value={anomalyDescription + partialTranscript}
+                onChange={(e) => setAnomalyDescription(e.target.value)}
+                placeholder="e.g. CTR dropped ~30% last week across all campaigns. Conversions held flat but CPC rose. Started around May 25."
+                rows={4}
+                style={{
+                  ...inputStyle,
+                  width: '100%',
+                  resize: 'vertical',
+                  lineHeight: 1.6,
+                  padding: '0.6rem 2.5rem 0.6rem 0.75rem',
+                }}
+                disabled={running}
+              />
+              <div style={{ position: 'absolute', top: 6, right: 6 }}>
+                <MicButton
+                  onResult={(transcript) => {
+                    setAnomalyDescription((prev) => (prev.trim() ? prev.trim() + ' ' : '') + transcript);
+                    setPartialTranscript('');
+                  }}
+                  onPartial={(interim) => setPartialTranscript(interim ? ' ' + interim : '')}
+                  size={15}
+                />
+              </div>
+            </div>
 
             {/* Optional date range */}
             <div className="mt-3 flex items-center gap-3 flex-wrap">
@@ -327,15 +416,18 @@ export default function AnomalyInvestigatorPage() {
               )}
               {!useRange && (
                 <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
-                  Default: last 30 days (agent infers specific window from your description)
+                  Default: last 30 days — agent infers narrower window from your description
                 </span>
               )}
             </div>
 
-            <div className="mt-4">
+            <div className="mt-4 flex items-center gap-3">
               <button onClick={handleRun} disabled={running} style={btnPrimary(running)}>
                 {running ? 'Investigating…' : 'Investigate'}
               </button>
+              <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
+                Budget cap A$2.50 · Uses org default model
+              </span>
             </div>
           </div>
 
@@ -351,44 +443,43 @@ export default function AnomalyInvestigatorPage() {
               className="rounded-2xl border p-5"
               style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
             >
-              {boundsFail.length > 0 && (
-                <BoundsWarningPanel boundsFailed={boundsFail} />
-              )}
+              {boundsFail.length > 0 && <BoundsWarningPanel boundsFailed={boundsFail} />}
 
               <MarkdownRenderer text={summary} />
 
-              <div className="mt-4 flex items-center gap-2 flex-wrap">
+              <ResultMeta result={result} />
+
+              <div className="mt-4 flex items-center gap-3 flex-wrap">
                 <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Export:</span>
                 <button
                   onClick={() => exportText({
                     content:  `Anomaly Investigation\n${result?.anomalyDescription ?? ''}\n\n${summary}`,
-                    filename: `anomaly-investigation-${isoDate(new Date())}.txt`,
+                    filename: `anomaly-investigation-${today}.txt`,
                   })}
-                  style={{
-                    padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 500,
-                    fontFamily: 'inherit', borderRadius: '0.5rem', cursor: 'pointer',
-                    border: '1px solid var(--color-border)',
-                    background: 'transparent', color: 'var(--color-muted)',
-                  }}
+                  style={btnGhost}
                 >
                   Text
                 </button>
                 <button
-                  onClick={async () => {
-                    await exportPdf({
-                      content:  summary,
-                      title:    `Anomaly Investigation · ${isoDate(new Date())}`,
-                      filename: `anomaly-investigation-${isoDate(new Date())}.pdf`,
-                    });
-                  }}
-                  style={{
-                    padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 500,
-                    fontFamily: 'inherit', borderRadius: '0.5rem', cursor: 'pointer',
-                    border: '1px solid var(--color-border)',
-                    background: 'transparent', color: 'var(--color-muted)',
-                  }}
+                  onClick={async () => exportPdf({
+                    content:  summary,
+                    title:    `Anomaly Investigation · ${today}`,
+                    filename: `anomaly-investigation-${today}.pdf`,
+                  })}
+                  style={btnGhost}
                 >
                   PDF
+                </button>
+                <button
+                  onClick={() => {
+                    setConversationSeed(
+                      `Here is the investigation log for the anomaly: "${result?.anomalyDescription ?? ''}"\n\n${summary}`
+                    );
+                    setActiveTab('conversation');
+                  }}
+                  style={btnGhost}
+                >
+                  Discuss this investigation
                 </button>
               </div>
             </div>
@@ -400,15 +491,27 @@ export default function AnomalyInvestigatorPage() {
               style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
             >
               <p style={{ color: 'var(--color-muted)', fontSize: '0.875rem' }}>
-                Describe the anomaly above and click <strong>Investigate</strong>. The agent will pull initial data,
-                form hypotheses from what it finds, and follow the evidence — stopping when confident or when hypotheses are exhausted.
+                Describe the anomaly above — or use the mic — then click <strong>Investigate</strong>.
+                The agent pulls initial data, forms hypotheses from what it finds, and stops when confident.
               </p>
             </div>
           )}
         </div>
       )}
 
-      {/* ── History tab ─────────────────────────────────────────────────────── */}
+      {/* ── Conversation ─────────────────────────────────────────────────────── */}
+      {activeTab === 'conversation' && (
+        <ConversationView
+          startDate={useRange ? startDate : undefined}
+          endDate={useRange ? endDate : undefined}
+          seedText={conversationSeed}
+          onSeedConsumed={() => setConversationSeed('')}
+          reportText={summary}
+          reportTitle={`Investigation: ${result?.anomalyDescription ?? 'Anomaly'}`}
+        />
+      )}
+
+      {/* ── History ──────────────────────────────────────────────────────────── */}
       {activeTab === 'history' && (
         <div
           className="rounded-2xl border p-4"
@@ -423,6 +526,15 @@ export default function AnomalyInvestigatorPage() {
           />
         </div>
       )}
+
+      {/* Processing modal — blocks navigation, reassures user */}
+      <ProcessingModal
+        isOpen={running}
+        title="Investigating…"
+        estimatedDuration="Typically 1–3 minutes depending on hypothesis count."
+        onCancel={handleCancel}
+        cancelConfirmMessage="Cancel this investigation? Findings so far will be lost."
+      />
     </div>
   );
 }
