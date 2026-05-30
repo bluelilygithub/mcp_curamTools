@@ -18,9 +18,11 @@
 const https   = require('https');
 const express = require('express');
 const { pool } = require('../db');
-const { requireAuth } = require('../middleware/requireAuth');
+const { requireAuth }    = require('../middleware/requireAuth');
 const AgentConfigService = require('../platform/AgentConfigService');
 const { getProvider }    = require('../platform/AgentOrchestrator');
+const CostGuardService   = require('../services/CostGuardService');
+const { logUsage }       = require('../services/UsageLogger');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -67,6 +69,18 @@ router.post('/parse-query', async (req, res) => {
     const raw     = response.content?.find((b) => b.type === 'text')?.text ?? '';
     const jsonStr = raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1);
     const parsed  = JSON.parse(jsonStr);
+
+    // Log usage — fire and forget
+    const u = response.usage ?? {};
+    const tokensUsed = {
+      input:      u.input_tokens                  ?? 0,
+      output:     u.output_tokens                 ?? 0,
+      cacheRead:  u.cache_read_input_tokens       ?? 0,
+      cacheWrite: u.cache_creation_input_tokens   ?? 0,
+    };
+    const costAud = CostGuardService.computeCostAud(tokensUsed, modelId, null);
+    logUsage({ orgId, userId: req.user.id, slug: 'youtube-search', modelId, tokensUsed, costAud })
+      .catch((e) => console.error('[youtube/parse-query usage log]', e.message));
 
     res.json({
       q:            String(parsed.q || input.trim()),
