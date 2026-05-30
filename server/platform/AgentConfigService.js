@@ -69,6 +69,7 @@ const AGENT_DEFAULTS = {
     ],
   },
   'nightly-cost-alert': {},
+  'anomaly-investigator': {},
   // ── Demo suite agents ─────────────────────────────────────────────────────
   'demo-document-analyzer': {},  // no operator-configurable settings; all config via adminConfig
   'spec-validator':          {},
@@ -234,6 +235,14 @@ const ADMIN_DEFAULTS = {
     max_task_budget_aud: 0.01,   // near-zero — no model inference
     fallback_model:      null,
   },
+  'anomaly-investigator': {
+    enabled:             true,
+    model:               null,
+    max_tokens:          6000,
+    max_iterations:      15,    // open-ended investigation may need many tool calls
+    max_task_budget_aud: 2.50,
+    fallback_model:      null,
+  },
   'demo-tender-response': {
     enabled:             true,
     model:               null,   // must be vision-capable (Stage 1 RFT extraction)
@@ -269,6 +278,7 @@ const AGENT_MODEL_REQUIREMENTS = {
   'google-ads-monitor':          { tier: 'advanced', reason: 'Multi-section performance report with cross-source analysis' },
   'google-ads-change-impact':    { tier: 'advanced', reason: 'Timeline analysis with performance discontinuity detection' },
   'google-ads-freeform':         { tier: 'advanced', capabilities: ['tool_use'], reason: 'Open-ended Q&A with live data retrieval' },
+  'anomaly-investigator':        { tier: 'advanced', capabilities: ['tool_use'], reason: 'Open-ended hypothesis-driven investigation across three data sources — requires strong reasoning to form, test, and revise hypotheses from data' },
   'competitor-keyword-intel':    { tier: 'advanced', capabilities: ['tool_use'], reason: 'Competitive gap analysis requiring detailed reasoning' },
   'ads-attribution-summary':     { tier: 'standard', reason: 'Brief structured summary from pre-fetched data' },
   'ads-bounce-analysis':         { tier: 'standard', reason: 'Structured bounce report from pre-fetched data' },

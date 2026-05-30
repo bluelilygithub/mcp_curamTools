@@ -176,6 +176,14 @@ module.exports = [
     schedule:   '0 22 * * *',            // 22:00 UTC daily (08:00 AEST next day)
   },
 
+  // ── Investigation ──────────────────────────────────────────────────────────
+  {
+    slug:       'anomaly-investigator',
+    module:     'anomalyInvestigator',
+    export:     'runAnomalyInvestigator',
+    permission: 'ads_operator',
+  },
+
   // ── Demo Suite ─────────────────────────────────────────────────────────────
   {
     slug:       'demo-document-analyzer',

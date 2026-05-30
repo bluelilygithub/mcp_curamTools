@@ -17,6 +17,7 @@ const SettingsPage                  = lazy(() => import('./pages/SettingsPage'))
 
 const GoogleAdsMonitorPage          = lazy(() => import('./pages/tools/GoogleAdsMonitorPage'));
 const DiamondPlateDataPage          = lazy(() => import('./pages/tools/DiamondPlateDataPage'));
+const AnomalyInvestigatorPage       = lazy(() => import('./pages/tools/AnomalyInvestigatorPage'));
 const DocExtractorPage              = lazy(() => import('./pages/tools/DocExtractorPage'));
 const MediaGenPage                  = lazy(() => import('./pages/tools/MediaGenPage'));
 const HighIntentAdvisorPage         = lazy(() => import('./pages/tools/HighIntentAdvisorPage'));
@@ -104,6 +105,7 @@ export default function App() {
                     <Route path="/tools/wp-theme-extractor"      element={<WpThemeExtractorPage />} />
                     <Route path="/tools/spec-validator"          element={<SpecValidatorPage />} />
                     <Route path="/tools/youtube"                 element={<YouTubeSearchPage />} />
+                    <Route path="/tools/anomaly-investigator"    element={<AnomalyInvestigatorPage />} />
 
                     {/* Admin-only */}
                     <Route element={<RequireRole allowedRoles={['org_admin']} />}>

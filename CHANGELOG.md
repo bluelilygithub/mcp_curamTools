@@ -18,6 +18,25 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-31 — Anomaly Investigator agent
+
+### Built
+- **`server/agents/anomalyInvestigator/tools.js`** — 13-tool cross-source suite (7 Google Ads, 4 GA4, 2 CRM). Includes `get_quality_scores` (absent from conversation agent — critical for CTR diagnosis). Tool descriptions guide hypothesis formation, not execution sequence.
+- **`server/agents/anomalyInvestigator/prompt.js`** — Reasoning protocol only: orient → hypothesise → test → update → stop. No cause list. No tool sequence. Tool schemas are the hypothesis space.
+- **`server/agents/anomalyInvestigator/index.js`** — ReAct agent (`maxIterations: 15`). Accepts freeform anomaly description or structured date range. Post-run validates three required sections (`## Investigation Log`, `## Dead Ends`, `## Open Threads`) and hypothesis hygiene (pre-call hypothesis count vs tool call count). Missing sections surface as `boundsFailed` → `needs_review`.
+- **`client/src/pages/tools/AnomalyInvestigatorPage.jsx`** — Textarea input, optional date range toggle, SSE stream progress, `BoundsWarningPanel` for section failures, export (text + PDF), history tab.
+- **`server/agents/manifest.js`** — Added `anomaly-investigator` entry.
+- **`server/platform/AgentConfigService.js`** — Added `AGENT_DEFAULTS`, `ADMIN_DEFAULTS` (max_iterations: 15, max_task_budget_aud: 2.50), and `AGENT_MODEL_REQUIREMENTS`.
+- **`server/platform/agentTrustContract.js`** — Added `anomaly-investigator` entry with `requiresDataGaps: false` — disables Data Gaps enforcement; section validation handled by agent's own `boundsFailed` return.
+- **`client/src/App.jsx`** — Route `/tools/anomaly-investigator`.
+- **`client/src/config/tools.js`** — Tool entry in Google Ads group.
+- **`client/src/pages/admin/AdminLessonsPage.jsx`** — Added to `LESSON_COVERAGE_SECTIONS`.
+
+### Design intent
+The investigation agent is the platform's first genuinely open-ended ReAct agent. The prompt describes a reasoning protocol, not a cause list — Claude derives hypotheses from initial data, not from enumerated suspects. The trust contract override disables Data Gaps in favour of Investigation Log hygiene checks. The dead-end test: run against a scenario where only one hypothesis is true — the agent should stop early, not tick all 13 tools.
+
+---
+
 ## 2026-05-30 — YouTube Search feature
 
 ### Built

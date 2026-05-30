@@ -16,6 +16,15 @@
 const TOOLS = [
   // ── Google Ads ────────────────────────────────────────────────────────────
   {
+    id:          'anomaly-investigator',
+    name:        'Anomaly Investigator',
+    description: 'Hypothesis-driven investigation across Google Ads, GA4, and CRM. Describe the anomaly — the agent forms hypotheses from data, tests them, and hands off an investigation log.',
+    icon:        'search',
+    path:        '/tools/anomaly-investigator',
+    roles:       ['ads_operator', 'org_admin'],
+    group:       'Google Ads',
+  },
+  {
     id:          'google-ads-monitor',
     name:        'Google Ads Monitor',
     description: 'AI-powered analysis of Google Ads campaign performance, search intent, and budget pacing.',
