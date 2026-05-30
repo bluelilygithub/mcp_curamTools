@@ -12,14 +12,15 @@
  *   POST   /favourites          — Save a video
  *   DELETE /favourites/:videoId — Remove a saved video
  *
- * Env: YOUTUBE_API_KEY, ANTHROPIC_API_KEY
+ * Env: YOUTUBE_API_KEY
  */
 
-const https     = require('https');
-const express   = require('express');
-const Anthropic = require('@anthropic-ai/sdk');
-const { pool }  = require('../db');
+const https   = require('https');
+const express = require('express');
+const { pool } = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
+const AgentConfigService = require('../platform/AgentConfigService');
+const { getProvider }    = require('../platform/AgentOrchestrator');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -44,25 +45,26 @@ Rules:
 - If no filter intent, return defaults: order=relevance, duration=any, publishedKey=""
 - q must not be empty`;
 
-let _anthropic;
-function getAnthropic() {
-  if (!_anthropic) _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  return _anthropic;
-}
-
 router.post('/parse-query', async (req, res) => {
   const { input } = req.body;
   if (!input?.trim()) return res.status(400).json({ error: 'input required' });
 
   try {
-    const msg = await getAnthropic().messages.create({
-      model:      'claude-haiku-4-5-20251001',
+    const orgId         = req.user.orgId;
+    const modelId       = await AgentConfigService.getOrgDefaultModel(orgId);
+    if (!modelId) return res.json({ q: input.trim(), order: 'relevance', duration: 'any', publishedKey: '', reasoning: '' });
+
+    const customProviders = await AgentConfigService.getCustomProviders(orgId).catch(() => []);
+    const provider        = getProvider(modelId, customProviders);
+
+    const response = await provider.chat({
+      model:      modelId,
       max_tokens: 200,
       system:     PARSE_SYSTEM,
       messages:   [{ role: 'user', content: input.trim() }],
     });
 
-    const raw     = msg.content[0]?.text ?? '';
+    const raw     = response.content?.find((b) => b.type === 'text')?.text ?? '';
     const jsonStr = raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1);
     const parsed  = JSON.parse(jsonStr);
 
