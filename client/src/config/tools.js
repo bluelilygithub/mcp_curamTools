@@ -146,6 +146,15 @@ const TOOLS = [
     roles:       ['org_member', 'org_admin'],
     group:       'Utilities',
   },
+  {
+    id:          'demo-spec-anomaly-investigator',
+    name:        'Spec Anomaly Investigator',
+    description: 'Upload a hydraulic specification PDF — agent investigates for likely problems using hypothesis-driven reasoning before Spec Validator runs formal compliance calculations.',
+    icon:        'search',
+    path:        '/demo/run/demo-spec-anomaly-investigator',
+    roles:       ['org_member', 'org_admin'],
+    group:       'Utilities',
+  },
 ];
 
 /**
