@@ -14,7 +14,7 @@
  */
 
 const TOOLS = [
-  // ── Google Ads ────────────────────────────────────────────────────────────
+  // ── Investigation ─────────────────────────────────────────────────────────
   {
     id:          'anomaly-investigator',
     name:        'Anomaly Investigator',
@@ -22,8 +22,10 @@ const TOOLS = [
     icon:        'search',
     path:        '/tools/anomaly-investigator',
     roles:       ['ads_operator', 'org_admin'],
-    group:       'Google Ads',
+    group:       'Investigation',
   },
+
+  // ── Google Ads ────────────────────────────────────────────────────────────
   {
     id:          'google-ads-monitor',
     name:        'Google Ads Monitor',
