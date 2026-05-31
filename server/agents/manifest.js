@@ -186,6 +186,13 @@ module.exports = [
 
   // ── Demo Suite ─────────────────────────────────────────────────────────────
   {
+    slug:       'demo-spec-anomaly-investigator',
+    module:     'demoSpecAnomalyInvestigator',
+    export:     'runDemoSpecAnomalyInvestigator',
+    permission: 'org_member',
+    rateLimit:  3,
+  },
+  {
     slug:       'demo-document-analyzer',
     module:     'demoSuite/documentAnalyzer',
     export:     'runDocumentAnalyzer',

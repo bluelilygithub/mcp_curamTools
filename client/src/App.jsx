@@ -59,6 +59,7 @@ const AdminClaudeSessionPage        = lazy(() => import('./pages/admin/AdminClau
 
 const DemoDashboardPage             = lazy(() => import('./pages/demo/DemoDashboardPage'));
 const DocumentAnalyzer              = lazy(() => import('./pages/demo/DocumentAnalyzer'));
+const DemoSpecAnomalyInvestigatorPage = lazy(() => import('./pages/demo/DemoSpecAnomalyInvestigatorPage'));
 const SpecValidator                 = lazy(() => import('./pages/demo/SpecValidator'));
 const TenderResponseGenerator       = lazy(() => import('./pages/demo/TenderResponseGenerator'));
 const DecisionLogPage               = lazy(() => import('./pages/demo/DecisionLogPage'));
@@ -148,6 +149,7 @@ export default function App() {
                     <Route path="/demo/run/demo-document-analyzer"     element={<DocumentAnalyzer />} />
                     <Route path="/demo/run/demo-spec-validator"        element={<SpecValidator />} />
                     <Route path="/demo/run/demo-tender-response"       element={<TenderResponseGenerator />} />
+                    <Route path="/demo/run/demo-spec-anomaly-investigator" element={<DemoSpecAnomalyInvestigatorPage />} />
                     <Route path="/demo/decision-log"                   element={<DecisionLogPage />} />
                     <Route path="/demo/logs/transactions"              element={<TransactionLogPage />} />
                     <Route path="/demo/logs/events"                    element={<AgentEventLogPage />} />

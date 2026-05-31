@@ -18,6 +18,27 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-05-31 — Demo Spec Anomaly Investigator (fourth engineering demo)
+
+### Built
+- **`server/agents/demoSpecAnomalyInvestigator/tools.js`** — 5 tools: `extract_spec_content` (nested Claude vision + Ghostscript rasterisation), `check_internal_consistency` (local deterministic: Q=Av, velocity vs diameter, pressure vs head — 3 relationships, ±10% tolerance), `get_standard_threshold` (hardcoded AS/NZS 3500.1 table: 3.0 m/s velocity + 9-entry flow rate table by diameter), `search_knowledge` (KB MCP), `get_prior_investigation_lessons` (LessonsRepositoryService).
+- **`server/agents/demoSpecAnomalyInvestigator/prompt.js`** — ≤400-word reasoning protocol. No cause list. No tool sequence. `extract_spec_content` always first (only correct first call — no hypothesis possible before document read). Three required output sections enforced.
+- **`server/agents/demoSpecAnomalyInvestigator/index.js`** — ReAct agent, maxIterations 12, budget A$1.50. FileIntakeService clears uploaded PDF. `pdfBuffer` + `customProviders` passed in context for nested tool vision call. Post-run section + hypothesis hygiene validation → `boundsFailed` → `needs_review`.
+- **`client/src/pages/demo/DemoSpecAnomalyInvestigatorPage.jsx`** — DemoShell demo page. PDF drop zone, optional concern textarea + MicButton, ProcessingModal, three-tab result (Investigation Log | Dead Ends | Open Threads) parsed client-side from markdown on `## ` section delimiters. Missing tab shows BoundsWarningPanel. Token/cost/model metadata line. Text export. History tab.
+- Platform wiring: manifest, AgentConfigService (AGENT_DEFAULTS + ADMIN_DEFAULTS + AGENT_MODEL_REQUIREMENTS), agentTrustContract (`requiresDataGaps: false`), demoCatalog, App.jsx route `/demo/run/demo-spec-anomaly-investigator`, AdminLessonsPage LESSON_COVERAGE_SECTIONS.
+
+### Architectural note
+`extract_spec_content` makes a nested Claude vision call inside a ReAct tool execute(). This is a new pattern in the codebase — a tool that calls the model internally, not just an MCP server. The outer ReAct loop calls Claude for reasoning; the tool independently calls Claude for extraction. The `pdfBuffer` and `customProviders` are passed through the agent context to make this possible without direct provider imports in the tools file.
+
+### SQL provisioning (manual — not committed)
+To assign to Curam Engineering demo org:
+```sql
+INSERT INTO org_agent_manifest (org_id, slug, enabled, is_configured, sort_order)
+VALUES (<curam_engineering_org_id>, 'demo-spec-anomaly-investigator', true, true, 3);
+```
+
+---
+
 ## 2026-05-31 — Anomaly Investigator agent
 
 ### Built

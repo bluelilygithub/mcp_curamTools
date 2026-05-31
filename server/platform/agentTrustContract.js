@@ -87,9 +87,13 @@ const AGENT_TRUST_CONTRACTS = {
       'citedUrls',
     ],
   },
-  // Investigation agent uses Investigation Log / Dead Ends / Open Threads instead of Data Gaps.
+  // Investigation agents use Investigation Log / Dead Ends / Open Threads instead of Data Gaps.
   // Section validation is done in the agent's runFn via boundsFailed.
   'anomaly-investigator': {
+    requiresDataGaps: false,
+    dataGapSourceIds: [],
+  },
+  'demo-spec-anomaly-investigator': {
     requiresDataGaps: false,
     dataGapSourceIds: [],
   },

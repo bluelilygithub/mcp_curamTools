@@ -70,6 +70,7 @@ const AGENT_DEFAULTS = {
   },
   'nightly-cost-alert': {},
   'anomaly-investigator': {},
+  'demo-spec-anomaly-investigator': {},
   // ── Demo suite agents ─────────────────────────────────────────────────────
   'demo-document-analyzer': {},  // no operator-configurable settings; all config via adminConfig
   'spec-validator':          {},
@@ -239,8 +240,16 @@ const ADMIN_DEFAULTS = {
     enabled:             true,
     model:               null,
     max_tokens:          6000,
-    max_iterations:      15,    // open-ended investigation may need many tool calls
+    max_iterations:      15,
     max_task_budget_aud: 2.50,
+    fallback_model:      null,
+  },
+  'demo-spec-anomaly-investigator': {
+    enabled:             true,
+    model:               null,   // must be vision-capable (extract_spec_content calls vision internally)
+    max_tokens:          4096,
+    max_iterations:      12,
+    max_task_budget_aud: 1.50,   // tighter — demo context
     fallback_model:      null,
   },
   'demo-tender-response': {
@@ -279,6 +288,7 @@ const AGENT_MODEL_REQUIREMENTS = {
   'google-ads-change-impact':    { tier: 'advanced', reason: 'Timeline analysis with performance discontinuity detection' },
   'google-ads-freeform':         { tier: 'advanced', capabilities: ['tool_use'], reason: 'Open-ended Q&A with live data retrieval' },
   'anomaly-investigator':        { tier: 'advanced', capabilities: ['tool_use'], reason: 'Open-ended hypothesis-driven investigation across three data sources — requires strong reasoning to form, test, and revise hypotheses from data' },
+  'demo-spec-anomaly-investigator': { tier: 'advanced', capabilities: ['tool_use', 'vision'], reason: 'ReAct investigation with nested vision extraction — requires vision capability and strong reasoning for hypothesis-driven spec analysis' },
   'competitor-keyword-intel':    { tier: 'advanced', capabilities: ['tool_use'], reason: 'Competitive gap analysis requiring detailed reasoning' },
   'ads-attribution-summary':     { tier: 'standard', reason: 'Brief structured summary from pre-fetched data' },
   'ads-bounce-analysis':         { tier: 'standard', reason: 'Structured bounce report from pre-fetched data' },

@@ -20,6 +20,7 @@ const LESSON_COVERAGE_SECTIONS = [
       'ads-attribution-summary',
       'ads-bounce-analysis',
       'anomaly-investigator',
+      'demo-spec-anomaly-investigator',
       'ads-copy-diagnostic',
       'ads-copy-gate',
       'ads-copy-playbook',

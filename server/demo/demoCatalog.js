@@ -40,6 +40,13 @@ const DEMO_CATALOG = {
     icon: 'file-check',
     pattern: 'three-stage-pipeline',
   },
+  'demo-spec-anomaly-investigator': {
+    name: 'Spec Anomaly Investigator',
+    description: 'Upload a hydraulic specification PDF. The agent investigates for likely problems using hypothesis-driven reasoning — before Spec Validator runs formal compliance calculations. Shows what a ReAct investigation loop looks like on a real engineering document.',
+    category: 'Engineering',
+    icon: 'search',
+    pattern: 'react-investigation',
+  },
   'demo-tender-response': {
     name: 'Tender Response Generator',
     description: 'Upload an RFT PDF — extract compliance requirements, run deterministic checks against a pre-loaded evidence pack, and generate first-draft response paragraphs with inline evidence citations.',
