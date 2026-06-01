@@ -68,13 +68,13 @@ async function runDemoSpecAnomalyInvestigator(context) {
   if (!rawFileData) throw new Error('No file uploaded. Upload a hydraulic specification PDF to investigate.');
 
   emit('Validating uploaded file…');
-  const clearedFile = await FileIntakeService.clearFile({
-    base64Data:   rawFileData,
+  const clearedFile = await FileIntakeService.fromBase64({
+    fileData:         rawFileData,
     mimeType,
     fileName,
     orgId,
-    userId:       req?.user?.id,
-    allowedMimes: ['application/pdf'],
+    userId:           req?.user?.id,
+    allowedMimeTypes: ['application/pdf'],
   });
 
   const freeformConcern = (req?.body?.freeformConcern ?? '').trim();
@@ -121,7 +121,7 @@ async function runDemoSpecAnomalyInvestigator(context) {
     result: {
       ...result,
       boundsFailed:   sectionFailures,
-      fileName:       clearedFile.sanitisedName ?? fileName,
+      fileName:       clearedFile.fileName ?? fileName,
       freeformConcern: freeformConcern || null,
     },
     trace,
