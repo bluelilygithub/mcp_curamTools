@@ -18,6 +18,13 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — Personal memory Settings help copy
+
+### Built
+- **`PersonalMemoryTab.jsx`** — “How memory works” section: manual vs conversation capture, no auto-logging, semantic recall, distinction from Admin Knowledge.
+
+---
+
 ## 2026-06-18 — Personal memory (per-user semantic notes)
 
 ### Built

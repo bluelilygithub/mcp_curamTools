@@ -188,9 +188,30 @@ export default function PersonalMemoryTab() {
         />
       )}
 
-      <Section title="About personal memory">
+      <Section title="How memory works">
         <p className="text-sm leading-relaxed" style={{ color: 'var(--color-muted)' }}>
-          Notes saved here are private to you within this organisation. The conversation agent can capture and recall them across sessions — other team members cannot see your memories.
+          Your personal notebook inside this organisation — only you can see it. The conversation agent can read and
+          write here; teammates and admins cannot.
+        </p>
+        <ul className="text-sm leading-relaxed space-y-2 list-disc pl-5" style={{ color: 'var(--color-muted)' }}>
+          <li>
+            <strong style={{ color: 'var(--color-text)' }}>Add manually</strong> — type a note below and save.
+            Good for preferences you already know (e.g. reporting cadence, campaign scope).
+          </li>
+          <li>
+            <strong style={{ color: 'var(--color-text)' }}>Add in conversation</strong> — say things like
+            “Remember that…” or “Keep this in mind for next time.” The agent saves a short note when it chooses to —
+            it does <em>not</em> log your whole chat automatically.
+          </li>
+          <li>
+            <strong style={{ color: 'var(--color-text)' }}>Recall when relevant</strong> — unlike a fixed fact list
+            pasted into every message, the agent searches these notes when prior context would help. Search below uses
+            the same semantic matching.
+          </li>
+        </ul>
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--color-muted)' }}>
+          Not the same as Admin → Knowledge, which is org-wide documents for all agents. Manual entries and
+          conversation captures share this list.
         </p>
         {stats && (
           <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
