@@ -57,6 +57,10 @@ const BUILTIN_MCP_SERVERS = [
     ...localServer('knowledge-base.js', ['DATABASE_URL', 'OPENAI_API_KEY']),
   },
   {
+    name: 'personal-memory',
+    ...localServer('personal-memory.js', ['DATABASE_URL', 'OPENAI_API_KEY']),
+  },
+  {
     name: 'storage',
     ...localServer('storage.js', [
       'DATABASE_URL',

@@ -158,7 +158,9 @@ Manages the full lifecycle of remote MCP server connections. All operations are 
 - `deregister(orgId, serverId)` — soft-deactivates (`is_active = FALSE`)
 - `list(orgId)` — returns all active servers with connection status
 - `connect(orgId, serverId)` / `disconnect(orgId, serverId)` — idempotent
-- `send(orgId, serverId, method, params)` — JSON-RPC dispatch with 30s timeout
+- `send(orgId, serverId, method, params, options)` — JSON-RPC dispatch with 30s timeout
+  - Stdio `tools/call` injects `__trusted_org_id` into arguments
+  - When `options.userId` is set, also injects `__trusted_user_id` (used by `personal-memory` MCP)
 - `disconnectAll()` — called on SIGTERM/SIGINT
 
 **Events:** `connected`, `disconnected`, `notification`

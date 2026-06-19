@@ -18,7 +18,7 @@
  *   Do NOT cross-reference CRM data with Google data for periods before March 2026.
  */
 
-const { getAdsServer, getAnalyticsServer, getWordPressServer, getPlatformServer, getKnowledgeBaseServer, callMcpTool, resolveRangeArgs } = require('../../platform/mcpTools');
+const { getAdsServer, getAnalyticsServer, getWordPressServer, getPlatformServer, getKnowledgeBaseServer, getPersonalMemoryServer, callMcpTool, resolveRangeArgs } = require('../../platform/mcpTools');
 const AgentConfigService = require('../../platform/AgentConfigService');
 
 /**
@@ -489,6 +489,90 @@ const flagPromptForReviewTool = {
   },
 };
 
+// ── Personal memory (per-user, org-scoped) ────────────────────────────────────
+
+function personalMemoryOptions(context) {
+  const userId = context.userId ?? context.user_id;
+  if (!userId) throw new Error('User context is required for personal memory.');
+  return { userId };
+}
+
+const captureThoughtTool = {
+  name: 'capture_thought',
+  description: 'Save a personal note for this user — preferences, decisions, or context to recall in future conversations. Scoped to the current user only; other org members cannot see it.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      content:  { type: 'string', description: 'What to remember.' },
+      metadata: { type: 'object', description: 'Optional tags, e.g. { "topic": "budget" }.' },
+    },
+    required: ['content'],
+  },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(input, context) {
+    const pm = await getPersonalMemoryServer(context.orgId);
+    return callMcpTool(context.orgId, pm, 'capture_thought', {
+      content:  input.content,
+      metadata: input.metadata ?? undefined,
+    }, personalMemoryOptions(context));
+  },
+};
+
+const searchThoughtsTool = {
+  name: 'search_thoughts',
+  description: 'Semantic search over this user\'s personal memories. Use when the user refers to something they told you before, or when prior personal context would help answer the question.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'What to recall — natural language.' },
+      limit: { type: 'integer', description: 'Max results. Default 8.' },
+    },
+    required: ['query'],
+  },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(input, context) {
+    const pm = await getPersonalMemoryServer(context.orgId);
+    return callMcpTool(context.orgId, pm, 'search_thoughts', {
+      query: input.query,
+      limit: input.limit ?? 8,
+    }, personalMemoryOptions(context));
+  },
+};
+
+const listThoughtsTool = {
+  name: 'list_thoughts',
+  description: 'List this user\'s recent personal memories (newest first). Use when the user asks what you remember about them.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      limit:  { type: 'integer', description: 'Max results. Default 20.' },
+      offset: { type: 'integer', description: 'Pagination offset. Default 0.' },
+    },
+  },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(input, context) {
+    const pm = await getPersonalMemoryServer(context.orgId);
+    return callMcpTool(context.orgId, pm, 'list_thoughts', {
+      limit:  input.limit  ?? 20,
+      offset: input.offset ?? 0,
+    }, personalMemoryOptions(context));
+  },
+};
+
+const thoughtStatsTool = {
+  name: 'thought_stats',
+  description: 'How many personal memories this user has stored.',
+  input_schema: {
+    type: 'object',
+    properties: {},
+  },
+  requiredPermissions: [], toolSlug: TOOL_SLUG,
+  async execute(_input, context) {
+    const pm = await getPersonalMemoryServer(context.orgId);
+    return callMcpTool(context.orgId, pm, 'thought_stats', {}, personalMemoryOptions(context));
+  },
+};
+
 const googleAdsConversationTools = [
   // Google Ads — full set
   getCampaignPerformanceTool,
@@ -520,6 +604,11 @@ const googleAdsConversationTools = [
   searchReportHistoryTool,
   // Knowledge base — search only; add_document excluded (RAG poisoning vector)
   searchKnowledgeTool,
+  // Personal memory — per-user notes across sessions
+  captureThoughtTool,
+  searchThoughtsTool,
+  listThoughtsTool,
+  thoughtStatsTool,
 ];
 
 module.exports = { googleAdsConversationTools, TOOL_SLUG };

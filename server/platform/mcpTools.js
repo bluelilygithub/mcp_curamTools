@@ -106,6 +106,17 @@ async function getKnowledgeBaseServer(orgId) {
   return server;
 }
 
+async function getPersonalMemoryServer(orgId) {
+  const server = await findAndConnect(orgId, 'personal-memory');
+  if (!server) {
+    throw new Error(
+      'No Personal Memory MCP server registered for this organisation. ' +
+      'Add one in Admin > MCP Servers (command: node, args: [.../mcp-servers/personal-memory.js]).'
+    );
+  }
+  return server;
+}
+
 /** @private Find a server matching a slug keyword and auto-connect if needed. */
 async function findAndConnect(orgId, keyword) {
   const servers = await MCPRegistry.list(orgId);
@@ -129,13 +140,15 @@ async function findAndConnect(orgId, keyword) {
  * @param {object} server   — server record returned by getAdsServer / getAnalyticsServer
  * @param {string} toolName — MCP tool name (e.g. 'ads_get_campaign_performance')
  * @param {object} args     — tool arguments
+ * @param {object} [options]
+ * @param {number} [options.userId] — injected as __trusted_user_id for per-user MCP tools
  * @returns {Promise<any>}  — parsed JSON result from the MCP server
  */
-async function callMcpTool(orgId, server, toolName, args = {}) {
+async function callMcpTool(orgId, server, toolName, args = {}, options = {}) {
   const result = await MCPRegistry.send(orgId, server.id, 'tools/call', {
     name:      toolName,
     arguments: args,
-  });
+  }, options);
   const raw = result?.content?.[0]?.text;
   if (!raw) throw new Error(`Empty response from MCP server for tool: ${toolName}`);
   return JSON.parse(raw);
@@ -160,10 +173,10 @@ async function callMcpTool(orgId, server, toolName, args = {}) {
  * @param {string} serverLabel — human-readable server name for the error object (e.g. 'google-ads')
  * @returns {Promise<any>}
  */
-async function callMcpToolSafe(orgId, serverOrPromise, toolName, args = {}, serverLabel = 'unknown') {
+async function callMcpToolSafe(orgId, serverOrPromise, toolName, args = {}, serverLabel = 'unknown', options = {}) {
   try {
     const server = await Promise.resolve(serverOrPromise);
-    return await callMcpTool(orgId, server, toolName, args);
+    return await callMcpTool(orgId, server, toolName, args, options);
   } catch (err) {
     console.warn(`[mcpTools] ${serverLabel}/${toolName} unavailable:`, err.message);
     return { _unavailable: true, server: serverLabel, error: err.message };
@@ -188,4 +201,4 @@ function resolveRangeArgs(context, input, defaultDays = 30) {
   return { days: context.days ?? input.days ?? defaultDays };
 }
 
-module.exports = { getAdsServer, getAnalyticsServer, getWordPressServer, getPlatformServer, getKnowledgeBaseServer, callMcpTool, callMcpToolSafe, resolveRangeArgs };
+module.exports = { getAdsServer, getAnalyticsServer, getWordPressServer, getPlatformServer, getKnowledgeBaseServer, getPersonalMemoryServer, callMcpTool, callMcpToolSafe, resolveRangeArgs };

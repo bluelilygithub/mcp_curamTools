@@ -84,6 +84,23 @@ All servers are registered in Admin > MCP Servers and connect via stdio (local p
 
 ---
 
+## personal-memory.js — 4 tools
+
+Per-user semantic memory within an organisation. Scoped via trusted `__trusted_org_id` + `__trusted_user_id`. Any org member; not admin-only.
+
+| Tool | Description |
+|---|---|
+| `capture_thought` | Store or update a personal note (deduped by content hash) |
+| `search_thoughts` | Semantic search over the user's memories |
+| `list_thoughts` | Recent memories (newest first) |
+| `thought_stats` | Count and date range |
+
+**REST:** `POST/GET/DELETE /api/personal-memory`  
+**UI:** Settings → Memory (`/settings?tab=memory`)  
+**Detail:** [PERSONAL_MEMORY.md](./PERSONAL_MEMORY.md)
+
+---
+
 ## storage.js — 4 tools
 
 | Tool | Description |
@@ -134,9 +151,9 @@ All servers are registered in Admin > MCP Servers and connect via stdio (local p
 
 ---
 
-## Conversation Agent — Tool Count: 25
+## Conversation Agent — Tool Count: 29
 
-Wires tools from: google-ads (11), google-analytics (5), wordpress (5), platform (4), knowledge-base (2).
+Wires tools from: google-ads (10), google-analytics (5), wordpress (6), platform (3), knowledge-base (1), personal-memory (4). See root `MCP-SERVERS.md` for exclusions.
 
 ## Ads Setup Architect — Tool Count: 7
 
@@ -152,6 +169,7 @@ All servers use stdio transport:
 - `node server/mcp-servers/wordpress.js`
 - `node server/mcp-servers/platform.js`
 - `node server/mcp-servers/knowledge-base.js`
+- `node server/mcp-servers/personal-memory.js`
 - `node server/mcp-servers/storage.js`
 
 Required environment variables are inherited from the parent process.

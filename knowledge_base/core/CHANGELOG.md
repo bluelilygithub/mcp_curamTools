@@ -10,6 +10,12 @@
 
 ---
 
+## 2026-06-18 — Personal memory (mirror)
+
+Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18**. Highlights: `personal_thoughts` table; `PersonalMemoryService`; `personal-memory.js` MCP (4 tools); `/api/personal-memory` REST; `__trusted_user_id` injection in `mcpRegistry`; conversation agent +29 tools; Settings **Memory** tab. See `architecture/PERSONAL_MEMORY.md`.
+
+---
+
 ## 2026-05-14 — Prompt versioning on AgentScheduler + createAgentRoute fix (mirror)
 
 Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-05-14**. Highlights: `AgentScheduler` merges `promptVersion`; `promptVersions.js` exports `mergePromptVersionIntoResult`; `createAgentRoute.js` file-header comment closed (requires were accidentally commented out).

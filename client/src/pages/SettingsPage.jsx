@@ -12,6 +12,7 @@ import { THEMES } from '../providers/ThemeProvider';
 import Button from '../components/ui/Button';
 import InlineBanner from '../components/ui/InlineBanner';
 import ModelsTab from '../components/settings/ModelsTab';
+import PersonalMemoryTab from '../components/settings/PersonalMemoryTab';
 
 
 // ── Timezones ──────────────────────────────────────────────────────────────
@@ -69,6 +70,7 @@ const LABEL_STYLE = { color: 'var(--color-muted)' };
 const TAB_PARAM = {
   Profile: 'profile',
   Appearance: 'appearance',
+  Memory: 'memory',
   Models: 'models',
   Budget: 'budget',
 };
@@ -398,7 +400,9 @@ export default function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = user?.roles?.some((r) => r.name === 'org_admin');
 
-  const tabs = isAdmin ? ['Profile', 'Appearance', 'Models', 'Budget'] : ['Profile', 'Appearance'];
+  const tabs = isAdmin
+    ? ['Profile', 'Appearance', 'Memory', 'Models', 'Budget']
+    : ['Profile', 'Appearance', 'Memory'];
   const requestedTab = tabFromParam(searchParams.get('tab'));
   const activeTab = tabs.includes(requestedTab) ? requestedTab : tabs[0];
 
@@ -413,7 +417,7 @@ export default function SettingsPage() {
     <div className="p-6 max-w-2xl mx-auto">
       <div className="mb-6">
         <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Settings</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--color-muted)' }}>Manage your account and workspace appearance.</p>
+        <p className="text-sm mt-1" style={{ color: 'var(--color-muted)' }}>Manage your account, personal memory, and workspace appearance.</p>
       </div>
 
       {/* Tab bar */}
@@ -436,6 +440,7 @@ export default function SettingsPage() {
 
       {activeTab === 'Profile'    && <ProfileTab />}
       {activeTab === 'Appearance' && <AppearanceTab />}
+      {activeTab === 'Memory'     && <PersonalMemoryTab />}
       {activeTab === 'Models'     && <ModelsTab />}
       {activeTab === 'Budget'     && <BudgetTab />}
     </div>

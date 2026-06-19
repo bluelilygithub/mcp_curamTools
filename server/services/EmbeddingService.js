@@ -122,4 +122,4 @@ async function search({ orgId, query, sourceType = null, limit = 8 }) {
   return rows;
 }
 
-module.exports = { embedAndStore, search };
+module.exports = { embedAndStore, search, embedText: fetchEmbedding };

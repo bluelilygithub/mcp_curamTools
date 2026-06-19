@@ -461,6 +461,27 @@ async function initSchema() {
         ON embeddings(org_id, source_type)
     `);
 
+    // Per-user personal memory (Open Brain–style thoughts scoped to org + user)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS personal_thoughts (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id              INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        content             TEXT NOT NULL,
+        content_fingerprint TEXT NOT NULL,
+        metadata            JSONB DEFAULT '{}',
+        embedding           vector(${1536}),
+        created_at          TIMESTAMPTZ DEFAULT NOW(),
+        updated_at          TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (org_id, user_id, content_fingerprint)
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_personal_thoughts_org_user
+        ON personal_thoughts(org_id, user_id, created_at DESC)
+    `);
+
     // Prompt flags — raised by agents or model-change detection; resolved by admins
     await client.query(`
       CREATE TABLE IF NOT EXISTS prompt_flags (

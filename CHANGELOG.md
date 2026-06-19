@@ -18,6 +18,35 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — Personal memory (per-user semantic notes)
+
+### Built
+- **`personal_thoughts` table** (`server/db.js`) — pgvector-backed store scoped to `org_id` + `user_id`; content deduped via SHA-256 fingerprint.
+- **`server/services/PersonalMemoryService.js`** — `capture`, `search`, `list`, `stats`, `remove`; reuses `EmbeddingService.embedText` (`text-embedding-3-small`, 1536 dims).
+- **`server/mcp-servers/personal-memory.js`** — stdio MCP server: `capture_thought`, `search_thoughts`, `list_thoughts`, `thought_stats`. Requires trusted `__trusted_org_id` + `__trusted_user_id`.
+- **`server/routes/personalMemory.js`** — REST API at `/api/personal-memory` (any authenticated org user; own thoughts only).
+- **`server/platform/mcpRegistry.js`** — injects `__trusted_user_id` on stdio `tools/call` when `send(..., { userId })` is passed.
+- **`server/platform/mcpTools.js`** — `getPersonalMemoryServer`, `callMcpTool` / `callMcpToolSafe` accept optional `{ userId }`.
+- **`server/mcp-servers/manifest.js`** — `personal-memory` built-in server (bootstrap on startup).
+- **Conversation agent** (`googleAdsConversation/tools.js`) — 4 personal-memory tools wired; exported tool count **25 → 29**.
+- **`client/src/components/settings/PersonalMemoryTab.jsx`** — Settings UI: capture, semantic search, list, delete.
+- **`client/src/pages/SettingsPage.jsx`** — **Memory** tab for all org users (`/settings?tab=memory`).
+
+### Docs
+- **`MCP-SERVERS.md`** — personal-memory tools, conversation count, registration note.
+- **`knowledge_base/architecture/PERSONAL_MEMORY.md`** — feature overview (scope, API, MCP, UI).
+- **`knowledge_base/architecture/MCP_SERVERS.md`** — personal-memory section; conversation tool count 29.
+- **`knowledge_base/architecture/PLATFORM_PRIMITIVES.md`** — `send` trusted user injection.
+
+### Design intent
+Open Brain–style personal memory within mcptools discipline: distinct from org-wide `embeddings` (RAG) and curated `agent_lessons`. Any org member can use their own memory; conversation agent can capture/recall across sessions. Not admin-only.
+
+### What's next
+- Optional: wire personal-memory tools into other ReAct agents beyond conversation.
+- Optional: MCP resource URIs for personal thought browse (if needed outside REST).
+
+---
+
 ## 2026-05-31 — Demo Spec Anomaly Investigator (fourth engineering demo)
 
 ### Built

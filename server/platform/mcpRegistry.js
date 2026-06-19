@@ -194,6 +194,7 @@ class MCPRegistryClass extends EventEmitter {
           arguments: {
             ...(params?.arguments && typeof params.arguments === 'object' ? params.arguments : {}),
             __trusted_org_id: orgId,
+            ...(options.userId ? { __trusted_user_id: options.userId } : {}),
           },
         }
       : params;

@@ -121,6 +121,21 @@ All servers are registered in Admin > MCP Servers and connect via stdio (local p
 
 ---
 
+## personal-memory.js — 4 tools
+
+Per-user semantic memory within an organisation. Scoped to `org_id` + `user_id` via trusted injection (`__trusted_org_id`, `__trusted_user_id`). Any org member can use their own memory; they cannot read other users' thoughts.
+
+| Tool | Description | Data Shape | When to Use |
+|---|---|---|---|
+| `capture_thought` | Store a personal note for the current user. Duplicate content updates the existing entry. | `{id, created, created_at, updated_at}` | When the user wants something remembered across sessions. |
+| `search_thoughts` | Semantic search over the user's personal memories. | `[{id, content, metadata, similarity, created_at, updated_at}]` | Recall prior personal context or preferences. |
+| `list_thoughts` | Recent personal memories (newest first). | `[{id, content, metadata, created_at, updated_at}]` | When the user asks what you remember about them. |
+| `thought_stats` | Count and date range of stored memories. | `{total, oldest, newest}` | Quick summary of memory store size. |
+
+**REST API:** `POST/GET/DELETE /api/personal-memory` (any authenticated org user).
+
+---
+
 ## storage.js — 4 tools
 
 | Tool | Description | Data Shape | When to Use |
@@ -159,9 +174,9 @@ Device data is available in **all three systems** — never tell the user device
 
 ---
 
-## Conversation Agent — Tool Count: 25
+## Conversation Agent — Tool Count: 29
 
-The conversation agent (`googleAdsConversation`) wires tools from: google-ads (10 — excludes `ads_generate_keyword_ideas`, `ads_get_ad_group_performance`, `ads_get_search_terms_by_ad_group`, `ads_get_quality_scores`, `ads_get_negative_keywords`), google-analytics (5), wordpress (6 — excludes `wp_get_server_ip`), platform (3 — excludes `get_pending_suggestions`, `update_suggestion_outcome`, `get_suggestion_history`, `flag_prompt_for_review`), knowledge-base (1 — excludes `add_document`, `list_knowledge_sources`). Current exported count: 25.
+The conversation agent (`googleAdsConversation`) wires tools from: google-ads (10 — excludes `ads_generate_keyword_ideas`, `ads_get_ad_group_performance`, `ads_get_search_terms_by_ad_group`, `ads_get_quality_scores`, `ads_get_negative_keywords`), google-analytics (5), wordpress (6 — excludes `wp_get_server_ip`), platform (3 — excludes `get_pending_suggestions`, `update_suggestion_outcome`, `get_suggestion_history`, `flag_prompt_for_review`), knowledge-base (1 — excludes `add_document`, `list_knowledge_sources`), personal-memory (4). Current exported count: 29.
 
 ---
 
@@ -195,6 +210,7 @@ All built-in servers use stdio transport with these command patterns:
 - `wordpress.js`: `node server/mcp-servers/wordpress.js`
 - `platform.js`: `node server/mcp-servers/platform.js`
 - `knowledge-base.js`: `node server/mcp-servers/knowledge-base.js`
+- `personal-memory.js`: `node server/mcp-servers/personal-memory.js`
 - `storage.js`: `node server/mcp-servers/storage.js`
 
 Required environment variables are inherited from the parent process via Railway environment configuration.
