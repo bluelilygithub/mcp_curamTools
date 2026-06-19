@@ -3,10 +3,11 @@
  * Contains: hamburger (mobile), brand, search, user email, org_name, role badge, logout.
  * CSS vars only — no hardcoded Tailwind colour classes.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useIcon } from '../../providers/IconProvider';
 import useAuthStore from '../../stores/authStore';
+import api from '../../api/client';
 
 export default function TopNav({ onMenuClick }) {
   const getIcon = useIcon();
@@ -14,7 +15,18 @@ export default function TopNav({ onMenuClick }) {
   const location = useLocation();
   const { user, logout } = useAuthStore();
   const [searchValue, setSearchValue] = useState('');
+  const [newSuggestionCount, setNewSuggestionCount] = useState(0);
   const isYouTube = location.pathname === '/tools/youtube';
+  const isSuggestions = location.pathname === '/suggestions';
+
+  useEffect(() => {
+    const fetchCount = () => {
+      api.get('/suggestions/count?status=new').then((d) => setNewSuggestionCount(d.count || 0)).catch(() => {});
+    };
+    fetchCount();
+    window.addEventListener('mcptools:suggestions-changed', fetchCount);
+    return () => window.removeEventListener('mcptools:suggestions-changed', fetchCount);
+  }, []);
 
   const primaryRole = user?.roles?.find((r) => r.scope_type === 'global')?.name;
   const isAdmin = primaryRole === 'org_admin';
@@ -104,6 +116,25 @@ export default function TopNav({ onMenuClick }) {
             {isAdmin ? 'Admin' : 'Member'}
           </span>
         )}
+
+        {/* Suggestions inbox */}
+        <button
+          onClick={() => navigate('/suggestions')}
+          className="relative flex items-center justify-center w-8 h-8 rounded-lg hover:opacity-70 transition-all"
+          aria-label="Suggestions"
+          title="Suggestions"
+          style={{ color: isSuggestions ? 'var(--color-primary)' : 'var(--color-muted)' }}
+        >
+          {getIcon('inbox', { size: 16 })}
+          {newSuggestionCount > 0 && (
+            <span
+              className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full text-[9px] font-bold flex items-center justify-center"
+              style={{ background: 'var(--color-primary)', color: '#fff' }}
+            >
+              {newSuggestionCount > 9 ? '9+' : newSuggestionCount}
+            </span>
+          )}
+        </button>
 
         {/* YouTube */}
         <button

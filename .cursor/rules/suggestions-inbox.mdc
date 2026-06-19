@@ -1,0 +1,27 @@
+---
+description: mcptools server — emit suggestions for anomalies
+globs:
+  - server/**/*.js
+alwaysApply: false
+---
+
+# mcptools — suggestions
+
+When a service, agent, or startup check finds an anomaly, call **`SuggestionService`** — do not only log.
+
+```javascript
+const { capture, captureIf, makeFingerprint } = require('../services/SuggestionService');
+
+await captureIf(condition, {
+  orgId,
+  userId,
+  source: 'serviceName',
+  category: 'alert',
+  fingerprint: makeFingerprint('serviceName', 'stable-key'),
+  title: '…',
+  body: '…',
+  context: '…',
+});
+```
+
+See `knowledge_base/architecture/SUGGESTIONS_INBOX.md`.

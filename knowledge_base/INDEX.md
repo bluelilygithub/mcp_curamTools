@@ -76,6 +76,7 @@ knowledge_base/
 | **Report chaining** (agent outputs as accountable downstream inputs) | `architecture/REPORT_CHAINING.md` |
 | **MCP servers & tools** | `architecture/MCP_SERVERS.md` |
 | **Personal memory** (per-user notes) | `architecture/PERSONAL_MEMORY.md` |
+| **Suggestions inbox** (agent/service findings) | `architecture/SUGGESTIONS_INBOX.md` |
 | **Database schema** | `architecture/DATABASE_SCHEMA.md` |
 | **Architectural decisions** | `decisions/DECISIONS.md` |
 | **Agent: Google Ads Monitor** | `agents/google-ads-monitor.md` |

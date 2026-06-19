@@ -59,6 +59,7 @@ app.use('/api/google-ads', require('./routes/googleAds'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/conversation', require('./routes/conversation'));
 app.use('/api/personal-memory', require('./routes/personalMemory'));
+app.use('/api/suggestions', require('./routes/suggestions'));
 app.use('/api/admin/knowledge', require('./routes/adminKnowledge'));
 app.use('/api/lessons',        require('./routes/lessons'));
 app.use('/api/doc-extractor',  require('./routes/docExtractor'));
@@ -96,6 +97,10 @@ const { bootstrapBuiltinMcpServers } = require('./platform/bootstrapBuiltinMcpSe
 
 initSchema()
   .then(async () => {
+    const { runStartupChecks } = require('./services/SuggestionService');
+    await runStartupChecks().catch((err) => {
+      logger.warn('Suggestion startup checks failed', { error: err.message });
+    });
     const result = await bootstrapBuiltinMcpServers();
     if (!result.skipped) {
       logger.info('Built-in MCP servers registered', {

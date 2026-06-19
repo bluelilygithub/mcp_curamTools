@@ -148,7 +148,10 @@ async function stats({ orgId, userId }) {
     [ids.orgId, ids.userId]
   );
 
-  return rows[0] ?? { total: 0, oldest: null, newest: null };
+  const result = rows[0] ?? { total: 0, oldest: null, newest: null };
+  const { reportPersonalMemoryHealth } = require('./SuggestionService');
+  reportPersonalMemoryHealth(orgId, userId, result).catch(() => {});
+  return result;
 }
 
 /**

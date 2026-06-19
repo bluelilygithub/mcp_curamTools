@@ -51,6 +51,7 @@ import {
   Server,
   Wrench,
   Menu,
+  Inbox,
   MessageSquare,
   Send,
   Mic,
@@ -96,6 +97,7 @@ const semanticMap = {
   users: Users,
   logout: LogOut,
   menu: Menu,
+  inbox: Inbox,
 
   // Chevrons
   'chevron-left': ChevronLeft,

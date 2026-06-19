@@ -18,6 +18,23 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — Suggestions inbox (SuggestionService)
+
+### Built
+- **`user_suggestions` table** — per-user inbox (`org_id` + `user_id`); distinct from org-only `agent_suggestions` (HIA).
+- **`server/services/SuggestionService.js`** — `capture`, `captureIf`, `makeFingerprint`, startup checks, personal memory health.
+- **`server/routes/suggestions.js`** — REST API at `/api/suggestions`.
+- **`client/src/pages/SuggestionsPage.jsx`** — filter by category/status, triage workflow, manual add.
+- **TopNav** — inbox icon + badge for `new` count.
+- **Emitters:** server startup (pgvector, `OPENAI_API_KEY`), `PersonalMemoryService.stats`.
+- **Docs:** `knowledge_base/architecture/SUGGESTIONS_INBOX.md`, `.cursor/rules/suggestions-inbox.mdc`.
+
+### Notes
+- Pattern ported from Vault; mcptools scopes all rows to org + user.
+- High Intent Advisor continues using `agent_suggestions` — unchanged.
+
+---
+
 ## 2026-06-18 — Personal memory Settings help copy
 
 ### Built

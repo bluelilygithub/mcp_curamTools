@@ -482,6 +482,34 @@ async function initSchema() {
         ON personal_thoughts(org_id, user_id, created_at DESC)
     `);
 
+    // Per-user suggestions inbox (agents, services, startup — distinct from agent_suggestions / HIA)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_suggestions (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id      INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        category    TEXT NOT NULL DEFAULT 'other',
+        status      TEXT NOT NULL DEFAULT 'new',
+        title       TEXT NOT NULL,
+        body        TEXT NOT NULL DEFAULT '',
+        context     TEXT,
+        source      TEXT,
+        fingerprint TEXT,
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_suggestions_org_user_status
+        ON user_suggestions(org_id, user_id, status, created_at DESC)
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_suggestions_org_user_category
+        ON user_suggestions(org_id, user_id, category, created_at DESC)
+    `);
+
     // Prompt flags — raised by agents or model-change detection; resolved by admins
     await client.query(`
       CREATE TABLE IF NOT EXISTS prompt_flags (

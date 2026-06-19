@@ -14,6 +14,7 @@ import LoginPage from './pages/LoginPage';
 const DashboardPage                 = lazy(() => import('./pages/DashboardPage'));
 const ToolLibraryPage               = lazy(() => import('./pages/ToolLibraryPage'));
 const SettingsPage                  = lazy(() => import('./pages/SettingsPage'));
+const SuggestionsPage               = lazy(() => import('./pages/SuggestionsPage'));
 
 const GoogleAdsMonitorPage          = lazy(() => import('./pages/tools/GoogleAdsMonitorPage'));
 const DiamondPlateDataPage          = lazy(() => import('./pages/tools/DiamondPlateDataPage'));
@@ -95,6 +96,7 @@ export default function App() {
                     <Route path="/dashboard"                     element={<DashboardPage />} />
                     <Route path="/tools"                         element={<ToolLibraryPage />} />
                     <Route path="/settings"                      element={<SettingsPage />} />
+                    <Route path="/suggestions"                   element={<SuggestionsPage />} />
                     <Route path="/tools/google-ads-monitor"      element={<GoogleAdsMonitorPage />} />
                     <Route path="/tools/diamondplate-data"       element={<DiamondPlateDataPage />} />
                     <Route path="/tools/doc-extractor"           element={<DocExtractorPage />} />

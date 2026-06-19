@@ -11,7 +11,7 @@ Per-user semantic notes within an organisation. Inspired by Open Brain’s captu
 | **Org** | Thoughts belong to one organisation (`org_id`). |
 | **User** | Each user sees and manages only their own rows (`user_id`). |
 | **Access** | Any authenticated org member — not admin-only. |
-| **Distinct from** | `embeddings` (org-wide RAG), `agent_lessons` (curated agent rules). |
+| **Distinct from** | `embeddings` (org-wide RAG), `agent_lessons` (curated agent rules), `user_suggestions` (inbox — see SUGGESTIONS_INBOX.md). |
 
 ---
 
