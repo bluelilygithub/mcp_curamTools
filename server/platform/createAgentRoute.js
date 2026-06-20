@@ -382,19 +382,24 @@ async function finalizeAgentRun({
     .catch(err => console.error(`[${slug}] usage log error:`, err.message));
 
   // Auto-index summary for RAG — fire and forget, never blocks the response
-  if (resultPayload.summary && process.env.OPENAI_API_KEY) {
-    EmbeddingService.embedAndStore({
-      orgId,
-      sourceType: 'agent_run',
-      sourceId:   runId,
-      content:    resultPayload.summary,
-      metadata: {
-        slug,
-        run_at:    new Date().toISOString(),
-        startDate: resultPayload.startDate ?? null,
-        endDate:   resultPayload.endDate   ?? null,
-      },
-    }).catch((e) => console.warn(`[${slug}] embedding failed (non-fatal):`, e.message));
+  if (resultPayload.summary) {
+    EmbeddingService.resolveEmbeddingConfig(orgId)
+      .then((cfg) => {
+        if (!cfg.available) return null;
+        return EmbeddingService.embedAndStore({
+          orgId,
+          sourceType: 'agent_run',
+          sourceId:   runId,
+          content:    resultPayload.summary,
+          metadata: {
+            slug,
+            run_at:    new Date().toISOString(),
+            startDate: resultPayload.startDate ?? null,
+            endDate:   resultPayload.endDate   ?? null,
+          },
+        });
+      })
+      .catch((e) => console.warn(`[${slug}] embedding failed (non-fatal):`, e.message));
   }
 }
 

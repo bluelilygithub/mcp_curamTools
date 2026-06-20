@@ -63,7 +63,7 @@ await captureIf(condition, {
 
 | Source | When |
 |--------|------|
-| `startup` | pgvector missing, `OPENAI_API_KEY` missing |
+| `startup` | pgvector missing, RAG embedding model not configured |
 | `PersonalMemoryService` | User has thoughts but embeddings unavailable |
 | `manual` | User adds via UI |
 

@@ -1,10 +1,35 @@
 require('dotenv').config();
 const { Pool } = require('pg');
+const { EMBEDDING_DIM } = require('./constants/embeddingModels');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
+
+async function migrateEmbeddingVectorDim(client, targetDim) {
+  for (const table of ['embeddings', 'personal_thoughts']) {
+    try {
+      const { rows } = await client.query(`
+        SELECT format_type(a.atttypid, a.atttypmod) AS coltype
+        FROM pg_attribute a
+        JOIN pg_class c ON c.oid = a.attrelid
+        WHERE c.relname = $1 AND a.attname = 'embedding' AND NOT a.attisdropped
+      `, [table]);
+      const coltype = rows[0]?.coltype || '';
+      const expected = `vector(${targetDim})`;
+      if (coltype === expected) continue;
+      if (coltype.startsWith('vector(')) {
+        console.warn(`[db] Migrating ${table}.embedding to ${expected} — existing vectors cleared`);
+        await client.query(`UPDATE ${table} SET embedding = NULL WHERE embedding IS NOT NULL`);
+        await client.query(`ALTER TABLE ${table} DROP COLUMN embedding`);
+        await client.query(`ALTER TABLE ${table} ADD COLUMN embedding ${expected}`);
+      }
+    } catch (err) {
+      console.warn(`[db] embedding dimension migration for ${table}:`, err.message);
+    }
+  }
+}
 
 async function initSchema() {
   const client = await pool.connect();
@@ -450,7 +475,7 @@ async function initSchema() {
         source_id   TEXT,
         content     TEXT NOT NULL,
         metadata    JSONB DEFAULT '{}',
-        embedding   vector(${1536}),
+        embedding   vector(${EMBEDDING_DIM}),
         created_at  TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE (org_id, source_type, source_id)
       )
@@ -470,7 +495,7 @@ async function initSchema() {
         content             TEXT NOT NULL,
         content_fingerprint TEXT NOT NULL,
         metadata            JSONB DEFAULT '{}',
-        embedding           vector(${1536}),
+        embedding           vector(${EMBEDDING_DIM}),
         created_at          TIMESTAMPTZ DEFAULT NOW(),
         updated_at          TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE (org_id, user_id, content_fingerprint)
@@ -481,6 +506,8 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_personal_thoughts_org_user
         ON personal_thoughts(org_id, user_id, created_at DESC)
     `);
+
+    await migrateEmbeddingVectorDim(client, EMBEDDING_DIM);
 
     // Per-user suggestions inbox (agents, services, startup — distinct from agent_suggestions / HIA)
     await client.query(`

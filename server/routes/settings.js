@@ -6,6 +6,7 @@
  *   Models        GET/PUT /api/settings/models
  *   Default model GET/PUT /api/settings/default-model
  *   Fallback model GET/PUT /api/settings/fallback-model
+ *   Embedding model GET/PUT /api/settings/embedding-model
  *   Tiered validation GET/PUT /api/settings/tiered-validation
  *   Model test    POST    /api/settings/models/:modelId/test
  *   Model status  GET     /api/settings/model-status
@@ -150,6 +151,85 @@ router.put('/lesson-model', async (req, res) => {
     res.json({ model_id: modelId });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update lesson model.' });
+  }
+});
+
+// ── RAG embedding model ─────────────────────────────────────────────────────
+
+const {
+  listEmbeddingModels,
+  validateEmbeddingModelSelection,
+  isProviderConfigured,
+} = require('../constants/embeddingModels');
+
+router.get('/embedding-models', async (req, res) => {
+  try {
+    const models = listEmbeddingModels().map((m) => ({
+      id: m.id,
+      label: m.label,
+      provider: m.provider,
+      dimensions: m.dimensions,
+      localOnly: m.localOnly,
+      description: m.description,
+      configured: isProviderConfigured(m),
+    }));
+    res.json({ models });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load embedding models.' });
+  }
+});
+
+router.get('/embedding-model', async (req, res) => {
+  try {
+    const modelId = await AgentConfigService.getOrgEmbeddingModel(req.user.orgId);
+    const validation = validateEmbeddingModelSelection(modelId);
+    res.json({
+      model_id: modelId,
+      valid: validation.valid,
+      issues: validation.issues,
+      model: validation.model
+        ? { id: validation.model.id, label: validation.model.label, provider: validation.model.provider }
+        : null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load embedding model.' });
+  }
+});
+
+router.get('/embedding-model/validate', async (req, res) => {
+  try {
+    const modelId = req.query.model_id ?? null;
+    const validation = validateEmbeddingModelSelection(modelId);
+    res.json({
+      model_id: modelId,
+      valid: validation.valid,
+      issues: validation.issues,
+      configured: validation.configured,
+      model: validation.model
+        ? {
+          id: validation.model.id,
+          label: validation.model.label,
+          provider: validation.model.provider,
+          dimensions: validation.model.dimensions,
+        }
+        : null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to validate embedding model.' });
+  }
+});
+
+router.put('/embedding-model', async (req, res) => {
+  try {
+    const modelId = req.body.model_id ?? null;
+    const validation = validateEmbeddingModelSelection(modelId);
+    if (modelId && !validation.valid) {
+      return res.status(400).json({ error: validation.issues[0] || 'Invalid embedding model.', issues: validation.issues });
+    }
+    await AgentConfigService.updateOrgEmbeddingModel(req.user.orgId, modelId, req.user.id);
+    res.json({ model_id: modelId, valid: validation.valid, issues: validation.issues });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Failed to update embedding model.' });
   }
 });
 

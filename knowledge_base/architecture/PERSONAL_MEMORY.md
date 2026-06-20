@@ -25,7 +25,7 @@ Per-user semantic notes within an organisation. Inspired by Open Brain’s captu
 | `content` | Note text (trimmed, max ~30k chars) |
 | `content_fingerprint` | SHA-256 of content — dedup per user |
 | `metadata` | JSONB tags (optional) |
-| `embedding` | `vector(1536)` — `text-embedding-3-small` |
+| `embedding` | `vector(768)` — org RAG model from Settings → Models |
 | `created_at`, `updated_at` | Timestamps |
 
 Unique: `(org_id, user_id, content_fingerprint)`.
@@ -103,10 +103,10 @@ Tool count with personal memory: **29** (see `MCP-SERVERS.md`).
 
 ## Environment
 
-Same as knowledge-base embeddings:
-
 - `DATABASE_URL`
-- `OPENAI_API_KEY`
+- Provider key for org **RAG embedding model** (e.g. `GEMINI_API_KEY` for Gemini `text-embedding-004`)
+
+Configure the model in **Settings → Models → RAG & memory embeddings**. See `architecture/EMBEDDINGS.md`.
 
 ---
 

@@ -10,7 +10,7 @@
  *   - API key status bar
  *   - Reset to defaults
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../../api/client';
 import useAuthStore from '../../stores/authStore';
 import Button from '../ui/Button';
@@ -87,6 +87,10 @@ export default function ModelsTab() {
   const [fallbackModel,       setFallbackModel]       = useState(null);
   const [pdfExtractionModel,  setPdfExtractionModel]  = useState(null);
   const [lessonModel,         setLessonModel]         = useState(null);
+  const [embeddingModel,      setEmbeddingModel]      = useState(null);
+  const [embeddingOptions,    setEmbeddingOptions]    = useState([]);
+  const [embeddingValidation, setEmbeddingValidation] = useState(null);
+  const [embeddingValidating, setEmbeddingValidating] = useState(false);
   const [tieredValidation,    setTieredValidation]    = useState({ confidence_threshold: 0.85, escalation_model: null });
   const [savingDefaults,      setSavingDefaults]      = useState(false);
   const [testResults,         setTestResults]         = useState({});
@@ -99,14 +103,23 @@ export default function ModelsTab() {
       api.get('/settings/default-model'),
       api.get('/settings/fallback-model'),
       api.get('/settings/lesson-model'),
+      api.get('/settings/embedding-model'),
+      api.get('/settings/embedding-models'),
       api.get('/settings/tiered-validation'),
       api.get('/admin/agents/spec-validator').catch(() => null),
-    ]).then(([modelData, statusData, defaultData, fallbackData, lessonData, validationData, svConfig]) => {
+    ]).then(([modelData, statusData, defaultData, fallbackData, lessonData, embeddingData, embeddingOpts, validationData, svConfig]) => {
       setModels(modelData);
       setApiKeyOk(statusData);
       setDefaultModel(defaultData.model_id ?? null);
       setFallbackModel(fallbackData.model_id ?? null);
       setLessonModel(lessonData.model_id ?? null);
+      setEmbeddingModel(embeddingData.model_id ?? null);
+      setEmbeddingOptions(embeddingOpts.models ?? []);
+      setEmbeddingValidation({
+        valid: embeddingData.valid,
+        issues: embeddingData.issues ?? [],
+        model: embeddingData.model,
+      });
       setTieredValidation({
         confidence_threshold: validationData.confidence_threshold ?? 0.85,
         escalation_model: validationData.escalation_model ?? null,
@@ -115,6 +128,34 @@ export default function ModelsTab() {
     }).catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [isAdmin]);
+
+  const validateEmbeddingSelection = useCallback(async (modelId) => {
+    if (!modelId) {
+      setEmbeddingValidation({
+        valid: false,
+        issues: ['Select an embedding model for RAG and personal memory.'],
+        model: null,
+      });
+      return;
+    }
+    setEmbeddingValidating(true);
+    try {
+      const result = await api.get(`/settings/embedding-model/validate?model_id=${encodeURIComponent(modelId)}`);
+      setEmbeddingValidation(result);
+    } catch (e) {
+      setEmbeddingValidation({ valid: false, issues: [e.message], model: null });
+    } finally {
+      setEmbeddingValidating(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin || loading) return undefined;
+    const timer = setTimeout(() => {
+      validateEmbeddingSelection(embeddingModel);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [embeddingModel, isAdmin, loading, validateEmbeddingSelection]);
 
   async function saveDefaults() {
     setSavingDefaults(true);
@@ -127,6 +168,7 @@ export default function ModelsTab() {
         api.put('/admin/agents/demo-document-analyzer', { model: pdfExtractionModel || null }),
         api.put('/admin/agents/demo-tender-response',   { model: pdfExtractionModel || null }),
         api.put('/settings/lesson-model', { model_id: lessonModel || null }),
+        api.put('/settings/embedding-model', { model_id: embeddingModel || null }),
         api.put('/settings/tiered-validation', tieredValidation),
       ]);
       setSuccess('Models saved.');
@@ -252,6 +294,7 @@ export default function ModelsTab() {
   const lessonModelObj = models.find((m) => m.id === lessonModel);
   const validationModelObj = models.find((m) => m.id === tieredValidation.escalation_model);
   const validationModelIsInactive = tieredValidation.escalation_model && !activeModels.some((m) => m.id === tieredValidation.escalation_model);
+  const embeddingInvalid = embeddingModel && embeddingValidation && !embeddingValidation.valid;
 
   const fi = {
     width: '100%', padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
@@ -379,9 +422,57 @@ export default function ModelsTab() {
             </div>
 
           </div>
+        </Section>
+      )}
 
+      {!loading && (
+        <Section title="RAG & memory embeddings">
+          <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+            Separate from chat models. Powers knowledge base search, personal memory, and agent run recall.
+            Chat models (e.g. DeepSeek, Kimi) cannot be used here — only embedding-capable models.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <label className={LABEL} style={LABEL_STYLE}>RAG embedding model</label>
+              <select
+                value={embeddingModel ?? ''}
+                onChange={(e) => setEmbeddingModel(e.target.value || null)}
+                className={FIELD}
+                style={{
+                  ...FIELD_STYLE,
+                  borderColor: embeddingInvalid ? '#fca5a5' : 'var(--color-border)',
+                }}
+              >
+                <option value="">— Select embedding model —</option>
+                {embeddingOptions.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label} — {m.id}{m.localOnly ? ' (local)' : ''}{!m.configured ? ' ⚠ key missing' : ''}
+                  </option>
+                ))}
+              </select>
+              {embeddingValidating && (
+                <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>Checking model…</p>
+              )}
+              {!embeddingValidating && embeddingValidation?.valid && embeddingValidation.model && (
+                <p className="text-xs mt-1" style={{ color: '#16a34a' }}>
+                  ✓ {embeddingValidation.model.label} ready ({embeddingValidation.model.dimensions} dimensions)
+                </p>
+              )}
+              {!embeddingValidating && embeddingValidation?.issues?.length > 0 && (
+                <div className="text-xs mt-1 space-y-1" style={{ color: '#991b1b' }}>
+                  {embeddingValidation.issues.map((issue) => (
+                    <p key={issue}>⚠ {issue}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
           <div className="flex justify-end">
-            <Button variant="primary" onClick={saveDefaults} disabled={savingDefaults}>
+            <Button
+              variant="primary"
+              onClick={saveDefaults}
+              disabled={savingDefaults || (embeddingModel && embeddingValidation && !embeddingValidation.valid)}
+            >
               {savingDefaults ? 'Saving…' : 'Save defaults'}
             </Button>
           </div>

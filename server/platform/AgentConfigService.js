@@ -947,6 +947,46 @@ async function updateOrgLessonModel(orgId, modelId, updatedBy) {
 }
 
 
+// ── Org-level RAG embedding model (system_settings key: 'embedding_model') ───
+// Used by EmbeddingService for knowledge base RAG and personal memory.
+
+async function getOrgEmbeddingModel(orgId) {
+  try {
+    let res = await pool.query(
+      `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'embedding_model' LIMIT 1`,
+      [orgId],
+    );
+    if (res.rows.length === 0 && orgId !== 1) {
+      res = await pool.query(
+        `SELECT value FROM system_settings WHERE org_id = 1 AND key = 'embedding_model' LIMIT 1`,
+      );
+    }
+    return res.rows[0]?.value?.model_id ?? null;
+  } catch (err) {
+    console.error('[AgentConfigService] getOrgEmbeddingModel error:', err.message);
+    return null;
+  }
+}
+
+async function updateOrgEmbeddingModel(orgId, modelId, updatedBy) {
+  const { validateEmbeddingModelSelection } = require('../constants/embeddingModels');
+  if (modelId) {
+    const validation = validateEmbeddingModelSelection(modelId);
+    if (!validation.model) {
+      throw Object.assign(new Error(validation.issues[0] || 'Invalid embedding model.'), { status: 400 });
+    }
+  }
+  await pool.query(
+    `INSERT INTO system_settings (org_id, key, value, updated_by, updated_at)
+     VALUES ($1, 'embedding_model', $2, $3, NOW())
+     ON CONFLICT (org_id, key)
+     DO UPDATE SET value = $2, updated_by = $3, updated_at = NOW()`,
+    [orgId, JSON.stringify({ model_id: modelId }), updatedBy],
+  );
+  return modelId;
+}
+
+
 // ── Org-level company profile (system_settings key: 'company_profile') ──────
 
 
@@ -1343,6 +1383,8 @@ module.exports = {
   updateOrgFallbackModel,
   getOrgLessonModel,
   updateOrgLessonModel,
+  getOrgEmbeddingModel,
+  updateOrgEmbeddingModel,
   getTieredValidationSettings,
   updateTieredValidationSettings,
   getCompanyProfile,

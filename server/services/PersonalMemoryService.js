@@ -48,7 +48,7 @@ async function capture({ orgId, userId, content, metadata = {} }) {
   if (!normalized) throw new Error('content is required');
 
   const fingerprint = contentFingerprint(normalized);
-  const vector = await embedText(normalized);
+  const vector = await embedText(normalized, { orgId: ids.orgId });
   const vectorStr = `[${vector.join(',')}]`;
   const meta = metadata && typeof metadata === 'object' ? metadata : {};
 
@@ -84,7 +84,7 @@ async function search({ orgId, userId, query, limit = 8 }) {
   if (!q) throw new Error('query is required');
 
   const cappedLimit = clampInt(limit, 8, 1, 20);
-  const vector = await embedText(q);
+  const vector = await embedText(q, { orgId: ids.orgId });
   const vectorStr = `[${vector.join(',')}]`;
 
   const { rows } = await pool.query(

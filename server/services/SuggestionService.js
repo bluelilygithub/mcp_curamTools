@@ -162,17 +162,23 @@ async function runStartupChecks() {
     console.warn('[SuggestionService] startup pgvector check:', err.message);
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    await capture({
-      orgId: admin.orgId,
-      userId: admin.userId,
-      source: 'startup',
-      category: 'alert',
-      fingerprint: makeFingerprint('startup', 'openai-key-missing'),
-      title: 'Embeddings unavailable — OPENAI_API_KEY not set',
-      body: 'RAG and personal memory embeddings use OpenAI text-embedding-3-small. Set OPENAI_API_KEY in environment variables. Chat agents use the model catalogue separately.',
-      context: 'server boot / EmbeddingService',
-    });
+  try {
+    const { resolveEmbeddingConfig } = require('./embeddingResolver');
+    const embedding = await resolveEmbeddingConfig(admin.orgId);
+    if (!embedding.available) {
+      await capture({
+        orgId: admin.orgId,
+        userId: admin.userId,
+        source: 'startup',
+        category: 'alert',
+        fingerprint: makeFingerprint('startup', `embedding:${embedding.modelId || 'unset'}`),
+        title: 'Embeddings unavailable — RAG model not configured',
+        body: embedding.issues?.join(' ') || embedding.hint || 'Set RAG embedding model in Settings > Models.',
+        context: 'Settings > Models > RAG embedding model',
+      });
+    }
+  } catch (err) {
+    console.warn('[SuggestionService] startup embedding check:', err.message);
   }
 }
 
@@ -180,16 +186,22 @@ async function reportPersonalMemoryHealth(orgId, userId, stats) {
   const ids = parseOrgUserIds(orgId, userId);
   if (!stats || stats.total === 0) return;
 
-  if (!process.env.OPENAI_API_KEY) {
-    await capture({
-      ...ids,
-      source: 'PersonalMemoryService',
-      category: 'alert',
-      fingerprint: makeFingerprint('PersonalMemoryService', 'openai-key-missing'),
-      title: 'Personal memory: embeddings unavailable',
-      body: 'Thoughts are stored but semantic search needs OPENAI_API_KEY. Set the key in Railway or local .env.',
-      context: '/settings?tab=memory',
-    });
+  try {
+    const { resolveEmbeddingConfig } = require('./embeddingResolver');
+    const embedding = await resolveEmbeddingConfig(orgId);
+    if (!embedding.available) {
+      await capture({
+        ...ids,
+        source: 'PersonalMemoryService',
+        category: 'alert',
+        fingerprint: makeFingerprint('PersonalMemoryService', `embedding:${embedding.modelId || 'unset'}`),
+        title: 'Personal memory: embeddings unavailable',
+        body: embedding.issues?.join(' ') || embedding.hint || 'Configure RAG embedding model in Settings > Models.',
+        context: '/settings?tab=models',
+      });
+    }
+  } catch (err) {
+    console.warn('[SuggestionService] personal memory embedding check:', err.message);
   }
 }
 

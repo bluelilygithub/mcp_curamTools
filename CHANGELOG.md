@@ -18,6 +18,22 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — RAG embedding model setting
+
+### Built
+- **Org setting** `embedding_model` in `system_settings` — separate from chat `ai_models`.
+- **`server/constants/embeddingModels.js`** — registry of embedding-capable models (Gemini, OpenAI, Ollama local).
+- **`server/services/embeddingResolver.js`** + **`embeddingProviders.js`** — org-scoped resolution; no hardcoded OpenAI.
+- **`EmbeddingService`** refactored to use org RAG model.
+- **Settings UI** — RAG & memory embeddings section with real-time validation (`/embedding-model/validate`).
+- **Schema** — vectors standardised to 768 dimensions (migration clears old 1536-dim vectors).
+- **Docs:** `knowledge_base/architecture/EMBEDDINGS.md`.
+
+### Fixed
+- Startup / suggestions no longer assume `OPENAI_API_KEY` when org uses Gemini embeddings.
+
+---
+
 ## 2026-06-18 — Suggestions inbox (SuggestionService)
 
 ### Built

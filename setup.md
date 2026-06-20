@@ -88,7 +88,8 @@ The `PORT` variable is injected automatically by Railway — do not set it in Ra
 | `APP_URL` | `https://mcpcuramtools-production.up.railway.app` |
 | `DATABASE_URL` | Railway Postgres connection string (auto-injected if using Railway Postgres) |
 | `ANTHROPIC_API_KEY` | Your Anthropic key |
-| `GEMINI_API_KEY` | Google Gemini key (optional) |
+| `GEMINI_API_KEY` | Google Gemini key — chat and/or **RAG embeddings** (Settings → Models → RAG embedding model) |
+| `OPENAI_API_KEY` | Optional — only if RAG embedding model is OpenAI `text-embedding-3-small` |
 | `DEEPSEEK_API_KEY` | DeepSeek key (optional) |
 | `KIMI_API_KEY` | Kimi / Moonshot key (optional) |
 | `MAIL_CHANNEL_API_KEY` | MailChannels key |

@@ -1,24 +1,22 @@
 /**
  * knowledge-base.js — Stdio MCP server for RAG (retrieval-augmented generation).
  *
- * Stores and retrieves text embeddings from the pgvector embeddings table.
- * Supports semantic search across agent run summaries and custom documents.
+ * Embeddings use the org RAG model from Settings > Models (system_settings.embedding_model).
  *
  * Required env vars:
- *   DATABASE_URL    — PostgreSQL connection string
- *   OPENAI_API_KEY  — for generating embeddings via text-embedding-3-small
+ *   DATABASE_URL — PostgreSQL connection string
+ *   Provider key for selected embedding model (e.g. GEMINI_API_KEY, OPENAI_API_KEY)
  */
 
 'use strict';
 
-const https    = require('https');
 const { Pool } = require('pg');
 const readline = require('readline');
+const EmbeddingService = require('../services/EmbeddingService');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
-const EMBED_MODEL = 'text-embedding-3-small';
-const MAX_CHARS   = 30000;
+const MAX_CHARS = 30000;
 
 function getTrustedOrgId(args) {
   const orgId = parseInt(args.__trusted_org_id, 10);
@@ -33,46 +31,6 @@ function clampInt(value, fallback, min, max) {
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(parsed, max));
 }
-
-// ── Embedding helper ──────────────────────────────────────────────────────────
-
-function fetchEmbedding(text) {
-  return new Promise((resolve, reject) => {
-    const input = String(text).slice(0, MAX_CHARS);
-    const body  = JSON.stringify({ model: EMBED_MODEL, input });
-
-    const req = https.request(
-      {
-        hostname: 'api.openai.com',
-        path:     '/v1/embeddings',
-        method:   'POST',
-        headers: {
-          Authorization:    `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type':   'application/json',
-          'Content-Length': Buffer.byteLength(body),
-        },
-      },
-      (res) => {
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => {
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.error) return reject(new Error(`OpenAI: ${parsed.error.message}`));
-            resolve(parsed.data[0].embedding);
-          } catch (e) {
-            reject(new Error(`Failed to parse OpenAI response: ${data.slice(0, 200)}`));
-          }
-        });
-      }
-    );
-    req.on('error', reject);
-    req.write(body);
-    req.end();
-  });
-}
-
-// ── Tool definitions ──────────────────────────────────────────────────────────
 
 const TOOLS = [
   {
@@ -111,8 +69,6 @@ const TOOLS = [
   },
 ];
 
-// ── Tool handlers ─────────────────────────────────────────────────────────────
-
 async function callTool(name, args = {}) {
   const orgId = getTrustedOrgId(args);
 
@@ -121,26 +77,13 @@ async function callTool(name, args = {}) {
     case 'search_knowledge': {
       const query = String(args.query || '').trim().slice(0, MAX_CHARS);
       if (!query) throw new Error('query is required');
-      const limit  = clampInt(args.limit, 8, 1, 20);
-      const vector = await fetchEmbedding(query);
-      const vecStr = `[${vector.join(',')}]`;
-
-      const params = [orgId, vecStr, limit];
-      let sql = `
-        SELECT
-          id,
-          source_type,
-          source_id,
-          content,
-          metadata,
-          1 - (embedding <=> $2::vector) AS similarity
-        FROM embeddings
-        WHERE org_id = $1
-      `;
-      if (args.source_type) { sql += ` AND source_type = $4`; params.push(args.source_type); }
-      sql += ` ORDER BY embedding <=> $2::vector LIMIT $3`;
-
-      const { rows } = await pool.query(sql, params);
+      const limit = clampInt(args.limit, 8, 1, 20);
+      const rows = await EmbeddingService.search({
+        orgId,
+        query,
+        sourceType: args.source_type || null,
+        limit,
+      });
       return rows.map((r) => ({
         source_type: r.source_type,
         source_id:   r.source_id,
@@ -151,22 +94,19 @@ async function callTool(name, args = {}) {
     }
 
     case 'add_document': {
-      const content  = String(args.content || '').slice(0, MAX_CHARS);
+      const content = String(args.content || '').slice(0, MAX_CHARS);
       const title = String(args.title || '').trim().slice(0, 160);
       if (!title || !content) throw new Error('title and content are required');
       const metadata = { title, category: args.category ? String(args.category).slice(0, 80) : null, added_at: new Date().toISOString() };
       const sourceId = `doc_${title.toLowerCase().replace(/\W+/g, '_').slice(0, 60)}`;
 
-      const vector = await fetchEmbedding(content);
-      const vecStr = `[${vector.join(',')}]`;
-
-      await pool.query(
-        `INSERT INTO embeddings (org_id, source_type, source_id, content, metadata, embedding)
-         VALUES ($1, 'document', $2, $3, $4, $5::vector)
-         ON CONFLICT (org_id, source_type, source_id)
-         DO UPDATE SET content = EXCLUDED.content, metadata = EXCLUDED.metadata, embedding = EXCLUDED.embedding`,
-        [orgId, sourceId, content, JSON.stringify(metadata), vecStr]
-      );
+      await EmbeddingService.embedAndStore({
+        orgId,
+        sourceType: 'document',
+        sourceId,
+        content,
+        metadata,
+      });
 
       return { ok: true, source_id: sourceId, title };
     }
@@ -182,7 +122,7 @@ async function callTool(name, args = {}) {
          WHERE org_id = $1
          GROUP BY source_type, metadata->>'category'
          ORDER BY source_type, count DESC`,
-        [orgId]
+        [orgId],
       );
       return rows;
     }
@@ -191,8 +131,6 @@ async function callTool(name, args = {}) {
       throw new Error(`Unknown tool: ${name}`);
   }
 }
-
-// ── JSON-RPC transport ────────────────────────────────────────────────────────
 
 function send(obj)              { process.stdout.write(JSON.stringify(obj) + '\n'); }
 function respond(id, result)    { send({ jsonrpc: '2.0', id, result }); }

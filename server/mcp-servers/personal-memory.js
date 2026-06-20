@@ -5,8 +5,8 @@
  * Any org member can capture and search their own memories.
  *
  * Required env vars:
- *   DATABASE_URL    — PostgreSQL connection string
- *   OPENAI_API_KEY  — for text-embedding-3-small
+ *   DATABASE_URL — PostgreSQL connection string
+ *   Provider key for org RAG embedding model (e.g. GEMINI_API_KEY)
  */
 
 'use strict';
