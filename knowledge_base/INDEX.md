@@ -65,6 +65,7 @@ knowledge_base/
 |---|---|
 | **Project identity & scope** | `core/PROJECT_IDENTITY.md` |
 | **Setup guide** | `core/SETUP.md` |
+| **Testing guide** | `core/TESTING.md` |
 | **Changelog (canonical)** | [`CHANGELOG.md`](../CHANGELOG.md) (repo root) |
 | **Changelog (kb mirror)** | `core/CHANGELOG.md` |
 | **Agent catalog (summary)** | `agents/AGENTS_INDEX.md` |

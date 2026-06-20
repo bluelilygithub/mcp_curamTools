@@ -18,6 +18,17 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — Unit tests (embeddings + cost guard)
+
+### Built
+- **`server/constants/embeddingModels.test.js`** — RAG model validation (chat vs embed, env keys, local Ollama).
+- **`server/services/CostGuardService.test.js`** — budget math, `check()` circuit breaker, catalogue pricing.
+- **`knowledge_base/core/TESTING.md`** — how to run tests, learning order, smoke vs runtime checks.
+- **`npm run test:unit`** — runs all `*.test.js` files; `npm test` = unit + golden-path smoke.
+- **Test audit** — `test-audit/LAST_RUN.md` + JSON history; `npm run test:audit` to view last run time and result.
+
+---
+
 ## 2026-06-18 — RAG embedding model setting
 
 ### Built

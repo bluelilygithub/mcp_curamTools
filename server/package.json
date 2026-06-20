@@ -4,6 +4,7 @@
   "description": "MCP_curamTools — multi-tenant AI agent platform server",
   "main": "index.js",
   "scripts": {
+    "test:unit": "node ../scripts/test/run-unit.js",
     "start": "node index.js",
     "dev": "node --watch index.js",
     "test:file-intake": "node --test services/FileIntakeService.test.js",

@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node scripts/smoke/golden-path.mjs",
+    "test:unit": "node scripts/test/run-unit.js",
+    "test": "node scripts/test/run-full.js",
+    "test:audit": "node scripts/test/show-audit.js",
     "smoke:golden-path": "node scripts/smoke/golden-path.mjs",
     "check:file-intake": "node scripts/check-file-intake.mjs"
   },

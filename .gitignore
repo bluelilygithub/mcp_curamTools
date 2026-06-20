@@ -43,5 +43,9 @@ temp/
 # Railway / Docker
 .railway/
 
+# Test audit (local run history — see test-audit/README.md)
+test-audit/*
+!test-audit/README.md
+
 # Vite
 .vite/
