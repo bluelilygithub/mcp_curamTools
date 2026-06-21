@@ -79,6 +79,7 @@ knowledge_base/
 | **Personal memory** (per-user notes) | `architecture/PERSONAL_MEMORY.md` |
 | **RAG embeddings** (org embedding model) | `architecture/EMBEDDINGS.md` |
 | **Suggestions inbox** (agent/service findings) | `architecture/SUGGESTIONS_INBOX.md` |
+| **Database migrations** (versioned schema changes) | `architecture/MIGRATIONS.md` |
 | **Database schema** | `architecture/DATABASE_SCHEMA.md` |
 | **Architectural decisions** | `decisions/DECISIONS.md` |
 | **Agent: Google Ads Monitor** | `agents/google-ads-monitor.md` |

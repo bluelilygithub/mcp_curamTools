@@ -59,6 +59,7 @@ See `test-audit/README.md`.
 |------|----------------|---------------|
 | `server/constants/embeddingModels.test.js` | Chat models ≠ RAG models; env var validation | Settings → RAG embedding model |
 | `server/services/CostGuardService.test.js` | Pure budget math; circuit breaker | Agent run cost guards |
+| `server/migrations/runner.test.js` | Migration registry + applied-id lookup | Database migrations |
 | `server/services/ExtractionValidationService.test.js` | Injected provider factory | Tiered extraction validation |
 | `server/services/FileIntakeService.test.js` | File intake rules | Doc upload pipeline |
 | `server/agents/docExtractor/index.test.js` | Agent-specific logic | Doc extractor |

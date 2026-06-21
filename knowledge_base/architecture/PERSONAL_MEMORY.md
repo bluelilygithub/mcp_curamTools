@@ -30,7 +30,7 @@ Per-user semantic notes within an organisation. Inspired by Open Brain’s captu
 
 Unique: `(org_id, user_id, content_fingerprint)`.
 
-Schema created in `initSchema()` — `server/db.js`.
+Schema created in `initSchema()` (baseline) — incremental patches in `server/migrations/`. See `architecture/MIGRATIONS.md`.
 
 ---
 

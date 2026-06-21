@@ -810,17 +810,18 @@ Returns a Promise. Always called fire-and-forget (`.catch` only) — a logging f
 
 ### Idempotent Schema Initialisation
 **Type:** Utility
-**Location (Vault reference):** `server/db.js` in both Curam Vault and ToolsForge
-**What it does:** All DDL (CREATE TABLE, ALTER TABLE ADD COLUMN, index creation) runs on every server start using IF NOT EXISTS guards. No migration tool, no manual steps.
+**Location:** `server/db.js` → `initSchema()` (baseline) + `server/migrations/` (versioned increments)
+**What it does:** On every server start, `initSchema()` applies baseline DDL (`CREATE TABLE IF NOT EXISTS`, extensions, indexes) in one transaction, then `runMigrations()` applies pending numbered migrations recorded in `schema_migrations`. No Knex/Flyway — lightweight in-repo runner.
 **Interface:**
 ```sql
+-- Baseline (db.js):
 CREATE TABLE IF NOT EXISTS ...;
+
+-- Incremental (server/migrations/NNN_name.js):
 ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...;
--- Constraint additions:
-DO $$ BEGIN ... EXCEPTION WHEN duplicate_object THEN NULL END $$;
 ```
-**Reuse contract:** Every schema change must use `IF NOT EXISTS` or an equivalent idempotent guard. The entire schema file runs on every server start. This works until you need to modify an existing column type or constraint — at that point versioned migrations are required.
-**Does not handle:** Column type changes on existing columns. Constraint modifications on live data. Concurrent schema evolution with multiple developers.
+**Reuse contract:** New tables/columns on fresh installs belong in baseline `CREATE TABLE` where possible. Legacy alters, constraint changes, data patches, and destructive changes (e.g. vector dimension migration) go in **`server/migrations/`** — append-only, never reorder ids. See `knowledge_base/architecture/MIGRATIONS.md`.
+**Does not handle:** Automatic down/rollback migrations (forward-only; restore from backup if needed).
 
 ---
 

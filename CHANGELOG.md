@@ -18,6 +18,25 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — Versioned database migrations
+
+### Built
+- **Migration runner** — `server/migrations/runner.js` records applied changes in `schema_migrations` (`id`, `name`, `applied_at`); one transaction per migration.
+- **Initial migrations** — `001_platform_schema_patches`, `002_embedding_vector_dimensions`, `003_system_settings_data_patches` (legacy alters/data patches moved out of `initSchema()`).
+- **`initSchema()` refactor** — baseline `CREATE TABLE IF NOT EXISTS` + extensions/indexes; incremental changes run via `runMigrations()` after baseline commit.
+- **CLI** — `npm run migrate` from `server/` applies pending migrations without starting HTTP.
+- **Docs** — `knowledge_base/architecture/MIGRATIONS.md`; cross-links in `INDEX.md`, `SETUP.md`, `DEPLOYMENT.md`.
+- **Tests** — `server/migrations/runner.test.js` (registry + applied-id lookup).
+
+### Fixed
+- **Local Postgres SSL** — `server/db.js` skips SSL for `localhost` / `127.0.0.1` `DATABASE_URL` (Docker Postgres without TLS).
+
+### Notes
+- Existing Railway/local DBs: migrations 001–003 apply once on next boot and are recorded; idempotent SQL safe on already-patched schemas.
+- **Rule going forward:** new column/constraint/data patches → new numbered file in `server/migrations/`; do not edit migrations already applied in production.
+
+---
+
 ## 2026-06-18 — Unit tests (embeddings + cost guard)
 
 ### Built

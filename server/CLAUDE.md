@@ -27,7 +27,7 @@ Run `npm test` from repo root before closing any session that changed:
 
 **No `window.print()` for PDF export.** Use `exportService.exportPdf()` / `fetchPdfBlob`. Route: `POST /api/export/pdf`. Full docs: `PLATFORM-PRIMITIVES.md`.
 
-**No UNIQUE index without dedup first.** Always `DELETE` duplicates before `CREATE UNIQUE INDEX` or the migration crashes in production.
+**No UNIQUE index without dedup first.** Always `DELETE` duplicates before `CREATE UNIQUE INDEX` or the migration crashes in production. Put dedup + constraint changes in **`server/migrations/`** (see `knowledge_base/architecture/MIGRATIONS.md`) — not inline in `initSchema()`.
 
 **No regex syntax in JSDoc block comments.** `*/` closes the block early and breaks the Vite build.
 

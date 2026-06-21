@@ -10,6 +10,12 @@
 
 ---
 
+## 2026-06-18 — Versioned database migrations (mirror)
+
+Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Versioned database migrations**. Highlights: `server/migrations/runner.js` + `schema_migrations` ledger; migrations 001–003; `initSchema()` baseline vs incremental split; `npm run migrate`; `architecture/MIGRATIONS.md`; local Postgres SSL skip in `db.js`.
+
+---
+
 ## 2026-06-18 — Personal memory (mirror)
 
 Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18**. Highlights: `personal_thoughts` table; `PersonalMemoryService`; `personal-memory.js` MCP (4 tools); `/api/personal-memory` REST; `__trusted_user_id` injection in `mcpRegistry`; conversation agent +29 tools; Settings **Memory** tab. See `architecture/PERSONAL_MEMORY.md`.

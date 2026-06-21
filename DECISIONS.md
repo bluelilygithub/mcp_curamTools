@@ -13,6 +13,18 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### Versioned database migrations — baseline initSchema + numbered runner
+**Date:** 2026-06-18
+**Status:** Settled
+**Context:** `initSchema()` in `server/db.js` had grown to ~900 lines mixing baseline `CREATE TABLE`, inline `ALTER` patches, dedup deletes, embedding dimension changes, and data backfills. With 33+ agents, multi-tenant org isolation, pgvector, and Railway deploys, schema drift and irreversible changes were hard to audit or roll back.
+**Decision (two layers):** Keep **`initSchema()`** for baseline schema on empty databases (`CREATE TABLE IF NOT EXISTS`, extensions, indexes). Move incremental and destructive changes to **`server/migrations/`** with a lightweight runner that records applied ids in **`schema_migrations`**.
+**Decision (runner behaviour):** One transaction per migration; migrations run automatically after baseline on every server boot; optional `npm run migrate` from `server/` without starting HTTP.
+**Decision (migration rules):** Append-only numbered ids (`001`, `002`, …); never reorder or edit migrations already applied in production; idempotent SQL where possible; forward-only (no auto `down()` — Postgres backup for rollback).
+**Rationale:** Preserves solo-dev convenience (no external migration tool) while giving a queryable ledger of what ran in each environment. Destructive changes (e.g. 768-dim vector migration) become reviewable files instead of hidden startup branches.
+**References:** `server/migrations/runner.js`, `server/migrations/index.js`, `server/db.js`, `knowledge_base/architecture/MIGRATIONS.md`, `knowledge_base/ops/DEPLOYMENT.md`.
+
+---
+
 ### Changelog layout — platform root vs optional mirrors and per-agent logs
 **Date:** 2026-05-14
 **Status:** Settled

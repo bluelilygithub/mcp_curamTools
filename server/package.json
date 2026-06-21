@@ -7,6 +7,7 @@
     "test:unit": "node ../scripts/test/run-unit.js",
     "start": "node index.js",
     "dev": "node --watch index.js",
+    "migrate": "node migrations/run.js",
     "test:file-intake": "node --test services/FileIntakeService.test.js",
     "test:doc-extractor": "node --test agents/docExtractor/index.test.js",
     "test:extraction-validation": "node --test services/ExtractionValidationService.test.js"

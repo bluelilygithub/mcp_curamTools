@@ -15,6 +15,13 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### Versioned database migrations — baseline initSchema + numbered runner (mirror)
+**Date:** 2026-06-18
+**Status:** Settled
+Mirror of root [`DECISIONS.md`](../../DECISIONS.md). Baseline DDL stays in `initSchema()`; incremental/destructive changes go to `server/migrations/` with `schema_migrations` ledger. See `architecture/MIGRATIONS.md`.
+
+---
+
 ### Multi-Org User Management — Org Selector on Invite, Organisations Admin Page
 **Date:** 2026-05-06
 **Status:** Settled

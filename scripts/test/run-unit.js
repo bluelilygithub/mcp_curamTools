@@ -15,6 +15,7 @@ const testFiles = [
   'services/ExtractionValidationService.test.js',
   'services/FileIntakeService.test.js',
   'agents/docExtractor/index.test.js',
+  'migrations/runner.test.js',
 ];
 
 const result = spawnSync(

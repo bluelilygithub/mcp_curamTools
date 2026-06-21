@@ -2,34 +2,15 @@ require('dotenv').config();
 const { Pool } = require('pg');
 const { EMBEDDING_DIM } = require('./constants/embeddingModels');
 
+const connectionString = process.env.DATABASE_URL || '';
+const isLocalDb = /localhost|127\.0\.0\.1/.test(connectionString);
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  connectionString,
+  ...(isLocalDb ? {} : { ssl: { rejectUnauthorized: false } }),
 });
 
-async function migrateEmbeddingVectorDim(client, targetDim) {
-  for (const table of ['embeddings', 'personal_thoughts']) {
-    try {
-      const { rows } = await client.query(`
-        SELECT format_type(a.atttypid, a.atttypmod) AS coltype
-        FROM pg_attribute a
-        JOIN pg_class c ON c.oid = a.attrelid
-        WHERE c.relname = $1 AND a.attname = 'embedding' AND NOT a.attisdropped
-      `, [table]);
-      const coltype = rows[0]?.coltype || '';
-      const expected = `vector(${targetDim})`;
-      if (coltype === expected) continue;
-      if (coltype.startsWith('vector(')) {
-        console.warn(`[db] Migrating ${table}.embedding to ${expected} — existing vectors cleared`);
-        await client.query(`UPDATE ${table} SET embedding = NULL WHERE embedding IS NOT NULL`);
-        await client.query(`ALTER TABLE ${table} DROP COLUMN embedding`);
-        await client.query(`ALTER TABLE ${table} ADD COLUMN embedding ${expected}`);
-      }
-    } catch (err) {
-      console.warn(`[db] embedding dimension migration for ${table}:`, err.message);
-    }
-  }
-}
+const { runMigrations } = require('./migrations/runner');
 
 async function initSchema() {
   const client = await pool.connect();
@@ -48,21 +29,27 @@ async function initSchema() {
       CREATE TABLE IF NOT EXISTS organizations (
         id         SERIAL PRIMARY KEY,
         name       TEXT NOT NULL,
+        org_type   TEXT NOT NULL DEFAULT 'internal'
+                     CHECK (org_type IN ('internal', 'demo')),
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
-        id            SERIAL PRIMARY KEY,
-        org_id        INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
-        email         TEXT NOT NULL UNIQUE,
-        password_hash TEXT,
-        first_name    TEXT,
-        last_name     TEXT,
-        phone         TEXT,
-        is_active     BOOLEAN NOT NULL DEFAULT FALSE,
-        created_at    TIMESTAMPTZ DEFAULT NOW()
+        id               SERIAL PRIMARY KEY,
+        org_id           INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+        email            TEXT NOT NULL UNIQUE,
+        password_hash    TEXT,
+        first_name       TEXT,
+        last_name        TEXT,
+        phone            TEXT,
+        timezone         TEXT NOT NULL DEFAULT 'UTC',
+        default_model_id TEXT,
+        login_attempts   INTEGER DEFAULT 0,
+        locked_until     TIMESTAMPTZ,
+        is_active        BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at       TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
@@ -98,32 +85,6 @@ async function initSchema() {
         ON user_roles(user_id)
     `);
 
-    // Remove duplicate rows that accumulated before the unique index was added.
-    // Must run before index creation — duplicates cause CREATE UNIQUE INDEX to fail.
-    // Keeps the earliest row (lowest id) for each logical combination.
-    await client.query(`
-      DELETE FROM user_roles
-      WHERE id NOT IN (
-        SELECT MIN(id)
-        FROM user_roles
-        GROUP BY user_id, role_name, scope_type, COALESCE(scope_id, '')
-      )
-    `);
-
-    // Unique constraint so ON CONFLICT DO NOTHING works correctly.
-    // scope_id is nullable; two partial indexes cover both cases since
-    // standard UNIQUE treats NULL != NULL.
-    await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS uq_user_roles_no_scope
-        ON user_roles(user_id, role_name, scope_type)
-        WHERE scope_id IS NULL
-    `);
-    await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS uq_user_roles_with_scope
-        ON user_roles(user_id, role_name, scope_type, scope_id)
-        WHERE scope_id IS NOT NULL
-    `);
-
     await client.query(`
       CREATE TABLE IF NOT EXISTS system_settings (
         id         SERIAL PRIMARY KEY,
@@ -147,35 +108,8 @@ async function initSchema() {
         custom_prompt        TEXT,
         updated_by           INTEGER REFERENCES users(id) ON DELETE SET NULL,
         updated_at           TIMESTAMPTZ DEFAULT NOW()
-        -- UNIQUE constraint replaced by partial indexes below
+        -- UNIQUE constraint replaced by partial indexes (migration 001)
       )
-    `);
-
-    // Idempotent column additions (existing installs)
-    await client.query(`ALTER TABLE agent_configs ADD COLUMN IF NOT EXISTS intelligence_profile JSONB`);
-    await client.query(`ALTER TABLE agent_configs ADD COLUMN IF NOT EXISTS customer_id TEXT DEFAULT NULL`);
-    await client.query(`ALTER TABLE agent_configs ADD COLUMN IF NOT EXISTS custom_prompt TEXT`);
-
-    // Drop old UNIQUE(org_id, slug) constraint and replace with partial indexes
-    // (existing installs have the constraint; new installs don't — DROP IF EXISTS handles both)
-    await client.query(`ALTER TABLE agent_configs DROP CONSTRAINT IF EXISTS agent_configs_org_id_slug_key`);
-
-    // Partial unique indexes: one default config per (org, slug), one per customer
-    await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_configs_org_slug_default
-        ON agent_configs(org_id, slug)
-        WHERE customer_id IS NULL
-    `);
-    await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_configs_org_slug_customer
-        ON agent_configs(org_id, slug, customer_id)
-        WHERE customer_id IS NOT NULL
-    `);
-
-    // Idempotent add of timezone to users
-    await client.query(`
-      ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'UTC'
     `);
 
     await client.query(`
@@ -183,6 +117,8 @@ async function initSchema() {
         id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         org_id       INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
         slug         TEXT NOT NULL,
+        customer_id  TEXT,
+        campaign_id  TEXT,
         status       TEXT NOT NULL DEFAULT 'running'
                        CHECK (status IN ('running', 'complete', 'error', 'needs_review')),
         result       JSONB,
@@ -235,15 +171,18 @@ async function initSchema() {
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS usage_logs (
-        id            SERIAL PRIMARY KEY,
-        org_id        INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
-        user_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
-        tool_slug     TEXT,
-        model_id      TEXT,
-        input_tokens  INTEGER DEFAULT 0,
-        output_tokens INTEGER DEFAULT 0,
-        cost_usd      NUMERIC(10, 6) DEFAULT 0,
-        created_at    TIMESTAMPTZ DEFAULT NOW()
+        id                    SERIAL PRIMARY KEY,
+        org_id                INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+        user_id               INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        tool_slug             TEXT,
+        model_id              TEXT,
+        input_tokens          INTEGER DEFAULT 0,
+        output_tokens         INTEGER DEFAULT 0,
+        cache_read_tokens     INTEGER DEFAULT 0,
+        cache_creation_tokens INTEGER DEFAULT 0,
+        cost_usd              NUMERIC(10, 6) DEFAULT 0,
+        cost_aud              NUMERIC(10, 6) DEFAULT 0,
+        created_at            TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
@@ -251,11 +190,6 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_usage_logs_org_created
         ON usage_logs(org_id, created_at DESC)
     `);
-
-    // Columns added after initial schema — idempotent on existing deployments
-    await client.query(`ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS cache_read_tokens     INTEGER      DEFAULT 0`);
-    await client.query(`ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS cache_creation_tokens INTEGER      DEFAULT 0`);
-    await client.query(`ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS cost_aud              NUMERIC(10,6) DEFAULT 0`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS email_templates (
@@ -348,19 +282,6 @@ async function initSchema() {
 
     // ── Org structure tables ───────────────────────────────────────────────
 
-    // Idempotent: add default_model_id to users
-    await client.query(`
-      ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS default_model_id TEXT
-    `);
-
-    // Idempotent: add login security columns to users
-    await client.query(`
-      ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS login_attempts INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ
-    `);
-
     await client.query(`
       CREATE TABLE IF NOT EXISTS departments (
         id          SERIAL PRIMARY KEY,
@@ -400,10 +321,6 @@ async function initSchema() {
     `);
 
     // ── Google Ads multi-customer tables ───────────────────────────────────
-
-    // Extend agent_runs with customer/campaign metadata (idempotent)
-    await client.query(`ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS customer_id TEXT`);
-    await client.query(`ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS campaign_id TEXT`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS google_ads_customers (
@@ -507,8 +424,6 @@ async function initSchema() {
         ON personal_thoughts(org_id, user_id, created_at DESC)
     `);
 
-    await migrateEmbeddingVectorDim(client, EMBEDDING_DIM);
-
     // Per-user suggestions inbox (agents, services, startup — distinct from agent_suggestions / HIA)
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_suggestions (
@@ -567,21 +482,14 @@ async function initSchema() {
         status       TEXT        NOT NULL DEFAULT 'pending',
         result       JSONB,
         error        TEXT,
+        label        TEXT,
+        purpose      TEXT,
+        instructions TEXT,
+        storage_key  TEXT,
+        deleted_at   TIMESTAMPTZ,
         created_at   TIMESTAMPTZ DEFAULT NOW(),
         completed_at TIMESTAMPTZ
       )
-    `);
-
-    await client.query(`
-      ALTER TABLE doc_extraction_runs
-        ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ
-    `);
-
-    await client.query(`
-      ALTER TABLE doc_extraction_runs
-        ADD COLUMN IF NOT EXISTS label        TEXT,
-        ADD COLUMN IF NOT EXISTS purpose      TEXT,
-        ADD COLUMN IF NOT EXISTS instructions TEXT
     `);
 
     await client.query(`
@@ -595,11 +503,6 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_doc_extraction_runs_search
         ON doc_extraction_runs
         USING GIN ((COALESCE(label, '') || ' ' || filename) gin_trgm_ops)
-    `);
-
-    await client.query(`
-      ALTER TABLE doc_extraction_runs
-        ADD COLUMN IF NOT EXISTS storage_key TEXT
     `);
 
     // ── Export Logs ────────────────────────────────────────────────────────────
@@ -662,6 +565,8 @@ async function initSchema() {
         status               TEXT        NOT NULL DEFAULT 'pending',
         result               JSONB,
         error                TEXT,
+        storage_key          TEXT,
+        cost_usd             NUMERIC(10,4),
         created_at           TIMESTAMPTZ DEFAULT NOW(),
         completed_at         TIMESTAMPTZ,
         deleted_at           TIMESTAMPTZ
@@ -671,12 +576,6 @@ async function initSchema() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_media_gen_runs_org
         ON media_gen_runs(org_id, created_at DESC)
-    `);
-
-    await client.query(`
-      ALTER TABLE media_gen_runs
-        ADD COLUMN IF NOT EXISTS storage_key TEXT,
-        ADD COLUMN IF NOT EXISTS cost_usd    NUMERIC(10,4)
     `);
 
     // ── High Intent Advisor ────────────────────────────────────────────────────
@@ -694,6 +593,8 @@ async function initSchema() {
         baseline_metrics JSONB       DEFAULT '{}',
         outcome_metrics  JSONB       DEFAULT '{}',
         outcome_notes    TEXT,
+        user_action      TEXT,
+        user_reason      TEXT,
         acted_on_at      TIMESTAMPTZ,
         reviewed_at      TIMESTAMPTZ,
         created_at       TIMESTAMPTZ DEFAULT now()
@@ -710,9 +611,6 @@ async function initSchema() {
         ON agent_suggestions(run_id)
     `);
 
-    await client.query(`ALTER TABLE agent_suggestions ADD COLUMN IF NOT EXISTS user_action TEXT`);
-    await client.query(`ALTER TABLE agent_suggestions ADD COLUMN IF NOT EXISTS user_reason TEXT`);
-
     // ── Geocode cache (Nominatim) ──────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS geocode_cache (
@@ -724,31 +622,7 @@ async function initSchema() {
       )
     `);
 
-    // ── Extend agent_runs status constraint to include needs_review ───────────
-    // DROP + ADD is idempotent — safe to run on existing and new deployments.
-    await client.query(`ALTER TABLE agent_runs DROP CONSTRAINT IF EXISTS agent_runs_status_check`);
-    await client.query(`
-      ALTER TABLE agent_runs ADD CONSTRAINT agent_runs_status_check
-        CHECK (status IN ('running', 'complete', 'error', 'needs_review'))
-    `);
-
     // ── Demo layer ─────────────────────────────────────────────────────────────
-
-    // org_type distinguishes internal orgs from external demo client orgs.
-    // Default 'internal' — all existing orgs remain unaffected.
-    await client.query(`
-      ALTER TABLE organizations
-        ADD COLUMN IF NOT EXISTS org_type TEXT NOT NULL DEFAULT 'internal'
-    `);
-    await client.query(`
-      ALTER TABLE organizations
-        DROP CONSTRAINT IF EXISTS organizations_org_type_check
-    `);
-    await client.query(`
-      ALTER TABLE organizations
-        ADD CONSTRAINT organizations_org_type_check
-          CHECK (org_type IN ('internal', 'demo'))
-    `);
 
     // Per-org agent manifest — controls which demo agents a client org sees.
     // slug references DEMO_CATALOG constant (code), not a DB FK.
@@ -789,9 +663,6 @@ async function initSchema() {
         created_at   TIMESTAMPTZ DEFAULT NOW()
       )
     `);
-    // Idempotent column additions for existing installs
-    await client.query(`ALTER TABLE transaction_logs ADD COLUMN IF NOT EXISTS prompt_text TEXT`);
-    await client.query(`ALTER TABLE transaction_logs ADD COLUMN IF NOT EXISTS response_text TEXT`);
 
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_transaction_logs_org_agent
@@ -888,23 +759,6 @@ async function initSchema() {
     `);
 
     await client.query('COMMIT');
-
-    // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)
-    await seedEmailTemplates(client);
-
-    // Seed admin user from env
-    await seedAdminUser();
-
-    // Data patch: doc-extractor max_tokens stored at old default of 4096 — bump to 16384.
-    // Dense engineering documents with 100+ fields truncate JSON at 4096 output tokens.
-    await client.query(`
-      UPDATE system_settings
-         SET value = jsonb_set(value, '{max_tokens}', '16384'::jsonb)
-       WHERE key = 'agent_doc_extractor'
-         AND (value->>'max_tokens')::int <= 4096
-    `);
-
-    console.log('[db] Schema initialised');
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('[db] Schema init failed:', err.message);
@@ -912,6 +766,16 @@ async function initSchema() {
   } finally {
     client.release();
   }
+
+  await runMigrations(pool);
+
+  // Seed default email templates (ON CONFLICT DO NOTHING — never overwrites admin edits)
+  await seedEmailTemplates();
+
+  // Seed admin user from env
+  await seedAdminUser();
+
+  console.log('[db] Schema initialised');
 }
 
 async function seedEmailTemplates() {

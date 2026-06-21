@@ -162,7 +162,12 @@ If startup logs `extension "vector" is not available`, the PostgreSQL instance d
 The `.env` contains Google OAuth credentials (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_MANAGER_ID`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_GA4_PROPERTY_ID`). These are used by `GoogleAdsService`, `GoogleAnalyticsService`, and the Gmail/Calendar integrations. All Google services share the same OAuth2 refresh token.
 
 ### Schema errors on startup
-`initSchema()` is fully idempotent (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). Safe to restart at any time.
+Schema uses a **two-layer** approach (see `knowledge_base/architecture/MIGRATIONS.md`):
+
+1. **`initSchema()`** — baseline `CREATE TABLE IF NOT EXISTS`, extensions, indexes (single transaction).
+2. **`runMigrations()`** — versioned incremental changes recorded in `schema_migrations`.
+
+Safe to restart at any time. Apply pending migrations without HTTP via `cd server && npm run migrate`.
 
 ---
 

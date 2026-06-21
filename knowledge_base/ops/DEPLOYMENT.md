@@ -56,18 +56,26 @@ The project uses a two-stage Docker build:
 
 ## Database Migrations
 
-All schema changes are idempotent and run on server startup in `server/db.js`:
+Schema changes use a **two-layer** model (full guide: `knowledge_base/architecture/MIGRATIONS.md`):
 
-```js
-// Pattern for adding columns:
-await pool.query(`ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...`);
+| Layer | Location | When it runs |
+|-------|----------|--------------|
+| **Baseline** | `server/db.js` → `initSchema()` | Every boot — `CREATE TABLE IF NOT EXISTS`, extensions, indexes |
+| **Versioned migrations** | `server/migrations/` | Every boot after baseline — pending rows in `schema_migrations` |
 
-// Pattern for adding constraints:
-await pool.query(`ALTER TABLE ... DROP CONSTRAINT IF EXISTS ...`);
-await pool.query(`ALTER TABLE ... ADD CONSTRAINT ...`);
+**Adding a change:** create `server/migrations/NNN_name.js`, register in `server/migrations/index.js`, test locally, deploy. Never reorder or edit migrations already applied in production.
+
+**Manual apply (optional):**
+
+```bash
+cd server && npm run migrate
 ```
 
-No migration tool (Knex, Sequelize) is used. Schema changes are applied automatically on deploy.
+Applied migrations are listed in the **`schema_migrations`** table (`id`, `name`, `applied_at`).
+
+Current migrations: `001_platform_schema_patches`, `002_embedding_vector_dimensions`, `003_system_settings_data_patches`.
+
+**Rollback:** redeploy previous Railway image; database state may already include forward migrations — restore from Postgres backup for destructive changes.
 
 ---
 
@@ -102,4 +110,4 @@ To rollback to a previous deployment:
 2. Find the working deployment
 3. Click "Redeploy"
 
-Database schema changes are idempotent — rolling back code won't break the schema.
+Database schema changes are versioned in `schema_migrations`. Rolling back **code** does not undo applied migrations — restore Postgres from backup if a migration was destructive.
