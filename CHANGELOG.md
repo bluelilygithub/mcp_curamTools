@@ -18,6 +18,21 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — Cross-org user management (platform operator)
+
+### Built
+- **`server/config/platformOperator.js`** — platform org + internal `org_admin` may manage users across all orgs.
+- **`GET /api/admin/users`** — returns all users for platform operators (`{ crossOrg: true, users }`); optional `?orgId=` filter.
+- **User mutations** — invite, update, delete, system roles, departments, org-roles, access-preview scoped via `findManagedUser()`.
+- **`?orgId=` on** `GET /admin/departments`, `/admin/org-roles`, `/admin/access-roles` for managing demo-org users.
+- **Admin Users UI** — organisation + app columns, org filter, Manage modal loads target org's departments/roles.
+
+### Notes
+- Demo org admins still see only their own org's users.
+- Platform operator = admin on `PLATFORM_ORG_ID` (default Blue Lily).
+
+---
+
 ## 2026-06-18 — Organisation admin: edit, delete, purpose field
 
 ### Built

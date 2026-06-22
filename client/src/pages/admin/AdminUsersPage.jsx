@@ -15,6 +15,22 @@ import useAuthStore from '../../stores/authStore';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+function OrgTypeBadge({ type }) {
+  const isDemo = type === 'demo';
+  return (
+    <span
+      className="px-2 py-0.5 rounded-full text-xs font-medium"
+      style={
+        isDemo
+          ? { background: 'rgba(245,158,11,0.12)', color: '#d97706' }
+          : { background: 'var(--color-surface)', color: 'var(--color-muted)', border: '1px solid var(--color-border)' }
+      }
+    >
+      {isDemo ? 'Engineering' : 'Internal'}
+    </span>
+  );
+}
+
 function RoleBadge({ isAdmin }) {
   return (
     <span
@@ -102,7 +118,7 @@ function InviteModal({ onClose, onInvited }) {
 
   useEffect(() => {
     api.get('/admin/organizations').then((data) => {
-      setOrgs(Array.isArray(data) ? data.filter((o) => o.org_type === 'demo') : []);
+      setOrgs(Array.isArray(data) ? data : []);
     }).catch(() => {});
   }, []);
 
@@ -141,15 +157,17 @@ function InviteModal({ onClose, onInvited }) {
               required autoFocus placeholder="colleague@example.com" style={inputStyle}
             />
           </div>
-          {orgs.length > 0 && (
+          {orgs.length > 1 && (
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-muted)' }}>
                 Organisation
               </label>
               <select value={orgId} onChange={(e) => setOrgId(e.target.value)} style={inputStyle}>
-                <option value="">— Internal (default) —</option>
+                <option value="">— Default (your organisation) —</option>
                 {orgs.map((o) => (
-                  <option key={o.id} value={o.id}>{o.name}</option>
+                  <option key={o.id} value={o.id}>
+                    {o.name}{o.org_type === 'demo' ? ' (Engineering client)' : ''}
+                  </option>
                 ))}
               </select>
             </div>
@@ -359,13 +377,16 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting,      setDeleting]      = useState(false);
 
+  const targetOrgId = user.org_id;
+
   useEffect(() => {
+    const orgQuery = targetOrgId ? `?orgId=${targetOrgId}` : '';
     Promise.all([
       api.get(`/admin/users/${user.id}/roles`),
       api.get(`/admin/users/${user.id}/departments`),
       api.get(`/admin/users/${user.id}/org-roles`),
-      api.get('/admin/departments'),
-      api.get('/admin/org-roles'),
+      api.get(`/admin/departments${orgQuery}`),
+      api.get(`/admin/org-roles${orgQuery}`),
       api.get('/admin/models'),
       api.get('/admin/organizations'),
       api.get('/admin/access-roles').catch(() => ({ systemRoles: SYSTEM_ROLE_FALLBACK })),
@@ -386,7 +407,7 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
       setAccessPreview(preview);
     }).catch(() => showToast('Failed to load user data', 'error'))
       .finally(() => setRoleLoading(false));
-  }, [user.id]);
+  }, [user.id, targetOrgId]);
 
   const toggleDept = (id) => {
     setUserDeptIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -837,6 +858,9 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
 
 export default function AdminUsersPage() {
   const [users,      setUsers]      = useState([]);
+  const [crossOrg,   setCrossOrg]   = useState(false);
+  const [orgFilter,  setOrgFilter]  = useState('all');
+  const [allOrgs,    setAllOrgs]    = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [showInvite, setShowInvite] = useState(false);
   const [manageUser, setManageUser] = useState(null);
@@ -844,26 +868,58 @@ export default function AdminUsersPage() {
   const getIcon = useIcon();
   const { showToast } = useToast();
 
+  useEffect(() => {
+    api.get('/admin/organizations')
+      .then((data) => setAllOrgs(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
+
   const fetchUsers = () => {
     setLoading(true);
-    api.get('/admin/users')
-      .then((data) => setUsers(Array.isArray(data) ? data : []))
+    const path = orgFilter !== 'all'
+      ? `/admin/users?orgId=${orgFilter}`
+      : '/admin/users';
+    api.get(path)
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setCrossOrg(false);
+          setUsers(data);
+        } else {
+          setCrossOrg(Boolean(data.crossOrg));
+          setUsers(Array.isArray(data.users) ? data.users : []);
+        }
+      })
       .catch(() => showToast('Failed to load users', 'error'))
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  useEffect(() => { fetchUsers(); }, [orgFilter]);
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+        <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Users</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>
-            Manage workspace members and invitations.
+            {crossOrg
+              ? 'Platform view — all organisations. Filter or manage demo client users from here.'
+              : 'Manage workspace members and invitations.'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {crossOrg && allOrgs.length > 0 && (
+            <select
+              value={orgFilter}
+              onChange={(e) => setOrgFilter(e.target.value)}
+              className="text-sm px-3 py-1.5 rounded-lg border"
+              style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}
+            >
+              <option value="all">All organisations</option>
+              {allOrgs.map((o) => (
+                <option key={o.id} value={String(o.id)}>{o.name}</option>
+              ))}
+            </select>
+          )}
           <button
             onClick={fetchUsers}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:opacity-60 transition-opacity"
@@ -902,8 +958,11 @@ export default function AdminUsersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
-                  {['Email', 'Name', 'Role', 'Status', 'Joined', ''].map((col) => (
-                    <th key={col}
+                  {(crossOrg
+                    ? ['Email', 'Name', 'Organisation', 'App', 'Role', 'Status', 'Joined', '']
+                    : ['Email', 'Name', 'Role', 'Status', 'Joined', '']
+                  ).map((col) => (
+                    <th key={col || 'actions'}
                       className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider"
                       style={{ color: 'var(--color-muted)' }}>
                       {col}
@@ -923,6 +982,16 @@ export default function AdminUsersPage() {
                       <td className="px-4 py-3" style={{ color: 'var(--color-text)' }}>
                         {[u.first_name, u.last_name].filter(Boolean).join(' ') || '—'}
                       </td>
+                      {crossOrg && (
+                        <>
+                          <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text)' }}>
+                            {u.org_name || '—'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <OrgTypeBadge type={u.org_type} />
+                          </td>
+                        </>
+                      )}
                       <td className="px-4 py-3"><RoleBadge isAdmin={isAdmin} /></td>
                       <td className="px-4 py-3"><StatusBadge isActive={u.is_active} /></td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted)' }}>

@@ -17,6 +17,11 @@ const bcrypt = require('bcryptjs');
 const https   = require('https');
 const { pool } = require('../db');
 const { getPlatformOrgId } = require('../config/platformOrg');
+const {
+  isPlatformOperator,
+  findManagedUser,
+  resolveScopedOrgId,
+} = require('../config/platformOperator');
 const { requireAuth } = require('../middleware/requireAuth');
 const { requirePermission } = require('../middleware/requirePermission');
 const { grantRole, revokeRole, getUserRoles, getAgentAccessDecision } = require('../services/PermissionService');
@@ -45,26 +50,46 @@ router.use(requireAuth, requirePermission('admin:access'));
 
 const SYSTEM_ROLE_NAMES = SYSTEM_ROLE_OPTIONS.map((role) => role.name);
 
+const USER_LIST_SQL = `
+  SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.is_active, u.created_at,
+         u.default_model_id, u.org_id, o.name AS org_name, o.org_type,
+         array_agg(DISTINCT r.role_name) FILTER (WHERE r.role_name IS NOT NULL) AS roles,
+         array_agg(DISTINCT d.name)      FILTER (WHERE d.id       IS NOT NULL) AS department_names
+    FROM users u
+    LEFT JOIN organizations o     ON o.id = u.org_id
+    LEFT JOIN user_roles r        ON r.user_id = u.id
+    LEFT JOIN user_departments ud ON ud.user_id = u.id
+    LEFT JOIN departments d       ON d.id = ud.department_id`;
+
 // ── Users ─────────────────────────────────────────────────────────────────
 
 router.get('/users', async (req, res) => {
   try {
+    const operator = await isPlatformOperator(req.user);
+    const filterOrgId = req.query.orgId ? parseInt(req.query.orgId, 10) : null;
+
+    let rows;
+    if (operator && !filterOrgId) {
+      const res2 = await pool.query(
+        `${USER_LIST_SQL}
+        GROUP BY u.id, o.name, o.org_type
+        ORDER BY o.name ASC, u.created_at DESC`
+      );
+      rows = res2.rows;
+      return res.json({ crossOrg: true, users: rows });
+    }
+
+    const orgId = operator && filterOrgId ? filterOrgId : req.user.orgId;
     const res2 = await pool.query(
-      `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.is_active, u.created_at,
-              u.default_model_id, u.org_id, o.name AS org_name,
-              array_agg(DISTINCT r.role_name) FILTER (WHERE r.role_name IS NOT NULL) AS roles,
-              array_agg(DISTINCT d.name)      FILTER (WHERE d.id       IS NOT NULL) AS department_names
-         FROM users u
-         LEFT JOIN organizations o    ON o.id            = u.org_id
-         LEFT JOIN user_roles r       ON r.user_id       = u.id
-         LEFT JOIN user_departments ud ON ud.user_id      = u.id
-         LEFT JOIN departments d       ON d.id            = ud.department_id
-        WHERE u.org_id = $1
-        GROUP BY u.id, o.name
-        ORDER BY u.created_at DESC`,
-      [req.user.orgId]
+      `${USER_LIST_SQL}
+       WHERE u.org_id = $1
+       GROUP BY u.id, o.name, o.org_type
+       ORDER BY u.created_at DESC`,
+      [orgId]
     );
-    res.json(res2.rows);
+    rows = res2.rows;
+    if (operator) return res.json({ crossOrg: true, users: rows });
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: 'Failed to load users.' });
   }
@@ -158,7 +183,10 @@ router.post('/users/invite', async (req, res) => {
   try {
     const { email, role = 'org_member', orgId } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required.' });
-    const targetOrgId = orgId ? parseInt(orgId) : req.user.orgId;
+    let targetOrgId = orgId ? parseInt(orgId, 10) : req.user.orgId;
+    if (targetOrgId !== req.user.orgId && !(await isPlatformOperator(req.user))) {
+      return res.status(403).json({ error: 'Cannot invite users into another organisation.' });
+    }
     const result = await createInvitation(email, targetOrgId, role, req.user.id);
     res.json({ email: result.email, activationUrl: result.activationUrl, expiresAt: result.expiresAt });
   } catch (err) {
@@ -169,7 +197,10 @@ router.post('/users/invite', async (req, res) => {
 
 router.post('/users/:id/resend-invite', async (req, res) => {
   try {
-    const result = await resendInvitation(parseInt(req.params.id), req.user.id);
+    const userId = parseInt(req.params.id, 10);
+    const target = await findManagedUser(userId, req.user);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+    const result = await resendInvitation(userId, req.user.id);
     res.json({ email: result.email, activationUrl: result.activationUrl, expiresAt: result.expiresAt });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -178,14 +209,23 @@ router.post('/users/:id/resend-invite', async (req, res) => {
 
 router.put('/users/:id', async (req, res) => {
   const { firstName, lastName, phone, isActive, role, defaultModelId, orgId } = req.body;
-  const userId = parseInt(req.params.id);
+  const userId = parseInt(req.params.id, 10);
   try {
+    const target = await findManagedUser(userId, req.user);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+
+    if (orgId != null && parseInt(orgId, 10) !== target.org_id) {
+      if (!(await isPlatformOperator(req.user))) {
+        return res.status(403).json({ error: 'Cannot move users between organisations.' });
+      }
+    }
+
     await pool.query(
       `UPDATE users SET first_name = $1, last_name = $2, phone = $3, is_active = $4, default_model_id = $5
          ${orgId ? ', org_id = $7' : ''}
        WHERE id = $6`,
       orgId
-        ? [firstName, lastName, phone, isActive, defaultModelId ?? null, userId, parseInt(orgId)]
+        ? [firstName, lastName, phone, isActive, defaultModelId ?? null, userId, parseInt(orgId, 10)]
         : [firstName, lastName, phone, isActive, defaultModelId ?? null, userId]
     );
     if (role) {
@@ -199,12 +239,14 @@ router.put('/users/:id', async (req, res) => {
 });
 
 router.delete('/users/:id', async (req, res) => {
-  const userId = parseInt(req.params.id);
+  const userId = parseInt(req.params.id, 10);
   if (userId === req.user.id) {
     return res.status(400).json({ error: 'You cannot delete your own account.' });
   }
   try {
-    await pool.query('DELETE FROM users WHERE id = $1 AND org_id = $2', [userId, req.user.orgId]);
+    const target = await findManagedUser(userId, req.user);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+    await pool.query('DELETE FROM users WHERE id = $1', [userId]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete user.' });
@@ -221,15 +263,14 @@ router.get('/users/:id/roles', async (req, res) => {
 });
 
 router.post('/users/:id/grant-role', async (req, res) => {
-  const userId = parseInt(req.params.id);
+  const userId = parseInt(req.params.id, 10);
   if (userId === req.user.id) {
     return res.status(400).json({ error: 'You cannot change your own role.' });
   }
   const { roleName, scopeType = 'global' } = req.body;
   if (!roleName) return res.status(400).json({ error: 'roleName is required.' });
-  // Verify target user belongs to this org
-  const check = await pool.query('SELECT id FROM users WHERE id = $1 AND org_id = $2', [userId, req.user.orgId]);
-  if (!check.rows.length) return res.status(404).json({ error: 'User not found.' });
+  const target = await findManagedUser(userId, req.user);
+  if (!target) return res.status(404).json({ error: 'User not found.' });
   try {
     await grantRole(userId, roleName, { scopeType, scopeId: null }, req.user.id);
     res.json({ ok: true });
@@ -239,14 +280,14 @@ router.post('/users/:id/grant-role', async (req, res) => {
 });
 
 router.post('/users/:id/revoke-role', async (req, res) => {
-  const userId = parseInt(req.params.id);
+  const userId = parseInt(req.params.id, 10);
   if (userId === req.user.id) {
     return res.status(400).json({ error: 'You cannot change your own role.' });
   }
   const { roleName, scopeType = 'global' } = req.body;
   if (!roleName) return res.status(400).json({ error: 'roleName is required.' });
-  const check = await pool.query('SELECT id FROM users WHERE id = $1 AND org_id = $2', [userId, req.user.orgId]);
-  if (!check.rows.length) return res.status(404).json({ error: 'User not found.' });
+  const target = await findManagedUser(userId, req.user);
+  if (!target) return res.status(404).json({ error: 'User not found.' });
   try {
     await revokeRole(userId, roleName, { scopeType, scopeId: null });
     res.json({ ok: true });
@@ -257,12 +298,13 @@ router.post('/users/:id/revoke-role', async (req, res) => {
 
 router.get('/access-roles', async (req, res) => {
   try {
+    const orgId = await resolveScopedOrgId(req.user, req.query.orgId);
     const { rows: customRoles } = await pool.query(
       `SELECT id, name, label, description, color
          FROM org_roles
         WHERE org_id = $1
         ORDER BY label`,
-      [req.user.orgId]
+      [orgId]
     );
     res.json({
       systemRoles: SYSTEM_ROLE_OPTIONS,
@@ -274,7 +316,7 @@ router.get('/access-roles', async (req, res) => {
 });
 
 router.put('/users/:id/system-roles', async (req, res) => {
-  const userId = parseInt(req.params.id);
+  const userId = parseInt(req.params.id, 10);
   const requestedRoles = Array.isArray(req.body.roleNames)
     ? [...new Set(req.body.roleNames.map((r) => String(r).trim()).filter(Boolean))]
     : [];
@@ -284,8 +326,8 @@ router.put('/users/:id/system-roles', async (req, res) => {
   }
 
   try {
-    const check = await pool.query('SELECT id FROM users WHERE id = $1 AND org_id = $2', [userId, req.user.orgId]);
-    if (!check.rows.length) return res.status(404).json({ error: 'User not found.' });
+    const target = await findManagedUser(userId, req.user);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
 
     const currentRoles = await getUserRoles(userId);
     const isRemovingOwnAdmin = userId === req.user.id
@@ -334,12 +376,12 @@ async function getUserAgentAccessPreview(userId, orgId) {
 }
 
 router.get('/users/:id/access-preview', async (req, res) => {
-  const userId = parseInt(req.params.id);
+  const userId = parseInt(req.params.id, 10);
   try {
-    const check = await pool.query('SELECT id FROM users WHERE id = $1 AND org_id = $2', [userId, req.user.orgId]);
-    if (!check.rows.length) return res.status(404).json({ error: 'User not found.' });
+    const target = await findManagedUser(userId, req.user);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
     const roles = await getUserRoles(userId);
-    const agents = await getUserAgentAccessPreview(userId, req.user.orgId);
+    const agents = await getUserAgentAccessPreview(userId, target.org_id);
     res.json({
       roles: roles.map((role) => role.role_name),
       agents,
@@ -353,12 +395,15 @@ router.get('/users/:id/access-preview', async (req, res) => {
 
 router.get('/users/:id/departments', async (req, res) => {
   try {
+    const userId = parseInt(req.params.id, 10);
+    const target = await findManagedUser(userId, req.user);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
     const r = await pool.query(
       `SELECT d.id, d.name, d.description, d.color
          FROM user_departments ud
          JOIN departments d ON d.id = ud.department_id
         WHERE ud.user_id = $1`,
-      [parseInt(req.params.id)]
+      [userId]
     );
     res.json(r.rows);
   } catch (err) {
@@ -367,9 +412,22 @@ router.get('/users/:id/departments', async (req, res) => {
 });
 
 router.put('/users/:id/departments', async (req, res) => {
-  const userId = parseInt(req.params.id);
+  const userId = parseInt(req.params.id, 10);
   const { departmentIds = [] } = req.body;
   try {
+    const target = await findManagedUser(userId, req.user);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+
+    if (departmentIds.length > 0) {
+      const valid = await pool.query(
+        'SELECT id FROM departments WHERE id = ANY($1) AND org_id = $2',
+        [departmentIds, target.org_id]
+      );
+      if (valid.rows.length !== departmentIds.length) {
+        return res.status(400).json({ error: 'One or more departments are invalid for this organisation.' });
+      }
+    }
+
     await pool.query('DELETE FROM user_departments WHERE user_id = $1', [userId]);
     if (departmentIds.length > 0) {
       const values = departmentIds.map((id, i) => `($1, $${i + 2})`).join(', ');
@@ -388,13 +446,15 @@ router.put('/users/:id/departments', async (req, res) => {
 
 router.get('/users/:id/org-roles', async (req, res) => {
   try {
-    // Return only roles that exist in org_roles (custom roles, not system roles)
+    const userId = parseInt(req.params.id, 10);
+    const target = await findManagedUser(userId, req.user);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
     const r = await pool.query(
       `SELECT ur.role_name
          FROM user_roles ur
          JOIN org_roles rl ON rl.name = ur.role_name AND rl.org_id = $2
         WHERE ur.user_id = $1 AND ur.scope_type = 'global'`,
-      [parseInt(req.params.id), req.user.orgId]
+      [userId, target.org_id]
     );
     res.json(r.rows.map(row => row.role_name));
   } catch (err) {
@@ -403,22 +463,22 @@ router.get('/users/:id/org-roles', async (req, res) => {
 });
 
 router.put('/users/:id/org-roles', async (req, res) => {
-  const userId = parseInt(req.params.id);
+  const userId = parseInt(req.params.id, 10);
   const { roleNames = [] } = req.body;
   try {
-    // Get all valid org role names for this org
+    const target = await findManagedUser(userId, req.user);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+
     const validRoles = await pool.query(
-      'SELECT name FROM org_roles WHERE org_id = $1', [req.user.orgId]
+      'SELECT name FROM org_roles WHERE org_id = $1', [target.org_id]
     );
     const validNames = validRoles.rows.map(r => r.name);
-    // Remove existing custom role assignments
     if (validNames.length > 0) {
       await pool.query(
         `DELETE FROM user_roles WHERE user_id = $1 AND scope_type = 'global' AND role_name = ANY($2)`,
         [userId, validNames]
       );
     }
-    // Grant selected roles
     for (const name of roleNames.filter(n => validNames.includes(n))) {
       await grantRole(userId, name, { scopeType: 'global', scopeId: null }, req.user.id);
     }
@@ -432,6 +492,7 @@ router.put('/users/:id/org-roles', async (req, res) => {
 
 router.get('/departments', async (req, res) => {
   try {
+    const orgId = await resolveScopedOrgId(req.user, req.query.orgId);
     const r = await pool.query(
       `SELECT d.id, d.name, d.description, d.color, d.created_at,
               COUNT(ud.user_id)::int AS member_count
@@ -440,7 +501,7 @@ router.get('/departments', async (req, res) => {
         WHERE d.org_id = $1
         GROUP BY d.id
         ORDER BY d.name`,
-      [req.user.orgId]
+      [orgId]
     );
     res.json(r.rows);
   } catch (err) {
@@ -497,6 +558,7 @@ router.delete('/departments/:id', async (req, res) => {
 
 router.get('/org-roles', async (req, res) => {
   try {
+    const orgId = await resolveScopedOrgId(req.user, req.query.orgId);
     const r = await pool.query(
       `SELECT or2.id, or2.name, or2.label, or2.description, or2.color, or2.created_at,
               COUNT(ur.id)::int AS member_count
@@ -505,7 +567,7 @@ router.get('/org-roles', async (req, res) => {
         WHERE or2.org_id = $1
         GROUP BY or2.id
         ORDER BY or2.label`,
-      [req.user.orgId]
+      [orgId]
     );
     res.json(r.rows);
   } catch (err) {

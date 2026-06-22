@@ -20,7 +20,8 @@ These files are the source of truth. The documents below derive from them and re
 **Decision (org_type semantics):** Keep DB values `internal` and `demo` — they are routing flags, not business labels. UI displays **Internal (Diamond Plate)** and **Engineering client**.
 **Decision (description column):** Add `organizations.description` (migration `004`) for operator notes — sales demo, client pilot, training sandbox, etc.
 **Decision (CRUD):** `PUT` and `DELETE /api/admin/organizations/:id`; delete blocked for `PLATFORM_ORG_ID` and the admin's own org; cascade removes users and org data.
-**References:** `server/migrations/004_organizations_description.js`; `server/routes/admin.js`; `client/src/pages/admin/AdminOrganizationsPage.jsx`; `knowledge_base/architecture/APPS.md`.
+**Decision (cross-org users):** Platform operator (`org_admin` on `PLATFORM_ORG_ID`, internal) sees all users on `/admin/users`; may invite, manage, and delete users in demo orgs without switching login. Demo org admins remain scoped to their own org.
+**References:** `server/migrations/004_organizations_description.js`; `server/routes/admin.js`; `server/config/platformOperator.js`; `client/src/pages/admin/AdminOrganizationsPage.jsx`; `client/src/pages/admin/AdminUsersPage.jsx`; `knowledge_base/architecture/APPS.md`.
 
 ---
 

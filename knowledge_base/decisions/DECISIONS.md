@@ -36,7 +36,8 @@ Mirror of root [`DECISIONS.md`](../../DECISIONS.md). Baseline DDL stays in `init
 **Decision (org_type semantics):** Keep DB values `internal` and `demo` — they are routing flags, not business labels. UI displays **Internal (Diamond Plate)** and **Engineering client**.
 **Decision (description column):** Add `organizations.description` (migration `004`) for operator notes — sales demo, client pilot, training sandbox, etc.
 **Decision (CRUD):** `PUT` and `DELETE /api/admin/organizations/:id`; delete blocked for `PLATFORM_ORG_ID` and the admin's own org; cascade removes users and org data.
-**References:** `server/migrations/004_organizations_description.js`; `server/routes/admin.js`; `client/src/pages/admin/AdminOrganizationsPage.jsx`; `architecture/APPS.md`.
+**Decision (cross-org users):** Platform operator (`org_admin` on `PLATFORM_ORG_ID`, internal) sees all users on `/admin/users`; may invite, manage, and delete users in demo orgs without switching login. Demo org admins remain scoped to their own org.
+**References:** `server/migrations/004_organizations_description.js`; `server/routes/admin.js`; `server/config/platformOperator.js`; `client/src/pages/admin/AdminOrganizationsPage.jsx`; `client/src/pages/admin/AdminUsersPage.jsx`; `architecture/APPS.md`.
 
 ---
 

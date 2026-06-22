@@ -61,6 +61,7 @@ See `test-audit/README.md`.
 | `server/services/CostGuardService.test.js` | Pure budget math; circuit breaker | Agent run cost guards |
 | `server/migrations/runner.test.js` | Migration registry + applied-id lookup | Database migrations |
 | `server/config/platformOrg.test.js` | `PLATFORM_ORG_ID` env parsing | Platform org fallback |
+| `server/config/platformOperator.test.js` | Cross-org operator scope | Platform operator |
 | `server/services/ExtractionValidationService.test.js` | Injected provider factory | Tiered extraction validation |
 | `server/services/FileIntakeService.test.js` | File intake rules | Doc upload pipeline |
 | `server/agents/docExtractor/index.test.js` | Agent-specific logic | Doc extractor |
