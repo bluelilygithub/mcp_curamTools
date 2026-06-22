@@ -238,6 +238,7 @@ Same as above, plus:
 | 0 | Document boundaries ([APPS.md](./APPS.md)) | Done |
 | 1 | `createPlatform`, app manifests, MCP split | Done |
 | 1b | Starter app + `loadPlugins` + `appModule` agents | Done |
+| 1c | Plugin contract tests + CI gate (`npm run test:unit`) | Done |
 | 2 | Client plugin registry (routes + nav) | **Next** |
 | 3 | Unify demo catalog with engineering manifest | Planned |
 | 4 | `PLUGINS` env / conditional deploy | Partial (`PLATFORM_PLUGINS`, `EXTRA_PLUGINS`) |

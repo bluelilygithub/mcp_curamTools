@@ -18,6 +18,20 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — Plugin contract tests + CI gate
+
+### Built
+- **`plugins.contract.test.js`** — per-app manifest, agent export, and `registerRoutes` contract for diamond-plate, engineering, starter.
+- **`createPlatform.test.js`** — Express route wiring without DB boot (401 = route mounted).
+- **`.github/workflows/test.yml`** — runs `npm run test:unit` + golden-path smoke on push/PR to `main`.
+- **`AgentScheduler.stopAll()`** — clean test shutdown after scheduled agents register.
+
+### Notes
+- **64 unit tests** passing (~11s). Still no Postgres/MCP/authenticated agent-run integration tests.
+- Docs: `knowledge_base/core/TESTING.md`, `PLUGIN_API.md` build order phase 1c.
+
+---
+
 ## 2026-06-18 — Starter app template on core
 
 ### Built

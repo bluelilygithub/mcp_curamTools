@@ -124,10 +124,12 @@ Open http://localhost:5174/ — default seed login: `admin@example.com` / `chang
 ### Automated
 
 ```bash
-npm run test:unit    # 45 tests — platformOrg, migrations, embeddings, cost guard
-npm test             # unit + golden-path smoke
+npm run test:unit    # 64 tests — plugins contract, createPlatform wiring, platformOrg, …
+npm test             # unit + golden-path smoke (same as CI)
 cd server && npm run migrate   # pending DB migrations only
 ```
+
+**CI:** GitHub Actions (`.github/workflows/test.yml`) runs unit tests + golden-path smoke on every push/PR to `main`. See `knowledge_base/core/TESTING.md`.
 
 ### Manual smoke
 

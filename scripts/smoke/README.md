@@ -32,6 +32,8 @@ npm run smoke:golden-path
 npm test
 ```
 
+Also run automatically in CI (`.github/workflows/test.yml`) after unit tests on push/PR to `main`.
+
 **Future (optional)**
 
 A second-tier smoke could call a running server with `SMOKE_BASE_URL` + `SMOKE_JWT` and stream one agent run; that belongs in a separate script when you want to spend tokens in CI.

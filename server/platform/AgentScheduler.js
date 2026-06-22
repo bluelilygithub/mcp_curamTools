@@ -142,6 +142,13 @@ class AgentSchedulerClass {
     }
   }
 
+  /** Stop all registered cron jobs (tests, graceful shutdown). */
+  stopAll() {
+    for (const slug of [...this._jobs.keys()]) {
+      this._stop(slug);
+    }
+  }
+
   /**
    * Execute the agent run for one cron tick. Persists result via persistRun.
    *

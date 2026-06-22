@@ -10,6 +10,12 @@
 
 ---
 
+## 2026-06-18 — Plugin contract tests + CI gate (mirror)
+
+Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Plugin contract tests + CI gate**. `plugins.contract.test.js`, `createPlatform.test.js`, GitHub Actions workflow, `AgentScheduler.stopAll()`.
+
+---
+
 ## 2026-06-18 — Starter app template on core (mirror)
 
 Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Starter app template on core**. `server/apps/starter/`; `loadPlugins.js` (`PLATFORM_PLUGINS`, `EXTRA_PLUGINS`); `appModule` agents; `loadPlugins.test.js`.

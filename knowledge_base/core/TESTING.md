@@ -1,8 +1,20 @@
 # Testing — mcptools
 
-How to run tests, what each layer does, and how to add more. Tests are **optional** — run them when learning or before a risky deploy. Nothing runs on a schedule unless you add CI later.
+How to run tests, what each layer does, and how to add more. **GitHub Actions** runs `npm run test:unit` + golden-path smoke on every push/PR to `main`. Locally, run the same before risky plugin or deploy changes.
 
 ---
+
+## Test layers (framework quality)
+
+| Layer | What it proves | Apps / plugins |
+|-------|----------------|----------------|
+| **Unit** (`*.test.js`) | Pure logic, env parsing, plugin id resolution | `loadPlugins`, `platformOrg`, services |
+| **Plugin contract** (`plugins.contract.test.js`) | Each app under `server/apps/*` exports valid manifest + loadable agent handlers + `registerRoutes` | diamond-plate, engineering, starter |
+| **Platform wiring** (`createPlatform.test.js`) | Express mounts plugin routes and agent paths (401 without auth = route exists) | starter, engineering smoke |
+| **Golden-path smoke** | Shared spine modules load; optional PDF | Not plugin-specific |
+| **Manual** ([PLUGINS.md](../architecture/PLUGINS.md)) | Boot log, sidebar, live login | Full stack + DB |
+
+**Not covered yet:** authenticated HTTP runs, Postgres integration, MCP subprocesses, or per-route tests for every Diamond Plate API. Those need `TEST_DATABASE_URL` + `supertest` (planned).
 
 ## Quick commands
 
@@ -62,6 +74,9 @@ See `test-audit/README.md`.
 | `server/migrations/runner.test.js` | Migration registry + applied-id lookup | Database migrations |
 | `server/config/platformOrg.test.js` | `PLATFORM_ORG_ID` env parsing | Platform org fallback |
 | `server/config/platformOperator.test.js` | Cross-org operator scope | Platform operator |
+| `server/platform/loadPlugins.test.js` | `PLATFORM_PLUGINS` / `EXTRA_PLUGINS` resolution | Plugin loading |
+| `server/platform/plugins.contract.test.js` | Per-app manifest + agent export contract | All app plugins |
+| `server/platform/createPlatform.test.js` | Route mounting without DB boot | createPlatform wiring |
 | `server/services/ExtractionValidationService.test.js` | Injected provider factory | Tiered extraction validation |
 | `server/services/FileIntakeService.test.js` | File intake rules | Doc upload pipeline |
 | `server/agents/docExtractor/index.test.js` | Agent-specific logic | Doc extractor |
@@ -150,7 +165,7 @@ Keep tests **fast** and **deterministic** — no live network, no real Anthropic
 
 | Step | When worth it |
 |------|----------------|
-| GitHub Action running `npm test` on push | You want automatic checks without remembering |
+| GitHub Action running `npm test` on push | **Done** — `.github/workflows/test.yml` |
 | `TEST_DATABASE_URL` integration tests | Second developer or repeated org-leak bugs |
 | `supertest` for HTTP routes | Testing auth + settings API together |
 

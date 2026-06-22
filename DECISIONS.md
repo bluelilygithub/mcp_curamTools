@@ -42,7 +42,8 @@ These files are the source of truth. The documents below derive from them and re
 **Decision (starter template):** `server/apps/starter/` is the maintained minimal plugin (health route + one agent). Off by default; enable with `EXTRA_PLUGINS=starter`. Copy via `cp -r server/apps/starter server/apps/my-app`.
 **Decision (plugin resolution):** `loadPlugins.js` loads `server/apps/<id>/plugin.js`. Defaults: `diamond-plate`, `engineering`. `PLATFORM_PLUGINS` replaces defaults; `EXTRA_PLUGINS` appends. Folder names starting with `_` are never loaded.
 **Decision (app-local agents):** Manifest field `appModule` loads agents from `server/apps/<app>/agents/`; legacy `module` under `server/agents/` unchanged.
-**References:** `server/apps/starter/README.md`; `server/platform/loadPlugins.js`; `server/routes/agents.js`; `knowledge_base/architecture/PLUGIN_API.md`.
+**Decision (framework quality gate):** Plugin contract tests (`plugins.contract.test.js`) validate each app plugin; `createPlatform.test.js` checks route wiring; GitHub Actions runs `npm run test:unit` + smoke on push to `main`. DB/MCP integration tests remain planned.
+**References:** `server/apps/starter/README.md`; `server/platform/loadPlugins.js`; `server/platform/plugins.contract.test.js`; `server/routes/agents.js`; `.github/workflows/test.yml`; `knowledge_base/architecture/PLUGIN_API.md`.
 
 ---
 

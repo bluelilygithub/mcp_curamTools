@@ -14,6 +14,8 @@ const testFiles = [
   'config/platformOrg.test.js',
   'config/platformOperator.test.js',
   'platform/loadPlugins.test.js',
+  'platform/plugins.contract.test.js',
+  'platform/createPlatform.test.js',
   'services/CostGuardService.test.js',
   'services/ExtractionValidationService.test.js',
   'services/FileIntakeService.test.js',
