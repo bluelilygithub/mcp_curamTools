@@ -75,6 +75,7 @@ Applies pending migrations without starting the HTTP server. Requires `DATABASE_
 | `001` | `platform_schema_patches` | Legacy column/constraint/index patches |
 | `002` | `embedding_vector_dimensions` | Align `embeddings` / `personal_thoughts` to 768-dim vectors |
 | `003` | `system_settings_data_patches` | doc-extractor `max_tokens` bump |
+| `004` | `organizations_description` | `organizations.description` for operator notes |
 
 ---
 

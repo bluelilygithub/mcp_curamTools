@@ -18,6 +18,19 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — Organisation admin: edit, delete, purpose field
+
+### Built
+- **Migration `004`** — `organizations.description` for operator notes (sales demo, client pilot, etc.).
+- **API** — `PUT /api/admin/organizations/:id`, `DELETE /api/admin/organizations/:id`; list includes `description` and `user_count`.
+- **Admin UI** — edit/delete on `/admin/organizations`; type shown as **Internal (Diamond Plate)** / **Engineering client**; purpose column.
+- **Delete guards** — cannot delete platform org (`PLATFORM_ORG_ID`) or the org you are logged into.
+
+### Notes
+- `org_type` remains a **routing flag** (`internal` → AppShell, `demo` → DemoShell); use **purpose** for business context when multiple engineering orgs exist.
+
+---
+
 ## 2026-06-18 — Plugin architecture docs + local verification
 
 ### Built

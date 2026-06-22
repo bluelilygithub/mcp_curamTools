@@ -76,7 +76,7 @@ cd server && npm run migrate
 
 Applied migrations are listed in the **`schema_migrations`** table (`id`, `name`, `applied_at`).
 
-Current migrations: `001_platform_schema_patches`, `002_embedding_vector_dimensions`, `003_system_settings_data_patches`.
+Current migrations: `001_platform_schema_patches`, `002_embedding_vector_dimensions`, `003_system_settings_data_patches`, `004_organizations_description`.
 
 **Rollback:** redeploy previous Railway image; database state may already include forward migrations — restore from Postgres backup for destructive changes.
 

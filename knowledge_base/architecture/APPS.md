@@ -47,6 +47,7 @@ This file is the **inventory and placement rules** for the three-block model. Us
 | Bootstrap | `server/platform/createPlatform.js` |
 | Diamond Plate sidebar | `client/src/config/tools.js` (engineering tools removed) |
 | Engineering navigation | `DemoShell` → `/api/demo/manifest` |
+| Org admin | `/admin/organizations` — `org_type` (app shell) + `description` (operator purpose notes) |
 
 **Target (future):** physical `packages/core` + `apps/*` folders with semver.
 

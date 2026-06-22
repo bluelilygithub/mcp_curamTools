@@ -16,6 +16,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const https   = require('https');
 const { pool } = require('../db');
+const { getPlatformOrgId } = require('../config/platformOrg');
 const { requireAuth } = require('../middleware/requireAuth');
 const { requirePermission } = require('../middleware/requirePermission');
 const { grantRole, revokeRole, getUserRoles, getAgentAccessDecision } = require('../services/PermissionService');
@@ -74,7 +75,10 @@ router.get('/users', async (req, res) => {
 router.get('/organizations', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, name, org_type, created_at FROM organizations ORDER BY name ASC`
+      `SELECT o.id, o.name, o.org_type, o.description, o.created_at,
+              (SELECT COUNT(*)::int FROM users u WHERE u.org_id = o.id) AS user_count
+         FROM organizations o
+        ORDER BY o.name ASC`
     );
     res.json(rows);
   } catch (err) {
@@ -83,17 +87,68 @@ router.get('/organizations', async (req, res) => {
 });
 
 router.post('/organizations', async (req, res) => {
-  const { name, orgType = 'internal' } = req.body;
+  const { name, orgType = 'internal', description = null } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required.' });
   if (!['internal', 'demo'].includes(orgType)) return res.status(400).json({ error: 'Invalid org type.' });
+  const desc = typeof description === 'string' ? description.trim() || null : null;
   try {
     const { rows } = await pool.query(
-      `INSERT INTO organizations (name, org_type) VALUES ($1, $2) RETURNING id, name, org_type, created_at`,
-      [name.trim(), orgType]
+      `INSERT INTO organizations (name, org_type, description)
+       VALUES ($1, $2, $3)
+       RETURNING id, name, org_type, description, created_at`,
+      [name.trim(), orgType, desc]
     );
-    res.json(rows[0]);
+    res.json({ ...rows[0], user_count: 0 });
   } catch (err) {
     res.status(500).json({ error: 'Failed to create organisation.' });
+  }
+});
+
+router.put('/organizations/:id', async (req, res) => {
+  const orgId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(orgId) || orgId <= 0) {
+    return res.status(400).json({ error: 'Invalid organisation id.' });
+  }
+  const { name, orgType, description } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'Name is required.' });
+  if (!['internal', 'demo'].includes(orgType)) return res.status(400).json({ error: 'Invalid org type.' });
+  const desc = typeof description === 'string' ? description.trim() || null : null;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE organizations
+          SET name = $1, org_type = $2, description = $3
+        WHERE id = $4
+        RETURNING id, name, org_type, description, created_at`,
+      [name.trim(), orgType, desc, orgId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Organisation not found.' });
+    const countRes = await pool.query(
+      'SELECT COUNT(*)::int AS user_count FROM users WHERE org_id = $1',
+      [orgId]
+    );
+    res.json({ ...rows[0], user_count: countRes.rows[0].user_count });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update organisation.' });
+  }
+});
+
+router.delete('/organizations/:id', async (req, res) => {
+  const orgId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(orgId) || orgId <= 0) {
+    return res.status(400).json({ error: 'Invalid organisation id.' });
+  }
+  if (orgId === getPlatformOrgId()) {
+    return res.status(400).json({ error: 'Cannot delete the platform template organisation.' });
+  }
+  if (orgId === req.user.orgId) {
+    return res.status(400).json({ error: 'Cannot delete the organisation you are logged into.' });
+  }
+  try {
+    const { rowCount } = await pool.query('DELETE FROM organizations WHERE id = $1', [orgId]);
+    if (!rowCount) return res.status(404).json({ error: 'Organisation not found.' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete organisation.' });
   }
 });
 

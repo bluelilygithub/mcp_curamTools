@@ -10,6 +10,12 @@
 
 ---
 
+## 2026-06-18 — Organisation admin (mirror)
+
+Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Organisation admin: edit, delete, purpose field**. Migration 004; PUT/DELETE org routes; Admin UI edit/delete; `description` for operator notes; clearer app-shell labels.
+
+---
+
 ## 2026-06-18 — Plugin architecture docs (mirror)
 
 Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Plugin architecture docs + local verification**. New `architecture/PLUGINS.md`; APPS/SETUP/TESTING/DEPLOYMENT cross-links; local smoke + 45 unit tests verified.

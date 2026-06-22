@@ -29,12 +29,23 @@ Mirror of root [`DECISIONS.md`](../../DECISIONS.md). Baseline DDL stays in `init
 
 ---
 
+### Organisation admin — org_type vs description
+**Date:** 2026-06-18
+**Status:** Settled
+**Context:** Multiple engineering client orgs need to be distinguishable in Admin. `org_type` only controls which app shell users see (`internal` → Diamond Plate, `demo` → Engineering/DemoShell). The prior organisations page was create-only.
+**Decision (org_type semantics):** Keep DB values `internal` and `demo` — they are routing flags, not business labels. UI displays **Internal (Diamond Plate)** and **Engineering client**.
+**Decision (description column):** Add `organizations.description` (migration `004`) for operator notes — sales demo, client pilot, training sandbox, etc.
+**Decision (CRUD):** `PUT` and `DELETE /api/admin/organizations/:id`; delete blocked for `PLATFORM_ORG_ID` and the admin's own org; cascade removes users and org data.
+**References:** `server/migrations/004_organizations_description.js`; `server/routes/admin.js`; `client/src/pages/admin/AdminOrganizationsPage.jsx`; `architecture/APPS.md`.
+
+---
+
 ### Multi-Org User Management — Org Selector on Invite, Organisations Admin Page
 **Date:** 2026-05-06
 **Status:** Settled
 **Context:** The demo layer requires users to be created in different orgs (e.g. Curam Engineering demo org vs internal org). The existing invite route hardcoded `req.user.orgId` — no way to invite a user into a different org via the UI. Admins also had no way to create new orgs without running raw SQL.
 **Decision (invite org selector):** `POST /api/admin/users/invite` accepts an optional `orgId` body param. If provided, `createInvitation` uses it; otherwise falls back to `req.user.orgId`. No extra auth check — the route already requires `org_admin`. The InviteModal fetches `/admin/organizations` and shows the dropdown only when more than one org exists, so single-org installs see no change.
-**Decision (organisations page):** `GET /api/admin/organizations` returns all orgs (no org_id filter — platform-wide list). `POST /api/admin/organizations` creates a new org with name + org_type. UI lives at `/admin/organizations`, linked from the sidebar above Users. No edit/delete on orgs for now — not needed.
+**Decision (organisations page):** `GET /api/admin/organizations` returns all orgs (no org_id filter — platform-wide list). `POST` creates; `PUT` / `DELETE` edit or remove orgs (see 2026-06-18 decision). UI at `/admin/organizations`.
 **Rationale:** Keeping invite flow simple — one extra dropdown, no separate invite-by-org route. The org list is platform-wide by design; admins managing demo clients need visibility of all orgs, not just their own.
 **References:** `server/routes/admin.js` — organizations section; `client/src/pages/admin/AdminOrganizationsPage.jsx`; `client/src/pages/admin/AdminUsersPage.jsx` InviteModal.
 
