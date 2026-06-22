@@ -158,13 +158,14 @@ Keep tests **fast** and **deterministic** — no live network, no real Anthropic
 
 ## After plugin / createPlatform changes
 
-Automated: `npm run test:unit` (includes `platformOrg.test.js`) and `npm test`.
+Automated: `npm run test:unit` (includes `platformOrg.test.js`, `loadPlugins.test.js`) and `npm test`.
 
 Manual local smoke (see `architecture/PLUGINS.md`):
 
 | Check | Expected |
 |-------|----------|
 | Server boot log | `plugins: ["diamond-plate","engineering"]`, MCP `serverCount: 7` |
+| With `EXTRA_PLUGINS=starter` | Boot log includes `"starter"`; `GET /api/starter/health` (auth) |
 | Login at :5174 | Works with seed credentials |
 | Diamond Plate sidebar | No Spec Validator / demo engineering tools |
 | `GET /api/demo/manifest` | Demo agents for engineering org |

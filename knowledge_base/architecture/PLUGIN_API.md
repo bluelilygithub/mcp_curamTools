@@ -62,19 +62,30 @@ module.exports = {
 ```javascript
 {
   slug:       'google-ads-monitor',
-  module:     'googleAdsMonitor',      // under server/agents/
+  module:     'googleAdsMonitor',      // under server/agents/ (legacy)
   export:     'runGoogleAdsMonitor',
   permission: 'ads_operator',
   schedule:   '0 6,18 * * *',          // optional cron
   rateLimit:  3,                       // optional
 }
+
+// App-local agent (co-located with plugin — preferred for new apps):
+{
+  slug:       'starter-hello',
+  appModule:  'starter/agents/hello',  // under server/apps/
+  export:     'runStarterHello',
+  permission: 'org_member',
+}
 ```
 
 | App | Plugin path | Agents | MCP | API routes |
 |-----|-------------|--------|-----|------------|
+| **Starter (template)** | `server/apps/starter/` | 1 (`appModule`) | — | `/api/starter/health` |
 | Diamond Plate | `server/apps/diamond-plate/` | 26 | google-ads, GA4, WordPress | google-ads, dashboard, conversation, youtube, media-gen |
 | Engineering | `server/apps/engineering/` | 5 | — | demo, doc-extractor |
 | Core | `createPlatform.js` | — | platform, knowledge-base, personal-memory, storage | auth, admin, agents shell, settings, … |
+
+Enable starter locally: `EXTRA_PLUGINS=starter` in `server/.env`. Copy source: `cp -r server/apps/starter server/apps/my-app` — see `server/apps/starter/README.md`.
 
 Legacy merge: `server/agents/manifest.js` re-exports both app manifests.
 
@@ -113,7 +124,10 @@ Adding an agent today typically touches **6 places**; only **2** are plugin-adja
 
 ### 2. Agent code location
 
-Manifests live under `server/apps/*/`; implementations remain in `server/agents/`. Plugins are registries, not packages.
+Manifests live under `server/apps/*/`. Implementations may be:
+
+- **Legacy:** `module` + `export` under `server/agents/`
+- **App-local:** `appModule` + `export` under `server/apps/<app>/agents/` (starter template)
 
 ### 3. Split manifests (Engineering)
 
@@ -125,9 +139,17 @@ Manifests live under `server/apps/*/`; implementations remain in `server/agents/
 
 Target: one manifest drives server + demo sidebar.
 
-### 4. No deploy-time plugin selection
+### 4. Plugin loading is env-driven
 
-`DEFAULT_PLUGINS` is hardcoded in `createPlatform.js`. Env-driven `PLUGINS=diamond-plate|engineering` is future work (today: `BOOTSTRAP_BUILTIN_MCP_SERVERS=false` only skips MCP).
+`server/platform/loadPlugins.js` resolves plugins from folder names under `server/apps/`:
+
+| Env | Behaviour |
+|-----|-----------|
+| *(default)* | `diamond-plate`, `engineering` |
+| `EXTRA_PLUGINS=starter` | Append starter template app |
+| `PLATFORM_PLUGINS=a,b` | Replace defaults entirely |
+
+Folders starting with `_` (e.g. `_template`) are never loaded.
 
 ### 5. Core agent extensions
 
@@ -215,9 +237,10 @@ Same as above, plus:
 |-------|------|--------|
 | 0 | Document boundaries ([APPS.md](./APPS.md)) | Done |
 | 1 | `createPlatform`, app manifests, MCP split | Done |
+| 1b | Starter app + `loadPlugins` + `appModule` agents | Done |
 | 2 | Client plugin registry (routes + nav) | **Next** |
 | 3 | Unify demo catalog with engineering manifest | Planned |
-| 4 | `PLUGINS` env / conditional deploy | Planned |
+| 4 | `PLUGINS` env / conditional deploy | Partial (`PLATFORM_PLUGINS`, `EXTRA_PLUGINS`) |
 | 5 | Physical `packages/core` + `apps/*` split | Deferred |
 
 ---

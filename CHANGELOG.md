@@ -18,6 +18,19 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — Starter app template on core
+
+### Built
+- **`server/apps/starter/`** — minimal plugin (health route + `starter-hello` agent with `appModule`).
+- **`server/platform/loadPlugins.js`** — `PLATFORM_PLUGINS` / `EXTRA_PLUGINS` env resolution.
+- **`appModule` manifest field** — agents co-located under `server/apps/<app>/agents/`.
+- **Tests** — `platform/loadPlugins.test.js`.
+
+### Notes
+- Starter off by default; enable with `EXTRA_PLUGINS=starter`. Copy via `cp -r server/apps/starter server/apps/my-app`.
+
+---
+
 ## 2026-06-18 — Plugin API documentation (agents + MCP + UI)
 
 ### Built

@@ -76,6 +76,7 @@ knowledge_base/
 | **Platform primitives** | `architecture/PLATFORM_PRIMITIVES.md` |
 | **Application boundaries** (Core / Diamond Plate / Engineering) | `architecture/APPS.md` |
 | **App plugins & createPlatform** | `architecture/PLUGINS.md` |
+| **Starter app template** (copy-paste new plugin) | `server/apps/starter/README.md` |
 | **Plugin API** (agents + MCP + UI — v0 vs target) | `architecture/PLUGIN_API.md` |
 | **createPlatform bootstrap** | `server/platform/createPlatform.js` |
 | **Report chaining** (agent outputs as accountable downstream inputs) | `architecture/REPORT_CHAINING.md` |

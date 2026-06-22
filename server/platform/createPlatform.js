@@ -18,10 +18,7 @@ const logger = require('../utils/logger');
 const { CORE_MCP_SERVERS } = require('../mcp-servers/manifest.core');
 const { bootstrapBuiltinMcpServers } = require('./bootstrapBuiltinMcpServers');
 const MCPRegistry = require('./mcpRegistry');
-const diamondPlatePlugin = require('../apps/diamond-plate/plugin');
-const engineeringPlugin = require('../apps/engineering/plugin');
-
-const DEFAULT_PLUGINS = [diamondPlatePlugin, engineeringPlugin];
+const { resolvePlugins } = require('./loadPlugins');
 
 function applySecurityMiddleware(app) {
   app.use(helmet({
@@ -111,15 +108,16 @@ function collectPluginAssets(plugins) {
   return { agentManifest, mcpServers };
 }
 
-function createPlatform({ plugins = DEFAULT_PLUGINS } = {}) {
+function createPlatform({ plugins, pluginIds } = {}) {
+  const resolvedPlugins = resolvePlugins({ plugins, pluginIds });
   const app = express();
   applySecurityMiddleware(app);
 
-  const { agentManifest, mcpServers } = collectPluginAssets(plugins);
+  const { agentManifest, mcpServers } = collectPluginAssets(resolvedPlugins);
 
   registerCoreRoutes(app);
 
-  for (const plugin of plugins) {
+  for (const plugin of resolvedPlugins) {
     if (typeof plugin.registerRoutes === 'function') {
       plugin.registerRoutes(app);
     }
@@ -154,7 +152,7 @@ function createPlatform({ plugins = DEFAULT_PLUGINS } = {}) {
       logger.info('Built-in MCP servers registered', {
         orgCount: result.orgCount,
         serverCount: result.serverCount,
-        plugins: plugins.map((p) => p.id),
+        plugins: resolvedPlugins.map((p) => p.id),
       });
     }
 
@@ -174,11 +172,11 @@ function createPlatform({ plugins = DEFAULT_PLUGINS } = {}) {
 
   return {
     app,
-    plugins,
+    plugins: resolvedPlugins,
     agentManifest,
     mcpServers,
     start,
   };
 }
 
-module.exports = { createPlatform, DEFAULT_PLUGINS };
+module.exports = { createPlatform, resolvePlugins };

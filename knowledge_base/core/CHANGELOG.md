@@ -10,6 +10,12 @@
 
 ---
 
+## 2026-06-18 — Starter app template on core (mirror)
+
+Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Starter app template on core**. `server/apps/starter/`; `loadPlugins.js` (`PLATFORM_PLUGINS`, `EXTRA_PLUGINS`); `appModule` agents; `loadPlugins.test.js`.
+
+---
+
 ## 2026-06-18 — Plugin API documentation (mirror)
 
 Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Plugin API documentation**. New `architecture/PLUGIN_API.md`; server v0 vs client gap; build order.

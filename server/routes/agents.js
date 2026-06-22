@@ -24,9 +24,15 @@ const { send: sendEmail }  = require('../services/EmailService');
 
 const AGENTS_DIR = path.resolve(__dirname, '../agents');
 
-function tryLoad(relPath, exportName, slug) {
+const APPS_DIR = path.resolve(__dirname, '../apps');
+
+function tryLoad(entry) {
+  const { slug, export: exportName, module: legacyModule, appModule } = entry;
   try {
-    return require(path.join(AGENTS_DIR, relPath))[exportName] ?? null;
+    const mod = appModule
+      ? require(path.join(APPS_DIR, appModule))
+      : require(path.join(AGENTS_DIR, legacyModule));
+    return mod[exportName] ?? null;
   } catch (err) {
     console.error(`[agents] ⚠ Failed to load agent "${slug}": ${err.message}`);
     return null;
@@ -50,7 +56,7 @@ function registerAgent(routePath, opts) {
 // ── Manifest-driven registration ──────────────────────────────────────────
 function registerManifestAgents(manifestEntries) {
   for (const entry of manifestEntries) {
-    const runFn = tryLoad(entry.module, entry.export, entry.slug);
+    const runFn = tryLoad(entry);
     registerAgent(`/${entry.slug}`, {
       slug:               entry.slug,
       runFn,

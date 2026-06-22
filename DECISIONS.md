@@ -35,6 +35,17 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### Starter app template and env-driven plugin loading
+**Date:** 2026-06-18
+**Status:** Settled
+**Context:** New apps needed a minimal reference on core without editing `createPlatform.js` for every product. Agent code was split between `server/agents/` (legacy) and app manifests under `server/apps/`.
+**Decision (starter template):** `server/apps/starter/` is the maintained minimal plugin (health route + one agent). Off by default; enable with `EXTRA_PLUGINS=starter`. Copy via `cp -r server/apps/starter server/apps/my-app`.
+**Decision (plugin resolution):** `loadPlugins.js` loads `server/apps/<id>/plugin.js`. Defaults: `diamond-plate`, `engineering`. `PLATFORM_PLUGINS` replaces defaults; `EXTRA_PLUGINS` appends. Folder names starting with `_` are never loaded.
+**Decision (app-local agents):** Manifest field `appModule` loads agents from `server/apps/<app>/agents/`; legacy `module` under `server/agents/` unchanged.
+**References:** `server/apps/starter/README.md`; `server/platform/loadPlugins.js`; `server/routes/agents.js`; `knowledge_base/architecture/PLUGIN_API.md`.
+
+---
+
 ### Versioned database migrations — baseline initSchema + numbered runner
 **Date:** 2026-06-18
 **Status:** Settled

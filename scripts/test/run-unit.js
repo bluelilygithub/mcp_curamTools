@@ -13,6 +13,7 @@ const testFiles = [
   'constants/embeddingModels.test.js',
   'config/platformOrg.test.js',
   'config/platformOperator.test.js',
+  'platform/loadPlugins.test.js',
   'services/CostGuardService.test.js',
   'services/ExtractionValidationService.test.js',
   'services/FileIntakeService.test.js',

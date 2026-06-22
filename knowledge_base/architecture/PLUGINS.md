@@ -69,6 +69,16 @@ When adding a “fallback to platform defaults” path, use `getPlatformOrgId()`
 
 Skip all MCP bootstrap: `BOOTSTRAP_BUILTIN_MCP_SERVERS=false`.
 
+### Plugin loading
+
+| Env | Effect |
+|-----|--------|
+| *(default)* | `diamond-plate` + `engineering` |
+| `EXTRA_PLUGINS=starter` | Also load minimal template app |
+| `PLATFORM_PLUGINS=id1,id2` | Replace default list |
+
+See `server/apps/starter/README.md` and [PLUGIN_API.md](./PLUGIN_API.md).
+
 ---
 
 ## Client navigation split
@@ -132,14 +142,20 @@ cd server && npm run migrate   # pending DB migrations only
 
 ---
 
-## Adding a new app plugin (future)
+## Adding a new app plugin
 
 See [PLUGIN_API.md](./PLUGIN_API.md) for the full v0 vs target contract, gaps (especially **client routes**), and build order.
 
-Quick server steps:
+**Fastest path:** copy the starter template:
 
-1. Create `server/apps/<name>/agentManifest.js` and `plugin.js`.
-2. Register in `createPlatform.js` `DEFAULT_PLUGINS` (or pass custom `plugins` array).
+```bash
+cp -r server/apps/starter server/apps/my-app
+```
+
+Then:
+
+1. Rename `id` / routes / agent slugs in `plugin.js`, `routes.js`, `agentManifest.js`.
+2. Enable with `EXTRA_PLUGINS=my-app` (or add to `PLATFORM_PLUGINS`).
 3. Add UI routes under `client/src/` and document in [APPS.md](./APPS.md).
 4. Do **not** edit `server/agents/manifest.js` directly — it re-exports merged app manifests.
 
