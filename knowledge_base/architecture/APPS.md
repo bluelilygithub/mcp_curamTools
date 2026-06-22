@@ -235,10 +235,10 @@ Demo agents may also appear in `tools.js` for **internal** users during developm
 |-------|---------------|-------|
 | `doc-extractor` agent + route | **Core primitive** or Engineering | Internal utility page; used by engineering pipeline |
 | `doc_extraction_runs` table | Engineering (or core doc module) | Both BL internal tool and engineering agents |
-| `media-gen` | **Unassigned** — utility; not Diamond Plate or Engineering core | Consider core optional module or remove from product split |
+| `media-gen` | **Diamond Plate** plugin route | Registered in `apps/diamond-plate/plugin.js` |
 | `FileIntakeService`, `ExtractionValidationService` | Core | Apps use, do not fork |
 | Lessons repository | Core mechanism | App-specific lesson *content* |
-| `org_id = 1` fallbacks in `AgentConfigService` | **Operator** (Blue Lily platform org) | Should become `PLATFORM_ORG_ID` env — not Diamond Plate-specific |
+| Platform settings fallback | **Operator** | `PLATFORM_ORG_ID` env (default `1`) via `server/config/platformOrg.js` |
 
 ---
 
@@ -253,16 +253,18 @@ Before adding code, ask:
 
 ### Do
 
-- Add new Diamond Plate agents under `server/agents/` with Ads/CRM naming; register in `manifest.js` Diamond Plate section
-- Add new Engineering agents under `server/agents/demoSuite/` or `specValidator/`; register in manifest Engineering section + `DEMO_CATALOG`
+- Add new Diamond Plate agents under `server/agents/`; register in `server/apps/diamond-plate/agentManifest.js`
+- Add new Engineering agents under `server/agents/demoSuite/` or `specValidator/`; register in `server/apps/engineering/agentManifest.js` + `DEMO_CATALOG`
 - Add core tables only when **both** apps need them
 - Reference this file in PR/commit descriptions when touching boundaries
 
-### Do not (until plugin API exists)
+### Do not
 
-- Move files physically — document ownership first
-- Add Diamond Plate prompts to core platform files without a comment marking app ownership
-- Bootstrap Google MCP for orgs that only use Engineering demos (`BOOTSTRAP_BUILTIN_MCP_SERVERS=false` on engineering-only deploys — future)
+- Add Diamond Plate prompts to core platform files without marking app ownership
+- Bootstrap Google MCP on engineering-only deploys without need (`BOOTSTRAP_BUILTIN_MCP_SERVERS=false`)
+- Put engineering demo tools back on `client/src/config/tools.js` (Diamond Plate sidebar)
+
+See [PLUGINS.md](./PLUGINS.md) for `createPlatform()` and plugin contract.
 
 ---
 

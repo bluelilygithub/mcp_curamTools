@@ -85,6 +85,24 @@ Expected output:
 
 Open `http://localhost:5174` in the browser.
 
+### Restart after server changes
+
+```bash
+# Terminal 1
+cd server && npm run dev
+
+# Terminal 2
+cd client && npm run dev
+```
+
+On boot you should see `plugins: ["diamond-plate","engineering"]` in the MCP registration log. See `knowledge_base/architecture/PLUGINS.md` for smoke checks.
+
+### Platform org
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `PLATFORM_ORG_ID` | `1` | Template org for model/settings inheritance when an org has no local value |
+
 ---
 
 ## Railway Deployment

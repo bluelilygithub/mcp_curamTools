@@ -18,6 +18,18 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — Plugin architecture docs + local verification
+
+### Built
+- **`knowledge_base/architecture/PLUGINS.md`** — `createPlatform()` bootstrap, plugin contract, MCP split, `PLATFORM_ORG_ID`, restart steps, smoke checklist.
+- **Cross-links** — `APPS.md` updated for plugin paths and completed `PLATFORM_ORG_ID`; `INDEX.md`, `SETUP.md`, `TESTING.md`, `ops/DEPLOYMENT.md`.
+
+### Verified (local)
+- Server :3002 + client :5174; login OK; boot log shows both plugins and 7 MCP servers.
+- `npm run test:unit` (45 tests) and `npm test` (unit + golden-path) pass.
+
+---
+
 ## 2026-06-18 — App plugins: createPlatform, PLATFORM_ORG_ID, sidebar split
 
 ### Built

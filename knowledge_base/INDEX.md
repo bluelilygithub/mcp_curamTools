@@ -75,7 +75,8 @@ knowledge_base/
 | **Prompt versioning** (`prompt_version` on runs, registry) | `core/PROMPT_VERSIONING.md` |
 | **Platform primitives** | `architecture/PLATFORM_PRIMITIVES.md` |
 | **Application boundaries** (Core / Diamond Plate / Engineering) | `architecture/APPS.md` |
-| **createPlatform bootstrap** | `platform/createPlatform.js` |
+| **App plugins & createPlatform** | `architecture/PLUGINS.md` |
+| **createPlatform bootstrap** | `server/platform/createPlatform.js` |
 | **Report chaining** (agent outputs as accountable downstream inputs) | `architecture/REPORT_CHAINING.md` |
 | **MCP servers & tools** | `architecture/MCP_SERVERS.md` |
 | **Personal memory** (per-user notes) | `architecture/PERSONAL_MEMORY.md` |

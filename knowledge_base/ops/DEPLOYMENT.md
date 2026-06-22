@@ -23,8 +23,11 @@ Set in Railway dashboard → service → Variables:
 | `SEED_ADMIN_EMAIL` | Initial admin email |
 | `SEED_ADMIN_PASSWORD` | Initial admin password |
 | `ORG_NAME` | `Blue Lily` |
+| `PLATFORM_ORG_ID` | `1` (default) — set if platform template org is not id 1 |
 
 **Do not set `PORT`** — Railway manages this.
+
+Boot log should show `plugins: ["diamond-plate","engineering"]`. See `knowledge_base/architecture/PLUGINS.md`.
 
 ### Redeploy
 ```bash

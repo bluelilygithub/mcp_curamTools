@@ -10,6 +10,18 @@
 
 ---
 
+## 2026-06-18 — Plugin architecture docs (mirror)
+
+Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Plugin architecture docs + local verification**. New `architecture/PLUGINS.md`; APPS/SETUP/TESTING/DEPLOYMENT cross-links; local smoke + 45 unit tests verified.
+
+---
+
+## 2026-06-18 — App plugins (mirror)
+
+Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — App plugins: createPlatform, PLATFORM_ORG_ID, sidebar split**. Highlights: `createPlatform()`, `server/apps/*` plugins, MCP manifest split, `PLATFORM_ORG_ID`, sidebar split, `platformOrg.test.js`.
+
+---
+
 ## 2026-06-18 — Versioned database migrations (mirror)
 
 Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Versioned database migrations**. Highlights: `server/migrations/runner.js` + `schema_migrations` ledger; migrations 001–003; `initSchema()` baseline vs incremental split; `npm run migrate`; `architecture/MIGRATIONS.md`; local Postgres SSL skip in `db.js`.

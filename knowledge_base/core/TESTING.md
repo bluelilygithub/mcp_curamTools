@@ -60,6 +60,7 @@ See `test-audit/README.md`.
 | `server/constants/embeddingModels.test.js` | Chat models ≠ RAG models; env var validation | Settings → RAG embedding model |
 | `server/services/CostGuardService.test.js` | Pure budget math; circuit breaker | Agent run cost guards |
 | `server/migrations/runner.test.js` | Migration registry + applied-id lookup | Database migrations |
+| `server/config/platformOrg.test.js` | `PLATFORM_ORG_ID` env parsing | Platform org fallback |
 | `server/services/ExtractionValidationService.test.js` | Injected provider factory | Tiered extraction validation |
 | `server/services/FileIntakeService.test.js` | File intake rules | Doc upload pipeline |
 | `server/agents/docExtractor/index.test.js` | Agent-specific logic | Doc extractor |
@@ -154,9 +155,25 @@ Keep tests **fast** and **deterministic** — no live network, no real Anthropic
 
 ---
 
+## After plugin / createPlatform changes
+
+Automated: `npm run test:unit` (includes `platformOrg.test.js`) and `npm test`.
+
+Manual local smoke (see `architecture/PLUGINS.md`):
+
+| Check | Expected |
+|-------|----------|
+| Server boot log | `plugins: ["diamond-plate","engineering"]`, MCP `serverCount: 7` |
+| Login at :5174 | Works with seed credentials |
+| Diamond Plate sidebar | No Spec Validator / demo engineering tools |
+| `GET /api/demo/manifest` | Demo agents for engineering org |
+
+---
+
 ## Related
 
 - Setup: `knowledge_base/core/SETUP.md`
+- Plugins: `knowledge_base/architecture/PLUGINS.md`
 - Embeddings: `knowledge_base/architecture/EMBEDDINGS.md`
 - Permissions: `PERMISSIONS.md`
 - Platform spine: `knowledge_base/architecture/PLATFORM_PRIMITIVES.md`
