@@ -2,8 +2,8 @@
  * agents.js — mount point for all agent routes.
  * Exports { agentsRouter, agentConfigsRouter } — both mounted in index.js.
  *
- * Agent list lives in server/agents/manifest.js.
- * To add an agent: add one entry to the manifest + create the agent files.
+ * Agent list: apps/diamond-plate/agentManifest.js + apps/engineering/agentManifest.js
+ * (merged in server/agents/manifest.js). Registered via createPlatform().
  * Custom sub-routes (suggestions, prompts CRUD, email) remain below the loop.
  */
 const path = require('path');
@@ -48,17 +48,23 @@ function registerAgent(routePath, opts) {
 }
 
 // ── Manifest-driven registration ──────────────────────────────────────────
-for (const entry of require('../agents/manifest')) {
-  const runFn = tryLoad(entry.module, entry.export, entry.slug);
-  registerAgent(`/${entry.slug}`, {
-    slug:               entry.slug,
-    runFn,
-    requiredPermission: entry.permission,
-    rateLimit:          entry.rateLimit,
-  });
-  if (entry.schedule && runFn) {
-    AgentScheduler.register({ slug: entry.slug, schedule: entry.schedule, runFn });
+function registerManifestAgents(manifestEntries) {
+  for (const entry of manifestEntries) {
+    const runFn = tryLoad(entry.module, entry.export, entry.slug);
+    registerAgent(`/${entry.slug}`, {
+      slug:               entry.slug,
+      runFn,
+      requiredPermission: entry.permission,
+      rateLimit:          entry.rateLimit,
+    });
+    if (entry.schedule && runFn) {
+      AgentScheduler.register({ slug: entry.slug, schedule: entry.schedule, runFn });
+    }
   }
+}
+
+function mountAgentManifest(manifestEntries) {
+  registerManifestAgents(manifestEntries);
 }
 
 // ── Custom sub-routes (not manifest-able — bespoke endpoints per agent) ───
@@ -439,4 +445,4 @@ agentsRouter.delete('/ai-visibility-monitor/prompts/:id', requireAuth, async (re
   }
 });
 
-module.exports = { agentsRouter, agentConfigsRouter };
+module.exports = { agentsRouter, agentConfigsRouter, mountAgentManifest };

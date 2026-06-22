@@ -11,6 +11,7 @@ const started = Date.now();
 
 const testFiles = [
   'constants/embeddingModels.test.js',
+  'config/platformOrg.test.js',
   'services/CostGuardService.test.js',
   'services/ExtractionValidationService.test.js',
   'services/FileIntakeService.test.js',

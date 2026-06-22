@@ -37,9 +37,18 @@ This file is the **inventory and placement rules** for the three-block model. Us
     └────────────────────┘                 └────────────────────┘
 ```
 
-**Today:** one Railway service, one Postgres database, one React SPA. Boundaries are **organisational**, not separate packages yet.
+**Today:** one Railway service, one Postgres database, one React SPA. Boundaries are implemented as **plugins** under `server/apps/` + `createPlatform()` — not separate npm packages yet.
 
-**Target (future):** `packages/core` + `apps/diamond-plate` + `apps/engineering` registering plugins with core.
+| Mechanism | Location |
+|-----------|----------|
+| Platform org config | `PLATFORM_ORG_ID` env → `server/config/platformOrg.js` |
+| MCP split | `manifest.core.js` + `manifest.diamond-plate.js` |
+| App plugins | `server/apps/diamond-plate/plugin.js`, `server/apps/engineering/plugin.js` |
+| Bootstrap | `server/platform/createPlatform.js` |
+| Diamond Plate sidebar | `client/src/config/tools.js` (engineering tools removed) |
+| Engineering navigation | `DemoShell` → `/api/demo/manifest` |
+
+**Target (future):** physical `packages/core` + `apps/*` folders with semver.
 
 ---
 

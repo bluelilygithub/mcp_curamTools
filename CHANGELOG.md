@@ -18,6 +18,22 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — App plugins: createPlatform, PLATFORM_ORG_ID, sidebar split
+
+### Built
+- **`PLATFORM_ORG_ID`** — `server/config/platformOrg.js`; replaces hardcoded `org_id = 1` fallbacks in `AgentConfigService`, `embeddingResolver`, `SuggestionService`.
+- **MCP manifest split** — `manifest.core.js` (platform, knowledge-base, personal-memory, storage) + `manifest.diamond-plate.js` (Google Ads, GA4, WordPress).
+- **App plugins** — `server/apps/diamond-plate/`, `server/apps/engineering/` with `agentManifest.js` + `plugin.js`.
+- **`createPlatform()`** — `server/platform/createPlatform.js`; slim `index.js`; merges plugin agents, routes, and MCP bootstrap.
+- **Sidebar** — engineering tools removed from `client/src/config/tools.js` (Diamond Plate `AppShell`); engineering agents remain on `DemoShell` via `/api/demo/manifest`.
+- **Tests** — `server/config/platformOrg.test.js` (45 unit tests total).
+
+### Notes
+- Behaviour-neutral for Railway if `PLATFORM_ORG_ID` unset (defaults to 1).
+- Internal `/tools/spec-validator` and `/demo/*` routes still work when bookmarked; not listed on Diamond Plate sidebar.
+
+---
+
 ## 2026-06-18 — Application boundaries (Core / Diamond Plate / Engineering)
 
 ### Built

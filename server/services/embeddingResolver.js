@@ -13,11 +13,12 @@ const {
   validateEmbeddingModelSelection,
   isLocalRuntime,
 } = require('../constants/embeddingModels');
+const { resolveOrgId } = require('../config/platformOrg');
 
 const DEFAULT_MODEL_ID = 'text-embedding-004';
 
 async function resolveEmbeddingConfig(orgId) {
-  const oid = parseInt(orgId, 10) || 1;
+  const oid = resolveOrgId(orgId);
   let modelId = await AgentConfigService.getOrgEmbeddingModel(oid);
 
   if (!modelId) {

@@ -9,6 +9,7 @@
 const crypto = require('crypto');
 const { pool } = require('../db');
 const { isValidCategory } = require('../constants/suggestionInbox');
+const { getPlatformOrgId } = require('../config/platformOrg');
 
 function makeFingerprint(source, key) {
   const raw = `${source || 'unknown'}:${key || ''}`;
@@ -54,7 +55,8 @@ function normalizePayload(payload) {
 }
 
 async function getPrimaryAdminForOrg(orgId) {
-  const oid = parseInt(orgId, 10) || 1;
+  const oid = parseInt(orgId, 10) || getPlatformOrgId();
+  const platformOrgId = getPlatformOrgId();
   const { rows } = await pool.query(
     `SELECT u.id, u.org_id
      FROM users u
@@ -68,15 +70,18 @@ async function getPrimaryAdminForOrg(orgId) {
   );
   if (rows.length) return { orgId: rows[0].org_id, userId: rows[0].id };
 
+  if (oid === platformOrgId) return null;
+
   const fallback = await pool.query(
     `SELECT u.id, u.org_id
      FROM users u
      INNER JOIN user_roles ur ON ur.user_id = u.id
      WHERE ur.role_name = 'org_admin'
        AND ur.scope_type = 'global'
-       AND u.org_id = 1
+       AND u.org_id = $1
      ORDER BY u.id ASC
      LIMIT 1`,
+    [platformOrgId],
   );
   if (fallback.rows.length) {
     return { orgId: fallback.rows[0].org_id, userId: fallback.rows[0].id };

@@ -119,42 +119,8 @@ const TOOLS = [
     roles:       ['org_member', 'org_admin'],
     group:       'Utilities',
   },
-  {
-    id:          'spec-validator',
-    name:        'Spec Validator',
-    description: 'Validate hydraulic calculation documents against AS/NZS 3500.1. Deterministic Python verification of pipe velocities, pressure drops, and system pressure budgets.',
-    icon:        'file-check',
-    path:        '/tools/spec-validator',
-    roles:       ['org_member', 'org_admin'],
-    group:       'Utilities',
-  },
-  {
-    id:          'demo-document-analyzer',
-    name:        'Document Analyzer',
-    description: 'Upload any document — AI-powered extraction of structured findings, deterministic rule checks, and probabilistic analysis with human-in-the-loop review.',
-    icon:        'file-search',
-    path:        '/demo/run/demo-document-analyzer',
-    roles:       ['org_member', 'org_admin'],
-    group:       'Utilities',
-  },
-  {
-    id:          'demo-tender-response',
-    name:        'Tender Response Generator',
-    description: 'Upload an RFT PDF — extract compliance requirements, run deterministic checks against a pre-loaded evidence pack, and generate first-draft response paragraphs with inline evidence citations.',
-    icon:        'file-text',
-    path:        '/demo/run/demo-tender-response',
-    roles:       ['org_member', 'org_admin'],
-    group:       'Utilities',
-  },
-  {
-    id:          'demo-spec-anomaly-investigator',
-    name:        'Spec Anomaly Investigator',
-    description: 'Upload a hydraulic specification PDF — agent investigates for likely problems using hypothesis-driven reasoning before Spec Validator runs formal compliance calculations.',
-    icon:        'search',
-    path:        '/demo/run/demo-spec-anomaly-investigator',
-    roles:       ['org_member', 'org_admin'],
-    group:       'Utilities',
-  },
+  // Engineering agents (spec, tender, demo document analyzer) live in DemoShell only —
+  // see /demo/dashboard and org_agent_manifest for demo org users.
 ];
 
 /**

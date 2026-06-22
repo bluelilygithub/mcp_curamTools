@@ -7,6 +7,7 @@
  *   agent_configs    → operator settings (schedule, thresholds, lookback) — any auth user
  */
 const { pool } = require('../db');
+const { getPlatformOrgId } = require('../config/platformOrg');
 
 // ── Default configs ────────────────────────────────────────────────────────
 // New agents append their defaults here. Do not remove existing entries.
@@ -456,13 +457,14 @@ async function getAgentConfig(orgId, slug) {
       [orgId, slug]
     );
     
-    // If the org hasn't set an agent config, fallback to the global admin org (org 1)
-    if (res.rows.length === 0 && orgId !== 1) {
+    // If the org hasn't set an agent config, fallback to the platform template org
+    const platformOrgId = getPlatformOrgId();
+    if (res.rows.length === 0 && orgId !== platformOrgId) {
       res = await pool.query(
         `SELECT config, intelligence_profile, custom_prompt
            FROM agent_configs
-          WHERE org_id = 1 AND slug = $1 AND customer_id IS NULL`,
-        [slug]
+          WHERE org_id = $1 AND slug = $2 AND customer_id IS NULL`,
+        [platformOrgId, slug]
       );
     }
     
@@ -623,10 +625,10 @@ async function getAdminConfig(slug, orgId = null) {
         `SELECT value FROM system_settings WHERE org_id = $1 AND key = $2 LIMIT 1`,
         [orgId, key]
       );
-      if (res.rows.length === 0 && orgId !== 1) {
+      if (res.rows.length === 0 && orgId !== getPlatformOrgId()) {
         res = await pool.query(
-          `SELECT value FROM system_settings WHERE org_id = 1 AND key = $1 LIMIT 1`,
-          [key]
+          `SELECT value FROM system_settings WHERE org_id = $1 AND key = $2 LIMIT 1`,
+          [getPlatformOrgId(), key]
         );
       }
     } else {
@@ -650,9 +652,10 @@ async function getOrgModels(orgId) {
       `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'ai_models' LIMIT 1`,
       [orgId]
     );
-    if (res.rows.length === 0 && orgId !== 1) {
+    if (res.rows.length === 0 && orgId !== getPlatformOrgId()) {
       res = await pool.query(
-        `SELECT value FROM system_settings WHERE org_id = 1 AND key = 'ai_models' LIMIT 1`
+        `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'ai_models' LIMIT 1`,
+        [getPlatformOrgId()]
       );
     }
     return res.rows.length > 0 ? normalizeModelList(res.rows[0]?.value) : MODEL_DEFAULTS;
@@ -856,10 +859,11 @@ async function getOrgDefaultModel(orgId) {
       `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'default_model' LIMIT 1`,
       [orgId]
     );
-    // If the org hasn't set a default model, fallback to the global admin org (org 1)
-    if (res.rows.length === 0 && orgId !== 1) {
+    // If the org hasn't set a default model, fallback to the platform template org
+    if (res.rows.length === 0 && orgId !== getPlatformOrgId()) {
       res = await pool.query(
-        `SELECT value FROM system_settings WHERE org_id = 1 AND key = 'default_model' LIMIT 1`
+        `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'default_model' LIMIT 1`,
+        [getPlatformOrgId()]
       );
     }
     return res.rows[0]?.value?.model_id ?? null;
@@ -888,10 +892,10 @@ async function getOrgFallbackModel(orgId) {
       `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'fallback_model' LIMIT 1`,
       [orgId]
     );
-    // If the org hasn't set a fallback model, fallback to the global admin org (org 1)
-    if (res.rows.length === 0 && orgId !== 1) {
+    if (res.rows.length === 0 && orgId !== getPlatformOrgId()) {
       res = await pool.query(
-        `SELECT value FROM system_settings WHERE org_id = 1 AND key = 'fallback_model' LIMIT 1`
+        `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'fallback_model' LIMIT 1`,
+        [getPlatformOrgId()]
       );
     }
     return res.rows[0]?.value?.model_id ?? null;
@@ -922,10 +926,10 @@ async function getOrgLessonModel(orgId) {
       `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'lesson_model' LIMIT 1`,
       [orgId]
     );
-    // If the org hasn't set a lesson model, fallback to the global admin org (org 1)
-    if (res.rows.length === 0 && orgId !== 1) {
+    if (res.rows.length === 0 && orgId !== getPlatformOrgId()) {
       res = await pool.query(
-        `SELECT value FROM system_settings WHERE org_id = 1 AND key = 'lesson_model' LIMIT 1`
+        `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'lesson_model' LIMIT 1`,
+        [getPlatformOrgId()]
       );
     }
     return res.rows[0]?.value?.model_id ?? null;
@@ -956,9 +960,10 @@ async function getOrgEmbeddingModel(orgId) {
       `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'embedding_model' LIMIT 1`,
       [orgId],
     );
-    if (res.rows.length === 0 && orgId !== 1) {
+    if (res.rows.length === 0 && orgId !== getPlatformOrgId()) {
       res = await pool.query(
-        `SELECT value FROM system_settings WHERE org_id = 1 AND key = 'embedding_model' LIMIT 1`,
+        `SELECT value FROM system_settings WHERE org_id = $1 AND key = 'embedding_model' LIMIT 1`,
+        [getPlatformOrgId()],
       );
     }
     return res.rows[0]?.value?.model_id ?? null;
