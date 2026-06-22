@@ -25,6 +25,16 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### Application boundaries — Core, Diamond Plate, Engineering (Phase 0)
+**Date:** 2026-06-18
+**Status:** Settled (documentation); physical split deferred
+**Context:** The repo mixes reusable platform code with Diamond Plate marketing/Ads agents and an Engineering demo vertical (Curam Engineering). “Blue Lily” in docs referred to the operator, while production prompts and tools target Diamond Plate Australia. A framework split requires a clear inventory before moving files.
+**Decision (three blocks):** **Core** — agent runtime, MCP host, auth, models, memory, audit. **Diamond Plate app** — Google Ads, GA4, WordPress CRM, internal org tools. **Engineering app** — `demoSuite`, spec/tender agents, demo orgs. **Blue Lily** — operator/maintainer, not a fourth customer app.
+**Decision (Phase 0):** Document boundaries in `knowledge_base/architecture/APPS.md` with placement rules; no monorepo move until plugin registration API exists.
+**References:** `knowledge_base/architecture/APPS.md`; `knowledge_base/core/PROJECT_IDENTITY.md`; `server/agents/manifest.js`; `server/demo/demoCatalog.js`; `client/src/config/tools.js`.
+
+---
+
 ### Changelog layout — platform root vs optional mirrors and per-agent logs
 **Date:** 2026-05-14
 **Status:** Settled

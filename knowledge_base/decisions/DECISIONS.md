@@ -15,6 +15,13 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### Application boundaries — Core, Diamond Plate, Engineering (mirror)
+**Date:** 2026-06-18
+**Status:** Settled (documentation)
+Mirror of root [`DECISIONS.md`](../../DECISIONS.md). See `architecture/APPS.md`.
+
+---
+
 ### Versioned database migrations — baseline initSchema + numbered runner (mirror)
 **Date:** 2026-06-18
 **Status:** Settled

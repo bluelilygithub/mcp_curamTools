@@ -74,6 +74,7 @@ knowledge_base/
 | **Prompts reference** | `core/PROMPTS.md` |
 | **Prompt versioning** (`prompt_version` on runs, registry) | `core/PROMPT_VERSIONING.md` |
 | **Platform primitives** | `architecture/PLATFORM_PRIMITIVES.md` |
+| **Application boundaries** (Core / Diamond Plate / Engineering) | `architecture/APPS.md` |
 | **Report chaining** (agent outputs as accountable downstream inputs) | `architecture/REPORT_CHAINING.md` |
 | **MCP servers & tools** | `architecture/MCP_SERVERS.md` |
 | **Personal memory** (per-user notes) | `architecture/PERSONAL_MEMORY.md` |
@@ -102,11 +103,12 @@ knowledge_base/
 ## Reading Order for New Sessions
 
 1. `core/PROJECT_IDENTITY.md` — understand scope and constraints
-2. Root `CHANGELOG.md` — read last 2–3 entries for current state (canonical)
-3. `architecture/PLATFORM_PRIMITIVES.md` — understand platform abstractions
-4. `architecture/MCP_SERVERS.md` — understand available tools
-5. Relevant agent docs under `agents/`
-6. `decisions/DECISIONS.md` — understand settled decisions
+2. `architecture/APPS.md` — Core vs Diamond Plate vs Engineering boundaries
+3. Root `CHANGELOG.md` — read last 2–3 entries for current state (canonical)
+4. `architecture/PLATFORM_PRIMITIVES.md` — understand platform abstractions
+5. `architecture/MCP_SERVERS.md` — understand available tools
+6. Relevant agent docs under `agents/`
+7. `decisions/DECISIONS.md` — understand settled decisions
 
 ---
 

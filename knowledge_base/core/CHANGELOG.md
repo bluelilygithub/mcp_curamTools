@@ -16,6 +16,12 @@ Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Versi
 
 ---
 
+## 2026-06-18 — Application boundaries (mirror)
+
+Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Application boundaries**. See `architecture/APPS.md`.
+
+---
+
 ## 2026-06-18 — Personal memory (mirror)
 
 Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18**. Highlights: `personal_thoughts` table; `PersonalMemoryService`; `personal-memory.js` MCP (4 tools); `/api/personal-memory` REST; `__trusted_user_id` injection in `mcpRegistry`; conversation agent +29 tools; Settings **Memory** tab. See `architecture/PERSONAL_MEMORY.md`.

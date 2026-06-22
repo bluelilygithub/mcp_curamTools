@@ -2,8 +2,11 @@
 
 ## What this project IS
 
-- **Internal learning project** for a single organisation (Blue Lily)
-- **Solo developer** context — built and maintained by one person
+- **Internal learning project** operated by **Blue Lily** (solo developer, maintainer of the repo)
+- **Two product applications** on one deployment today — see [APPS.md](../architecture/APPS.md):
+  - **Diamond Plate** — marketing/Ads/CRM tools for Diamond Plate Australia (`org_type = internal`)
+  - **Engineering** — AEC demo agents for client demo orgs (`org_type = demo`, e.g. Curam Engineering)
+- **Core platform** — shared agent runtime, MCP, auth, memory, models (documented in APPS.md)
 - **Invite‑only users** — all users are known colleagues/manual invites
 - **Not a public SaaS** — no anonymous signup, no payment processing
 - **Not a commercial product** — no revenue generation, no customer support team

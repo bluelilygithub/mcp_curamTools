@@ -1,6 +1,6 @@
 # CLAUDE.md — Server guardrails
 
-**Project Context:** Internal platform, solo developer, one org. Read [PROJECT_IDENTITY.md](../PROJECT_IDENTITY.md) before architectural decisions.
+**Project Context:** Internal platform, solo developer. Read [PROJECT_IDENTITY.md](../PROJECT_IDENTITY.md) before architectural decisions. **App boundaries:** Core vs Diamond Plate vs Engineering — [knowledge_base/architecture/APPS.md](../knowledge_base/architecture/APPS.md).
 
 Before touching the conversation agent, MCP servers, or agent prompts: Search relevant source files for existing patterns, verify against these guardrails and DECISIONS.md, then make the change and update CHANGELOG.md.
 

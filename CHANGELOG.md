@@ -18,6 +18,19 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — Application boundaries (Core / Diamond Plate / Engineering)
+
+### Built
+- **`knowledge_base/architecture/APPS.md`** — Phase 0 manifest: three logical blocks + Blue Lily as operator; agent/route/table/UI inventories; placement rules.
+- **`PROJECT_IDENTITY.md`** — clarifies Diamond Plate and Engineering as product apps on shared core.
+- **`INDEX.md`** — reading order includes APPS.md.
+
+### Notes
+- No code or deploy changes — documentation-only boundary before any physical split.
+- Primary production app is **Diamond Plate** (not “Blue Lily app”); Engineering uses demo org layer.
+
+---
+
 ## 2026-06-18 — Versioned database migrations
 
 ### Built
