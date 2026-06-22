@@ -25,6 +25,16 @@ These files are the source of truth. The documents below derive from them and re
 
 ---
 
+### Plugin API — server v0 and client gap
+**Date:** 2026-06-18
+**Status:** Server settled (v0); client unified API planned
+**Context:** Apps need to register agents, MCP servers, API routes, and UI navigation without editing core files for every feature. Phase 1 shipped `createPlatform` with per-app `plugin.js` under `server/apps/`.
+**Decision (server v0 contract):** Each plugin exports `id`, optional `label`, `agentManifest`, `mcpServers`, and `registerRoutes(app)`. Core always loads `CORE_MCP_SERVERS`; plugins append. Agents mount via `mountAgentManifest()` after plugin routes.
+**Decision (not in v0):** Client plugin registry (`routes` + `nav` from `client/apps/*`), env-driven `PLUGINS=`, unified `DEMO_CATALOG` with engineering manifest, physical package split.
+**References:** `knowledge_base/architecture/PLUGIN_API.md`; `server/platform/createPlatform.js`; `server/apps/diamond-plate/plugin.js`; `server/apps/engineering/plugin.js`; `client/src/App.jsx`; `client/src/config/tools.js`.
+
+---
+
 ### Versioned database migrations — baseline initSchema + numbered runner
 **Date:** 2026-06-18
 **Status:** Settled
@@ -43,6 +53,7 @@ These files are the source of truth. The documents below derive from them and re
 **Context:** The repo mixes reusable platform code with Diamond Plate marketing/Ads agents and an Engineering demo vertical (Curam Engineering). “Blue Lily” in docs referred to the operator, while production prompts and tools target Diamond Plate Australia. A framework split requires a clear inventory before moving files.
 **Decision (three blocks):** **Core** — agent runtime, MCP host, auth, models, memory, audit. **Diamond Plate app** — Google Ads, GA4, WordPress CRM, internal org tools. **Engineering app** — `demoSuite`, spec/tender agents, demo orgs. **Blue Lily** — operator/maintainer, not a fourth customer app.
 **Decision (Phase 0):** Document boundaries in `knowledge_base/architecture/APPS.md` with placement rules; no monorepo move until plugin registration API exists.
+**Decision (server plugin v0):** `createPlatform({ plugins })` merges `agentManifest`, `mcpServers`, and `registerRoutes` — see `architecture/PLUGIN_API.md`. Client routes remain manual in `App.jsx` (Phase 2).
 **References:** `knowledge_base/architecture/APPS.md`; `knowledge_base/core/PROJECT_IDENTITY.md`; `server/agents/manifest.js`; `server/demo/demoCatalog.js`; `client/src/config/tools.js`.
 
 ---

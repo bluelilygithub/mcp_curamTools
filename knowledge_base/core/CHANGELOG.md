@@ -10,6 +10,12 @@
 
 ---
 
+## 2026-06-18 — Plugin API documentation (mirror)
+
+Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Plugin API documentation**. New `architecture/PLUGIN_API.md`; server v0 vs client gap; build order.
+
+---
+
 ## 2026-06-18 — Platform tenant cleanup (mirror)
 
 Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Platform tenant cleanup**. EmbeddingService, updateAdminConfig, AgentScheduler; docs updated.

@@ -134,6 +134,10 @@ cd server && npm run migrate   # pending DB migrations only
 
 ## Adding a new app plugin (future)
 
+See [PLUGIN_API.md](./PLUGIN_API.md) for the full v0 vs target contract, gaps (especially **client routes**), and build order.
+
+Quick server steps:
+
 1. Create `server/apps/<name>/agentManifest.js` and `plugin.js`.
 2. Register in `createPlatform.js` `DEFAULT_PLUGINS` (or pass custom `plugins` array).
 3. Add UI routes under `client/src/` and document in [APPS.md](./APPS.md).
@@ -145,6 +149,7 @@ cd server && npm run migrate   # pending DB migrations only
 
 | Doc | Topic |
 |-----|-------|
+| [PLUGIN_API.md](./PLUGIN_API.md) | Agents + MCP + UI routes — implemented vs planned |
 | [APPS.md](./APPS.md) | What belongs in core vs each app |
 | [MIGRATIONS.md](./MIGRATIONS.md) | Schema versioning |
 | [MCP_SERVERS.md](./MCP_SERVERS.md) | MCP tool reference |

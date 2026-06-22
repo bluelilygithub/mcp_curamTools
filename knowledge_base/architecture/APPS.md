@@ -49,6 +49,7 @@ This file is the **inventory and placement rules** for the three-block model. Us
 | Engineering navigation | `DemoShell` → `/api/demo/manifest` |
 | Org admin | `/admin/organizations` — `org_type` (app shell) + `description` (operator purpose notes) |
 | Cross-org users | Platform operator (`PLATFORM_ORG_ID` admin) sees all users on `/admin/users` |
+| Plugin API | Server v0 in `createPlatform`; client + unified manifests — see `architecture/PLUGIN_API.md` |
 
 **Target (future):** physical `packages/core` + `apps/*` folders with semver.
 

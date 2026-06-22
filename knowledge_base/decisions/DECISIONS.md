@@ -29,6 +29,13 @@ Mirror of root [`DECISIONS.md`](../../DECISIONS.md). Baseline DDL stays in `init
 
 ---
 
+### Plugin API — server v0 and client gap (mirror)
+**Date:** 2026-06-18
+**Status:** Server settled (v0); client unified API planned
+Mirror of root [`DECISIONS.md`](../../DECISIONS.md). See `architecture/PLUGIN_API.md`.
+
+---
+
 ### Organisation admin — org_type vs description
 **Date:** 2026-06-18
 **Status:** Settled

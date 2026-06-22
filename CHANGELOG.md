@@ -18,6 +18,17 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — Plugin API documentation (agents + MCP + UI)
+
+### Built
+- **`knowledge_base/architecture/PLUGIN_API.md`** — server v0 contract, runtime flow, gaps (client routes, split manifests), target API, build order.
+- **Cross-links** — `PLUGINS.md`, `APPS.md`, `INDEX.md`, `DECISIONS.md`.
+
+### Notes
+- Server plugin (`createPlatform`) is documented as **v0**; client plugin registry is explicit **next** phase.
+
+---
+
 ## 2026-06-18 — Platform tenant cleanup (remaining org_id = 1 literals)
 
 ### Fixed
