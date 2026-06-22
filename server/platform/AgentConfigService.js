@@ -833,8 +833,7 @@ async function updateAdminConfig(slug, patch, updatedBy, orgId = null) {
 
   let targetOrgId = orgId;
   if (!targetOrgId) {
-    const orgRes = await pool.query('SELECT id FROM organizations ORDER BY id LIMIT 1');
-    targetOrgId = orgRes.rows[0]?.id;
+    targetOrgId = getPlatformOrgId();
   }
   if (!targetOrgId) throw new Error('No organisation found');
 

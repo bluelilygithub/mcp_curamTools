@@ -10,7 +10,7 @@ import InlineBanner from '../../components/ui/InlineBanner';
 import MicButton from '../../components/ui/MicButton';
 import ReadAloudButton from '../../components/ui/ReadAloudButton';
 
-const SQL_PLACEHOLDER = `-- Examples:
+const SQL_PLACEHOLDER = `-- Examples (use your org id — platform default is PLATFORM_ORG_ID, often 1):
 -- SELECT * FROM users WHERE org_id = 1 LIMIT 20;
 -- SELECT slug, status, run_at FROM agent_runs ORDER BY run_at DESC LIMIT 50;
 -- SELECT key, value FROM system_settings WHERE org_id = 1;`;

@@ -301,7 +301,7 @@ AgentConfigService.updateOrgBudgetSettings(orgId, patch, updatedBy)
 
 AgentConfigService.getOrgLessonModel(orgId)
 // Returns: string | null — model ID for lesson AI, or null if not configured.
-// Falls back to the global admin org (orgId = 1) if the current org has no setting.
+// Falls back to the platform tenant org (PLATFORM_ORG_ID / getPlatformOrgId()) if the current org has no setting.
 
 AgentConfigService.updateOrgLessonModel(orgId, modelId, updatedBy)
 // Upserts the lesson AI model selection. Pass null to clear.

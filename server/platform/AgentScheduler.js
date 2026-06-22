@@ -8,7 +8,6 @@
  *   AgentScheduler.updateSchedule('my-agent', '0 9 * * *');
  */
 const cron = require('node-cron');
-const { pool } = require('../db');
 const { persistRun } = require('./persistRun');
 const { mergePromptVersionIntoResult } = require('./promptVersions');
 const { buildDataGapReview } = require('./dataGapEvidence');
@@ -19,6 +18,7 @@ const {
 } = require('./agentTrustContract');
 const { loadLessonsForAgent, proposeLessonFromRun } = require('../services/LessonRepositoryService');
 const AgentConfigService = require('./AgentConfigService');
+const { getPlatformOrgId } = require('../config/platformOrg');
 
 
 /**
@@ -248,15 +248,10 @@ class AgentSchedulerClass {
   }
 
   /**
-   * Resolve orgId from DB when not supplied (single-org fallback).
+   * Resolve orgId when not supplied on a scheduled job (platform template org).
    */
   async _resolveOrgId() {
-    try {
-      const res = await pool.query('SELECT id FROM organizations ORDER BY id LIMIT 1');
-      return res.rows[0]?.id ?? null;
-    } catch {
-      return null;
-    }
+    return getPlatformOrgId();
   }
 }
 

@@ -10,6 +10,12 @@
 
 ---
 
+## 2026-06-18 — Platform tenant cleanup (mirror)
+
+Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Platform tenant cleanup**. EmbeddingService, updateAdminConfig, AgentScheduler; docs updated.
+
+---
+
 ## 2026-06-18 — Cross-org user management (mirror)
 
 Mirror of root [`CHANGELOG.md`](../../CHANGELOG.md) entry **2026-06-18 — Cross-org user management (platform operator)**.

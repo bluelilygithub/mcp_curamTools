@@ -18,6 +18,16 @@ If a session changes both platform and one agent, **one root entry** is enough u
 
 ---
 
+## 2026-06-18 — Platform tenant cleanup (remaining org_id = 1 literals)
+
+### Fixed
+- **`EmbeddingService.embedText`** — missing `orgId` uses `resolveOrgId()` (platform tenant), not hardcoded `1`.
+- **`AgentConfigService.updateAdminConfig`** — null org targets `getPlatformOrgId()` instead of `ORDER BY id LIMIT 1`.
+- **`AgentScheduler._resolveOrgId`** — scheduled jobs default to `getPlatformOrgId()`.
+- **Docs** — `EMBEDDINGS.md`, `DECISIONS.md`, `PLATFORM-PRIMITIVES.md` reference `PLATFORM_ORG_ID` not magic `1`.
+
+---
+
 ## 2026-06-18 — Cross-org user management (platform operator)
 
 ### Built

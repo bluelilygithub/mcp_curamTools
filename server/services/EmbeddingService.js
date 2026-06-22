@@ -8,9 +8,10 @@
 const { pool } = require('../db');
 const { embedWithModel } = require('./embeddingProviders');
 const { resolveEmbeddingConfig } = require('./embeddingResolver');
+const { resolveOrgId } = require('../config/platformOrg');
 
-async function embedText(text, { orgId = 1 } = {}) {
-  const config = await resolveEmbeddingConfig(orgId);
+async function embedText(text, { orgId } = {}) {
+  const config = await resolveEmbeddingConfig(resolveOrgId(orgId));
   if (!config.available || !config.model) {
     throw new Error(config.hint || 'Embeddings unavailable — configure RAG embedding model in Settings > Models.');
   }

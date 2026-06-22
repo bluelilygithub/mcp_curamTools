@@ -53,9 +53,9 @@ Settings inheritance (models, embedding model, per-agent admin config) falls bac
 |---------|---------|---------|
 | `PLATFORM_ORG_ID` | `1` | Org whose `system_settings` and `agent_configs` seed other orgs |
 
-Used by: `AgentConfigService`, `embeddingResolver`, `SuggestionService` (via `server/config/platformOrg.js`).
+Used by: `AgentConfigService`, `embeddingResolver`, `EmbeddingService`, `SuggestionService`, `AgentScheduler`, `platformOperator.js`.
 
-Set on Railway if your seeded admin org is **not** id 1.
+When adding a “fallback to platform defaults” path, use `getPlatformOrgId()` — never hardcode `1`.
 
 ---
 

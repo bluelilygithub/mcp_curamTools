@@ -2,8 +2,8 @@
 
 /**
  * Platform org — operator template for system_settings / model catalogue inheritance.
- * Defaults to org id 1 for backward compatibility. Set PLATFORM_ORG_ID in production
- * if the seeded admin org is not id 1.
+ * Set PLATFORM_ORG_ID in production when the seeded operator org is not database id 1.
+ * Defaults to 1 for backward compatibility with existing installs.
  */
 
 function getPlatformOrgId() {

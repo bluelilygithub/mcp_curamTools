@@ -39,7 +39,11 @@ Platform vector columns use **768 dimensions**. Migrating from the previous 1536
 | `GET` | `/api/settings/embedding-model/validate?model_id=` | Real-time validation (UI) |
 | `PUT` | `/api/settings/embedding-model` | Set `{ model_id }` — rejects invalid models |
 
-Org inherits from global admin org (`org_id = 1`) when unset, same pattern as `default_model`.
+Org inherits from the **platform tenant** (`PLATFORM_ORG_ID` / `getPlatformOrgId()`) when unset — same pattern as `default_model`.
+
+## Platform tenant
+
+See `knowledge_base/architecture/PLUGINS.md` § Platform org (`PLATFORM_ORG_ID`).
 
 ## Consumers
 
