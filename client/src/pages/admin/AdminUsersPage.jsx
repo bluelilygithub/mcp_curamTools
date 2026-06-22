@@ -2,9 +2,10 @@
  * AdminUsersPage — manage workspace members, roles, and invitations.
  *
  * Modals:
- *   InviteModal  — invite a new user; shows activation link on success
- *   ResendModal  — regenerate an invite link for a pending user
- *   ManageModal  — edit profile, toggle org_admin role, delete user
+ *   InviteModal      — invite a new user; shows activation link on success
+ *   ResendModal      — regenerate an invite link for a pending user
+ *   ManageModal      — edit profile, roles, org, departments; delete user
+ *   DeleteUserModal  — confirm delete from table row
  */
 import { useState, useEffect } from 'react';
 import api from '../../api/client';
@@ -526,7 +527,7 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
   };
 
   return (
-    <ModalShell onClose={onClose} title="Manage User" subtitle={user.email}>
+    <ModalShell onClose={onClose} title="Edit User" subtitle={user.email}>
       <div className="space-y-5">
 
         {/* ── Organisation ──────────────────────────────────────────────── */}
@@ -854,9 +855,66 @@ function ManageModal({ user, onClose, onSaved, onDeleted }) {
   );
 }
 
+// ── Delete user confirm ───────────────────────────────────────────────────────
+
+function DeleteUserModal({ user, onClose, onDeleted }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const { showToast } = useToast();
+
+  const handleDelete = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await api.delete(`/admin/users/${user.id}`);
+      showToast(`User ${user.email} removed`, 'success');
+      onDeleted();
+    } catch (err) {
+      setError(err.message || 'Failed to remove user');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email;
+
+  return (
+    <ModalShell onClose={onClose} title="Delete user?" maxWidth="max-w-lg">
+      <p className="text-sm" style={{ color: 'var(--color-text)' }}>
+        Permanently remove <strong>{displayName}</strong> ({user.email})?
+        {user.org_name && (
+          <> from <strong>{user.org_name}</strong></>
+        )}
+        {' '}This cannot be undone.
+      </p>
+      {error && <p className="text-xs" style={{ color: '#ef4444' }}>{error}</p>}
+      <div className="flex gap-2 pt-1">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex-1 py-2.5 rounded-xl text-sm border transition-opacity hover:opacity-70"
+          style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted)', background: 'transparent', cursor: 'pointer' }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={loading}
+          className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-80 disabled:opacity-50"
+          style={{ background: '#dc2626', border: 'none', cursor: 'pointer' }}
+        >
+          {loading ? 'Deleting…' : 'Delete permanently'}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AdminUsersPage() {
+  const currentUser = useAuthStore((s) => s.user);
   const [users,      setUsers]      = useState([]);
   const [crossOrg,   setCrossOrg]   = useState(false);
   const [orgFilter,  setOrgFilter]  = useState('all');
@@ -864,6 +922,7 @@ export default function AdminUsersPage() {
   const [loading,    setLoading]    = useState(true);
   const [showInvite, setShowInvite] = useState(false);
   const [manageUser, setManageUser] = useState(null);
+  const [deleteUser, setDeleteUser] = useState(null);
   const [resendUser, setResendUser] = useState(null);
   const getIcon = useIcon();
   const { showToast } = useToast();
@@ -902,8 +961,8 @@ export default function AdminUsersPage() {
           <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Users</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted)' }}>
             {crossOrg
-              ? 'Platform view — all organisations. Filter or manage demo client users from here.'
-              : 'Manage workspace members and invitations.'}
+              ? 'Platform view — edit or delete users across all organisations.'
+              : 'Manage, edit, and delete workspace members.'}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -997,22 +1056,39 @@ export default function AdminUsersPage() {
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted)' }}>
                         {fmtDate(u.created_at)}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
                           {!u.is_active && (
                             <button
+                              type="button"
                               onClick={() => setResendUser(u)}
-                              className="text-xs px-2 py-1 rounded-lg hover:opacity-70 transition-opacity"
-                              style={{ color: 'var(--color-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                              Resend Invite
+                              className="p-1.5 rounded-lg hover:opacity-70 transition-opacity"
+                              style={{ color: 'var(--color-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+                              title="Resend invite"
+                            >
+                              {getIcon('mail', { size: 15 })}
                             </button>
                           )}
                           <button
+                            type="button"
                             onClick={() => setManageUser(u)}
-                            className="text-xs px-2 py-1 rounded-lg hover:opacity-70 transition-opacity"
-                            style={{ color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                            Manage
+                            className="p-1.5 rounded-lg hover:opacity-70 transition-opacity"
+                            style={{ color: 'var(--color-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+                            title="Edit user"
+                          >
+                            {getIcon('edit', { size: 15 })}
                           </button>
+                          {currentUser?.id !== u.id && (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteUser(u)}
+                              className="p-1.5 rounded-lg hover:opacity-70 transition-opacity"
+                              style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}
+                              title="Delete user"
+                            >
+                              {getIcon('trash', { size: 15 })}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1041,6 +1117,14 @@ export default function AdminUsersPage() {
           onClose={() => setManageUser(null)}
           onSaved={() => { fetchUsers(); }}
           onDeleted={() => { fetchUsers(); setManageUser(null); }}
+        />
+      )}
+
+      {deleteUser && (
+        <DeleteUserModal
+          user={deleteUser}
+          onClose={() => setDeleteUser(null)}
+          onDeleted={() => { fetchUsers(); setDeleteUser(null); }}
         />
       )}
     </div>
